@@ -1,0 +1,6 @@
+name = "aldeyabi-pricing"
+compatibility_date = "2024-01-01"
+
+[site]
+bucket = "."
+include = ["index.html", "_headers", "_redirects"]
