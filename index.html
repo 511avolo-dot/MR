@@ -14253,20 +14253,16 @@ async function triggerAIInsights() {
 - الموردون: ${suppliers.length}
 
 ## أكثر الأصناف ارتفاعاً في السعر (السعر الأخير > المتوسط بـ15%+):
-${risingItems.length ? risingItems.map(i => `- ${i.name}: آخر سعر ${i.last} ر.س (ارتفع ${i.pct}% عن المتوسط ${i.avg} ر.س)`).join('
-') : 'لا توجد بيانات كافية'}
+${risingItems.length ? risingItems.map(i => `- ${i.name}: آخر سعر ${i.last} ر.س (ارتفع ${i.pct}% عن المتوسط ${i.avg} ر.س)`).join('\n') : 'لا توجد بيانات كافية'}
 
 ## أصناف بتذبذب سعري عالٍ (max > 1.5× min):
-${highVariance.length ? highVariance.map(i => `- ${i.name} (${i.category}): أدنى ${i.min} ر.س / أعلى ${i.max} ر.س`).join('
-') : 'لا توجد'}
+${highVariance.length ? highVariance.map(i => `- ${i.name} (${i.category}): أدنى ${i.min} ر.س / أعلى ${i.max} ر.س`).join('\n') : 'لا توجد'}
 
 ## أنشط الموردين:
-${topSuppliers.map(s => `- ${s.name}: ${s.count} عرض، متوسط سعر ${s.avg} ر.س`).join('
-')}
+${topSuppliers.map(s => `- ${s.name}: ${s.count} عرض، متوسط سعر ${s.avg} ر.س`).join('\n')}
 
 ## أعلى الفئات إنفاقاً:
-${topCats.map(([cat, val]) => `- ${cat}: ${val.toFixed(0)} ر.س`).join('
-')}
+${topCats.map(([cat, val]) => `- ${cat}: ${val.toFixed(0)} ر.س`).join('\n')}
 
 قدّم تحليلاً منظماً يشمل:
 1. **أكثر الأصناف ارتفاعاً في السعر** — وتوصية للتفاوض
