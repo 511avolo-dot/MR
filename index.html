@@ -1113,25 +1113,27 @@ body.print-preview-active .print-document{display:block}
 }
 body.print-preview-active .print-document{display:block}
 .print-header{
-  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;
-  border-bottom:3px double #231F20;padding-bottom:14px;margin-bottom:18px;
+  display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:center;
+  border-bottom:3px solid #C4A265;padding-bottom:16px;margin-bottom:20px;
+  background:linear-gradient(to left,#f9f6f0,#fff);border-radius:6px 6px 0 0;
+  padding:14px 16px 16px;
 }
 .print-logo{
-  width:140px;min-height:60px;
+  width:180px;min-height:70px;
   display:flex;align-items:center;justify-content:flex-start;
-  font-family:'Fraunces',serif;font-size:18px;color:#231F20;font-weight:700;
+  font-family:'NeoSansArabic','Fraunces',serif;font-size:18px;color:#231F20;font-weight:700;
 }
-.print-logo img{max-width:100%;max-height:80px;display:block;object-fit:contain}
+.print-logo img{width:100%;max-width:180px;max-height:90px;display:block;object-fit:contain}
 .print-logo-fallback{
-  width:80px;height:80px;border:1.5px solid #231F20;border-radius:8px;
-  display:grid;place-items:center;background:#f8f5ee;
-  font-family:'Fraunces',serif;font-size:18px;color:#231F20;font-weight:700;
-  text-align:center;line-height:1.1;padding:6px;
+  min-width:80px;height:80px;padding:0 12px;border-radius:8px;
+  display:grid;place-items:center;background:#231F20;
+  font-family:'NeoSansArabic','Fraunces',serif;font-size:16px;color:#C4A265;font-weight:700;
+  text-align:center;line-height:1.2;
 }
 .print-company{text-align:center}
 .print-company-name{
-  font-family:'NeoSansArabic','Fraunces','Cairo',Arial,sans-serif;font-size:18px;font-weight:700;
-  color:#231F20;margin-bottom:2px;letter-spacing:-0.5px;
+  font-family:'NeoSansArabic','Cairo',Arial,sans-serif;font-size:20px;font-weight:700;
+  color:#231F20;margin-bottom:3px;letter-spacing:-0.3px;line-height:1.2;
 }
 .print-company-name-en{
   font-family:'Fraunces',serif;font-size:11px;color:#666;
@@ -1145,13 +1147,12 @@ body.print-preview-active .print-document{display:block}
 .print-doc-info-row{display:flex;justify-content:space-between;gap:10px;margin-bottom:2px}
 .print-doc-info-row strong{color:#231F20}
 .print-doc-title{
-  text-align:center;font-family:'NeoSansArabic','Fraunces','Cairo',Arial,sans-serif;
-  font-size:18px;font-weight:700;color:#231F20;
-  padding:8px 0;margin-bottom:14px;
-  background:linear-gradient(180deg,rgba(196,162,101,0.06),rgba(196,162,101,0.12));
-  border-radius:6px;
-  letter-spacing:-0.3px;
-  border-bottom:2px solid #C4A265;
+  text-align:center;font-family:'NeoSansArabic','Cairo',Arial,sans-serif;
+  font-size:17px;font-weight:700;color:#231F20;
+  padding:8px 20px;margin:16px auto;
+  border-bottom:2.5px solid #C4A265;
+  border-top:2.5px solid #C4A265;
+  letter-spacing:0.02em;
 }
 .print-doc-subtitle{
   text-align:center;font-size:11px;color:#666;margin-top:-10px;margin-bottom:14px;
@@ -2233,13 +2234,13 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="brand-mark" style="align-items:center;gap:14px">
-        <div class="brand-logo" style="width:52px;height:52px;background:transparent;display:flex;align-items:center;justify-content:center;padding:0;border-radius:0;box-shadow:none">
-          <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="2" width="18" height="18" rx="2.5" fill="#C4A265"/>
-            <rect x="28" y="2" width="22" height="18" rx="2.5" fill="#C4A265"/>
-            <rect x="2" y="23" width="18" height="10" fill="#C4A265"/>
-            <rect x="28" y="23" width="22" height="10" fill="#C4A265"/>
-            <rect x="2" y="36" width="48" height="14" rx="5" fill="#C4A265"/>
+        <div class="brand-logo" style="width:54px;height:54px;background:#231F20;display:flex;align-items:center;justify-content:center;padding:0;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.35)">
+          <svg width="40" height="40" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="31" height="31" rx="4" fill="#C4A265"/>
+            <rect x="45" y="4" width="31" height="31" rx="4" fill="#C4A265"/>
+            <rect x="4" y="42" width="31" height="18" fill="#C4A265"/>
+            <rect x="45" y="42" width="31" height="18" fill="#C4A265"/>
+            <rect x="4" y="65" width="72" height="15" rx="5" fill="#C4A265"/>
           </svg>
         </div>
         <div>
@@ -2346,8 +2347,21 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       <!-- DASHBOARD -->
       <section class="page active" id="page-dashboard">
         <div class="page-header">
-          <div class="page-eyebrow">نظرة عامة</div>
-          <h1 class="page-title">لوحة التحكم</h1>
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+            <div style="width:46px;height:46px;background:#231F20;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(0,0,0,0.18)">
+              <svg width="32" height="32" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="31" height="31" rx="4" fill="#C4A265"/>
+                <rect x="45" y="4" width="31" height="31" rx="4" fill="#C4A265"/>
+                <rect x="4" y="42" width="31" height="18" fill="#C4A265"/>
+                <rect x="45" y="42" width="31" height="18" fill="#C4A265"/>
+                <rect x="4" y="65" width="72" height="15" rx="5" fill="#C4A265"/>
+              </svg>
+            </div>
+            <div>
+              <div class="page-eyebrow">نظرة عامة</div>
+              <h1 class="page-title" style="margin-bottom:0">لوحة التحكم</h1>
+            </div>
+          </div>
           <p class="page-subtitle">نظرة شاملة على أسعار المشتريات، الأصناف المُسعّرة، والسجل التاريخي الحديث عبر جميع الفئات والموردين المعتمدين.</p>
         </div>
 
@@ -5714,19 +5728,14 @@ function exportCSV(data, filename, cols){
 
 async function exportExcel(data, filename, cols, options = {}) {
   if (!data || !data.length) { toast('warn','لا توجد بيانات','لا يوجد شيء للتصدير'); return; }
-  toast('info','جاري التصدير','تحميل مكتبة Excel...');
+  toast('info','جاري التصدير','جارٍ تحميل مكتبة Excel...');
   try {
     await loadScriptOnce(SHEETJS_CDN, ()=>typeof XLSX !== 'undefined');
-    if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel');
-    
+    if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel — تحقق من الاتصال بالإنترنت');
+
     const wb = XLSX.utils.book_new();
-    if(wb.Props === undefined) wb.Props = {};
-    wb.Props.Title = options.title || filename.replace('.xlsx','');
-    wb.Props.Author = 'مجموعة الذيابي';
-    wb.Props.Company = 'Al-Deyabi Group';
-    wb.Props.CreatedDate = new Date();
-    
-    // Build data sheet
+
+    // Build rows
     const headers = cols.map(c => c.label);
     const rows = data.map(r => cols.map(c => {
       const v = r[c.key];
@@ -5734,48 +5743,31 @@ async function exportExcel(data, filename, cols, options = {}) {
       if(typeof v === 'number') return v;
       return String(v);
     }));
-    
-    const wsData = [headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
-    // Auto-width: calculate max char length per column
-    const colWidths = cols.map((c, i) => {
-      const maxLen = Math.max(
-        c.label.length,
-        ...rows.map(r => String(r[i] || '').length)
-      );
-      return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
-    });
-    ws['!cols'] = colWidths;
-    
-    // Freeze first row
-    ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
-    
-    const sheetName = options.sheetName || 'البيانات';
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    // Auto-width per column
+    ws['!cols'] = cols.map((c, i) => ({
+      wch: Math.min(Math.max(c.label.length, ...rows.map(r => String(r[i]||'').length)) + 2, 50)
+    }));
+
+    const sheetName = (options.sheetName || 'البيانات').slice(0, 31);
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    
-    // Summary sheet
-    if(options.summary !== false) {
-      const company = getCompanyInfo ? getCompanyInfo() : {};
-      const summaryData = [
-        ['مجموعة الذيابي للمقاولات', ''],
-        ['Al-Deyabi Group', ''],
-        ['', ''],
-        ['التقرير:', options.title || filename.replace('.xlsx','')],
-        ['تاريخ التصدير:', new Date().toLocaleDateString('ar-SA')],
-        ['إجمالي السجلات:', data.length],
-        ['', ''],
-        ['المصدر:', 'نظام التسعير الموحد - إصدار 5.1'],
-      ];
-      if(company && company.name_ar) summaryData.splice(0, 0, ['الشركة:', company.name_ar]);
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      wsSummary['!cols'] = [{wch: 25}, {wch: 35}];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص');
+
+    // Normalize filename
+    let xlsxFilename = filename.replace(/\.csv$/i,'').replace(/\.xlsx?$/i,'') + '.xlsx';
+
+    // Write with blob fallback for browsers that block file-system access
+    try {
+      XLSX.writeFile(wb, xlsxFilename);
+    } catch(_) {
+      const buf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+      const url = URL.createObjectURL(new Blob([buf], {type:'application/octet-stream'}));
+      const a = Object.assign(document.createElement('a'), {href:url, download:xlsxFilename});
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url), 2000);
     }
-    
-    let xlsxFilename = filename.replace(/\.csv$/i, '.xlsx').replace(/\.xls$/i, '.xlsx');
-    if(!xlsxFilename.endsWith('.xlsx')) xlsxFilename = xlsxFilename + '.xlsx';
-    XLSX.writeFile(wb, xlsxFilename);
+
     toast('success', 'تم التصدير', `${xlsxFilename} · ${data.length} سجل`);
   } catch(e) {
     console.error('Excel export error:', e);
@@ -7963,7 +7955,18 @@ async function updateAIStatusBadge(){
 /* ============================================================ */
 
 // Embedded default logo (Aldyabi Contracting) — used as fallback when no logo_url is set
-const DEFAULT_COMPANY_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgODAiIHdpZHRoPSIyNDAiIGhlaWdodD0iODAiPgogIDwhLS0gR2VvbWV0cmljIG1hcmsgLS0+CiAgPHJlY3QgeD0iNCIgeT0iNCIgd2lkdGg9IjI4IiBoZWlnaHQ9IjI4IiByeD0iMy41IiBmaWxsPSIjQzRBMjY1Ii8+CiAgPHJlY3QgeD0iNDAiIHk9IjQiIHdpZHRoPSIzNCIgaGVpZ2h0PSIyOCIgcng9IjMuNSIgZmlsbD0iI0M0QTI2NSIvPgogIDxyZWN0IHg9IjQiIHk9IjM2IiB3aWR0aD0iMjgiIGhlaWdodD0iMTYiIGZpbGw9IiNDNEEyNjUiLz4KICA8cmVjdCB4PSI0MCIgeT0iMzYiIHdpZHRoPSIzNCIgaGVpZ2h0PSIxNiIgZmlsbD0iI0M0QTI2NSIvPgogIDxyZWN0IHg9IjQiIHk9IjU2IiB3aWR0aD0iNzAiIGhlaWdodD0iMjAiIHJ4PSI3IiBmaWxsPSIjQzRBMjY1Ii8+CiAgPCEtLSBBcmFiaWMgdGV4dCAtLT4KICA8dGV4dCB4PSI5MiIgeT0iMzUiIGZvbnQtZmFtaWx5PSJOZW9TYW5zQXJhYmljLCBBcmlhbCIgZm9udC1zaXplPSIyMiIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzIzMUYyMCIgdGV4dC1hbmNob3I9InN0YXJ0IiBkaXJlY3Rpb249InJ0bCIgdW5pY29kZS1iaWRpPSJiaWRpLW92ZXJyaWRlIj7Zhdis2YXZiNi52Kkg2KfZhNiw2YrYp9io2Yo8L3RleHQ+CiAgPCEtLSBFbmdsaXNoIHRleHQgLS0+CiAgPHRleHQgeD0iOTIiIHk9IjU4IiBmb250LWZhbWlseT0iTmVvU2Fuc0FyYWJpYywgQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNDNEEyNjUiIGxldHRlci1zcGFjaW5nPSIyIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPkFMLURFWUFCSSBHUk9VUDwvdGV4dD4KPC9zdmc+';
+const DEFAULT_COMPANY_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIiB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCI+CiAgPCEtLSBEYXJrIGJhY2tncm91bmQgbWFyayAtLT4KICA8cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgcng9IjEwIiBmaWxsPSIjMjMxRjIwIi8+CiAgPCEtLSBHZW9tZXRyaWMgbWFyazogdG9wIHJvdyAtLT4KICA8cmVjdCB4PSIxNCIgeT0iMTQiIHdpZHRoPSIzOCIgaGVpZ2h0PSIzOCIgcng9IjQuNSIgZmlsbD0iI0M0QTI2NSIvPgogIDxyZWN0IHg9IjY4IiB5PSIxNCIgd2lkdGg9IjM4IiBoZWlnaHQ9IjM4IiByeD0iNC41IiBmaWxsPSIjQzRBMjY1Ii8+CiAgPCEtLSBNaWRkbGUgcm93IC0tPgogIDxyZWN0IHg9IjE0IiB5PSI1OCIgd2lkdGg9IjM4IiBoZWlnaHQ9IjIyIiBmaWxsPSIjQzRBMjY1Ii8+CiAgPHJlY3QgeD0iNjgiIHk9IjU4IiB3aWR0aD0iMzgiIGhlaWdodD0iMjIiIGZpbGw9IiNDNEEyNjUiLz4KICA8IS0tIEJvdHRvbSBiYXIgLS0+CiAgPHJlY3QgeD0iMTQiIHk9Ijg2IiB3aWR0aD0iOTIiIGhlaWdodD0iMjAiIHJ4PSI2IiBmaWxsPSIjQzRBMjY1Ii8+CiAgPCEtLSBEaXZpZGVyIC0tPgogIDxsaW5lIHgxPSIxNDAiIHkxPSIxMCIgeDI9IjE0MCIgeTI9IjExMCIgc3Ryb2tlPSIjQzRBMjY1IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLW9wYWNpdHk9IjAuNCIvPgogIDwhLS0gQXJhYmljIG5hbWUgLS0+CiAgPHRleHQgeD0iMzkwIiB5PSI1MiIgZm9udC1mYW1pbHk9Ik5lb1NhbnNBcmFiaWMsIENhaXJvLCBUYWhvbWEsIEFyaWFsIiBmb250LXNpemU9IjMyIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMjMxRjIwIiB0ZXh0LWFuY2hvcj0iZW5kIj4mI3g2NDU7JiN4NjJDOyYjeDY0NTsmI3g2NDg7JiN4NjM5OyYjeDYyOTsgJiN4NjI3OyYjeDY0NDsmI3g2MzA7JiN4NjRBOyYjeDYyNzsmI3g2Mjg7JiN4NjRBOzwvdGV4dD4KICA8IS0tIEVuZ2xpc2ggbmFtZSAtLT4KICA8dGV4dCB4PSIzOTAiIHk9IjgyIiBmb250LWZhbWlseT0iTmVvU2Fuc0FyYWJpYywgQXJpYWwiIGZvbnQtc2l6ZT0iMTUiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNDNEEyNjUiIHRleHQtYW5jaG9yPSJlbmQiIGxldHRlci1zcGFjaW5nPSIzIj5BTC1ERVlBQkkgR1JPVVA8L3RleHQ+CiAgPCEtLSBTdWJ0aXRsZSAtLT4KICA8dGV4dCB4PSIzOTAiIHk9IjEwNiIgZm9udC1mYW1pbHk9Ik5lb1NhbnNBcmFiaWMsIENhaXJvLCBBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzg4OCIgdGV4dC1hbmNob3I9ImVuZCI+JiN4NjQ0OyYjeDY0NDsmI3g2NDU7JiN4NjQyOyYjeDYyNzsmI3g2NDg7JiN4NjQ0OyYjeDYyNzsmI3g2MkE7PC90ZXh0Pgo8L3N2Zz4=';
+
+
+// Inline SVG geometric mark for print header fallback
+const PRINT_LOGO_MARK = `<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <rect width="80" height="80" rx="8" fill="#231F20"/>
+  <rect x="9" y="9" width="27" height="27" rx="3.5" fill="#C4A265"/>
+  <rect x="44" y="9" width="27" height="27" rx="3.5" fill="#C4A265"/>
+  <rect x="9" y="41" width="27" height="16" fill="#C4A265"/>
+  <rect x="44" y="41" width="27" height="16" fill="#C4A265"/>
+  <rect x="9" y="61" width="62" height="13" rx="4" fill="#C4A265"/>
+</svg>`;
 
 const COMPANY_DEFAULTS = {
   name_ar: 'مجموعة الذيابي للمقاولات',
@@ -8113,14 +8116,14 @@ function buildPrintHeader(company, options){
   const docDate = options.date || new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
   const docDateGreg = new Date().toLocaleDateString('en-GB');
 
-  // Logo: use logo_url if set, else use embedded DEFAULT_COMPANY_LOGO, else text fallback
+  // Logo: custom URL > embedded SVG > inline mark fallback
   let logoHtml;
   if(company.logo_url && company.logo_url.trim()){
-    logoHtml = `<img src="${escapeHtml(company.logo_url)}" alt="logo" onerror="this.outerHTML='<img src=\\'${DEFAULT_COMPANY_LOGO}\\' alt=\\'logo\\'>'">`;
+    logoHtml = `<img src="${escapeHtml(company.logo_url)}" alt="logo" style="max-width:180px;max-height:90px;object-fit:contain" onerror="this.style.display='none'">`;
   } else if(typeof DEFAULT_COMPANY_LOGO !== 'undefined' && DEFAULT_COMPANY_LOGO){
-    logoHtml = `<img src="${DEFAULT_COMPANY_LOGO}" alt="logo">`;
+    logoHtml = `<img src="${DEFAULT_COMPANY_LOGO}" alt="logo" style="max-width:180px;max-height:90px;object-fit:contain">`;
   } else {
-    logoHtml = `<div class="print-logo-fallback">${escapeHtml(company.name_ar.split(' ')[1] || 'الذيابي')}</div>`;
+    logoHtml = `<div class="print-logo-fallback">${PRINT_LOGO_MARK}</div>`;
   }
 
   // Build company meta lines
