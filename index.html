@@ -2366,6 +2366,43 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         </div>
 
         <div class="stats-grid" id="stats-grid"></div>
+
+        <!-- KPI Section -->
+        <div id="kpi-section" style="margin-bottom:28px"></div>
+
+        <!-- AI Insights Panel -->
+        <div id="ai-insights-panel" style="margin-bottom:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:22px">✨</span>
+              <div>
+                <div style="font-size:15px;font-weight:700;color:var(--ink)">تحليل ذكي</div>
+                <div style="font-size:12px;color:var(--muted)">رؤى مدعومة بالذكاء الاصطناعي من بيانات المشتريات</div>
+              </div>
+            </div>
+            <button id="btn-ai-analyze" onclick="triggerAIInsights()" style="display:flex;align-items:center;gap:8px;padding:9px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              تحليل الآن
+            </button>
+          </div>
+          <div id="ai-insights-body" style="padding:16px 22px">
+            <div id="ai-no-key" style="display:none;text-align:center;padding:20px 0">
+              <div style="font-size:32px;margin-bottom:10px">🔑</div>
+              <div style="font-size:14px;color:var(--ink-2);margin-bottom:14px">يلزم إعداد مفتاح Claude API لتفعيل التحليل الذكي</div>
+              <div style="display:flex;align-items:center;gap:8px;max-width:480px;margin:0 auto">
+                <input id="ai-key-input" type="password" placeholder="sk-ant-..." style="flex:1;padding:9px 13px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--ink);font-family:monospace" oninput="document.getElementById('ai-key-save-btn').disabled=!this.value.trim()" />
+                <button id="ai-key-save-btn" disabled onclick="saveAIKey()" style="padding:9px 18px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">حفظ المفتاح</button>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:10px">يُحفظ المفتاح محلياً في المتصفح فقط ولا يُرسل لأي خادم خارجي</div>
+            </div>
+            <div id="ai-loading" style="display:none;text-align:center;padding:24px 0">
+              <div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#C4A265;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px"></div>
+              <div style="font-size:13px;color:var(--muted)">جاري التحليل...</div>
+            </div>
+            <div id="ai-result" style="display:none;white-space:pre-wrap;font-size:13.5px;line-height:1.75;color:var(--ink-2);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px 18px;max-height:380px;overflow-y:auto;direction:rtl;text-align:right"></div>
+            <div id="ai-idle-msg" style="text-align:center;padding:18px 0;color:var(--muted);font-size:13px">اضغط <strong>تحليل الآن</strong> للحصول على رؤى ذكية من بيانات المشتريات</div>
+          </div>
+        </div>
         <div style="text-align:end;font-size:11px;color:var(--muted);margin-top:4px" id="dashboard-last-update"></div>
 
         <div class="dash-charts">
@@ -3732,6 +3769,12 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         </button>
       </div>
       <div class="users-list" id="users-list" style="padding:8px"></div>
+      <div style="margin:0 16px 16px;padding:14px;background:rgba(196,162,101,0.07);border:1px solid rgba(196,162,101,0.25);border-radius:10px;font-size:12px;line-height:1.7">
+        <strong style="color:#6d5328">⚠️ إذا لم يتمكن المستخدمون الجدد من تسجيل الدخول — شغّل هذا SQL في Supabase → SQL Editor:</strong>
+        <pre id="rls-fix-sql" style="background:#1a1a1a;color:#e8d5a3;padding:10px;border-radius:6px;margin-top:8px;font-size:10.5px;overflow-x:auto;direction:ltr;user-select:all;cursor:copy" title="انقر لنسخ">ALTER TABLE proc_users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_select" ON proc_users FOR SELECT USING (true);
+CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (true);</pre>
+      </div>
     </div>
   </div>
 </div>
@@ -4336,10 +4379,15 @@ async function attemptLogin(username, password){
 
   if(cloudIsEnabled){
     // Cloud is connected: only cloud users are trusted.
+    if(cloudUsers && Object.keys(cloudUsers).length === 0){
+      // Empty result — likely Supabase RLS blocking anon reads on proc_users.
+      // This happens when the table has RLS enabled without a public SELECT policy.
+      return { ok:false, error: 'تعذّر قراءة المستخدمين من قاعدة البيانات (RLS). يرجى تشغيل SQL المطلوب في Supabase → راجع الإعدادات → إدارة المستخدمين.', lockedOut: false };
+    }
     if(cloudUsers && cloudUsers[username]){
       const u = cloudUsers[username];
       if(u.active === false){
-        return { ok:false, error: 'هذا الحساب معطّل. اتصل بالإدمن لتفعيله.', lockedOut: false };
+        return { ok:false, error: 'هذا الحساب معطّل. اتصل بالمسؤول لتفعيله.', lockedOut: false };
       }
       const candidateHash = await sha256Hex(password);
       if(candidateHash === u.password_hash){
@@ -4349,11 +4397,12 @@ async function attemptLogin(username, password){
         validPermissions = u.permissions;
       }
     } else if(cloudUsers === null){
-      // Cloud is enabled but fetch failed (network/RLS). Surface a clear
-      // error rather than silently letting the bootstrap password work.
       return { ok:false, error: 'تعذّر التحقق من المستخدمين عبر السحابة. تحقق من الاتصال وحاول مجدداً.', lockedOut: false };
+    } else {
+      // User not found in cloud users list
+      return { ok:false, error: 'اسم المستخدم غير موجود. تحقق من الاسم أو اطلب من المسؤول إنشاء الحساب.', lockedOut: false };
     }
-    // else: cloud users fetched but this username not in cloud → fail
+    // if username found but password wrong → fall through to invalid count
   } else {
     // Cloud not enabled at all → bootstrap mode (initial setup before
     // connecting Supabase). Plaintext bootstrap passwords are used here.
@@ -4933,6 +4982,7 @@ function renderDashboard(){
 
   // Render the new analytics charts
   renderDashboardCharts();
+  renderKPIs();
 }
 
 function filterByCategory(cat){
@@ -8597,11 +8647,18 @@ async function buildHistoryReport(fromDate, toDate, options){
   options = options || {};
   const company = await loadCompanyInfo();
   let history = [...STATE.history];
-  if(fromDate) history = history.filter(h => (h.date||'') >= fromDate);
-  if(toDate) history = history.filter(h => (h.date||'') <= toDate);
-  if(options.supplier) history = history.filter(h => h.supplier === options.supplier);
-  if(options.category) history = history.filter(h => h.category === options.category);
+  // Filter by selected nums first (overrides date/supplier filters)
+  if(options.nums && options.nums.length > 0){
+    const numSet = new Set(options.nums);
+    history = history.filter(h => numSet.has(h.num));
+  } else {
+    if(fromDate) history = history.filter(h => (h.date||'') >= fromDate);
+    if(toDate) history = history.filter(h => (h.date||'') <= toDate);
+    if(options.supplier) history = history.filter(h => h.supplier === options.supplier);
+    if(options.category) history = history.filter(h => h.category === options.category);
+  }
   history.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const isSelectedPrint = !!(options.nums && options.nums.length > 0);
 
   const totalValue = history.reduce((s,h)=>s+(h.price||0),0);
   const uniqueItems = new Set(history.map(h=>h.code)).size;
@@ -8633,8 +8690,8 @@ async function buildHistoryReport(fromDate, toDate, options){
   return `
     <div class="print-document">
       ${buildPrintHeader(company, {docNumber})}
-      <div class="print-doc-title">تقرير سجل المشتريات</div>
-      <div class="print-doc-subtitle">من ${escapeHtml(fromDate||'البداية')} إلى ${escapeHtml(toDate||'اليوم')}</div>
+      <div class="print-doc-title">${isSelectedPrint ? `تقرير البنود المحددة (${history.length} بند)` : 'تقرير سجل المشتريات'}</div>
+      <div class="print-doc-subtitle">${isSelectedPrint ? `بنود مختارة من سجل المشتريات` : `من ${escapeHtml(fromDate||'البداية')} إلى ${escapeHtml(toDate||'اليوم')}`}</div>
 
       <div class="print-grid-stats">
         <div class="print-stat-card"><span class="label">عدد العمليات</span><span class="value">${history.length}</span></div>
@@ -9384,12 +9441,14 @@ async function saveUserForm(){
       }
       closeModal('modal-user-form');
       const msg = __userFormMode === 'add'
-        ? 'تم إنشاء المستخدم'
+        ? `تم إنشاء المستخدم "${username}" — يمكنه الآن تسجيل الدخول بكلمة السر التي حددتها`
         : (editedSelf
             ? 'تم تحديث حسابك — التغييرات سارية الآن'
-            : 'تم تحديث المستخدم — ستظهر التغييرات عند تسجيل دخوله التالي');
-      toast('success', 'تم', msg);
-      setTimeout(()=>{ openModal('modal-users'); renderUsersList(); }, 150);
+            : `تم تحديث بيانات "${__userFormTarget}" — سارية من تسجيل الدخول التالي`);
+      toast('success', 'تم الحفظ', msg);
+      // Invalidate cache to force fresh read next login attempt
+      CLOUD_USERS_CACHE = null; CLOUD_USERS_LAST_FETCH = 0;
+      setTimeout(()=>{ openModal('modal-users'); renderUsersList(); }, 200);
     } else {
       errEl.textContent = res.error || 'فشل الحفظ';
       errEl.style.display = '';
@@ -10640,7 +10699,14 @@ function init(){
     const fromDate = document.getElementById('hist-date-from')?.value || '';
     const toDate = document.getElementById('hist-date-to')?.value || '';
     const supplier = document.getElementById('hist-supplier')?.value || '';
-    printHistoryReport(fromDate || null, toDate || null, {supplier: supplier || null});
+    const selectedNums = STATE.compareSelection && STATE.compareSelection.length > 0
+      ? [...STATE.compareSelection] : null;
+    if(selectedNums){
+      // Print only selected rows — ignore date/supplier filters
+      printHistoryReport(null, null, {nums: selectedNums});
+    } else {
+      printHistoryReport(fromDate || null, toDate || null, {supplier: supplier || null});
+    }
   });
   // Select-all checkbox in history
   const selAll = document.getElementById('hist-select-all');
@@ -10800,6 +10866,11 @@ function init(){
   if(btnManageUsers) btnManageUsers.addEventListener('click', openUserManagement);
   const btnUserAdd = document.getElementById('btn-user-add');
   if(btnUserAdd) btnUserAdd.addEventListener('click', () => openUserForm('add'));
+  // Click-to-copy RLS SQL helper
+  const rlsSql = document.getElementById('rls-fix-sql');
+  if(rlsSql) rlsSql.addEventListener('click', () => {
+    navigator.clipboard.writeText(rlsSql.textContent.trim()).then(()=>toast('success','تم النسخ','SQL جاهز للصق في Supabase')).catch(()=>{});
+  });
   const btnUfSave = document.getElementById('uf-save');
   if(btnUfSave) btnUfSave.addEventListener('click', saveUserForm);
   // Auto-update permission checkboxes when role changes (admin = all checked, user = defaults)
