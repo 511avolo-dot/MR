@@ -2135,6 +2135,25 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .print-preview-content { background: #e8e4da; }
 .print-document { box-shadow: 0 4px 24px rgba(35,31,32,0.15) !important; }
 
+/* ===== AI AGENTS PAGE ===== */
+.agent-tab-btn{padding:8px 16px;background:var(--surface);border:1.5px solid var(--border);border-radius:24px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;font-family:inherit;transition:all 0.18s;white-space:nowrap}
+.agent-tab-btn.active{background:#231F20;color:#C4A265;border-color:#231F20}
+.agent-tab-btn:hover:not(.active){border-color:#C4A265;color:var(--ink)}
+.agent-msg{display:flex;gap:10px;align-items:flex-start;animation:slideInUp 0.22s ease}
+.agent-msg.user{flex-direction:row-reverse}
+.agent-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;font-weight:700}
+.agent-bubble{max-width:82%;padding:11px 15px;border-radius:12px;font-size:13.5px;line-height:1.7;direction:rtl;text-align:right}
+.agent-msg.user .agent-bubble{background:#231F20;color:#f5f1ea;border-radius:12px 4px 12px 12px}
+.agent-msg.bot .agent-bubble{background:var(--surface-2);border:1px solid var(--border);color:var(--ink);border-radius:4px 12px 12px 12px}
+.agent-tool-call{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:6px;font-size:11.5px;color:#7c3aed;margin-top:6px;font-family:'IBM Plex Mono',monospace}
+.agent-tool-done{color:#2d6a4f;background:rgba(45,106,79,0.07);border-color:rgba(45,106,79,0.2)}
+.agent-quick-chip{padding:6px 14px;background:var(--surface);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--ink-2);cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.agent-quick-chip:hover{border-color:#C4A265;color:var(--ink);background:rgba(196,162,101,0.08)}
+.agent-thinking{display:flex;gap:4px;padding:4px 0}
+.agent-thinking span{width:7px;height:7px;border-radius:50%;background:#C4A265;animation:typingDot 1.2s infinite}
+.agent-thinking span:nth-child(2){animation-delay:0.2s}
+.agent-thinking span:nth-child(3){animation-delay:0.4s}
+
 </style>
 <template id="__bundler_thumbnail" data-bg-color="#0a1814">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
@@ -2291,6 +2310,11 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
         التحليلات المتقدمة
         <span style="margin-inline-start:auto;font-size:9px;background:linear-gradient(135deg,#C4A265,#9A7A45);color:#231F20;padding:2px 6px;border-radius:8px;font-weight:700;letter-spacing:0.05em">جديد</span>
+      </a>
+      <a class="nav-item" data-page="agents">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><path d="M5 7v1M19 7v1"/></svg>
+        وكلاء الذكاء الاصطناعي
+        <span style="margin-inline-start:auto;font-size:9px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#e9d5ff;padding:2px 6px;border-radius:8px;font-weight:700">وكلاء</span>
       </a>
       <a class="nav-item" data-page="ai">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 0110 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
@@ -2942,6 +2966,88 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
               <div class="empty-title">جارٍ التحليل…</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- AI AGENTS PAGE -->
+      <section class="page" id="page-agents">
+        <div class="page-header">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+            <div style="width:46px;height:46px;background:linear-gradient(135deg,#7c3aed,#5b21b6);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(124,58,237,0.35)">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/></svg>
+            </div>
+            <div>
+              <div class="page-eyebrow">نظام متعدد الوكلاء</div>
+              <h1 class="page-title" style="margin:0">وكلاء الذكاء الاصطناعي</h1>
+            </div>
+          </div>
+          <p class="page-subtitle">وكلاء متخصصون مزودون بأدوات تحليل المشتريات — يبحثون في بياناتك، يقارنون الأسعار، ويقدمون توصيات مدروسة.</p>
+        </div>
+
+        <!-- Agent selector tabs -->
+        <div id="agent-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+          <button class="agent-tab-btn active" data-agent="pricing" onclick="selectAgent('pricing')">
+            📊 محلل التسعير
+          </button>
+          <button class="agent-tab-btn" data-agent="supplier" onclick="selectAgent('supplier')">
+            🏢 مقيّم الموردين
+          </button>
+          <button class="agent-tab-btn" data-agent="budget" onclick="selectAgent('budget')">
+            💰 مستشار الميزانية
+          </button>
+          <button class="agent-tab-btn" data-agent="risk" onclick="selectAgent('risk')">
+            ⚠️ محلل المخاطر
+          </button>
+          <button class="agent-tab-btn" data-agent="report" onclick="selectAgent('report')">
+            📄 مولّد التقارير
+          </button>
+        </div>
+
+        <!-- Active agent info -->
+        <div id="agent-info-bar" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;font-size:13px">
+          <div id="agent-info-icon" style="font-size:24px">📊</div>
+          <div style="flex:1">
+            <div id="agent-info-name" style="font-weight:700;color:var(--ink)">محلل التسعير</div>
+            <div id="agent-info-desc" style="color:var(--muted);font-size:12px;margin-top:2px">متخصص في تحليل الأسعار واكتشاف فرص التوفير وتحديد التذبذب السعري</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="clearAgentConversation()" title="بدء محادثة جديدة">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+              محادثة جديدة
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="exportAgentConversation()" title="تصدير المحادثة">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              تصدير
+            </button>
+          </div>
+        </div>
+
+        <!-- Chat area -->
+        <div id="agent-chat-wrap" style="display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;height:520px">
+          <div id="agent-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+            <!-- Messages inserted here -->
+          </div>
+          <!-- No-key warning -->
+          <div id="agent-no-key" style="display:none;padding:16px;background:rgba(196,162,101,0.08);border-top:1px solid var(--border);text-align:center">
+            <div style="font-size:13px;color:var(--ink-2);margin-bottom:10px">⚠️ أدخل مفتاح Anthropic API لتفعيل الوكلاء</div>
+            <div style="display:flex;gap:8px;justify-content:center;max-width:480px;margin:0 auto">
+              <input id="agent-key-input" type="password" placeholder="sk-ant-..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--ink);font-family:monospace">
+              <button onclick="saveAgentKey()" style="padding:8px 16px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">حفظ</button>
+            </div>
+          </div>
+          <div id="agent-input-row" style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end">
+            <textarea id="agent-input" placeholder="اسأل الوكيل..." rows="1" style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg);color:var(--ink);font-family:inherit;resize:none;max-height:120px;direction:rtl"></textarea>
+            <button id="agent-send-btn" onclick="sendAgentMessage()" style="padding:10px 18px;background:#231F20;color:#C4A265;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:opacity 0.2s">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              إرسال
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick prompts -->
+        <div style="margin-top:12px">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">اقتراحات سريعة:</div>
+          <div id="agent-quick-prompts" style="display:flex;gap:8px;flex-wrap:wrap"></div>
         </div>
       </section>
 
@@ -14444,6 +14550,388 @@ function renderKPIs() {
   document.head.appendChild(style);
 })();
 
+/* ============================================================
+   AI MULTI-AGENT FRAMEWORK v1.0
+   مجموعة الذيابي — نظام الوكلاء الذكيين
+   ============================================================ */
+
+// ─── Agent Configurations ───────────────────────────────────
+const AGENTS = {
+  pricing: {
+    name: 'محلل التسعير', icon: '📊', color: '#C4A265',
+    desc: 'متخصص في تحليل الأسعار واكتشاف فرص التوفير وتحديد التذبذب السعري',
+    system: `أنت "محلل التسعير" لمجموعة الذيابي للمقاولات بالرياض.
+متخصص في تحليل بيانات المشتريات، اكتشاف الأنماط السعرية، وتحديد فرص التوفير.
+استخدم الأدوات المتاحة للحصول على بيانات دقيقة قبل الإجابة.
+تحدث بالعربية الفصحى المهنية. كن محدداً وعملياً. استند للأرقام الفعلية فقط.`,
+    prompts: ['ما أعلى 5 أصناف سعراً؟','أصناف ذات تذبذب سعري عالٍ','مقارنة أسعار الفئات','فرص التوفير في المشتريات']
+  },
+  supplier: {
+    name: 'مقيّم الموردين', icon: '🏢', color: '#3b82f6',
+    desc: 'يحلل أداء الموردين ويوصي بأفضلهم بناءً على السعر والموثوقية',
+    system: `أنت "مقيّم الموردين" لمجموعة الذيابي للمقاولات.
+متخصص في تقييم أداء الموردين، مقارنة العروض، والتوصية بأفضل مصادر التوريد.
+استخدم الأدوات للحصول على إحصاءات دقيقة. الرد بالعربية المهنية.`,
+    prompts: ['أفضل الموردين من حيث السعر','موردون غير نشطين','مقارنة موردي صنف معين','تقييم شامل لجميع الموردين']
+  },
+  budget: {
+    name: 'مستشار الميزانية', icon: '💰', color: '#10b981',
+    desc: 'يقترح تحسينات الإنفاق ويحسّن قرارات الشراء',
+    system: `أنت "مستشار الميزانية" لمجموعة الذيابي للمقاولات.
+متخصص في تحليل الإنفاق وتحديد فرص التوفير وتحسين قرارات الشراء.
+استخدم الأدوات لتحليل الإنفاق الفعلي بدقة. تحدث بالعربية المهنية.`,
+    prompts: ['تحليل الإنفاق الشهري','فئات الإنفاق الأعلى','توصيات لتقليل التكاليف','تقرير الميزانية السنوي']
+  },
+  risk: {
+    name: 'محلل المخاطر', icon: '⚠️', color: '#ef4444',
+    desc: 'يكتشف شذوذات الأسعار والمخاطر في سلسلة التوريد',
+    system: `أنت "محلل المخاطر" لمجموعة الذيابي للمقاولات.
+متخصص في كشف الشذوذات السعرية، تحديد مخاطر سلسلة التوريد، والتحذير من الأنماط غير الطبيعية.
+استخدم الأدوات للكشف الدقيق. تحدث بالعربية المهنية مع التركيز على الأثر العملي.`,
+    prompts: ['اكتشف شذوذات الأسعار','أصناف ذات مورد واحد فقط','تحليل مخاطر التوريد','تنبيهات عاجلة']
+  },
+  report: {
+    name: 'مولّد التقارير', icon: '📄', color: '#8b5cf6',
+    desc: 'يولّد تقارير شاملة وجاهزة للاجتماعات والعروض التقديمية',
+    system: `أنت "مولّد التقارير" لمجموعة الذيابي للمقاولات.
+متخصص في توليد تقارير مهنية شاملة بالعربية جاهزة للعرض والاجتماعات.
+استخدم الأدوات لجمع البيانات ثم اكتب تقريراً منظماً مع عناوين وأقسام وتوصيات.`,
+    prompts: ['تقرير المشتريات الشهري','تقرير أداء الموردين','تقرير تحليل التكاليف','ملخص تنفيذي للإدارة']
+  }
+};
+
+// ─── Tool Definitions (Anthropic format) ────────────────────
+const AGENT_TOOLS = [
+  {name:'search_items',description:'Search procurement items by name, code or category',input_schema:{type:'object',properties:{query:{type:'string'},category:{type:'string'},limit:{type:'integer',default:10}},required:['query']}},
+  {name:'get_price_history',description:'Get price history records for a specific item code',input_schema:{type:'object',properties:{code:{type:'string'},days:{type:'integer',default:365}},required:['code']}},
+  {name:'get_supplier_stats',description:'Get performance statistics for a supplier by name',input_schema:{type:'object',properties:{name:{type:'string'}},required:['name']}},
+  {name:'find_price_anomalies',description:'Find items with high price variance (max/min ratio above threshold)',input_schema:{type:'object',properties:{threshold:{type:'number',default:1.5},category:{type:'string'},limit:{type:'integer',default:20}}}},
+  {name:'get_category_analysis',description:'Analyze procurement spending grouped by category',input_schema:{type:'object',properties:{months:{type:'integer',default:12}}}},
+  {name:'compare_item_suppliers',description:'Compare all suppliers for a specific item code or name',input_schema:{type:'object',properties:{code:{type:'string'},name:{type:'string'}}}},
+  {name:'get_top_items',description:'Get top items by price, variance, or activity',input_schema:{type:'object',properties:{sort_by:{type:'string',enum:['price','variance','activity'],default:'price'},limit:{type:'integer',default:10},category:{type:'string'}}}},
+  {name:'get_dashboard_summary',description:'Get a full summary of the procurement system state',input_schema:{type:'object',properties:{}}}
+];
+
+// ─── Tool Implementations ────────────────────────────────────
+function runAgentTool(name, inp){
+  try{
+    const items = STATE.items||[], hist = STATE.history||[], sups = STATE.suppliers||[];
+    switch(name){
+      case 'search_items':{
+        const q=(inp.query||'').toLowerCase(), cat=inp.category||'';
+        return items.filter(i=>((i.name||'').toLowerCase().includes(q)||(i.code||'').toLowerCase().includes(q))&&(!cat||i.category===cat)).slice(0,inp.limit||10).map(i=>({code:i.code,name:i.name,category:i.category,unit:i.unit,last_price:i.last_price,avg_price:i.avg_price,min_price:i.min_price,max_price:i.max_price,offers:i.offers,last_supplier:i.last_supplier}));
+      }
+      case 'get_price_history':{
+        const cut=new Date(Date.now()-(inp.days||365)*864e5).toISOString().slice(0,10);
+        const r=hist.filter(h=>h.code===inp.code&&(h.date||'')>=cut).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+        return{count:r.length,records:r.slice(0,50).map(h=>({date:h.date,price:h.price,supplier:h.supplier,unit:h.unit,reference:h.reference}))};
+      }
+      case 'get_supplier_stats':{
+        const q=(inp.name||'').toLowerCase();
+        const r=hist.filter(h=>(h.supplier||'').toLowerCase().includes(q));
+        if(!r.length)return{found:false};
+        const prices=r.map(h=>h.price).filter(p=>p!=null);
+        return{name:inp.name,transactions:r.length,unique_items:[...new Set(r.map(h=>h.code))].length,avg_price:prices.length?(prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2):0,min_price:prices.length?Math.min(...prices):0,max_price:prices.length?Math.max(...prices):0,last_date:r.map(h=>h.date).filter(Boolean).sort().pop()};
+      }
+      case 'find_price_anomalies':{
+        const thr=inp.threshold||1.5, cat=inp.category||'';
+        const map={};
+        hist.forEach(h=>{if(!h.code||h.price==null)return;if(cat&&h.category!==cat)return;if(!map[h.code])map[h.code]={name:h.name||h.code,cat:h.category||'',prices:[]};map[h.code].prices.push(h.price);});
+        return Object.entries(map).filter(([,v])=>{const mn=Math.min(...v.prices),mx=Math.max(...v.prices);return mn>0&&mx>=thr*mn;}).map(([code,v])=>{const mn=Math.min(...v.prices),mx=Math.max(...v.prices);return{code,name:v.name,category:v.cat,min:mn,max:mx,ratio:(mx/mn).toFixed(2),count:v.prices.length};}).sort((a,b)=>b.ratio-a.ratio).slice(0,inp.limit||20);
+      }
+      case 'get_category_analysis':{
+        const cut=new Date(Date.now()-(inp.months||12)*30*864e5).toISOString().slice(0,10);
+        const cats={};
+        hist.filter(h=>(h.date||'')>=cut).forEach(h=>{const c=h.category||'غير مصنف';if(!cats[c])cats[c]={total:0,count:0,items:new Set()};cats[c].total+=h.price||0;cats[c].count++;if(h.code)cats[c].items.add(h.code);});
+        return Object.entries(cats).sort((a,b)=>b[1].total-a[1].total).map(([cat,d])=>({category:cat,total:+d.total.toFixed(2),transactions:d.count,unique_items:d.items.size}));
+      }
+      case 'compare_item_suppliers':{
+        const code=inp.code||'', nm=(inp.name||'').toLowerCase();
+        const r=hist.filter(h=>(code&&h.code===code)||(!code&&(h.name||'').toLowerCase().includes(nm)));
+        if(!r.length)return{found:false};
+        const byS={};
+        r.forEach(h=>{const s=h.supplier||'غير معروف';if(!byS[s])byS[s]={prices:[],dates:[]};byS[s].prices.push(h.price);byS[s].dates.push(h.date);});
+        return Object.entries(byS).map(([sup,d])=>({supplier:sup,quotes:d.prices.length,avg_price:+(d.prices.reduce((a,b)=>a+b,0)/d.prices.length).toFixed(2),min_price:Math.min(...d.prices),max_price:Math.max(...d.prices),last_date:d.dates.filter(Boolean).sort().pop()})).sort((a,b)=>a.avg_price-b.avg_price);
+      }
+      case 'get_top_items':{
+        const by=inp.sort_by||'price', cat=inp.category||'', lim=inp.limit||10;
+        let list=[...items];
+        if(cat)list=list.filter(i=>i.category===cat);
+        if(by==='price')list.sort((a,b)=>(b.last_price||0)-(a.last_price||0));
+        else if(by==='variance')list=list.filter(i=>i.min_price&&i.max_price&&i.min_price>0).sort((a,b)=>(b.max_price/b.min_price)-(a.max_price/a.min_price));
+        else list.sort((a,b)=>(b.offers||0)-(a.offers||0));
+        return list.slice(0,lim).map(i=>({code:i.code,name:i.name,category:i.category,last_price:i.last_price,avg_price:i.avg_price,min_price:i.min_price,max_price:i.max_price,offers:i.offers}));
+      }
+      case 'get_dashboard_summary':{
+        const priced=items.filter(i=>i.last_price);
+        const totalSpend=hist.reduce((s,h)=>s+(h.price||0),0);
+        const cats=[...new Set(items.map(i=>i.category).filter(Boolean))];
+        return{total_items:items.length,priced_items:priced.length,total_history:hist.length,total_suppliers:sups.length,total_categories:cats.length,total_spend_sar:+totalSpend.toFixed(2),avg_price:priced.length?(priced.reduce((s,i)=>s+(i.avg_price||0),0)/priced.length).toFixed(2):0,categories:cats.slice(0,10)};
+      }
+      default: return{error:'unknown tool'};
+    }
+  }catch(e){return{error:e.message};}
+}
+
+// ─── Agent State ─────────────────────────────────────────────
+let AGENT_CURRENT = 'pricing';
+let AGENT_HISTORY = {}; // per-agent message history
+let AGENT_BUSY = false;
+
+function getAgentKey(){ return localStorage.getItem('ai_api_key')||localStorage.getItem('anthropic_key')||''; }
+function saveAgentKey(){
+  const v=document.getElementById('agent-key-input')?.value?.trim();
+  if(!v)return;
+  localStorage.setItem('ai_api_key',v);
+  document.getElementById('agent-no-key').style.display='none';
+  toast('success','تم الحفظ','مفتاح API محفوظ — يمكنك الآن استخدام الوكلاء');
+}
+
+function selectAgent(id){
+  AGENT_CURRENT=id;
+  const cfg=AGENTS[id];
+  if(!cfg)return;
+  // Update tabs
+  document.querySelectorAll('.agent-tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.agent===id));
+  // Update info bar
+  document.getElementById('agent-info-icon').textContent=cfg.icon;
+  document.getElementById('agent-info-name').textContent=cfg.name;
+  document.getElementById('agent-info-desc').textContent=cfg.desc;
+  // Update quick prompts
+  const qp=document.getElementById('agent-quick-prompts');
+  if(qp) qp.innerHTML=cfg.prompts.map(p=>`<div class="agent-quick-chip" onclick="setAgentInput(${JSON.stringify(p)})">${p}</div>`).join('');
+  // Load conversation
+  renderAgentMessages();
+}
+
+function setAgentInput(text){
+  const el=document.getElementById('agent-input');
+  if(el){el.value=text;el.focus();}
+}
+
+function renderAgentMessages(){
+  const msgs=AGENT_HISTORY[AGENT_CURRENT]||[];
+  const el=document.getElementById('agent-messages');
+  if(!el)return;
+  if(!msgs.length){
+    const cfg=AGENTS[AGENT_CURRENT];
+    el.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--muted)">
+      <div style="font-size:40px;margin-bottom:12px">${cfg.icon}</div>
+      <div style="font-weight:600;color:var(--ink);margin-bottom:6px">${cfg.name}</div>
+      <div style="font-size:13px">${cfg.desc}</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML='';
+  msgs.forEach(m=>{
+    if(m.role==='user') addAgentMsgEl('user',m.content);
+    else if(m.role==='assistant'&&typeof m.content==='string') addAgentMsgEl('bot',m.content);
+  });
+}
+
+function addAgentMsgEl(role, content, streaming=false){
+  const msgs=document.getElementById('agent-messages');
+  if(!msgs)return null;
+  const cfg=AGENTS[AGENT_CURRENT];
+  const div=document.createElement('div');
+  div.className=`agent-msg ${role}`;
+  const formatted=(typeof content==='string')?escapeHtml(content).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>').replace(/(<li>.*?<\/li>)+/g,m=>'<ul style="margin:4px 0;padding-inline-start:20px">'+m+'</ul>').replace(/\n/g,'<br>'):escapeHtml(String(content));
+  if(role==='user'){
+    div.innerHTML=`<div class="agent-bubble">${formatted}</div><div class="agent-avatar" style="background:rgba(196,162,101,0.15);color:#C4A265">أ</div>`;
+  } else {
+    const cursor=streaming?'<span id="agent-cursor" style="display:inline-block;width:6px;height:14px;background:#C4A265;animation:blink 1s infinite;vertical-align:middle;margin-inline-start:3px"></span>':'';
+    div.innerHTML=`<div class="agent-avatar" style="background:#231F20;color:#C4A265;font-size:15px">${cfg.icon}</div><div class="agent-bubble" id="agent-streaming-bubble">${formatted||'<div class="agent-thinking"><span></span><span></span><span></span></div>'}${cursor}</div>`;
+  }
+  // Remove empty state
+  const empty=msgs.querySelector('[style*="padding:40px"]');
+  if(empty)empty.remove();
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+function clearAgentConversation(){
+  AGENT_HISTORY[AGENT_CURRENT]=[];
+  renderAgentMessages();
+  toast('info','محادثة جديدة','تم مسح سجل المحادثة');
+}
+
+function exportAgentConversation(){
+  const msgs=AGENT_HISTORY[AGENT_CURRENT]||[];
+  if(!msgs.length){toast('warn','فارغة','لا توجد محادثة للتصدير');return;}
+  const cfg=AGENTS[AGENT_CURRENT];
+  const text=msgs.map(m=>(m.role==='user'?'المستخدم: ':'الوكيل: ')+m.content).join('\n\n---\n\n');
+  const blob=new Blob([`محادثة مع ${cfg.name}\nمجموعة الذيابي للمقاولات\n${'='.repeat(40)}\n\n${text}`],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=Object.assign(document.createElement('a'),{href:url,download:`محادثة_${cfg.name}_${new Date().toISOString().slice(0,10)}.txt`});
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// ─── Streaming Agent Engine ───────────────────────────────────
+async function sendAgentMessage(){
+  if(AGENT_BUSY)return;
+  const input=document.getElementById('agent-input');
+  const sendBtn=document.getElementById('agent-send-btn');
+  const q=(input?.value||'').trim();
+  if(!q)return;
+  const apiKey=getAgentKey();
+  if(!apiKey){document.getElementById('agent-no-key').style.display='';return;}
+
+  input.value='';input.style.height='';
+  AGENT_BUSY=true;
+  if(sendBtn){sendBtn.disabled=true;sendBtn.textContent='يعمل...';}
+
+  // Add user message to history and UI
+  if(!AGENT_HISTORY[AGENT_CURRENT])AGENT_HISTORY[AGENT_CURRENT]=[];
+  AGENT_HISTORY[AGENT_CURRENT].push({role:'user',content:q});
+  addAgentMsgEl('user',q);
+
+  // Add streaming bot message placeholder
+  const botDiv=addAgentMsgEl('bot','',true);
+  const bubble=botDiv?.querySelector('#agent-streaming-bubble');
+
+  try{
+    let fullText='';
+    let toolCallsThisRound=[];
+    let messages=[...AGENT_HISTORY[AGENT_CURRENT]];
+    const cfg=AGENTS[AGENT_CURRENT];
+
+    // Agentic loop: keep calling until no more tool use
+    for(let round=0;round<5;round++){
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2048,stream:true,system:cfg.system,tools:AGENT_TOOLS,messages})
+      });
+      if(!res.ok){const e=await res.text();throw new Error(`API ${res.status}: ${e.slice(0,200)}`);}
+
+      const reader=res.body.getReader();
+      const dec=new TextDecoder();
+      let buf='',currentToolId=null,currentToolName=null,currentToolInput='';
+      let assistantContent=[];
+      let stopReason=null;
+      let roundText='';
+
+      while(true){
+        const{done,value}=await reader.read();
+        if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split('\n');buf=lines.pop();
+        for(const line of lines){
+          if(!line.startsWith('data: '))continue;
+          const data=line.slice(6).trim();
+          if(!data||data==='[DONE]')continue;
+          try{
+            const ev=JSON.parse(data);
+            if(ev.type==='message_start')stopReason=null;
+            else if(ev.type==='message_delta')stopReason=ev.delta?.stop_reason;
+            else if(ev.type==='content_block_start'){
+              const cb=ev.content_block;
+              if(cb.type==='text'){assistantContent.push({type:'text',text:''});}
+              else if(cb.type==='tool_use'){currentToolId=cb.id;currentToolName=cb.name;currentToolInput='';assistantContent.push({type:'tool_use',id:cb.id,name:cb.name,input:{}});
+                // Show tool call in UI
+                if(bubble){const tc=document.createElement('div');tc.className='agent-tool-call';tc.id=`tc-${cb.id}`;tc.innerHTML=`⚙️ يستخدم أداة: <strong>${getToolLabel(cb.name)}</strong> <span style="opacity:0.6">جارٍ التنفيذ...</span>`;bubble.appendChild(tc);}
+              }
+            }
+            else if(ev.type==='content_block_delta'){
+              if(ev.delta?.type==='text_delta'){
+                roundText+=ev.delta.text;fullText+=ev.delta.text;
+                const idx=assistantContent.findIndex(c=>c.type==='text');
+                if(idx>=0)assistantContent[idx].text+=ev.delta.text;
+                // Stream to UI
+                if(bubble){
+                  const cursor=bubble.querySelector('#agent-cursor');
+                  const thinking=bubble.querySelector('.agent-thinking');
+                  if(thinking)thinking.remove();
+                  const textNode=bubble.querySelector('.agent-stream-text')||(() =>{const d=document.createElement('div');d.className='agent-stream-text';d.style.cssText='white-space:pre-wrap;direction:rtl;text-align:right';if(cursor)bubble.insertBefore(d,cursor);else bubble.appendChild(d);return d;})();
+                  textNode.innerHTML=escapeHtml(fullText).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>').replace(/(<li>.*?<\/li>)+/g,m=>'<ul style="margin:4px 0;padding-inline-start:20px">'+m+'</ul>').replace(/\n/g,'<br>');
+                  document.getElementById('agent-messages').scrollTop=99999;
+                }
+              }
+              else if(ev.delta?.type==='input_json_delta')currentToolInput+=ev.delta.partial_json;
+            }
+            else if(ev.type==='content_block_stop'){
+              if(currentToolName){
+                let toolInput={};try{toolInput=JSON.parse(currentToolInput);}catch(e){}
+                const toolIdx=assistantContent.findIndex(c=>c.type==='tool_use'&&c.id===currentToolId);
+                if(toolIdx>=0)assistantContent[toolIdx].input=toolInput;
+                const result=runAgentTool(currentToolName,toolInput);
+                toolCallsThisRound.push({id:currentToolId,name:currentToolName,input:toolInput,result});
+                // Update tool call UI
+                const tcEl=document.getElementById(`tc-${currentToolId}`);
+                if(tcEl){const cnt=Array.isArray(result)?result.length:(result?.count??result?.transactions??'');tcEl.className='agent-tool-call agent-tool-done';tcEl.innerHTML=`✅ ${getToolLabel(currentToolName)}: ${cnt!==undefined&&cnt!==''?cnt+' نتيجة':'تم'}`;}
+                currentToolName=null;currentToolInput='';currentToolId=null;
+              }
+            }
+          }catch(e){}
+        }
+      }
+
+      // Add assistant turn to messages
+      messages.push({role:'assistant',content:assistantContent.filter(c=>(c.type==='text'&&c.text)||(c.type==='tool_use'))});
+
+      // If tool_use stop, add results and continue loop
+      if(stopReason==='tool_use'&&toolCallsThisRound.length){
+        messages.push({role:'user',content:toolCallsThisRound.map(tc=>({type:'tool_result',tool_use_id:tc.id,content:JSON.stringify(tc.result)}))});
+        toolCallsThisRound=[];
+        continue;
+      }
+      break; // end_turn or no tools
+    }
+
+    // Finalize UI
+    if(bubble){
+      const cursor=bubble.querySelector('#agent-cursor');if(cursor)cursor.remove();
+      const streamText=bubble.querySelector('.agent-stream-text');
+      if(streamText)streamText.id='';
+    }
+
+    // Save to history
+    AGENT_HISTORY[AGENT_CURRENT].push({role:'assistant',content:fullText});
+
+  }catch(e){
+    if(bubble)bubble.innerHTML=`<div style="color:var(--danger);font-size:13px">❌ ${escapeHtml(e.message)}</div>`;
+  }finally{
+    AGENT_BUSY=false;
+    if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='إرسال';}
+    if(sendBtn)sendBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> إرسال';
+  }
+}
+
+function getToolLabel(name){
+  const labels={search_items:'بحث في الأصناف',get_price_history:'سجل الأسعار',get_supplier_stats:'إحصاءات المورد',find_price_anomalies:'كشف الشذوذ',get_category_analysis:'تحليل الفئات',compare_item_suppliers:'مقارنة الموردين',get_top_items:'أفضل الأصناف',get_dashboard_summary:'ملخص النظام'};
+  return labels[name]||name;
+}
+
+// Auto-resize textarea
+(function(){
+  const ta=document.getElementById('agent-input');
+  if(ta){
+    ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';});
+    ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAgentMessage();}});
+  }
+})();
+
+// Initialize agents page when navigated to
+(function(){
+  const orig=window.showPage||function(){};
+  document.addEventListener('DOMContentLoaded',()=>{
+    document.querySelectorAll('[data-page="agents"]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        setTimeout(()=>{
+          selectAgent(AGENT_CURRENT);
+          const k=getAgentKey();
+          if(!k)document.getElementById('agent-no-key').style.display='';
+        },50);
+      });
+    });
+  });
+  // If already on agents page
+  if(document.getElementById('page-agents')?.classList.contains('active')){
+    selectAgent(AGENT_CURRENT);
+  }
+})();
 
 </script>
 </body>
