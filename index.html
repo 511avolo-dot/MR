@@ -14029,6 +14029,422 @@ function spExportCSV(){
   });
 })();
 
+
+/* ================================================================
+   AI INSIGHTS — Claude API Integration
+   ================================================================ */
+
+async function getAIInsights(prompt) {
+  const apiKey = localStorage.getItem('ai_api_key') || '';
+  if (!apiKey) return null;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API Error ${res.status}: ${errText}`);
+  }
+  const j = await res.json();
+  return j.content?.[0]?.text || null;
+}
+
+function saveAIKey() {
+  const inp = document.getElementById('ai-key-input');
+  if (!inp) return;
+  const key = inp.value.trim();
+  if (!key) return;
+  localStorage.setItem('ai_api_key', key);
+  inp.value = '';
+  document.getElementById('ai-no-key').style.display = 'none';
+  document.getElementById('ai-idle-msg').style.display = 'block';
+  showToast('تم حفظ مفتاح API بنجاح', 'success');
+}
+
+async function triggerAIInsights() {
+  const apiKey = localStorage.getItem('ai_api_key') || '';
+  const noKey = document.getElementById('ai-no-key');
+  const loading = document.getElementById('ai-loading');
+  const result = document.getElementById('ai-result');
+  const idle = document.getElementById('ai-idle-msg');
+  const btn = document.getElementById('btn-ai-analyze');
+
+  if (!apiKey) {
+    if (noKey) noKey.style.display = 'block';
+    if (idle) idle.style.display = 'none';
+    if (result) result.style.display = 'none';
+    return;
+  }
+
+  // Build data summary for prompt
+  const items = STATE.items || [];
+  const hist = STATE.history || [];
+  const suppliers = STATE.suppliers || [];
+
+  const totalItems = items.length;
+  const pricedItems = items.filter(i => i.last_price != null);
+  const totalHist = hist.length;
+
+  // Price variance data
+  const itemPrices = {};
+  hist.forEach(h => {
+    if (!h.code || h.price == null) return;
+    if (!itemPrices[h.code]) itemPrices[h.code] = { name: h.name || h.code, prices: [], category: h.category || '' };
+    itemPrices[h.code].prices.push(Number(h.price));
+  });
+
+  const highVariance = Object.entries(itemPrices)
+    .filter(([, v]) => {
+      const mn = Math.min(...v.prices), mx = Math.max(...v.prices);
+      return mn > 0 && mx > 1.5 * mn;
+    })
+    .slice(0, 5)
+    .map(([code, v]) => ({ code, name: v.name, min: Math.min(...v.prices), max: Math.max(...v.prices), category: v.category }));
+
+  // Supplier spend
+  const supSpend = {};
+  hist.forEach(h => {
+    if (!h.supplier || h.price == null) return;
+    if (!supSpend[h.supplier]) supSpend[h.supplier] = { total: 0, count: 0 };
+    supSpend[h.supplier].total += Number(h.price);
+    supSpend[h.supplier].count++;
+  });
+  const topSuppliers = Object.entries(supSpend)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([name, v]) => ({ name, count: v.count, avg: (v.total / v.count).toFixed(2) }));
+
+  // Category spend
+  const catSpend = {};
+  hist.forEach(h => {
+    if (!h.category || h.price == null) return;
+    catSpend[h.category] = (catSpend[h.category] || 0) + Number(h.price);
+  });
+  const topCats = Object.entries(catSpend).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  // Rising prices (items with last price > avg price significantly)
+  const risingItems = pricedItems
+    .filter(i => i.avg_price && i.last_price > i.avg_price * 1.15)
+    .sort((a, b) => (b.last_price / (b.avg_price || 1)) - (a.last_price / (a.avg_price || 1)))
+    .slice(0, 5)
+    .map(i => ({ name: i.name || i.code, last: i.last_price, avg: i.avg_price, pct: ((i.last_price / i.avg_price - 1) * 100).toFixed(1) }));
+
+  const prompt = `أنت محلل مشتريات خبير لشركة مجموعة الذيابي. حلّل البيانات التالية وقدّم رؤى عملية باللغة العربية:
+
+## ملخص البيانات:
+- إجمالي الأصناف: ${totalItems} (مُسعّر: ${pricedItems.length})
+- السجلات التاريخية: ${totalHist}
+- الموردون: ${suppliers.length}
+
+## أكثر الأصناف ارتفاعاً في السعر (السعر الأخير > المتوسط بـ15%+):
+${risingItems.length ? risingItems.map(i => `- ${i.name}: آخر سعر ${i.last} ر.س (ارتفع ${i.pct}% عن المتوسط ${i.avg} ر.س)`).join('
+') : 'لا توجد بيانات كافية'}
+
+## أصناف بتذبذب سعري عالٍ (max > 1.5× min):
+${highVariance.length ? highVariance.map(i => `- ${i.name} (${i.category}): أدنى ${i.min} ر.س / أعلى ${i.max} ر.س`).join('
+') : 'لا توجد'}
+
+## أنشط الموردين:
+${topSuppliers.map(s => `- ${s.name}: ${s.count} عرض، متوسط سعر ${s.avg} ر.س`).join('
+')}
+
+## أعلى الفئات إنفاقاً:
+${topCats.map(([cat, val]) => `- ${cat}: ${val.toFixed(0)} ر.س`).join('
+')}
+
+قدّم تحليلاً منظماً يشمل:
+1. **أكثر الأصناف ارتفاعاً في السعر** — وتوصية للتفاوض
+2. **الموردون الأكثر تنافسية** — بناءً على البيانات
+3. **فرص التوفير المحتملة** — من خلال التذبذب السعري أو الفئات
+4. **تنبيهات المخاطر** — أي مؤشرات تستدعي الانتباه
+
+اجعل الإجابة عملية ومباشرة، مع تجنب التكرار. لا تزيد عن 400 كلمة.`;
+
+  // Show loading
+  if (noKey) noKey.style.display = 'none';
+  if (idle) idle.style.display = 'none';
+  if (result) result.style.display = 'none';
+  if (loading) loading.style.display = 'block';
+  if (btn) btn.disabled = true;
+
+  try {
+    const text = await getAIInsights(prompt);
+    if (loading) loading.style.display = 'none';
+    if (result) {
+      result.textContent = text || 'لم يتم الحصول على نتيجة.';
+      result.style.display = 'block';
+    }
+  } catch (err) {
+    if (loading) loading.style.display = 'none';
+    if (result) {
+      result.textContent = 'حدث خطأ أثناء التحليل: ' + (err.message || String(err));
+      result.style.display = 'block';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ================================================================
+   KPI DASHBOARD — Enhanced analytics section
+   ================================================================ */
+
+function renderKPIs() {
+  const kpiEl = document.getElementById('kpi-section');
+  if (!kpiEl) return;
+
+  const items = STATE.items || [];
+  const hist = STATE.history || [];
+
+  /* ── 1. Price Trend Sparkline (monthly count over time) ── */
+  const monthMap = {};
+  hist.forEach(h => {
+    if (!h.date) return;
+    const m = String(h.date).slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(m)) return;
+    monthMap[m] = (monthMap[m] || 0) + 1;
+  });
+  const months = Object.keys(monthMap).sort().slice(-12);
+  const vals = months.map(m => monthMap[m] || 0);
+  const maxV = Math.max(...vals, 1);
+  const minV = Math.min(...vals, 0);
+  const W = 400, H = 80, padX = 10, padY = 10;
+  const points = vals.map((v, i) => {
+    const x = padX + (i / Math.max(vals.length - 1, 1)) * (W - padX * 2);
+    const y = padY + (1 - (v - minV) / (maxV - minV || 1)) * (H - padY * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const arMonths = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const firstMonth = months[0] ? (arMonths[parseInt(months[0].slice(5), 10) - 1] || months[0].slice(5)) + ' ' + months[0].slice(0, 4) : '—';
+  const lastMonth = months[months.length - 1] ? (arMonths[parseInt(months[months.length - 1].slice(5), 10) - 1] || months[months.length - 1].slice(5)) + ' ' + months[months.length - 1].slice(0, 4) : '—';
+
+  const sparklineSVG = vals.length > 1 ? `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible">
+      <defs>
+        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#C4A265" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#C4A265" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polyline points="${points}" fill="none" stroke="#C4A265" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">
+      <span>${firstMonth}</span><span>${lastMonth}</span>
+    </div>
+  ` : '<div style="color:var(--muted);font-size:13px;padding:12px 0">لا توجد بيانات كافية</div>';
+
+  /* ── 2. Top 5 Categories by Spend (horizontal bar chart) ── */
+  const catSpend = {};
+  hist.forEach(h => {
+    if (!h.category || h.price == null) return;
+    catSpend[h.category] = (catSpend[h.category] || 0) + Number(h.price);
+  });
+  const topCats5 = Object.entries(catSpend).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxCatSpend = topCats5[0]?.[1] || 1;
+
+  const catBarsHTML = topCats5.length ? topCats5.map(([cat, spend], i) => {
+    const pct = (spend / maxCatSpend * 100).toFixed(1);
+    const colors = ['#C4A265', '#a88a52', '#8f7444', '#765e36', '#5d4828'];
+    return `
+      <div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${cat}">${cat}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;margin-right:6px">${Number(spend).toLocaleString('ar-SA', {maximumFractionDigits:0})} ر.س</span>
+        </div>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${colors[i]};border-radius:4px;transition:width 0.6s ease"></div>
+        </div>
+      </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد بيانات</div>';
+
+  /* ── 3. Supplier Performance KPI Table ── */
+  const supData = {};
+  hist.forEach(h => {
+    if (!h.supplier || h.price == null) return;
+    const s = supData[h.supplier] = supData[h.supplier] || { count: 0, total: 0, min: Infinity, max: -Infinity, lastDate: '' };
+    s.count++;
+    s.total += Number(h.price);
+    if (Number(h.price) < s.min) s.min = Number(h.price);
+    if (Number(h.price) > s.max) s.max = Number(h.price);
+    if (h.date && h.date > s.lastDate) s.lastDate = h.date;
+  });
+  const topSupTable = Object.entries(supData).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+
+  const supTableHTML = topSupTable.length ? `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:right;padding:6px 8px;color:var(--muted);font-weight:600">المورد</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">العروض</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">متوسط السعر</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">أدنى سعر</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">آخر تاريخ</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${topSupTable.map(([name, d], i) => `
+          <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? 'background:var(--bg-alt,rgba(0,0,0,0.02))' : ''}">
+            <td style="padding:7px 8px;color:var(--ink-2);font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.name || name}">${name}</td>
+            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:var(--ink-2)">${d.count}</td>
+            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:var(--ink-2)">${(d.total / d.count).toFixed(2)} ر.س</td>
+            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:#2d6a4f">${d.min === Infinity ? '—' : d.min.toFixed(2) + ' ر.س'}</td>
+            <td style="padding:7px 8px;text-align:center;color:var(--muted)">${d.lastDate || '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>` : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد بيانات</div>';
+
+  /* ── 4. Price Variance Alerts (max > 1.5 × min) ── */
+  const itemPrices = {};
+  hist.forEach(h => {
+    if (!h.code || h.price == null) return;
+    const ip = itemPrices[h.code] = itemPrices[h.code] || { name: h.name || h.code, category: h.category || '', prices: [] };
+    ip.prices.push(Number(h.price));
+  });
+  const varAlerts = Object.entries(itemPrices)
+    .filter(([, v]) => {
+      const mn = Math.min(...v.prices), mx = Math.max(...v.prices);
+      return mn > 0 && mx > 1.5 * mn;
+    })
+    .map(([code, v]) => {
+      const mn = Math.min(...v.prices), mx = Math.max(...v.prices);
+      return { code, name: v.name, category: v.category, min: mn, max: mx, ratio: (mx / mn).toFixed(2) };
+    })
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 8);
+
+  const varHTML = varAlerts.length ? varAlerts.map(a => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${a.category || a.code}</div>
+      </div>
+      <div style="text-align:left;flex-shrink:0">
+        <div style="font-size:11px;color:var(--muted)">
+          <span style="color:#2d6a4f">${a.min.toFixed(0)}</span>
+          <span style="margin:0 4px">→</span>
+          <span style="color:#9b2c2c">${a.max.toFixed(0)}</span>
+          <span style="color:var(--muted);margin-right:2px">ر.س</span>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:#9b2c2c;text-align:center;margin-top:2px">×${a.ratio}</div>
+      </div>
+    </div>`).join('') : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد أصناف بتذبذب سعري مرتفع ✓</div>';
+
+  /* ── Render all KPI cards ── */
+  kpiEl.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:8px">
+
+      <!-- Price Trend Sparkline -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">اتجاه الأسعار الشهري</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">عدد العروض آخر ${months.length} شهر</div>
+          </div>
+          <div style="font-size:20px;color:#C4A265">📈</div>
+        </div>
+        ${sparklineSVG}
+        <div style="display:flex;gap:16px;margin-top:10px">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${Math.max(...vals, 0)}</div>
+            <div style="font-size:10px;color:var(--muted)">أعلى شهر</div>
+          </div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${vals.reduce((a, b) => a + b, 0)}</div>
+            <div style="font-size:10px;color:var(--muted)">إجمالي العروض</div>
+          </div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0}</div>
+            <div style="font-size:10px;color:var(--muted)">متوسط / شهر</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top 5 Categories by Spend -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">أعلى الفئات إنفاقاً</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">أكبر 5 فئات بإجمالي القيمة</div>
+          </div>
+          <div style="font-size:20px;color:#C4A265">🏷️</div>
+        </div>
+        ${catBarsHTML}
+      </div>
+
+      <!-- Supplier Performance Table -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;grid-column:span 2" class="kpi-sup-table">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">أداء الموردين</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">أكثر الموردين نشاطاً بتفاصيل التسعير</div>
+          </div>
+          <div style="font-size:20px;color:#C4A265">🏭</div>
+        </div>
+        ${supTableHTML}
+      </div>
+
+      <!-- Price Variance Alerts -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px" class="kpi-var-alerts">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">تنبيهات التذبذب السعري</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">أصناف السعر الأعلى > 1.5× الأدنى</div>
+          </div>
+          <div style="font-size:20px">⚠️</div>
+        </div>
+        ${varHTML}
+      </div>
+
+    </div>
+  `;
+}
+
+/* ── Initialize AI insights panel state on dashboard load ── */
+(function initAIPanel() {
+  // Show/hide no-key prompt dynamically when panel is viewed
+  const _orig = window.renderDashboard || (typeof renderDashboard !== 'undefined' ? renderDashboard : null);
+  if (_orig) {
+    const _wrapped = window.renderDashboard;
+    window._postRenderDashboard = function() {
+      const apiKey = localStorage.getItem('ai_api_key') || '';
+      const noKey = document.getElementById('ai-no-key');
+      const idle = document.getElementById('ai-idle-msg');
+      if (noKey) noKey.style.display = apiKey ? 'none' : 'block';
+      if (idle) idle.style.display = apiKey ? 'block' : 'none';
+    };
+  }
+})();
+
+/* ── CSS for KPI section responsive ── */
+(function addKPIStyles() {
+  const style = document.createElement('style');
+  style.textContent = `
+    @media (max-width: 900px) {
+      .kpi-sup-table { grid-column: span 1 !important; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    #ai-insights-panel { transition: box-shadow 0.2s; }
+    #ai-insights-panel:hover { box-shadow: var(--shadow-md, 0 4px 20px rgba(0,0,0,0.08)); }
+    #ai-result { font-family: inherit; }
+    #ai-result strong, #ai-result b { color: #C4A265; }
+  `;
+  document.head.appendChild(style);
+})();
+
+
 </script>
 </body>
 </html>
