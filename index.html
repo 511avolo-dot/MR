@@ -13867,30 +13867,26 @@ function spExportCSV(){
     return;
   }
   const items = spGetSortedSelection();
-  const rows = [['#','الكود','اسم البند','الفئة','الوحدة','السعر','المورد المرجعي']];
-  items.forEach((it,idx)=>{
-    rows.push([
-      idx+1,
-      it.code||'',
-      it.name||'',
-      it.category||'',
-      it.unit||'',
-      it.last_price||0,
-      it.last_supplier||''
-    ]);
-  });
-  const csv = '\uFEFF' + rows.map(r=>r.map(c=>{
-    const s = String(c).replace(/"/g,'""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `عرض_تسعير_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('success','تم التصدير','تم تنزيل ملف CSV');
+  const data = items.map((it, idx) => ({
+    num: idx + 1,
+    code: it.code || '',
+    name: it.name || '',
+    category: it.category || '',
+    unit: it.unit || '',
+    price: it.last_price || 0,
+    supplier: it.last_supplier || ''
+  }));
+  const cols = [
+    {key:'num', label:'#'},
+    {key:'code', label:'الكود'},
+    {key:'name', label:'اسم البند'},
+    {key:'category', label:'الفئة'},
+    {key:'unit', label:'الوحدة'},
+    {key:'price', label:'السعر'},
+    {key:'supplier', label:'المورد المرجعي'}
+  ];
+  const filename = `عرض_تسعير_${new Date().toISOString().slice(0,10)}.xlsx`;
+  exportExcel(data, filename, cols, {title:'عرض التسعير', sheetName:'عرض التسعير'});
 }
 
 (function setupSmartPricing(){
