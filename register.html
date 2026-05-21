@@ -544,6 +544,38 @@ button { cursor: pointer; font-family: inherit; }
 .summary-label { color: var(--color-muted); min-width: 150px; flex-shrink: 0; font-weight: 400; }
 .summary-val { color: var(--color-ink); font-weight: 500; }
 
+/* ── Autofill banner ── */
+.autofill-banner {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  font-size: var(--text-sm);
+  margin-bottom: var(--sp-5);
+  border: 1px solid;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.autofill-success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+.autofill-success svg { stroke: var(--color-success); }
+.autofill-manual {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  color: var(--color-muted);
+}
+.autofill-manual svg { stroke: var(--color-muted); }
+
+/* ── AI-filled field highlight ── */
+.field input.ai-filled,
+.field select.ai-filled,
+.field textarea.ai-filled {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+}
+
 /* ── Focus ring for keyboard nav ── */
 :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
@@ -690,6 +722,13 @@ button { cursor: pointer; font-family: inherit; }
 
   <!-- ════ STEP 2: Company Info ════ -->
   <div id="step-2" class="hidden">
+
+    <!-- Autofill result banner -->
+    <div id="autofill-banner" class="autofill-banner" style="display:none">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <span id="autofill-msg"></span>
+    </div>
+
     <div class="card">
       <div class="card-title">
         <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
@@ -1116,8 +1155,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const REG_TABLE     = 'proc_supplier_registrations';
 const BUCKET        = 'supplier-docs';
 const AI_MODELS     = ['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.0-flash'];
-const PDFJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER  = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// Local-hosted libs — no CDN dependency
+const PDFJS_CDN     = '/lib/pdf.min.js';
+const PDFJS_WORKER  = '/lib/pdf.worker.min.js';
+const PDFJS_CDNS    = [PDFJS_CDN, 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
 
 let SB = null;
 let AI_KEY = null, AI_MODEL = AI_MODELS[0];
@@ -1227,12 +1268,24 @@ function loadSupabaseLib() {
 function loadScriptOnce(src, check) {
   return new Promise((resolve, reject) => {
     if (check()) { resolve(); return; }
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) { existing.addEventListener('load', () => check() ? resolve() : reject()); return; }
     const s = document.createElement('script');
     s.src = src; s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('فشل تحميل ' + src));
+    const timer = setTimeout(() => reject(new Error('timeout:' + src)), src.startsWith('/') ? 8000 : 20000);
+    s.onload = () => { clearTimeout(timer); check() ? resolve() : reject(new Error('failed:' + src)); };
+    s.onerror = () => { clearTimeout(timer); reject(new Error('error:' + src)); };
     document.head.appendChild(s);
   });
+}
+
+async function loadLib(urls, check) {
+  if (check()) return;
+  let last;
+  for (const u of (Array.isArray(urls) ? urls : [urls])) {
+    try { await loadScriptOnce(u, check); return; } catch(e) { last = e; }
+  }
+  throw last || new Error('فشل تحميل المكتبة');
 }
 
 /* Setup screen save */
@@ -1386,7 +1439,7 @@ async function extractFromFile(file, docType) {
 }
 
 async function extractFromPdf(file, docType) {
-  await loadScriptOnce(PDFJS_CDN, () => typeof pdfjsLib !== 'undefined');
+  await loadLib(PDFJS_CDNS, () => typeof pdfjsLib !== 'undefined');
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
   const data = await file.arrayBuffer();
   const pdf  = await pdfjsLib.getDocument({data}).promise;
@@ -1522,7 +1575,9 @@ function fillFromAI(data) {
   // Entity type radio
   if (data.entity_type && data.entity_type !== 'null') {
     document.querySelectorAll('input[name=entity]').forEach(r => {
-      if (r.value.includes(data.entity_type) || data.entity_type.includes(r.value.split(' ')[0])) r.checked = true;
+      if (r.value.includes(data.entity_type) || data.entity_type.includes(r.value.split(' ')[0])) {
+        r.checked = true; filled++;
+      }
     });
   }
   return filled;
@@ -1559,16 +1614,29 @@ async function step1Next() {
     toast('warn', 'يرجى رفع الوثائق الإلزامية: ' + missing.join('، '));
     return;
   }
-  showProc('جارٍ التحقق من الوثائق...', 'يرجى الانتظار لحظة');
+  showProc('جارٍ قراءة وثائقك...', 'يرجى الانتظار — نحلل المستندات لتعبئة النموذج تلقائياً');
+  let filled = 0;
   try {
     const data = await extractAllDocs();
-    fillFromAI(data);
-    hideProc();
-    goStep(2);
+    filled = fillFromAI(data);
   } catch(e) {
-    hideProc();
-    goStep(2);
+    console.warn('Auto-fill failed:', e);
   }
+  hideProc();
+  // Show autofill result banner
+  const banner = document.getElementById('autofill-banner');
+  const bannerMsg = document.getElementById('autofill-msg');
+  if (banner && bannerMsg) {
+    if (filled > 0) {
+      banner.className = 'autofill-banner autofill-success';
+      bannerMsg.textContent = `تم تعبئة ${filled} حقلاً تلقائياً من وثائقك — يرجى المراجعة والتأكيد`;
+    } else {
+      banner.className = 'autofill-banner autofill-manual';
+      bannerMsg.textContent = 'يرجى تعبئة بيانات المنشأة يدوياً';
+    }
+    banner.style.display = 'flex';
+  }
+  goStep(2);
 }
 
 function step2Next() {
