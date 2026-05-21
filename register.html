@@ -1235,6 +1235,12 @@ async function connectSupabase(url, key) {
         AI_MODEL = v.model    || AI_MODELS[0];
       }
     } catch(e) {}
+    // Try to create the storage bucket if it doesn't exist yet
+    // (anon key may not have permission — that's OK, we'll catch it)
+    try {
+      const {error: bErr} = await SB.storage.createBucket(BUCKET, {public: false});
+      // If error is "already exists" that's fine. Any other error is silently ignored.
+    } catch(e) {}
     hideProc();
     showMainForm();
   } catch(e) {
@@ -1756,7 +1762,11 @@ async function submitForm() {
         if (error) throw error;
         docPaths[docId] = path;
       } catch(e) {
-        toast('warn', `تحذير: تعذر رفع "${docData.name}" — ${e.message}`);
+        const isBucket = /bucket/i.test(e.message || '');
+        const msg = isBucket
+          ? `تعذر رفع "${docData.name}" — مخزن الملفات غير مُعدّ. سيتم إرسال الطلب بدون هذا الملف.`
+          : `تعذر رفع "${docData.name}" — ${e.message}`;
+        toast('warn', msg);
       }
     }
 
