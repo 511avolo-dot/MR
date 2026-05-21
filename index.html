@@ -2650,7 +2650,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                 </div>
                 <div class="form-field">
                   <label class="form-label">التاريخ <span class="req">*</span></label>
-                  <input type="date" class="form-input" id="f-date">
+                  <input type="date" class="form-input" id="f-date" dir="ltr">
                 </div>
               </div>
               <div class="form-row">
@@ -2812,8 +2812,8 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <select class="select" id="hist-supplier">
             <option value="">كل الموردين</option>
           </select>
-          <input type="date" class="input" id="hist-date-from" title="من تاريخ">
-          <input type="date" class="input" id="hist-date-to" title="إلى تاريخ">
+          <input type="date" class="input" id="hist-date-from" title="من تاريخ" dir="ltr">
+          <input type="date" class="input" id="hist-date-to" title="إلى تاريخ" dir="ltr">
           <div style="margin-inline-start:auto;display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" id="print-hist-btn" title="طباعة تقرير سجل المشتريات">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
@@ -3355,7 +3355,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         </div>
         <div class="form-field">
           <label class="form-label">التاريخ <span class="req">*</span></label>
-          <input type="date" class="form-input" id="ee-date">
+          <input type="date" class="form-input" id="ee-date" dir="ltr">
         </div>
       </div>
       <div class="form-row">
@@ -5073,8 +5073,8 @@ function renderDashboard(){
   const lastUpdateEl = document.getElementById('dashboard-last-update');
   if(lastUpdateEl) {
     const now = new Date();
-    lastUpdateEl.textContent = 'آخر تحديث: ' + now.toLocaleTimeString('ar-SA', {hour:'2-digit', minute:'2-digit'});
-    lastUpdateEl.title = now.toLocaleString('ar-SA');
+    lastUpdateEl.textContent = 'آخر تحديث: ' + now.toLocaleTimeString('ar-SA-u-nu-latn', {hour:'2-digit', minute:'2-digit'});
+    lastUpdateEl.title = now.toLocaleString('ar-SA-u-nu-latn');
   }
 
   // Animate stat values (count-up effect)
@@ -8266,7 +8266,7 @@ async function saveCompanyInfoForm(){
 function buildPrintHeader(company, options){
   options = options || {};
   const docNumber = options.docNumber || `DOC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-  const docDate = options.date || new Date().toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'});
+  const docDate = options.date || new Date().toLocaleDateString('ar-SA-u-nu-latn', {year:'numeric',month:'long',day:'numeric'});
   const docDateGreg = new Date().toLocaleDateString('en-GB');
 
   // Logo: custom URL > embedded SVG > inline mark fallback
@@ -8319,7 +8319,7 @@ function buildPrintFooter(company, options){
       <div style="flex:1">
         ${note ? `<div style="margin-bottom:8px;font-size:11px;color:#444"><strong>ملاحظة:</strong> ${escapeHtml(note)}</div>` : ''}
         <div>طُبع بواسطة: ${escapeHtml(STATE.currentUser?.displayName || STATE.currentUser?.username || '—')}</div>
-        <div>التاريخ: ${new Date().toLocaleString('ar-SA')}</div>
+        <div>التاريخ: ${new Date().toLocaleString('ar-SA-u-nu-latn')}</div>
         ${company.website ? `<div style="margin-top:4px" dir="ltr">${escapeHtml(company.website)}</div>` : ''}
       </div>
       ${showSignature ? `
@@ -14281,8 +14281,12 @@ function renderKPIs() {
 
   const items = STATE.items || [];
   const hist = STATE.history || [];
+  const suppliers = STATE.suppliers || [];
+  const fmt = n => n == null || isNaN(n) ? '—' : Number(n).toLocaleString('en-US', {maximumFractionDigits: 2});
+  const fmtInt = n => Number(n).toLocaleString('en-US', {maximumFractionDigits: 0});
+  const arMonths = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
-  /* ── 1. Price Trend Sparkline (monthly count over time) ── */
+  /* ── Monthly activity map ── */
   const monthMap = {};
   hist.forEach(h => {
     if (!h.date) return;
@@ -14292,194 +14296,241 @@ function renderKPIs() {
   });
   const months = Object.keys(monthMap).sort().slice(-12);
   const vals = months.map(m => monthMap[m] || 0);
-  const maxV = Math.max(...vals, 1);
-  const minV = Math.min(...vals, 0);
-  const W = 400, H = 80, padX = 10, padY = 10;
-  const points = vals.map((v, i) => {
+  const totalOffers = vals.reduce((a, b) => a + b, 0);
+  const peakMonth = months[vals.indexOf(Math.max(...vals, 0))] || '';
+  const peakLabel = peakMonth ? (arMonths[parseInt(peakMonth.slice(5),10)-1]||'') + ' ' + peakMonth.slice(0,4) : '—';
+  const avgMonth = vals.length ? Math.round(totalOffers / vals.length) : 0;
+  const lastMonthVal = vals[vals.length - 1] || 0;
+  const prevMonthVal = vals[vals.length - 2] || 0;
+  const monthTrend = prevMonthVal ? ((lastMonthVal - prevMonthVal) / prevMonthVal * 100).toFixed(0) : null;
+
+  /* ── Sparkline SVG ── */
+  const W = 360, H = 70, padX = 6, padY = 8;
+  const maxV = Math.max(...vals, 1), minV = 0;
+  const sparkPoints = vals.map((v, i) => {
     const x = padX + (i / Math.max(vals.length - 1, 1)) * (W - padX * 2);
     const y = padY + (1 - (v - minV) / (maxV - minV || 1)) * (H - padY * 2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  const arMonths = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  const firstMonth = months[0] ? (arMonths[parseInt(months[0].slice(5), 10) - 1] || months[0].slice(5)) + ' ' + months[0].slice(0, 4) : '—';
-  const lastMonth = months[months.length - 1] ? (arMonths[parseInt(months[months.length - 1].slice(5), 10) - 1] || months[months.length - 1].slice(5)) + ' ' + months[months.length - 1].slice(0, 4) : '—';
+  const areaPoints = vals.length > 1 ? `${sparkPoints} ${(padX + (W-padX*2)).toFixed(1)},${H} ${padX},${H}` : '';
+  const firstLbl = months[0] ? (arMonths[parseInt(months[0].slice(5),10)-1]||'') + ' ' + months[0].slice(2,4) : '';
+  const lastLbl  = months[months.length-1] ? (arMonths[parseInt(months[months.length-1].slice(5),10)-1]||'') + ' ' + months[months.length-1].slice(2,4) : '';
 
-  const sparklineSVG = vals.length > 1 ? `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible">
+  const sparkSVG = vals.length > 1 ? `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible;margin-bottom:4px">
       <defs>
-        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#C4A265" stop-opacity="0.3"/>
+        <linearGradient id="kpiGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#C4A265" stop-opacity="0.25"/>
           <stop offset="100%" stop-color="#C4A265" stop-opacity="0"/>
         </linearGradient>
       </defs>
-      <polyline points="${points}" fill="none" stroke="#C4A265" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${areaPoints ? `<polygon points="${areaPoints}" fill="url(#kpiGrad)"/>` : ''}
+      <polyline points="${sparkPoints}" fill="none" stroke="#C4A265" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${vals.length > 0 ? `<circle cx="${(padX + ((vals.length-1)/Math.max(vals.length-1,1))*(W-padX*2)).toFixed(1)}" cy="${(padY + (1-(lastMonthVal-minV)/(maxV-minV||1))*(H-padY*2)).toFixed(1)}" r="4" fill="#C4A265"/>` : ''}
     </svg>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px">
-      <span>${firstMonth}</span><span>${lastMonth}</span>
-    </div>
-  ` : '<div style="color:var(--muted);font-size:13px;padding:12px 0">لا توجد بيانات كافية</div>';
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted)">${firstLbl ? `<span>${firstLbl}</span><span>${lastLbl}</span>` : ''}</div>
+  ` : `<div style="color:var(--muted);font-size:12px;padding:16px 0;text-align:center">لا توجد بيانات كافية</div>`;
 
-  /* ── 2. Top 5 Categories by Spend (horizontal bar chart) ── */
+  /* ── Top categories by spend ── */
   const catSpend = {};
   hist.forEach(h => {
     if (!h.category || h.price == null) return;
     catSpend[h.category] = (catSpend[h.category] || 0) + Number(h.price);
   });
-  const topCats5 = Object.entries(catSpend).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const maxCatSpend = topCats5[0]?.[1] || 1;
+  const topCats = Object.entries(catSpend).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxSpend = topCats[0]?.[1] || 1;
+  const totalSpend = topCats.reduce((s, [, v]) => s + v, 0);
+  const catColors = ['#C4A265','#b8966a','#a88a58','#947848','#7d6238','#614c2a'];
 
-  const catBarsHTML = topCats5.length ? topCats5.map(([cat, spend], i) => {
-    const pct = (spend / maxCatSpend * 100).toFixed(1);
-    const colors = ['#C4A265', '#a88a52', '#8f7444', '#765e36', '#5d4828'];
+  const catHTML = topCats.length ? topCats.map(([cat, spend], i) => {
+    const pct = (spend / maxSpend * 100).toFixed(0);
+    const sharePct = totalSpend ? (spend / totalSpend * 100).toFixed(1) : 0;
     return `
-      <div style="margin-bottom:9px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-          <span style="color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${cat}">${cat}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;margin-right:6px">${Number(spend).toLocaleString('ar-SA', {maximumFractionDigits:0})} ر.س</span>
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;min-width:0">
+            <div style="width:9px;height:9px;border-radius:50%;background:${catColors[i]};flex-shrink:0"></div>
+            <span style="font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(cat)}">${escapeHtml(cat)}</span>
+          </div>
+          <div style="text-align:left;flex-shrink:0;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;color:var(--muted);background:var(--bg);padding:1px 5px;border-radius:8px">${sharePct}%</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-2);font-weight:600">${fmtInt(spend)} ر.س</span>
+          </div>
         </div>
-        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${colors[i]};border-radius:4px;transition:width 0.6s ease"></div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${catColors[i]};border-radius:3px;transition:width 0.7s ease"></div>
         </div>
       </div>`;
-  }).join('') : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد بيانات</div>';
+  }).join('') : '<div style="color:var(--muted);font-size:13px;padding:10px 0;text-align:center">لا توجد بيانات</div>';
 
-  /* ── 3. Supplier Performance KPI Table ── */
+  /* ── Supplier performance (top 5 by activity) ── */
   const supData = {};
   hist.forEach(h => {
     if (!h.supplier || h.price == null) return;
     const s = supData[h.supplier] = supData[h.supplier] || { count: 0, total: 0, min: Infinity, max: -Infinity, lastDate: '' };
-    s.count++;
-    s.total += Number(h.price);
+    s.count++; s.total += Number(h.price);
     if (Number(h.price) < s.min) s.min = Number(h.price);
     if (Number(h.price) > s.max) s.max = Number(h.price);
     if (h.date && h.date > s.lastDate) s.lastDate = h.date;
   });
-  const topSupTable = Object.entries(supData).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+  const topSups = Object.entries(supData).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+  const maxSupCount = topSups[0]?.[1].count || 1;
 
-  const supTableHTML = topSupTable.length ? `
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead>
-        <tr style="border-bottom:1px solid var(--border)">
-          <th style="text-align:right;padding:6px 8px;color:var(--muted);font-weight:600">المورد</th>
-          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">العروض</th>
-          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">متوسط السعر</th>
-          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">أدنى سعر</th>
-          <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:600">آخر تاريخ</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${topSupTable.map(([name, d], i) => `
-          <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? 'background:var(--bg-alt,rgba(0,0,0,0.02))' : ''}">
-            <td style="padding:7px 8px;color:var(--ink-2);font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${d.name || name}">${name}</td>
-            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:var(--ink-2)">${d.count}</td>
-            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:var(--ink-2)">${(d.total / d.count).toFixed(2)} ر.س</td>
-            <td style="padding:7px 8px;text-align:center;font-family:'IBM Plex Mono',monospace;color:#2d6a4f">${d.min === Infinity ? '—' : d.min.toFixed(2) + ' ر.س'}</td>
-            <td style="padding:7px 8px;text-align:center;color:var(--muted)">${d.lastDate || '—'}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>` : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد بيانات</div>';
+  const supHTML = topSups.length ? topSups.map(([name, d], i) => {
+    const barW = Math.round(d.count / maxSupCount * 100);
+    const avg = d.total / d.count;
+    const variance = d.min < Infinity ? ((d.max - d.min) / (d.min || 1) * 100).toFixed(0) : 0;
+    const varColor = variance > 50 ? '#b91c1c' : variance > 25 ? '#d97706' : '#16a34a';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#C4A265,#8f7444);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700;flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden"><div style="height:100%;width:${barW}%;background:#C4A265;border-radius:2px"></div></div>
+        </div>
+        <div style="text-align:left;flex-shrink:0">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-2)">${fmt(avg)} ر.س</div>
+          <div style="font-size:10px;color:var(--muted);text-align:center">${d.count} عرض</div>
+        </div>
+        <div style="width:34px;text-align:center;flex-shrink:0">
+          <div style="font-size:10px;font-weight:700;color:${varColor}">±${variance}%</div>
+          <div style="font-size:9px;color:var(--muted)">تذبذب</div>
+        </div>
+      </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:13px;padding:10px 0;text-align:center">لا توجد بيانات</div>';
 
-  /* ── 4. Price Variance Alerts (max > 1.5 × min) ── */
+  /* ── Price variance alerts ── */
   const itemPrices = {};
   hist.forEach(h => {
     if (!h.code || h.price == null) return;
     const ip = itemPrices[h.code] = itemPrices[h.code] || { name: h.name || h.code, category: h.category || '', prices: [] };
     ip.prices.push(Number(h.price));
   });
-  const varAlerts = Object.entries(itemPrices)
-    .filter(([, v]) => {
-      const mn = Math.min(...v.prices), mx = Math.max(...v.prices);
-      return mn > 0 && mx > 1.5 * mn;
-    })
-    .map(([code, v]) => {
-      const mn = Math.min(...v.prices), mx = Math.max(...v.prices);
-      return { code, name: v.name, category: v.category, min: mn, max: mx, ratio: (mx / mn).toFixed(2) };
-    })
-    .sort((a, b) => b.ratio - a.ratio)
-    .slice(0, 8);
+  const alerts = Object.entries(itemPrices)
+    .filter(([, v]) => { const mn=Math.min(...v.prices),mx=Math.max(...v.prices); return mn>0&&mx>1.5*mn; })
+    .map(([code, v]) => { const mn=Math.min(...v.prices),mx=Math.max(...v.prices); return {code,name:v.name,category:v.category,min:mn,max:mx,ratio:mx/mn}; })
+    .sort((a,b)=>b.ratio-a.ratio).slice(0,6);
 
-  const varHTML = varAlerts.length ? varAlerts.map(a => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px;gap:8px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
-        <div style="font-size:11px;color:var(--muted)">${a.category || a.code}</div>
-      </div>
-      <div style="text-align:left;flex-shrink:0">
-        <div style="font-size:11px;color:var(--muted)">
-          <span style="color:#2d6a4f">${a.min.toFixed(0)}</span>
-          <span style="margin:0 4px">→</span>
-          <span style="color:#9b2c2c">${a.max.toFixed(0)}</span>
-          <span style="color:var(--muted);margin-right:2px">ر.س</span>
+  const alertsHTML = alerts.length ? alerts.map(a => {
+    const savingPct = ((1 - a.min/a.max)*100).toFixed(0);
+    const ratioLbl = a.ratio.toFixed(1) + '×';
+    const bg = a.ratio > 3 ? 'rgba(185,28,28,0.06)' : a.ratio > 2 ? 'rgba(217,119,6,0.06)' : 'rgba(196,162,101,0.06)';
+    const cl = a.ratio > 3 ? '#b91c1c' : a.ratio > 2 ? '#d97706' : '#92400e';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:7px;background:${bg};border:1px solid var(--border);margin-bottom:6px;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:1px">${escapeHtml(a.category||a.code)}</div>
         </div>
-        <div style="font-size:12px;font-weight:700;color:#9b2c2c;text-align:center;margin-top:2px">×${a.ratio}</div>
-      </div>
-    </div>`).join('') : '<div style="color:var(--muted);font-size:13px;padding:8px 0">لا توجد أصناف بتذبذب سعري مرتفع ✓</div>';
+        <div style="text-align:left;flex-shrink:0;direction:ltr">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${fmt(a.min)} → <span style="color:${cl};font-weight:600">${fmt(a.max)}</span> <span style="color:var(--muted)">ر.س</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;justify-content:flex-end">
+            <span style="font-size:10px;background:${bg};color:${cl};border:1px solid ${cl};padding:1px 5px;border-radius:6px;font-weight:700">${ratioLbl}</span>
+            <span style="font-size:10px;color:#16a34a">وفر ${savingPct}%</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('') : `<div style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:8px;background:rgba(22,163,74,0.06);border:1px solid rgba(22,163,74,0.2)"><span style="font-size:18px">✓</span><span style="font-size:13px;color:#16a34a;font-weight:600">جميع الأصناف بأسعار مستقرة</span></div>`;
 
-  /* ── Render all KPI cards ── */
+  /* ── Summary stats ── */
+  const pricedItems = items.filter(i => i.last_price != null);
+  const totalCats = Object.keys(catSpend).length;
+  const activeSupCount = Object.keys(supData).length;
+
   kpiEl.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:8px">
+    <div style="margin-bottom:20px">
 
-      <!-- Price Trend Sparkline -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">اتجاه الأسعار الشهري</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">عدد العروض آخر ${months.length} شهر</div>
+      <!-- Summary Strip -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+        ${[
+          {label:'إجمالي الأصناف', val: fmtInt(items.length), sub: `${fmtInt(pricedItems.length)} مُسعَّر`, icon:'📦', color:'#C4A265'},
+          {label:'سجلات الأسعار', val: fmtInt(hist.length), sub: `عبر ${totalCats} فئة`, icon:'📋', color:'#7c3aed'},
+          {label:'موردون نشطون', val: fmtInt(activeSupCount), sub: `من ${fmtInt(suppliers.length)} إجمالي`, icon:'🏢', color:'#0891b2'},
+          {label:'تنبيهات التذبذب', val: fmtInt(alerts.length), sub: alerts.length ? 'تستحق المراجعة' : 'أسعار مستقرة', icon: alerts.length ? '⚠️' : '✅', color: alerts.length ? '#d97706' : '#16a34a'},
+        ].map(c=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+            <div style="width:38px;height:38px;border-radius:9px;background:${c.color}18;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${c.icon}</div>
+            <div>
+              <div style="font-size:19px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace;line-height:1">${c.val}</div>
+              <div style="font-size:11px;color:var(--ink-2);margin-top:2px;font-weight:500">${c.label}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:1px">${c.sub}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Main KPI Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" class="kpi-main-grid">
+
+        <!-- Trend Card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">نشاط التسعير</div>
+              <div style="font-size:22px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace">${fmtInt(totalOffers)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">إجمالي عروض آخر ${months.length} شهر</div>
+            </div>
+            <div style="text-align:left">
+              ${monthTrend !== null ? `
+                <div style="font-size:13px;font-weight:700;color:${Number(monthTrend)>=0?'#16a34a':'#dc2626'};background:${Number(monthTrend)>=0?'rgba(22,163,74,0.08)':'rgba(220,38,38,0.08)'};padding:4px 8px;border-radius:6px">${Number(monthTrend)>=0?'↑':'↓'} ${Math.abs(monthTrend)}%</div>
+                <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:2px">آخر شهر</div>
+              ` : ''}
+            </div>
           </div>
-          <div style="font-size:20px;color:#C4A265">📈</div>
+          ${sparkSVG}
+          <div style="display:flex;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+            <div style="flex:1;text-align:center">
+              <div style="font-size:15px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace">${fmtInt(Math.max(...vals,0))}</div>
+              <div style="font-size:10px;color:var(--muted)">ذروة شهرية</div>
+              <div style="font-size:9px;color:var(--muted);margin-top:1px">${peakLabel}</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div style="flex:1;text-align:center">
+              <div style="font-size:15px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace">${fmtInt(avgMonth)}</div>
+              <div style="font-size:10px;color:var(--muted)">متوسط / شهر</div>
+            </div>
+            <div style="width:1px;background:var(--border)"></div>
+            <div style="flex:1;text-align:center">
+              <div style="font-size:15px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace">${fmtInt(lastMonthVal)}</div>
+              <div style="font-size:10px;color:var(--muted)">آخر شهر</div>
+            </div>
+          </div>
         </div>
-        ${sparklineSVG}
-        <div style="display:flex;gap:16px;margin-top:10px">
-          <div style="text-align:center;flex:1">
-            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${Math.max(...vals, 0)}</div>
-            <div style="font-size:10px;color:var(--muted)">أعلى شهر</div>
+
+        <!-- Top Categories Card -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px">
+          <div style="margin-bottom:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">أعلى الفئات إنفاقاً</div>
+            <div style="font-size:11px;color:var(--muted)">إجمالي: <span style="font-family:'IBM Plex Mono',monospace;color:var(--ink-2);font-weight:600">${fmtInt(totalSpend)} ر.س</span></div>
           </div>
-          <div style="text-align:center;flex:1">
-            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${vals.reduce((a, b) => a + b, 0)}</div>
-            <div style="font-size:10px;color:var(--muted)">إجمالي العروض</div>
-          </div>
-          <div style="text-align:center;flex:1">
-            <div style="font-size:18px;font-weight:700;color:var(--ink);font-family:'Fraunces',serif">${vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0}</div>
-            <div style="font-size:10px;color:var(--muted)">متوسط / شهر</div>
-          </div>
+          ${catHTML}
         </div>
       </div>
 
-      <!-- Top 5 Categories by Spend -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+      <!-- Supplier Performance -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">أعلى الفئات إنفاقاً</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">أكبر 5 فئات بإجمالي القيمة</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">أداء الموردين</div>
+            <div style="font-size:11px;color:var(--muted)">الموردون الأكثر نشاطاً مع مؤشر تذبذب الأسعار</div>
           </div>
-          <div style="font-size:20px;color:#C4A265">🏷️</div>
-        </div>
-        ${catBarsHTML}
-      </div>
-
-      <!-- Supplier Performance Table -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;grid-column:span 2" class="kpi-sup-table">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">أداء الموردين</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">أكثر الموردين نشاطاً بتفاصيل التسعير</div>
+          <div style="font-size:10px;color:var(--muted);display:flex;gap:12px">
+            <span><span style="color:#16a34a;font-weight:700">±</span> تذبذب منخفض</span>
+            <span><span style="color:#b91c1c;font-weight:700">±</span> تذبذب عالٍ</span>
           </div>
-          <div style="font-size:20px;color:#C4A265">🏭</div>
         </div>
-        ${supTableHTML}
+        ${supHTML}
       </div>
 
       <!-- Price Variance Alerts -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px" class="kpi-var-alerts">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;${alerts.length?'border-right:3px solid #d97706':''}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div>
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">تنبيهات التذبذب السعري</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">أصناف السعر الأعلى > 1.5× الأدنى</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${alerts.length ? '⚠️ تنبيهات التذبذب السعري' : '✅ استقرار الأسعار'}</div>
+            <div style="font-size:11px;color:var(--muted)">${alerts.length ? 'أصناف بفجوة سعرية تزيد عن 50% — راجعها للتفاوض' : 'لا توجد أصناف بتذبذب سعري مرتفع'}</div>
           </div>
-          <div style="font-size:20px">⚠️</div>
+          ${alerts.length ? `<div style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700">${alerts.length} صنف</div>` : ''}
         </div>
-        ${varHTML}
+        ${alertsHTML}
       </div>
 
     </div>
@@ -14493,11 +14544,11 @@ function renderKPIs() {
   if (_orig) {
     const _wrapped = window.renderDashboard;
     window._postRenderDashboard = function() {
-      const apiKey = localStorage.getItem('ai_api_key') || '';
+      const geminiKey = localStorage.getItem('proc_ai_key') || '';
       const noKey = document.getElementById('ai-no-key');
       const idle = document.getElementById('ai-idle-msg');
-      if (noKey) noKey.style.display = apiKey ? 'none' : 'block';
-      if (idle) idle.style.display = apiKey ? 'block' : 'none';
+      if (noKey) noKey.style.display = geminiKey ? 'none' : 'block';
+      if (idle) idle.style.display = geminiKey ? 'block' : 'none';
     };
   }
 })();
@@ -14507,7 +14558,11 @@ function renderKPIs() {
   const style = document.createElement('style');
   style.textContent = `
     @media (max-width: 900px) {
-      .kpi-sup-table { grid-column: span 1 !important; }
+      .kpi-main-grid { grid-template-columns: 1fr !important; }
+      #kpi-section [style*="grid-template-columns:repeat(4,1fr)"] { grid-template-columns: repeat(2,1fr) !important; }
+    }
+    @media (max-width: 600px) {
+      #kpi-section [style*="grid-template-columns:repeat(4,1fr)"] { grid-template-columns: 1fr 1fr !important; }
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
