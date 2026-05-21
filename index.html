@@ -2411,13 +2411,11 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
           <div id="ai-insights-body" style="padding:16px 22px">
             <div id="ai-no-key" style="display:none;text-align:center;padding:20px 0">
-              <div style="font-size:32px;margin-bottom:10px">🔑</div>
-              <div style="font-size:14px;color:var(--ink-2);margin-bottom:14px">يلزم إعداد مفتاح Claude API لتفعيل التحليل الذكي</div>
-              <div style="display:flex;align-items:center;gap:8px;max-width:480px;margin:0 auto">
-                <input id="ai-key-input" type="password" placeholder="sk-ant-..." style="flex:1;padding:9px 13px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--ink);font-family:monospace" oninput="document.getElementById('ai-key-save-btn').disabled=!this.value.trim()" />
-                <button id="ai-key-save-btn" disabled onclick="saveAIKey()" style="padding:9px 18px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">حفظ المفتاح</button>
-              </div>
-              <div style="font-size:11px;color:var(--muted);margin-top:10px">يُحفظ المفتاح محلياً في المتصفح فقط ولا يُرسل لأي خادم خارجي</div>
+              <div style="font-size:32px;margin-bottom:8px">✨</div>
+              <div style="font-size:14px;color:var(--ink-2);margin-bottom:4px;font-weight:600">يلزم مفتاح Gemini API لتفعيل التحليل الذكي</div>
+              <div style="font-size:12px;color:#C4A265;margin-bottom:14px">مجاني تماماً — 1500 تحليل يومياً بدون بطاقة ائتمان</div>
+              <button onclick="openModal('modal-ai-settings')" style="padding:9px 22px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⚙️ إعداد مفتاح Gemini</button>
+              <div style="font-size:11px;color:var(--muted);margin-top:10px">احصل على مفتاحك المجاني من <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#C4A265">aistudio.google.com</a></div>
             </div>
             <div id="ai-loading" style="display:none;text-align:center;padding:24px 0">
               <div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border);border-top-color:#C4A265;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px"></div>
@@ -3029,11 +3027,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
           <!-- No-key warning -->
           <div id="agent-no-key" style="display:none;padding:16px;background:rgba(196,162,101,0.08);border-top:1px solid var(--border);text-align:center">
-            <div style="font-size:13px;color:var(--ink-2);margin-bottom:10px">⚠️ أدخل مفتاح Anthropic API لتفعيل الوكلاء</div>
-            <div style="display:flex;gap:8px;justify-content:center;max-width:480px;margin:0 auto">
-              <input id="agent-key-input" type="password" placeholder="sk-ant-..." style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);color:var(--ink);font-family:monospace">
-              <button onclick="saveAgentKey()" style="padding:8px 16px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">حفظ</button>
-            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:4px">✨ يلزم مفتاح Gemini API لتفعيل الوكلاء</div>
+            <div style="font-size:12px;color:#C4A265;margin-bottom:10px">مجاني تماماً — بدون بطاقة ائتمان</div>
+            <button onclick="openModal('modal-ai-settings')" style="padding:8px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⚙️ إعداد مفتاح Gemini</button>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px">احصل على مفتاحك من <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#C4A265">aistudio.google.com</a></div>
           </div>
           <div id="agent-input-row" style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end">
             <textarea id="agent-input" placeholder="اسأل الوكيل..." rows="1" style="flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;background:var(--bg);color:var(--ink);font-family:inherit;resize:none;max-height:120px;direction:rtl"></textarea>
@@ -14141,51 +14138,28 @@ function spExportCSV(){
    ================================================================ */
 
 async function getAIInsights(prompt) {
-  const apiKey = localStorage.getItem('ai_api_key') || '';
-  if (!apiKey) return null;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`API Error ${res.status}: ${errText}`);
+  try {
+    const text = await aiComplete({ prompt, feature: 'insights', maxTokens: 1024, cache: false });
+    return text;
+  } catch(e) {
+    if(e.code === 'AI_NOT_CONFIGURED') return null;
+    throw e;
   }
-  const j = await res.json();
-  return j.content?.[0]?.text || null;
 }
 
 function saveAIKey() {
-  const inp = document.getElementById('ai-key-input');
-  if (!inp) return;
-  const key = inp.value.trim();
-  if (!key) return;
-  localStorage.setItem('ai_api_key', key);
-  inp.value = '';
-  document.getElementById('ai-no-key').style.display = 'none';
-  document.getElementById('ai-idle-msg').style.display = 'block';
-  showToast('تم حفظ مفتاح API بنجاح', 'success');
+  openModal('modal-ai-settings');
 }
 
 async function triggerAIInsights() {
-  const apiKey = localStorage.getItem('ai_api_key') || '';
+  const geminiKey = localStorage.getItem('proc_ai_key') || '';
   const noKey = document.getElementById('ai-no-key');
   const loading = document.getElementById('ai-loading');
   const result = document.getElementById('ai-result');
   const idle = document.getElementById('ai-idle-msg');
   const btn = document.getElementById('btn-ai-analyze');
 
-  if (!apiKey) {
+  if (!geminiKey) {
     if (noKey) noKey.style.display = 'block';
     if (idle) idle.style.display = 'none';
     if (result) result.style.display = 'none';
@@ -14674,14 +14648,8 @@ let AGENT_CURRENT = 'pricing';
 let AGENT_HISTORY = {}; // per-agent message history
 let AGENT_BUSY = false;
 
-function getAgentKey(){ return localStorage.getItem('ai_api_key')||localStorage.getItem('anthropic_key')||''; }
-function saveAgentKey(){
-  const v=document.getElementById('agent-key-input')?.value?.trim();
-  if(!v)return;
-  localStorage.setItem('ai_api_key',v);
-  document.getElementById('agent-no-key').style.display='none';
-  toast('success','تم الحفظ','مفتاح API محفوظ — يمكنك الآن استخدام الوكلاء');
-}
+function getAgentKey(){ return localStorage.getItem('proc_ai_key')||''; }
+function saveAgentKey(){ openModal('modal-ai-settings'); }
 
 function selectAgent(id){
   AGENT_CURRENT=id;
@@ -14765,14 +14733,46 @@ function exportAgentConversation(){
 }
 
 // ─── Streaming Agent Engine ───────────────────────────────────
+async function geminiAgentRound(systemPrompt, geminiContents, tools){
+  const cfg = await loadAIConfig();
+  if(!cfg.enabled) throw Object.assign(new Error('يلزم إعداد مفتاح Gemini API — اذهب للإعدادات → الذكاء الاصطناعي'), {code:'AI_NOT_CONFIGURED'});
+  const functionDeclarations = tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.input_schema
+  }));
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      systemInstruction: {parts:[{text: systemPrompt}]},
+      contents: geminiContents,
+      tools: [{function_declarations: functionDeclarations}],
+      tool_config: {function_calling_config: {mode:'AUTO'}},
+      generationConfig: {temperature:0.7, maxOutputTokens:2048},
+      safetySettings:[
+        {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
+        {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'},
+        {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
+        {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
+      ]
+    })
+  });
+  if(!res.ok){const e=await res.text();throw new Error(`Gemini ${res.status}: ${e.slice(0,200)}`);}
+  return await res.json();
+}
+
 async function sendAgentMessage(){
   if(AGENT_BUSY)return;
   const input=document.getElementById('agent-input');
   const sendBtn=document.getElementById('agent-send-btn');
   const q=(input?.value||'').trim();
   if(!q)return;
-  const apiKey=getAgentKey();
-  if(!apiKey){document.getElementById('agent-no-key').style.display='';return;}
+
+  // Check Gemini key
+  const geminiKey=getAgentKey();
+  if(!geminiKey){document.getElementById('agent-no-key').style.display='';return;}
 
   input.value='';input.style.height='';
   AGENT_BUSY=true;
@@ -14783,115 +14783,84 @@ async function sendAgentMessage(){
   AGENT_HISTORY[AGENT_CURRENT].push({role:'user',content:q});
   addAgentMsgEl('user',q);
 
-  // Add streaming bot message placeholder
   const botDiv=addAgentMsgEl('bot','',true);
   const bubble=botDiv?.querySelector('#agent-streaming-bubble');
 
   try{
     let fullText='';
-    let toolCallsThisRound=[];
-    let messages=[...AGENT_HISTORY[AGENT_CURRENT]];
-    const cfg=AGENTS[AGENT_CURRENT];
+    const agentCfg=AGENTS[AGENT_CURRENT];
 
-    // Agentic loop: keep calling until no more tool use
+    // Build Gemini-format conversation history
+    const geminiContents=[];
+    const hist=AGENT_HISTORY[AGENT_CURRENT];
+    for(const m of hist){
+      geminiContents.push({role: m.role==='assistant'?'model':'user', parts:[{text: typeof m.content==='string'?m.content:JSON.stringify(m.content)}]});
+    }
+
+    // Agentic loop: up to 5 rounds
     for(let round=0;round<5;round++){
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2048,stream:true,system:cfg.system,tools:AGENT_TOOLS,messages})
-      });
-      if(!res.ok){const e=await res.text();throw new Error(`API ${res.status}: ${e.slice(0,200)}`);}
+      const data = await geminiAgentRound(agentCfg.system, geminiContents, AGENT_TOOLS);
+      const candidate = data?.candidates?.[0];
+      if(!candidate) throw new Error('لا توجد استجابة من Gemini');
 
-      const reader=res.body.getReader();
-      const dec=new TextDecoder();
-      let buf='',currentToolId=null,currentToolName=null,currentToolInput='';
-      let assistantContent=[];
-      let stopReason=null;
-      let roundText='';
+      const parts = candidate.content?.parts || [];
+      const funcCallPart = parts.find(p => p.functionCall);
+      const textPart = parts.find(p => p.text);
 
-      while(true){
-        const{done,value}=await reader.read();
-        if(done)break;
-        buf+=dec.decode(value,{stream:true});
-        const lines=buf.split('\n');buf=lines.pop();
-        for(const line of lines){
-          if(!line.startsWith('data: '))continue;
-          const data=line.slice(6).trim();
-          if(!data||data==='[DONE]')continue;
-          try{
-            const ev=JSON.parse(data);
-            if(ev.type==='message_start')stopReason=null;
-            else if(ev.type==='message_delta')stopReason=ev.delta?.stop_reason;
-            else if(ev.type==='content_block_start'){
-              const cb=ev.content_block;
-              if(cb.type==='text'){assistantContent.push({type:'text',text:''});}
-              else if(cb.type==='tool_use'){currentToolId=cb.id;currentToolName=cb.name;currentToolInput='';assistantContent.push({type:'tool_use',id:cb.id,name:cb.name,input:{}});
-                // Show tool call in UI
-                if(bubble){const tc=document.createElement('div');tc.className='agent-tool-call';tc.id=`tc-${cb.id}`;tc.innerHTML=`⚙️ يستخدم أداة: <strong>${getToolLabel(cb.name)}</strong> <span style="opacity:0.6">جارٍ التنفيذ...</span>`;bubble.appendChild(tc);}
-              }
-            }
-            else if(ev.type==='content_block_delta'){
-              if(ev.delta?.type==='text_delta'){
-                roundText+=ev.delta.text;fullText+=ev.delta.text;
-                const idx=assistantContent.findIndex(c=>c.type==='text');
-                if(idx>=0)assistantContent[idx].text+=ev.delta.text;
-                // Stream to UI
-                if(bubble){
-                  const cursor=bubble.querySelector('#agent-cursor');
-                  const thinking=bubble.querySelector('.agent-thinking');
-                  if(thinking)thinking.remove();
-                  const textNode=bubble.querySelector('.agent-stream-text')||(() =>{const d=document.createElement('div');d.className='agent-stream-text';d.style.cssText='white-space:pre-wrap;direction:rtl;text-align:right';if(cursor)bubble.insertBefore(d,cursor);else bubble.appendChild(d);return d;})();
-                  textNode.innerHTML=escapeHtml(fullText).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>').replace(/(<li>.*?<\/li>)+/g,m=>'<ul style="margin:4px 0;padding-inline-start:20px">'+m+'</ul>').replace(/\n/g,'<br>');
-                  document.getElementById('agent-messages').scrollTop=99999;
-                }
-              }
-              else if(ev.delta?.type==='input_json_delta')currentToolInput+=ev.delta.partial_json;
-            }
-            else if(ev.type==='content_block_stop'){
-              if(currentToolName){
-                let toolInput={};try{toolInput=JSON.parse(currentToolInput);}catch(e){}
-                const toolIdx=assistantContent.findIndex(c=>c.type==='tool_use'&&c.id===currentToolId);
-                if(toolIdx>=0)assistantContent[toolIdx].input=toolInput;
-                const result=runAgentTool(currentToolName,toolInput);
-                toolCallsThisRound.push({id:currentToolId,name:currentToolName,input:toolInput,result});
-                // Update tool call UI
-                const tcEl=document.getElementById(`tc-${currentToolId}`);
-                if(tcEl){const cnt=Array.isArray(result)?result.length:(result?.count??result?.transactions??'');tcEl.className='agent-tool-call agent-tool-done';tcEl.innerHTML=`✅ ${getToolLabel(currentToolName)}: ${cnt!==undefined&&cnt!==''?cnt+' نتيجة':'تم'}`;}
-                currentToolName=null;currentToolInput='';currentToolId=null;
-              }
-            }
-          }catch(e){}
+      if(funcCallPart){
+        const {name, args} = funcCallPart.functionCall;
+        // Show tool call in UI
+        if(bubble){
+          const tc=document.createElement('div');
+          tc.className='agent-tool-call';
+          tc.id=`tc-${round}`;
+          tc.innerHTML=`⚙️ يستخدم أداة: <strong>${getToolLabel(name)}</strong> <span style="opacity:0.6">جارٍ التنفيذ...</span>`;
+          bubble.appendChild(tc);
         }
-      }
-
-      // Add assistant turn to messages
-      messages.push({role:'assistant',content:assistantContent.filter(c=>(c.type==='text'&&c.text)||(c.type==='tool_use'))});
-
-      // If tool_use stop, add results and continue loop
-      if(stopReason==='tool_use'&&toolCallsThisRound.length){
-        messages.push({role:'user',content:toolCallsThisRound.map(tc=>({type:'tool_result',tool_use_id:tc.id,content:JSON.stringify(tc.result)}))});
-        toolCallsThisRound=[];
+        const toolResult=runAgentTool(name, args||{});
+        // Update tool call UI
+        const tcEl=document.getElementById(`tc-${round}`);
+        if(tcEl){
+          const cnt=Array.isArray(toolResult)?toolResult.length:(toolResult?.count??toolResult?.transactions??'');
+          tcEl.className='agent-tool-call agent-tool-done';
+          tcEl.innerHTML=`✅ ${getToolLabel(name)}: ${cnt!==undefined&&cnt!==''?cnt+' نتيجة':'تم'}`;
+        }
+        // Add tool call + result to Gemini conversation
+        geminiContents.push({role:'model', parts:[{functionCall:{name, args:args||{}}}]});
+        geminiContents.push({role:'user', parts:[{functionResponse:{name, response:{output:JSON.stringify(toolResult)}}}]});
         continue;
       }
-      break; // end_turn or no tools
+
+      // Text response — render it
+      if(textPart){
+        fullText=textPart.text;
+        if(bubble){
+          const thinking=bubble.querySelector('.agent-thinking');
+          if(thinking)thinking.remove();
+          const cursor=bubble.querySelector('#agent-cursor');
+          if(cursor)cursor.remove();
+          const textNode=document.createElement('div');
+          textNode.className='agent-stream-text';
+          textNode.style.cssText='white-space:pre-wrap;direction:rtl;text-align:right';
+          textNode.innerHTML=escapeHtml(fullText).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>').replace(/(<li>.*?<\/li>)+/g,m=>'<ul style="margin:4px 0;padding-inline-start:20px">'+m+'</ul>').replace(/\n/g,'<br>');
+          bubble.appendChild(textNode);
+          document.getElementById('agent-messages').scrollTop=99999;
+        }
+      }
+      break;
     }
 
-    // Finalize UI
-    if(bubble){
-      const cursor=bubble.querySelector('#agent-cursor');if(cursor)cursor.remove();
-      const streamText=bubble.querySelector('.agent-stream-text');
-      if(streamText)streamText.id='';
-    }
-
-    // Save to history
-    AGENT_HISTORY[AGENT_CURRENT].push({role:'assistant',content:fullText});
+    // Save final response to history
+    AGENT_HISTORY[AGENT_CURRENT].push({role:'assistant',content:fullText||'(لا توجد استجابة)'});
 
   }catch(e){
-    if(bubble)bubble.innerHTML=`<div style="color:var(--danger);font-size:13px">❌ ${escapeHtml(e.message)}</div>`;
+    const errMsg = e.code==='AI_NOT_CONFIGURED'
+      ? '⚠️ يلزم إعداد مفتاح Gemini API — اضغط على ⚙️ إعداد مفتاح Gemini'
+      : `❌ ${escapeHtml(e.message)}`;
+    if(bubble)bubble.innerHTML=`<div style="color:var(--danger);font-size:13px">${errMsg}</div>`;
   }finally{
     AGENT_BUSY=false;
-    if(sendBtn){sendBtn.disabled=false;sendBtn.textContent='إرسال';}
-    if(sendBtn)sendBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> إرسال';
+    if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> إرسال';}
   }
 }
 
