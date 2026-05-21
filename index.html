@@ -9070,12 +9070,13 @@ function loadScriptOnce(url, globalCheck){
       else if(polls > 200){ clearInterval(poller); /* ~20s — let timeout handle reject */ }
     }, 100);
 
-    // Hard timeout (25s)
+    // Timeout: 8s for local files (fast), 25s for CDN fallbacks
+    const isLocal = url.startsWith('/');
     const timeout = setTimeout(() => {
       clearInterval(poller);
       if(checkGlobal()) finish(true);
       else finish(false, new Error('انتهت مهلة تحميل المكتبة. تحقق من اتصال الإنترنت وحاول مجدداً.'));
-    }, 12000);
+    }, isLocal ? 8000 : 25000);
 
     const done = (ok, err) => { clearInterval(poller); clearTimeout(timeout); finish(ok, err); };
 
@@ -12459,12 +12460,16 @@ const SI_STATE = {
   matched: null    // {supplier:{name, existing}, rows:[{...extracted, matchedItem, action}]}
 };
 
+// Local-first: libs are bundled with the app — no CDN dependency
+const SHEETJS_LOCAL     = '/lib/xlsx.full.min.js';
+const PDFJS_LOCAL       = '/lib/pdf.min.js';
+const PDFJS_WORKER_LOCAL= '/lib/pdf.worker.min.js';
+// CDN fallbacks (used only if local path fails)
 const SHEETJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-// Fallback CDN lists for resilience
-const SHEETJS_CDNS = [SHEETJS_CDN,'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'];
-const PDFJS_CDNS   = [PDFJS_CDN,'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
+const PDFJS_CDN   = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER_CDN  = PDFJS_WORKER_LOCAL; // always local for worker
+const SHEETJS_CDNS = [SHEETJS_LOCAL, SHEETJS_CDN, 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+const PDFJS_CDNS   = [PDFJS_LOCAL,   PDFJS_CDN,   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
 
 function resetSmartImportState(){
   // Reset in-memory state
