@@ -15506,7 +15506,6 @@ async function approveRegistration(reg) {
       commercial_reg: reg.commercial_reg,
       tax_id:         reg.vat_number || reg.zakat_number,
       notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
-      offers_count:   0,
       created_by:     STATE.currentUser?.username || null,
       updated_by:     STATE.currentUser?.username || null,
       created_at:     new Date().toISOString(),
