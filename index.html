@@ -5184,7 +5184,14 @@ function renderItems(){
   }
   let list = [...STATE.items];
   const q = STATE.itemsFilter.q.trim().toLowerCase();
-  if(q) list = list.filter(i=> (i.code||'').toLowerCase().includes(q) || (i.name||'').toLowerCase().includes(q));
+  if(q) list = list.filter(i=> {
+    if((i.code||'').toLowerCase().includes(q)) return true;
+    if((i.name||'').toLowerCase().includes(q)) return true;
+    // Also search English aliases stored from bilingual imports
+    const aliases = SI_ALIASES_BY_CODE[i.code];
+    if(aliases && aliases.some(a => a.includes(q))) return true;
+    return false;
+  });
   if(STATE.itemsFilter.category) list = list.filter(i=>i.category===STATE.itemsFilter.category);
   
   const {col,dir} = STATE.itemsSort;
@@ -7615,7 +7622,7 @@ function renderCmdResults(q){
     {type:'action', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>', title:'تبديل الوضع الليلي', sub:'الفاتح / الداكن', do:()=>toggleDarkMode()},
     {type:'action', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>', title:'تنزيل نسخة احتياطية', sub:'حفظ كل البيانات كملف JSON', do:()=>downloadBackup()},
   ];
-  const items = STATE.items.map(i=>({type:'item', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10"/></svg>', title:i.name||i.code, sub:`${i.code} · ${i.category||''} · ${fmtPrice(i.last_price)} ر.س`, do:()=>{closeCmdPalette();openItemDetail(i.code)}, _hay:(i.code+' '+i.name+' '+i.category).toLowerCase()}));
+  const items = STATE.items.map(i=>({type:'item', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10"/></svg>', title:i.name||i.code, sub:`${i.code} · ${i.category||''} · ${fmtPrice(i.last_price)} ر.س`, do:()=>{closeCmdPalette();openItemDetail(i.code)}, _hay:(i.code+' '+i.name+' '+i.category+' '+(SI_ALIASES_BY_CODE[i.code]||[]).join(' ')).toLowerCase()}));
   const sups = STATE.suppliers.map(s=>({type:'supplier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>', title:s.name, sub:`${s.specialty||'—'} · ${s.offers_count||0} عرض`, do:()=>{closeCmdPalette();openSupplierDetail(s.name)}, _hay:(s.name+' '+s.specialty+' '+s.contact).toLowerCase()}));
   let all;
   if(!q){
@@ -12588,9 +12595,9 @@ async function siHandleFile(file){
     // Refresh learned aliases (best-effort) so the latest user confirmations
     // from other sessions are reflected in this match
     try { await siLoadLearnedAliases(false); } catch(e) {}
-    // Now match against existing data
+    // Now match against existing data (async — may invoke AI for Tier 4)
     siShowProcessing('مطابقة البيانات...', `تم استخراج ${extracted.items.length} بند، جاري المطابقة`);
-    SI_STATE.matched = siMatchExtractedData(extracted);
+    SI_STATE.matched = await siMatchExtractedData(extracted);
     siShowReview();
   } catch(e) {
     console.error('Smart Import error:', e);
@@ -13131,7 +13138,8 @@ async function siAIExtractFromImage(base64, mimeType){
    The cache is loaded once at startup (after cloud connect) and kept in
    sync after each user confirmation.
 */
-let SI_LEARNED_ALIASES = {};
+let SI_LEARNED_ALIASES = {};     // normalized_alias → item_code (for matching)
+let SI_ALIASES_BY_CODE = {};     // item_code → [original_text, ...] (for bilingual search)
 let SI_ALIASES_LOADED_AT = 0;
 
 async function siLoadLearnedAliases(force){
@@ -13143,15 +13151,24 @@ async function siLoadLearnedAliases(force){
   try {
     const {data, error} = await CLOUD.client
       .from('proc_item_aliases')
-      .select('normalized_alias, item_code');
+      .select('normalized_alias, item_code, original_text');
     if(error){
       // Table may not exist yet — gracefully degrade, system still works
       console.warn('[aliases] table not ready:', error.message);
       return SI_LEARNED_ALIASES;
     }
     const map = {};
-    (data || []).forEach(r => { map[r.normalized_alias] = r.item_code; });
+    const byCode = {};
+    (data || []).forEach(r => {
+      map[r.normalized_alias] = r.item_code;
+      // Build reverse index: code → list of original texts (for search)
+      if(r.original_text){
+        if(!byCode[r.item_code]) byCode[r.item_code] = [];
+        byCode[r.item_code].push(r.original_text.toLowerCase());
+      }
+    });
     SI_LEARNED_ALIASES = map;
+    SI_ALIASES_BY_CODE = byCode;
     SI_ALIASES_LOADED_AT = Date.now();
     return map;
   } catch(e) {
@@ -13169,8 +13186,13 @@ async function siSaveLearnedAlias(extractedName, itemCode, originalText){
   const norm = siNormalize(extractedName);
   if(!norm) return false;
 
-  // Update in-memory cache immediately so the current session benefits
+  // Update in-memory caches immediately so the current session benefits
   SI_LEARNED_ALIASES[norm] = itemCode;
+  if(extractedName){
+    if(!SI_ALIASES_BY_CODE[itemCode]) SI_ALIASES_BY_CODE[itemCode] = [];
+    const orig = (originalText || extractedName).toLowerCase();
+    if(!SI_ALIASES_BY_CODE[itemCode].includes(orig)) SI_ALIASES_BY_CODE[itemCode].push(orig);
+  }
 
   try {
     // Upsert: if alias exists, bump count; otherwise insert
@@ -13366,19 +13388,73 @@ function siSimilarity(a, b){
   return combined;
 }
 
-/* === MATCHING THRESHOLDS (3-tier system) === */
+/* === MATCHING THRESHOLDS (4-tier system) === */
 const SI_MATCH_AUTO = 0.85;      // ≥85% → auto-match (high confidence)
 const SI_MATCH_SUGGEST = 0.55;   // 55%-85% → "is this the same? you decide"
-// <55% → treat as new item
+// <55% → check AI semantic, otherwise treat as new item
+
+/* === MODEL NUMBER EXTRACTION (Tier 1.5) ===
+   Extracts alphanumeric model/part codes that are language-neutral.
+   Examples: "H-FCM001", "ZA65-300L-K", "FCM-001"
+   These codes appear in English quotes AND Arabic item names, enabling
+   cross-language matching even when text similarity fails. */
+function siExtractModelNumbers(text){
+  if(!text) return [];
+  const re = /\b([A-Z]{1,6}[-_]?[A-Z0-9]{1,}(?:[-_][A-Z0-9]+)*)\b/gi;
+  const found = new Set();
+  let m;
+  while((m = re.exec(text)) !== null){
+    const code = m[1].toUpperCase().replace(/[-_]/g,'');
+    if(/\d/.test(code) && code.length >= 3) found.add(code);
+  }
+  return [...found];
+}
+
+/* === AI SEMANTIC MATCHING (Tier 4) ===
+   When text similarity is below the suggest threshold — usually because the
+   extracted name is in English and existing items are in Arabic — we ask
+   Gemini whether the English name semantically matches any of the top candidates.
+   This is the last resort before declaring an item "new".
+   Returns the matching candidate object {item, score} or null. */
+async function siAISemanticMatch(extractedName, candidates){
+  const cfg = await loadAIConfig();
+  if(!cfg.enabled || candidates.length === 0) return null;
+
+  const list = candidates.map((c, i) =>
+    `${i+1}. [${c.item.code}] ${c.item.name}`
+  ).join('\n');
+
+  const prompt = `اسم صنف من عرض سعر:\n"${extractedName}"\n\nأصناف موجودة في قاعدة البيانات:\n${list}\n\nهل أي من هذه الأصناف العربية يطابق الصنف أعلاه (نفس المنتج بلغة مختلفة أو تهجئة مختلفة)؟\nأجب بـ JSON فقط — مثال: {"match":1} أو {"match":null}`;
+
+  try {
+    const reply = await aiComplete({
+      prompt,
+      feature: 'smart_import_semantic',
+      temperature: 0,
+      maxTokens: 32,
+      cache: false
+    });
+    const json = siExtractJSON(reply);
+    if(json && json.match != null){
+      const idx = parseInt(json.match) - 1;
+      if(idx >= 0 && idx < candidates.length) return candidates[idx];
+    }
+  } catch(e) {
+    console.warn('[siAISemanticMatch]', e.message);
+  }
+  return null;
+}
 
 /* === SMART ITEM MATCHING ===
    For every extracted item, compute candidates against the catalog:
-   1. Exact code match (score=1.0, auto)
-   2. Learned alias match (score=0.99, auto — user previously confirmed this)
-   3. Name+dimension similarity → top 3 candidates ranked
+   1.   Exact code match (score=1.0, auto)
+   1.5  Model number extraction — language-neutral code like "H-FCM001"
+   2.   Learned alias match (score=0.99, auto — user previously confirmed)
+   3.   Name+dimension text similarity → top 3 candidates ranked
+   4.   AI semantic matching — Gemini confirms English↔Arabic equivalence
    Unit comparison further filters: if units differ, candidate gets a soft penalty.
 */
-function siMatchExtractedData(extracted){
+async function siMatchExtractedData(extracted){
   const result = {
     supplier: {
       name: extracted.supplier?.name || 'مورد غير معروف',
@@ -13411,27 +13487,52 @@ function siMatchExtractedData(extracted){
 
   // Pre-load learned aliases (built up from prior user confirmations)
   const aliases = SI_LEARNED_ALIASES || {};
+  // Check AI availability once — used for Tier 4
+  const aiCfg = await loadAIConfig();
+  const hasAI = aiCfg.enabled;
 
   for(const item of (extracted.items || [])){
     if(!item.name || !item.price) continue;
 
-    // ── Tier 1: Exact code match ──────────────────────────
     let bestItem = null;
     let bestScore = 0;
     let candidates = [];
+    let matchReason = '';
 
+    // ── Tier 1: Exact code match ──────────────────────────
     if(item.code){
       const exact = STATE.items.find(i => i.code && i.code.toString().toLowerCase() === item.code.toString().toLowerCase());
-      if(exact){ bestItem = exact; bestScore = 1; }
+      if(exact){ bestItem = exact; bestScore = 1; matchReason = `تطابق الكود: ${item.code}`; }
     }
 
-    // ── Tier 2: Learned alias match (highest priority after code) ─
+    // ── Tier 1.5: Model number extraction (language-neutral) ──
+    // Extracts alphanumeric codes like "H-FCM001" from item name,
+    // then searches existing items' names AND codes for the same token.
+    // Works even when the quote is English and DB items are Arabic.
+    if(!bestItem){
+      const modelNums = siExtractModelNumbers(item.name);
+      if(modelNums.length > 0){
+        outer15: for(const mn of modelNums){
+          for(const i of STATE.items){
+            const inCode = i.code && siExtractModelNumbers(i.code).includes(mn);
+            const inName = siExtractModelNumbers(i.name || '').includes(mn);
+            if(inCode || inName){
+              bestItem = i; bestScore = 0.95;
+              matchReason = `تطابق رقم الموديل: ${mn}`;
+              break outer15;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Tier 2: Learned alias match (highest priority after code) ──
     if(!bestItem){
       const normName = siNormalize(item.name);
       const aliasCode = aliases[normName];
       if(aliasCode){
         const aliased = STATE.items.find(i => i.code === aliasCode);
-        if(aliased){ bestItem = aliased; bestScore = 0.99; }
+        if(aliased){ bestItem = aliased; bestScore = 0.99; matchReason = 'ربط معتمد مسبقاً'; }
       }
     }
 
@@ -13454,10 +13555,30 @@ function siMatchExtractedData(extracted){
       if(candidates.length){
         bestItem = candidates[0].item;
         bestScore = candidates[0].score;
+        matchReason = `تشابه النص: ${(candidates[0].score*100).toFixed(0)}%`;
       }
     }
 
-    // Determine action based on three thresholds
+    // ── Tier 4: AI Semantic Matching (cross-language fallback) ──
+    // Triggered only when: no confident match yet (below suggest threshold),
+    // there are some text candidates to evaluate, and AI key is configured.
+    // This handles the common case: English quote vs Arabic catalog.
+    if(bestScore < SI_MATCH_SUGGEST && candidates.length > 0 && hasAI){
+      try {
+        siShowProcessing('مطابقة دلالية...', `"${item.name.slice(0, 50)}"`);
+        const aiMatch = await siAISemanticMatch(item.name, candidates);
+        if(aiMatch){
+          bestItem = aiMatch.item;
+          // Score of 0.72 → lands in 'suggest' range (user confirms), not auto
+          bestScore = 0.72;
+          matchReason = 'تطابق دلالي (ذكاء اصطناعي)';
+        }
+      } catch(e) {
+        console.warn('[Tier4 AI]', e.message);
+      }
+    }
+
+    // Determine action based on four thresholds
     let action, matchedItem, suggestions;
     if(bestScore >= SI_MATCH_AUTO){
       action = 'update';                 // auto-merge into existing item's history
@@ -13485,6 +13606,7 @@ function siMatchExtractedData(extracted){
       price: parseFloat(item.price) || 0,
       matchedItem,
       matchScore: bestScore,
+      matchReason,                       // why it matched (shown in review UI)
       suggestions,                       // only present when action='suggest'
       action,                            // 'add' | 'update' | 'suggest'
       userDecision: null,                // user's choice when action='suggest': 'merge'|'new'|null
@@ -13593,7 +13715,8 @@ function siShowReview(){
 
     if(row.action === 'update'){
       // Auto-matched (high confidence)
-      html += `<div style="font-size:11px;color:var(--muted)">↔ ${escapeHtml(row.matchedItem.name)} [${escapeHtml(row.matchedItem.code)}] (${(row.matchScore*100).toFixed(0)}%)</div>`;
+      const reasonTag = row.matchReason ? ` — ${escapeHtml(row.matchReason)}` : ` (${(row.matchScore*100).toFixed(0)}%)`;
+      html += `<div style="font-size:11px;color:var(--muted)">↔ ${escapeHtml(row.matchedItem.name)} [${escapeHtml(row.matchedItem.code)}]${reasonTag}</div>`;
     } else if(row.action === 'suggest'){
       // Uncertain — show suggestion + buttons
       if(row.userDecision === 'merge'){
@@ -13608,8 +13731,9 @@ function siShowReview(){
       } else {
         // Pending — show the suggestion with action buttons
         const best = row.matchedItem;
+        const pendingReason = row.matchReason || `ثقة ${(row.matchScore*100).toFixed(0)}%`;
         html += `<div style="font-size:11px;color:#9b6a14;margin-top:4px">
-          🤔 قد يكون: <strong>${escapeHtml(best.name)}</strong> [${escapeHtml(best.code)}] — ثقة ${(row.matchScore*100).toFixed(0)}%
+          🤔 قد يكون: <strong>${escapeHtml(best.name)}</strong> [${escapeHtml(best.code)}] — ${escapeHtml(pendingReason)}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
           <button class="btn btn-accent btn-sm" data-si-merge="${idx}" data-si-merge-code="${escapeHtml(best.code)}" style="font-size:11px;padding:4px 10px">
