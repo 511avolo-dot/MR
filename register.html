@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>نموذج تسجيل الموردين — مجموعة الذيابي</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1a3a5c;--navy-light:#2a5080;--gold:#C4A265;--gold-dark:#9A7A45;
+  --bg:#f0f4f8;--card:#fff;--text:#1a2e40;--muted:#64748b;--border:#e2e8f0;
+  --success:#16a34a;--error:#dc2626;--warn:#d97706;
+  --radius:10px;--shadow:0 2px 12px rgba(0,0,0,0.08);
+}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;direction:rtl}
+a{color:inherit;text-decoration:none}
+input,select,textarea{font-family:inherit;font-size:14px;direction:rtl}
+button{cursor:pointer;font-family:inherit}
+
+/* ── Layout ── */
+.page-wrap{max-width:860px;margin:0 auto;padding:24px 16px 60px}
+.hidden{display:none!important}
+
+/* ── Header ── */
+.reg-header{background:linear-gradient(135deg,var(--navy),var(--navy-light));color:#fff;padding:20px 28px;border-radius:var(--radius);margin-bottom:28px;display:flex;align-items:center;gap:16px}
+.reg-header h1{font-size:20px;font-weight:700;line-height:1.3}
+.reg-header p{font-size:13px;opacity:.8;margin-top:4px}
+.header-logo{width:52px;height:52px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px}
+
+/* ── Steps indicator ── */
+.steps-bar{display:flex;align-items:center;margin-bottom:28px;gap:0}
+.step-item{display:flex;align-items:center;flex:1}
+.step-circle{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2px solid var(--border);background:#fff;color:var(--muted);flex-shrink:0;transition:.25s}
+.step-label{font-size:11px;color:var(--muted);margin-top:4px;text-align:center;display:block;line-height:1.3}
+.step-col{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.step-line{flex:1;height:2px;background:var(--border);transition:.25s}
+.step-item.done .step-circle{background:var(--success);border-color:var(--success);color:#fff}
+.step-item.active .step-circle{background:var(--navy);border-color:var(--navy);color:#fff}
+.step-item.done .step-line,.step-item.active .step-line{background:var(--navy)}
+
+/* ── Card ── */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;margin-bottom:20px}
+.card-title{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card-title svg{width:20px;height:20px;stroke:var(--gold);fill:none}
+.card-subtitle{font-size:13px;color:var(--muted);margin-bottom:20px}
+
+/* ── Form fields ── */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.form-row.cols-3{grid-template-columns:1fr 1fr 1fr}
+.form-row.col-1{grid-template-columns:1fr}
+@media(max-width:600px){.form-row,.form-row.cols-3{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:13px;font-weight:600;color:var(--text)}
+.field label .req{color:var(--error);margin-inline-start:2px}
+.field label .opt{font-size:11px;font-weight:400;color:var(--muted);margin-inline-start:4px}
+.field input,.field select,.field textarea{border:1.5px solid var(--border);border-radius:7px;padding:9px 12px;font-size:14px;color:var(--text);background:#fff;transition:.2s;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(26,58,92,.08)}
+.field input.ai-filled{border-color:#22c55e;background:#f0fdf4}
+.field textarea{resize:vertical;min-height:80px}
+.field-note{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ── Section separator ── */
+.section-sep{border:none;border-top:1px solid var(--border);margin:20px 0}
+.section-label{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid var(--gold);display:inline-block}
+
+/* ── Checkboxes / radios ── */
+.check-group{display:flex;flex-wrap:wrap;gap:10px}
+.check-item{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+.check-item input{width:16px;height:16px;cursor:pointer;accent-color:var(--navy)}
+
+/* ── Document upload cards ── */
+.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:580px){.doc-grid{grid-template-columns:1fr}}
+.doc-card{border:2px dashed var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:.2s;position:relative;background:#fafafa}
+.doc-card:hover{border-color:var(--navy);background:#f0f4f8}
+.doc-card.uploaded{border-style:solid;border-color:var(--success);background:#f0fdf4;cursor:default}
+.doc-card.required-badge::before{content:'إلزامي';position:absolute;top:8px;left:8px;background:#fee2e2;color:var(--error);font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.doc-card.optional-badge::before{content:'اختياري';position:absolute;top:8px;left:8px;background:#fef9ee;color:var(--warn);font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.doc-card-icon{font-size:28px;margin-bottom:8px;text-align:center}
+.doc-card-name{font-size:13px;font-weight:600;text-align:center;margin-bottom:4px}
+.doc-card-hint{font-size:11px;color:var(--muted);text-align:center}
+.doc-card-status{margin-top:8px;font-size:11px;text-align:center}
+.doc-card.uploaded .doc-card-status{color:var(--success);font-weight:600}
+.doc-remove{position:absolute;top:6px;right:6px;background:#fee2e2;border:none;border-radius:50%;width:22px;height:22px;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--error);padding:0;line-height:1}
+.doc-remove:hover{background:#fca5a5}
+.ai-badge{display:inline-block;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;margin-inline-start:4px}
+
+/* ── Services table ── */
+.services-table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:13px}
+.services-table th{background:var(--navy);color:#fff;padding:8px 10px;text-align:right;font-weight:600}
+.services-table td{border:1px solid var(--border);padding:6px 8px}
+.services-table td input,.services-table td select{border:none;padding:4px;width:100%;font-size:13px;background:transparent}
+.services-table td input:focus,.services-table td select:focus{outline:1px solid var(--navy)}
+.services-table tr:hover td{background:#f8fafc}
+.btn-add-row{font-size:13px;color:var(--navy);background:none;border:1.5px dashed var(--navy);border-radius:7px;padding:6px 14px;display:flex;align-items:center;gap:6px;margin-top:8px}
+.btn-add-row:hover{background:#f0f4f8}
+.btn-del-row{background:#fee2e2;border:none;border-radius:5px;color:var(--error);font-size:15px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+/* ── Compliance list ── */
+.compliance-list{display:flex;flex-direction:column;gap:10px;margin:16px 0}
+.compliance-item{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5;padding:10px 12px;background:#f8fafc;border-radius:7px;border:1.5px solid var(--border);cursor:pointer;transition:.2s}
+.compliance-item:has(input:checked){border-color:var(--success);background:#f0fdf4}
+.compliance-item input[type=checkbox]{margin-top:3px;width:16px;height:16px;flex-shrink:0;accent-color:var(--success)}
+
+/* ── Buttons ── */
+.btn{border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;transition:.2s}
+.btn-primary{background:var(--navy);color:#fff}
+.btn-primary:hover{background:var(--navy-light)}
+.btn-primary:disabled{background:#94a3b8;cursor:not-allowed}
+.btn-ghost{background:#f1f5f9;color:var(--text)}
+.btn-ghost:hover{background:#e2e8f0}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-dark));color:#231F20}
+.btn-gold:hover{opacity:.9}
+.btn-danger{background:#fee2e2;color:var(--error)}
+.btn-danger:hover{background:#fca5a5}
+.step-nav{display:flex;justify-content:space-between;align-items:center;margin-top:24px}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:20px;right:20px;left:20px;max-width:420px;margin:auto;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast-msg{padding:12px 18px;border-radius:9px;font-size:14px;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,.15);pointer-events:auto;display:flex;align-items:center;gap:10px;animation:slideUp .3s ease}
+.toast-msg.info{background:#1a3a5c}.toast-msg.success{background:#16a34a}.toast-msg.error{background:#dc2626}.toast-msg.warn{background:#d97706}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ── Processing overlay ── */
+#proc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:8888;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.proc-card{background:#fff;border-radius:var(--radius);padding:28px 36px;text-align:center;max-width:320px}
+.proc-spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--navy);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px}
+.proc-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.proc-sub{font-size:13px;color:var(--muted)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Setup screen ── */
+#setup-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.setup-card{background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.12);padding:36px;max-width:480px;width:100%}
+.setup-logo{text-align:center;font-size:48px;margin-bottom:16px}
+.setup-title{font-size:22px;font-weight:700;color:var(--navy);text-align:center;margin-bottom:6px}
+.setup-sub{font-size:14px;color:var(--muted);text-align:center;margin-bottom:28px}
+.setup-field{margin-bottom:14px}
+.setup-field label{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+.setup-field input{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;direction:ltr}
+.setup-field input:focus{outline:none;border-color:var(--navy)}
+.setup-hint{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── Success screen ── */
+#success-screen{display:none;align-items:center;justify-content:center;min-height:60vh}
+.success-card{background:#fff;border-radius:14px;box-shadow:var(--shadow);padding:48px 36px;max-width:480px;width:100%;text-align:center}
+.success-icon{font-size:60px;margin-bottom:16px}
+.success-title{font-size:22px;font-weight:700;color:var(--success);margin-bottom:10px}
+.success-sub{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:8px}
+.success-id{font-size:12px;color:var(--muted);background:#f8fafc;padding:8px 14px;border-radius:7px;margin-top:14px;direction:ltr}
+
+/* ── AI hint bar ── */
+.ai-hint{background:linear-gradient(135deg,#ede9fe,#ddd6fe);border:1.5px solid #c4b5fd;border-radius:8px;padding:12px 16px;font-size:13px;color:#5b21b6;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.ai-hint svg{width:18px;height:18px;stroke:#7c3aed;fill:none;flex-shrink:0}
+
+/* ── Summary ── */
+.summary-row{display:flex;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)}
+.summary-row:last-child{border:none}
+.summary-label{color:var(--muted);min-width:140px;flex-shrink:0}
+.summary-val{color:var(--text);font-weight:500}
+
+/* ── Progress note ── */
+.progress-note{font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px}
+.progress-bar-wrap{height:4px;background:var(--border);border-radius:2px;margin-bottom:28px;overflow:hidden}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--navy),var(--gold));border-radius:2px;transition:width .4s}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div id="setup-screen" class="hidden">
+  <div class="setup-card">
+    <div class="setup-logo">🏢</div>
+    <div class="setup-title">إعداد بوابة التسجيل</div>
+    <div class="setup-sub">يرجى إدخال بيانات الاتصال بقاعدة البيانات (هذه الخطوة للمسؤول فقط)</div>
+    <div class="setup-field">
+      <label>رابط Supabase</label>
+      <input type="url" id="setup-url" placeholder="https://xxxx.supabase.co" dir="ltr"/>
+      <div class="setup-hint">من لوحة Supabase → Settings → API → Project URL</div>
+    </div>
+    <div class="setup-field">
+      <label>Anon Key (المفتاح العام)</label>
+      <input type="text" id="setup-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5..." dir="ltr"/>
+      <div class="setup-hint">من Supabase → Settings → API → anon public key</div>
+    </div>
+    <div id="setup-error" style="color:var(--error);font-size:13px;margin:10px 0;display:none"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px" onclick="setupSave()">اختبار الاتصال والمتابعة</button>
+  </div>
+</div>
+
+<!-- ══ PROCESSING OVERLAY ══ -->
+<div id="proc-overlay" class="hidden">
+  <div class="proc-card">
+    <div class="proc-spinner"></div>
+    <div class="proc-title" id="proc-title">جارٍ المعالجة...</div>
+    <div class="proc-sub" id="proc-sub"></div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div id="toast"></div>
+
+<!-- ══ MAIN FORM ══ -->
+<div id="main-form" class="hidden">
+<div class="page-wrap">
+
+  <!-- Header -->
+  <div class="reg-header">
+    <div class="header-logo">🏗️</div>
+    <div>
+      <h1>نموذج تسجيل الموردين</h1>
+      <p>مجموعة الذيابي — يرجى تعبئة جميع الحقول بدقة لضمان سرعة الاعتماد</p>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-bar" style="width:20%"></div></div>
+
+  <!-- Steps indicator -->
+  <div class="steps-bar" id="steps-bar">
+    <div class="step-item active" id="si-1">
+      <div class="step-col">
+        <div class="step-circle" id="sc-1">1</div>
+        <span class="step-label">الوثائق</span>
+      </div>
+      <div class="step-line" id="sl-1"></div>
+    </div>
+    <div class="step-item" id="si-2">
+      <div class="step-col">
+        <div class="step-circle" id="sc-2">2</div>
+        <span class="step-label">بيانات المنشأة</span>
+      </div>
+      <div class="step-line" id="sl-2"></div>
+    </div>
+    <div class="step-item" id="si-3">
+      <div class="step-col">
+        <div class="step-circle" id="sc-3">3</div>
+        <span class="step-label">التواصل</span>
+      </div>
+      <div class="step-line" id="sl-3"></div>
+    </div>
+    <div class="step-item" id="si-4">
+      <div class="step-col">
+        <div class="step-circle" id="sc-4">4</div>
+        <span class="step-label">النشاط</span>
+      </div>
+      <div class="step-line" id="sl-4"></div>
+    </div>
+    <div class="step-item" id="si-5">
+      <div class="step-col">
+        <div class="step-circle" id="sc-5">5</div>
+        <span class="step-label">الإقرار</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ STEP 1: Upload Documents ════ -->
+  <div id="step-1">
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        رفع الوثائق النظامية
+        <span class="ai-badge">AI</span>
+      </div>
+      <div class="card-subtitle">ارفع الوثائق أدناه — الذكاء الاصطناعي سيستخرج البيانات تلقائياً وتوفر عليك الكتابة اليدوية</div>
+
+      <div class="ai-hint">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        بعد رفع الوثائق الإلزامية سيقوم الذكاء الاصطناعي بقراءتها وتعبئة النموذج تلقائياً. تحقق من البيانات في الخطوة التالية.
+      </div>
+
+      <div class="section-label">الوثائق الإلزامية</div>
+      <div class="doc-grid" id="docs-required">
+        <!-- generated by JS -->
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="section-label">وثائق إضافية <span style="font-weight:400;color:var(--muted);font-size:12px">(اختيارية — تُقوّي طلبك)</span></div>
+        <div class="doc-grid" id="docs-optional">
+          <!-- generated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <span></span>
+      <button class="btn btn-primary" onclick="step1Next()">
+        التالي: بيانات المنشأة
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6" transform="scale(-1,1) translate(-24,0)"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ════ STEP 2: Company Info ════ -->
+  <div id="step-2" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+        القسم الأول: المعلومات العامة عن المنشأة
+      </div>
+      <div class="card-subtitle" id="ai-fill-note"></div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>الاسم القانوني للمنشأة (عربي) <span class="req">*</span></label>
+          <input type="text" id="f-legal-ar" placeholder="مثال: شركة النور للمقاولات"/>
+        </div>
+        <div class="field">
+          <label>الاسم القانوني للمنشأة (إنجليزي)</label>
+          <input type="text" id="f-legal-en" placeholder="Al Noor Contracting Company" dir="ltr"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>الاسم التجاري <span class="opt">(إن وجد)</span></label>
+          <input type="text" id="f-trade-name" placeholder="الاسم التجاري"/>
+        </div>
+        <div class="field">
+          <label>دولة التسجيل</label>
+          <input type="text" id="f-country" value="المملكة العربية السعودية"/>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:14px">
+        <label>نوع الكيان القانوني <span class="req">*</span></label>
+        <div class="check-group" style="margin-top:6px">
+          <label class="check-item"><input type="radio" name="entity" value="مؤسسة فردية" id="et-1"> مؤسسة فردية</label>
+          <label class="check-item"><input type="radio" name="entity" value="شركة ذات مسؤولية محدودة" id="et-2"> شركة ذات مسؤولية محدودة</label>
+          <label class="check-item"><input type="radio" name="entity" value="شركة مساهمة" id="et-3"> شركة مساهمة</label>
+          <label class="check-item"><input type="radio" name="entity" value="فرع شركة أجنبية" id="et-4"> فرع شركة أجنبية</label>
+          <label class="check-item"><input type="radio" name="entity" value="أخرى" id="et-5"> أخرى</label>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">بيانات السجل التجاري</div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>رقم السجل التجاري <span class="req">*</span></label>
+          <input type="text" id="f-cr" placeholder="1010xxxxxxx" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>تاريخ الإصدار</label>
+          <input type="date" id="f-cr-issue" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>تاريخ الانتهاء</label>
+          <input type="date" id="f-cr-expiry" dir="ltr"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>تاريخ التأسيس (ميلادي)</label>
+          <input type="date" id="f-est-date" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>تاريخ التأسيس (هجري) <span class="opt">(إن وجد)</span></label>
+          <input type="text" id="f-est-hijri" placeholder="مثال: 1440/03/15"/>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">بيانات الغرفة التجارية</div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>اسم الغرفة التجارية</label>
+          <input type="text" id="f-chamber" placeholder="غرفة الرياض"/>
+        </div>
+        <div class="field">
+          <label>رقم العضوية</label>
+          <input type="text" id="f-chamber-num" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>تاريخ انتهاء العضوية</label>
+          <input type="date" id="f-chamber-exp" dir="ltr"/>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">الأرقام الضريبية والتأمينية</div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>الرقم الضريبي (VAT)</label>
+          <input type="text" id="f-vat" placeholder="3xxxxxxxxxxxxxxxxx" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>رقم الزكاة (ZATCA)</label>
+          <input type="text" id="f-zakat" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>رقم التأمينات (GOSI)</label>
+          <input type="text" id="f-gosi" dir="ltr"/>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">العنوان وبيانات التواصل</div>
+      <div class="form-row col-1">
+        <div class="field">
+          <label>العنوان الوطني (المدينة - الحي - الشارع - رقم المبنى) <span class="req">*</span></label>
+          <input type="text" id="f-address" placeholder="الرياض، حي العليا، شارع التخصصي، مبنى رقم 12"/>
+        </div>
+      </div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>المدينة <span class="req">*</span></label>
+          <input type="text" id="f-city" placeholder="الرياض"/>
+        </div>
+        <div class="field">
+          <label>ص.ب</label>
+          <input type="text" id="f-pobox" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>الرمز البريدي</label>
+          <input type="text" id="f-postal" dir="ltr"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>هاتف المنشأة <span class="req">*</span></label>
+          <input type="tel" id="f-phone" placeholder="0112xxxxxx" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>فاكس <span class="opt">(إن وجد)</span></label>
+          <input type="tel" id="f-fax" dir="ltr"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>البريد الإلكتروني العام للمنشأة <span class="req">*</span></label>
+          <input type="email" id="f-email" placeholder="info@company.com" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>الموقع الإلكتروني <span class="opt">(إن وجد)</span></label>
+          <input type="url" id="f-website" placeholder="https://www.company.com" dir="ltr"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goStep(1)">← رجوع</button>
+      <button class="btn btn-primary" onclick="step2Next()">التالي: بيانات التواصل →</button>
+    </div>
+  </div>
+
+  <!-- ════ STEP 3: Contact Info ════ -->
+  <div id="step-3" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m0 0a4 4 0 110-8 4 4 0 010 8zm10 0a4 4 0 110-8 4 4 0 010 8z"/></svg>
+        القسم الثاني: بيانات التواصل والمخولين
+      </div>
+      <div class="card-subtitle">يرجى تعبئة بيانات المسؤولين في منشأتكم</div>
+
+      <div class="section-label">الشخص الرئيسي للتواصل</div>
+      <div class="form-row">
+        <div class="field">
+          <label>الاسم <span class="req">*</span></label>
+          <input type="text" id="f-con-name" placeholder="محمد عبدالله"/>
+        </div>
+        <div class="field">
+          <label>المنصب الوظيفي</label>
+          <input type="text" id="f-con-title" placeholder="مدير المبيعات"/>
+        </div>
+      </div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>الجوال <span class="req">*</span></label>
+          <input type="tel" id="f-con-mobile" placeholder="05xxxxxxxx" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>الهاتف المباشر <span class="opt">(إن وجد)</span></label>
+          <input type="tel" id="f-con-phone" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="f-con-email" placeholder="name@company.com" dir="ltr"/>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">مسؤول المبيعات / تطوير الأعمال <span style="font-weight:400;color:var(--muted);font-size:12px">(إن وجد)</span></div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>الاسم</label>
+          <input type="text" id="f-sal-name"/>
+        </div>
+        <div class="field">
+          <label>الجوال</label>
+          <input type="tel" id="f-sal-mobile" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="f-sal-email" dir="ltr"/>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="section-label">مسؤول المالية والحسابات <span style="font-weight:400;color:var(--muted);font-size:12px">(إن وجد)</span></div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>الاسم</label>
+          <input type="text" id="f-fin-name"/>
+        </div>
+        <div class="field">
+          <label>الجوال</label>
+          <input type="tel" id="f-fin-mobile" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>البريد الإلكتروني</label>
+          <input type="email" id="f-fin-email" dir="ltr"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goStep(2)">← رجوع</button>
+      <button class="btn btn-primary" onclick="step3Next()">التالي: النشاط والخدمات →</button>
+    </div>
+  </div>
+
+  <!-- ════ STEP 4: Business & Services ════ -->
+  <div id="step-4" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+        القسم الثالث: نبذة عن النشاط ونطاق الأعمال
+      </div>
+
+      <div class="form-row col-1">
+        <div class="field">
+          <label>وصف موجز لنشاط المنشأة الرئيسي <span class="req">*</span></label>
+          <textarea id="f-biz-desc" placeholder="اكتب وصفاً واضحاً لطبيعة نشاط منشأتكم، المنتجات أو الخدمات الرئيسية التي تقدمونها..." rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>سنة بدء مزاولة النشاط</label>
+          <input type="number" id="f-start-year" placeholder="2010" min="1900" max="2030" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>رأس المال المدفوع (ريال)</label>
+          <input type="number" id="f-capital" placeholder="500000" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>إجمالي عدد الموظفين</label>
+          <input type="number" id="f-emp-total" placeholder="50" dir="ltr"/>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>عدد الموظفين السعوديين</label>
+          <input type="number" id="f-emp-saudi" placeholder="20" dir="ltr"/>
+        </div>
+        <div class="field">
+          <label>درجة تصنيف المقاولين <span class="opt">(إن وجد)</span></label>
+          <input type="text" id="f-contractor-grade" placeholder="الدرجة الأولى — هيئة المقاولين"/>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:14px">
+        <label>نطاق عمل المنشأة</label>
+        <div class="check-group" style="margin-top:6px">
+          <label class="check-item"><input type="checkbox" name="scope" value="داخل المملكة (محلي)"> داخل المملكة (محلي)</label>
+          <label class="check-item"><input type="checkbox" name="scope" value="إقليمي"> إقليمي</label>
+          <label class="check-item"><input type="checkbox" name="scope" value="دولي"> دولي</label>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:20px">
+        <label>القطاعات التي تخدمها المنشأة</label>
+        <div class="check-group" style="margin-top:6px">
+          <label class="check-item"><input type="checkbox" name="sector" value="المقاولات"> المقاولات</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="التشغيل والصيانة"> التشغيل والصيانة</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="النقليات"> النقليات</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="الخدمات اللوجستية"> الخدمات اللوجستية</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="التوريدات العامة"> التوريدات العامة</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="التقنية والاتصالات"> التقنية والاتصالات</label>
+          <label class="check-item"><input type="checkbox" name="sector" value="الاستشارات"> الاستشارات</label>
+        </div>
+      </div>
+
+      <hr class="section-sep"/>
+      <div class="card-title" style="margin-bottom:8px">
+        <svg viewBox="0 0 24 24"><path d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+        القسم الرابع: فئات المنتجات والخدمات المقدمة
+      </div>
+      <div class="card-subtitle">يرجى إدراج المنتجات أو الخدمات التي يمكن لمنشأتكم توريدها لمجموعة الذيابي</div>
+
+      <div style="overflow-x:auto">
+        <table class="services-table">
+          <thead>
+            <tr>
+              <th style="width:22%">الفئة الرئيسية</th>
+              <th style="width:28%">وصف تفصيلي للمواد/الخدمات</th>
+              <th style="width:16%">الدور</th>
+              <th style="width:18%">العلامات التجارية</th>
+              <th style="width:12%">بلد المنشأ</th>
+              <th style="width:4%"></th>
+            </tr>
+          </thead>
+          <tbody id="services-tbody">
+            <!-- rows added by JS -->
+          </tbody>
+        </table>
+      </div>
+      <button class="btn-add-row" onclick="addServiceRow()">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M12 5v14m-7-7h14"/></svg>
+        إضافة فئة
+      </button>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goStep(3)">← رجوع</button>
+      <button class="btn btn-primary" onclick="step4Next()">التالي: الإقرار والإرسال →</button>
+    </div>
+  </div>
+
+  <!-- ════ STEP 5: Compliance & Submit ════ -->
+  <div id="step-5" class="hidden">
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        القسم التاسع: إقرارات الامتثال والسلوك المهني
+      </div>
+      <div class="card-subtitle">يرجى قراءة الإقرارات التالية والموافقة عليها جميعاً</div>
+
+      <div class="compliance-list">
+        <label class="compliance-item">
+          <input type="checkbox" class="comp-chk"/>
+          <span>نُقرّ بأن جميع البيانات الواردة في هذا النموذج صحيحة وكاملة وتعكس واقع المنشأة في تاريخ تقديمها.</span>
+        </label>
+        <label class="compliance-item">
+          <input type="checkbox" class="comp-chk"/>
+          <span>نُقرّ بالالتزام بجميع الأنظمة واللوائح المعمول بها في المملكة العربية السعودية، بما في ذلك أنظمة مكافحة الرشوة وغسل الأموال وتمويل الإرهاب.</span>
+        </label>
+        <label class="compliance-item">
+          <input type="checkbox" class="comp-chk"/>
+          <span>نُقرّ بعدم وجود أي تعارض مصالح مع موظفي أو ممثلي مجموعة الذيابي، وسنُفصح فوراً في حال وجود أي حالة تعارض مصالح حالية أو مستقبلية.</span>
+        </label>
+        <label class="compliance-item">
+          <input type="checkbox" class="comp-chk"/>
+          <span>نلتزم بتطبيق معايير السلامة والجودة والبيئة المعتمدة لدى مجموعة الذيابي في حال قبولنا كمورد معتمد.</span>
+        </label>
+        <label class="compliance-item">
+          <input type="checkbox" class="comp-chk"/>
+          <span>نُقرّ بأن مجموعة الذيابي تحتفظ بالحق في قبول أو رفض طلب التسجيل أو تعليق التعامل دون إبداء الأسباب.</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        بيانات ممثل المنشأة المفوض بالتوقيع
+      </div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>الاسم الثلاثي <span class="req">*</span></label>
+          <input type="text" id="f-rep-name" placeholder="محمد علي أحمد"/>
+        </div>
+        <div class="field">
+          <label>المنصب الوظيفي <span class="req">*</span></label>
+          <input type="text" id="f-rep-title" placeholder="المدير التنفيذي"/>
+        </div>
+        <div class="field">
+          <label>رقم الهوية / الإقامة <span class="req">*</span></label>
+          <input type="text" id="f-rep-id" dir="ltr"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        ملخص الطلب
+      </div>
+      <div id="summary-body" style="margin-top:12px"></div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goStep(4)">← رجوع</button>
+      <button class="btn btn-gold" id="submit-btn" onclick="submitForm()">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9z"/></svg>
+        إرسال طلب التسجيل
+      </button>
+    </div>
+  </div>
+
+</div><!-- /page-wrap -->
+</div><!-- /main-form -->
+
+<!-- ══ SUCCESS SCREEN ══ -->
+<div id="success-screen">
+  <div class="page-wrap" style="display:flex;align-items:center;justify-content:center;min-height:80vh">
+    <div class="success-card">
+      <div class="success-icon">✅</div>
+      <div class="success-title">تم إرسال طلبكم بنجاح!</div>
+      <div class="success-sub">شكراً لتسجيلكم كمورد في مجموعة الذيابي. سيقوم فريق إدارة العمليات وسلاسل الإمداد بمراجعة طلبكم والتواصل معكم خلال 3-5 أيام عمل.</div>
+      <div class="success-sub" style="margin-top:8px">يرجى الاحتفاظ برقم الطلب للمتابعة.</div>
+      <div class="success-id" id="success-reg-id"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   الإعدادات — يُعدّها المسؤول قبل النشر
+   ══════════════════════════════════════════════════════ */
+const SUPABASE_URL      = 'YOUR_SUPABASE_URL';   // مثال: https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // المفتاح العام (anon/public)
+/* ══════════════════════════════════════════════════════ */
+
+const REG_TABLE     = 'proc_supplier_registrations';
+const BUCKET        = 'supplier-docs';
+const AI_MODELS     = ['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.0-flash'];
+const PDFJS_CDN     = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER  = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let SB = null;
+let AI_KEY = null, AI_MODEL = AI_MODELS[0];
+let currentStep = 1;
+const regId = 'reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+/* ── Document types ── */
+const REQUIRED_DOCS = [
+  {id:'cr',       name:'السجل التجاري',             hint:'PDF أو صورة واضحة',  icon:'📋'},
+  {id:'vat',      name:'شهادة الزكاة / VAT',          hint:'شهادة ZATCA سارية',  icon:'📄'},
+  {id:'gosi',     name:'شهادة التأمينات (GOSI)',      hint:'الشهادة السارية',     icon:'🛡️'},
+  {id:'chamber',  name:'شهادة الغرفة التجارية',       hint:'عضوية سارية المفعول', icon:'🏛️'},
+];
+const OPTIONAL_DOCS = [
+  {id:'municipal', name:'رخصة البلدية / الترخيص الصناعي', hint:'إن وجد', icon:'🏗️'},
+  {id:'articles',  name:'عقد التأسيس والنظام الأساسي',    hint:'للشركات', icon:'📜'},
+  {id:'quality',   name:'شهادات الجودة (ISO 9001...)',     hint:'اختياري', icon:'🏆'},
+  {id:'safety',    name:'شهادات السلامة والبيئة',          hint:'اختياري', icon:'⚙️'},
+  {id:'clients',   name:'قائمة أهم العملاء والمشاريع',     hint:'PDF أو Excel', icon:'🤝'},
+  {id:'brochure',  name:'بروشور / ملف تعريفي',             hint:'اختياري', icon:'📰'},
+];
+
+const uploadedDocs = {};  // {docId: {file, name, size, path}}
+
+/* ════════════════════════════════════
+   INIT
+   ════════════════════════════════════ */
+async function init() {
+  const urlPlaceholder = SUPABASE_URL.includes('YOUR_SUPABASE') || !SUPABASE_URL.startsWith('https://');
+  const keyPlaceholder = SUPABASE_ANON_KEY.includes('YOUR_SUPABASE') || SUPABASE_ANON_KEY.length < 20;
+
+  if (urlPlaceholder || keyPlaceholder) {
+    // Try localStorage fallback (if admin opened index.html on same device)
+    const saved = localStorage.getItem('proc_cloud_config');
+    if (saved) {
+      try {
+        const cfg = JSON.parse(saved);
+        if (cfg.url && cfg.key) {
+          await connectSupabase(cfg.url, cfg.key);
+          return;
+        }
+      } catch(e) {}
+    }
+    // Show setup screen
+    document.getElementById('setup-screen').classList.remove('hidden');
+    return;
+  }
+  await connectSupabase(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+async function connectSupabase(url, key) {
+  try {
+    showProc('جارٍ الاتصال...', 'الاتصال بقاعدة البيانات');
+    await loadSupabaseLib();
+    SB = window.supabase.createClient(url, key, {auth:{persistSession:false}});
+    // Fetch AI key from proc_settings
+    try {
+      const {data} = await SB.from('proc_settings').select('value').eq('key','ai_config').maybeSingle();
+      if (data && data.value) {
+        const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        AI_KEY   = v.api_key  || null;
+        AI_MODEL = v.model    || AI_MODELS[0];
+      }
+    } catch(e) {}
+    hideProc();
+    showMainForm();
+  } catch(e) {
+    hideProc();
+    toast('error', 'فشل الاتصال: ' + e.message);
+    document.getElementById('setup-screen').classList.remove('hidden');
+  }
+}
+
+function loadSupabaseLib() {
+  return new Promise((resolve, reject) => {
+    if (window.supabase) { resolve(); return; }
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+      'https://unpkg.com/@supabase/supabase-js@2',
+    ];
+    let i = 0;
+    const tryNext = () => {
+      if (window.supabase) { resolve(); return; }
+      if (i >= cdns.length) { reject(new Error('تعذر تحميل مكتبة Supabase')); return; }
+      const s = document.createElement('script');
+      s.src = cdns[i++]; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = () => { if (window.supabase) resolve(); else tryNext(); };
+      s.onerror = () => { s.remove(); tryNext(); };
+      document.head.appendChild(s);
+    };
+    tryNext();
+  });
+}
+
+function loadScriptOnce(src, check) {
+  return new Promise((resolve, reject) => {
+    if (check()) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('فشل تحميل ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+/* Setup screen save */
+async function setupSave() {
+  const url = document.getElementById('setup-url').value.trim();
+  const key = document.getElementById('setup-key').value.trim();
+  const errEl = document.getElementById('setup-error');
+  errEl.style.display = 'none';
+  if (!url || !key) { errEl.textContent = 'يرجى إدخال الرابط والمفتاح'; errEl.style.display='block'; return; }
+  try {
+    showProc('اختبار الاتصال...', '');
+    await loadSupabaseLib();
+    const client = window.supabase.createClient(url, key, {auth:{persistSession:false}});
+    const {error} = await client.from('proc_items').select('code').limit(1);
+    if (error) throw error;
+    localStorage.setItem('proc_cloud_config', JSON.stringify({url, key}));
+    document.getElementById('setup-screen').classList.add('hidden');
+    SB = client;
+    hideProc();
+    showMainForm();
+  } catch(e) {
+    hideProc();
+    errEl.textContent = 'فشل الاتصال: ' + (e.message || e);
+    errEl.style.display = 'block';
+  }
+}
+
+function showMainForm() {
+  document.getElementById('main-form').classList.remove('hidden');
+  renderDocCards();
+  addServiceRow();
+}
+
+/* ════════════════════════════════════
+   DOCUMENT CARDS
+   ════════════════════════════════════ */
+function renderDocCards() {
+  document.getElementById('docs-required').innerHTML = REQUIRED_DOCS.map(d => docCard(d, true)).join('');
+  document.getElementById('docs-optional').innerHTML = OPTIONAL_DOCS.map(d => docCard(d, false)).join('');
+}
+
+function docCard(d, required) {
+  return `
+    <div class="doc-card ${required ? 'required-badge' : 'optional-badge'}" id="dc-${d.id}" onclick="triggerUpload('${d.id}')">
+      <div class="doc-card-icon">${d.icon}</div>
+      <div class="doc-card-name">${d.name}</div>
+      <div class="doc-card-hint">${d.hint}</div>
+      <div class="doc-card-status" id="dcs-${d.id}">انقر للرفع</div>
+      <input type="file" id="fi-${d.id}" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp"
+             onchange="handleDocFile(event,'${d.id}')">
+    </div>`;
+}
+
+function triggerUpload(docId) {
+  if (uploadedDocs[docId]) return;
+  document.getElementById('fi-' + docId).click();
+}
+
+async function handleDocFile(event, docId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  uploadedDocs[docId] = {file, name: file.name, size: file.size, path: null};
+  const card = document.getElementById('dc-' + docId);
+  const status = document.getElementById('dcs-' + docId);
+  card.classList.add('uploaded');
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'doc-remove'; removeBtn.title = 'حذف'; removeBtn.textContent = '×';
+  removeBtn.onclick = (e) => { e.stopPropagation(); removeDoc(docId); };
+  card.appendChild(removeBtn);
+  const kb = Math.round(file.size / 1024);
+  status.textContent = `✓ ${file.name} (${kb} KB)`;
+  event.target.value = '';
+}
+
+function removeDoc(docId) {
+  delete uploadedDocs[docId];
+  const card = document.getElementById('dc-' + docId);
+  card.classList.remove('uploaded');
+  const btn = card.querySelector('.doc-remove');
+  if (btn) btn.remove();
+  document.getElementById('dcs-' + docId).textContent = 'انقر للرفع';
+}
+
+/* ════════════════════════════════════
+   AI EXTRACTION
+   ════════════════════════════════════ */
+async function extractAllDocs() {
+  if (!AI_KEY) {
+    toast('warn', 'مفتاح الذكاء الاصطناعي غير مُعدّ — يرجى تعبئة البيانات يدوياً');
+    return {};
+  }
+  const merged = {};
+  const docsToExtract = Object.entries(uploadedDocs).filter(([,v]) => v.file);
+  if (!docsToExtract.length) return {};
+
+  for (const [docId, docData] of docsToExtract) {
+    const docName = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find(d => d.id === docId)?.name || docId;
+    showProc('استخراج البيانات بالذكاء الاصطناعي...', `جارٍ قراءة: ${docName}`);
+    try {
+      const result = await extractFromFile(docData.file, docName);
+      Object.keys(result).forEach(k => {
+        if (result[k] && !merged[k]) merged[k] = result[k];
+      });
+    } catch(e) {
+      console.warn('AI extraction failed for', docId, e);
+    }
+  }
+  hideProc();
+  return merged;
+}
+
+async function extractFromFile(file, docType) {
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  if (isPdf) {
+    return await extractFromPdf(file, docType);
+  } else {
+    const base64 = await fileToBase64(file);
+    return await aiExtractImage(base64, file.type || 'image/jpeg', docType);
+  }
+}
+
+async function extractFromPdf(file, docType) {
+  await loadScriptOnce(PDFJS_CDN, () => typeof pdfjsLib !== 'undefined');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const data = await file.arrayBuffer();
+  const pdf  = await pdfjsLib.getDocument({data}).promise;
+  let text = '';
+  for (let p = 1; p <= Math.min(pdf.numPages, 3); p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    text += content.items.map(i => i.str).join(' ') + '\n';
+  }
+  if (text.trim().length < 60) {
+    // Scanned PDF — use vision on page 1
+    const page = await pdf.getPage(1);
+    const vp = page.getViewport({scale: 2});
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
+    const base64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+    canvas.width = 0; canvas.height = 0;
+    return await aiExtractImage(base64, 'image/jpeg', docType);
+  }
+  return await aiExtractText(text, docType);
+}
+
+async function aiExtractText(text, docType) {
+  const prompt = buildExtractionPrompt(docType) + `\n\nنص الوثيقة:\n${text.slice(0, 6000)}`;
+  const reply  = await geminiCall([{text: prompt}]);
+  return parseAiJson(reply);
+}
+
+async function aiExtractImage(base64, mime, docType) {
+  const prompt = buildExtractionPrompt(docType);
+  const reply  = await geminiCall([
+    {text: prompt},
+    {inline_data: {mime_type: mime, data: base64}}
+  ]);
+  return parseAiJson(reply);
+}
+
+function buildExtractionPrompt(docType) {
+  return `أنت مساعد تسجيل موردين في شركة سعودية. استخرج البيانات من وثيقة "${docType}" وأعد JSON فقط بدون أي نص آخر:
+{
+  "legal_name_ar": "الاسم القانوني بالعربية أو null",
+  "legal_name_en": "الاسم بالإنجليزية أو null",
+  "entity_type": "نوع الكيان: مؤسسة فردية أو شركة ذات مسؤولية محدودة أو شركة مساهمة أو فرع شركة أجنبية أو null",
+  "commercial_reg": "رقم السجل التجاري أو null",
+  "cr_issue_date": "تاريخ الإصدار YYYY-MM-DD أو null",
+  "cr_expiry_date": "تاريخ الانتهاء YYYY-MM-DD أو null",
+  "established_date": "تاريخ التأسيس YYYY-MM-DD أو null",
+  "vat_number": "الرقم الضريبي VAT أو null",
+  "zakat_number": "رقم الزكاة أو null",
+  "gosi_number": "رقم التأمينات الاجتماعية أو null",
+  "chamber": "اسم الغرفة التجارية أو null",
+  "chamber_membership": "رقم عضوية الغرفة أو null",
+  "chamber_expiry": "تاريخ انتهاء العضوية YYYY-MM-DD أو null",
+  "city": "المدينة أو null",
+  "address": "العنوان الكامل أو null",
+  "phone": "رقم الهاتف أو null",
+  "employees_total": "إجمالي الموظفين كرقم أو null",
+  "employees_saudi": "عدد السعوديين كرقم أو null",
+  "paid_capital": "رأس المال المدفوع كرقم أو null"
+}
+استجب فقط بـ JSON صحيح.`;
+}
+
+async function geminiCall(parts) {
+  const body = {
+    contents: [{role: 'user', parts}],
+    generationConfig: {temperature: 0.1, maxOutputTokens: 2048}
+  };
+  let lastErr = null;
+  for (const model of AI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(AI_KEY)}`;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const resp = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        if (!resp.ok) { const t = await resp.text(); lastErr = new Error(t); break; }
+        const data = await resp.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } catch(e) { lastErr = e; if (attempt < 2) await delay(1500); }
+    }
+  }
+  throw lastErr || new Error('فشل استدعاء الذكاء الاصطناعي');
+}
+
+function parseAiJson(text) {
+  if (!text) return {};
+  let s = text.trim().replace(/```(?:json)?/gi, '').trim();
+  try { return JSON.parse(s); } catch(e) {}
+  const start = s.indexOf('{'), end = s.lastIndexOf('}');
+  if (start !== -1 && end !== -1) {
+    try { return JSON.parse(s.slice(start, end + 1)); } catch(e) {}
+  }
+  return {};
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = () => reject(new Error('فشل قراءة الملف'));
+    r.readAsDataURL(file);
+  });
+}
+
+/* ════════════════════════════════════
+   FILL FORM FROM AI DATA
+   ════════════════════════════════════ */
+function fillFromAI(data) {
+  const map = {
+    'f-legal-ar':      data.legal_name_ar,
+    'f-legal-en':      data.legal_name_en,
+    'f-cr':            data.commercial_reg,
+    'f-cr-issue':      data.cr_issue_date,
+    'f-cr-expiry':     data.cr_expiry_date,
+    'f-est-date':      data.established_date,
+    'f-vat':           data.vat_number,
+    'f-zakat':         data.zakat_number,
+    'f-gosi':          data.gosi_number,
+    'f-chamber':       data.chamber,
+    'f-chamber-num':   data.chamber_membership,
+    'f-chamber-exp':   data.chamber_expiry,
+    'f-city':          data.city,
+    'f-address':       data.address,
+    'f-phone':         data.phone,
+  };
+  let filled = 0;
+  for (const [id, val] of Object.entries(map)) {
+    if (val && val !== 'null') {
+      const el = document.getElementById(id);
+      if (el && !el.value) { el.value = val; el.classList.add('ai-filled'); filled++; }
+    }
+  }
+  // Entity type radio
+  if (data.entity_type && data.entity_type !== 'null') {
+    document.querySelectorAll('input[name=entity]').forEach(r => {
+      if (r.value.includes(data.entity_type) || data.entity_type.includes(r.value.split(' ')[0])) r.checked = true;
+    });
+  }
+  return filled;
+}
+
+/* ════════════════════════════════════
+   STEP NAVIGATION
+   ════════════════════════════════════ */
+function goStep(n) {
+  document.getElementById('step-' + currentStep).classList.add('hidden');
+  currentStep = n;
+  document.getElementById('step-' + n).classList.remove('hidden');
+  updateStepBar();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+  if (n === 5) renderSummary();
+}
+
+function updateStepBar() {
+  for (let i = 1; i <= 5; i++) {
+    const si = document.getElementById('si-' + i);
+    const sc = document.getElementById('sc-' + i);
+    si.className = 'step-item';
+    if (i < currentStep)       { si.classList.add('done'); sc.textContent = '✓'; }
+    else if (i === currentStep){ si.classList.add('active'); sc.textContent = i; }
+    else                       { sc.textContent = i; }
+  }
+  const pct = ((currentStep - 1) / 4) * 100;
+  document.getElementById('prog-bar').style.width = pct + '%';
+}
+
+async function step1Next() {
+  const missing = REQUIRED_DOCS.filter(d => !uploadedDocs[d.id]).map(d => d.name);
+  if (missing.length) {
+    toast('warn', 'يرجى رفع الوثائق الإلزامية: ' + missing.join('، '));
+    return;
+  }
+  // Run AI extraction
+  showProc('الذكاء الاصطناعي يقرأ وثائقكم...', 'قد يستغرق دقيقة أو دقيقتين');
+  try {
+    const data = await extractAllDocs();
+    const filled = fillFromAI(data);
+    hideProc();
+    if (filled > 0) {
+      document.getElementById('ai-fill-note').textContent = `✨ تم استخراج ${filled} حقلاً تلقائياً من وثائقكم — يرجى المراجعة والتصحيح إن لزم`;
+    }
+    goStep(2);
+  } catch(e) {
+    hideProc();
+    toast('warn', 'تعذر الاستخراج التلقائي — يرجى تعبئة البيانات يدوياً');
+    goStep(2);
+  }
+}
+
+function step2Next() {
+  const legalAr = document.getElementById('f-legal-ar').value.trim();
+  const city    = document.getElementById('f-city').value.trim();
+  const phone   = document.getElementById('f-phone').value.trim();
+  const email   = document.getElementById('f-email').value.trim();
+  const entity  = document.querySelector('input[name=entity]:checked');
+  if (!legalAr) { toast('warn','يرجى إدخال الاسم القانوني للمنشأة'); return; }
+  if (!city)    { toast('warn','يرجى إدخال المدينة'); return; }
+  if (!phone)   { toast('warn','يرجى إدخال هاتف المنشأة'); return; }
+  if (!email)   { toast('warn','يرجى إدخال البريد الإلكتروني للمنشأة'); return; }
+  if (!entity)  { toast('warn','يرجى تحديد نوع الكيان القانوني'); return; }
+  goStep(3);
+}
+
+function step3Next() {
+  const name   = document.getElementById('f-con-name').value.trim();
+  const mobile = document.getElementById('f-con-mobile').value.trim();
+  if (!name)   { toast('warn','يرجى إدخال اسم الشخص الرئيسي للتواصل'); return; }
+  if (!mobile) { toast('warn','يرجى إدخال رقم الجوال للشخص الرئيسي'); return; }
+  goStep(4);
+}
+
+function step4Next() {
+  const desc = document.getElementById('f-biz-desc').value.trim();
+  if (!desc) { toast('warn','يرجى كتابة وصف موجز لنشاط المنشأة'); return; }
+  const rows = document.querySelectorAll('#services-tbody tr');
+  if (!rows.length) { toast('warn','يرجى إضافة فئة منتجات أو خدمات واحدة على الأقل'); return; }
+  goStep(5);
+}
+
+/* ════════════════════════════════════
+   SERVICES TABLE
+   ════════════════════════════════════ */
+function addServiceRow() {
+  const tbody = document.getElementById('services-tbody');
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td><input type="text" placeholder="مثال: مواد البناء"/></td>
+    <td><input type="text" placeholder="وصف تفصيلي"/></td>
+    <td>
+      <select>
+        <option value="">الدور</option>
+        <option>مصنّع</option>
+        <option>وكيل</option>
+        <option>موزّع</option>
+        <option>مقدم خدمة</option>
+      </select>
+    </td>
+    <td><input type="text" placeholder="العلامات التجارية"/></td>
+    <td><input type="text" placeholder="السعودية"/></td>
+    <td><button class="btn-del-row" onclick="this.closest('tr').remove()" title="حذف">×</button></td>`;
+  tbody.appendChild(row);
+}
+
+/* ════════════════════════════════════
+   SUMMARY
+   ════════════════════════════════════ */
+function renderSummary() {
+  const v = id => (document.getElementById(id)?.value || '—');
+  const entity = document.querySelector('input[name=entity]:checked')?.value || '—';
+  const rows = [
+    ['الاسم القانوني (عربي)', v('f-legal-ar')],
+    ['الاسم القانوني (إنجليزي)', v('f-legal-en') || '—'],
+    ['نوع الكيان', entity],
+    ['المدينة', v('f-city')],
+    ['رقم السجل التجاري', v('f-cr') || '—'],
+    ['الرقم الضريبي (VAT)', v('f-vat') || '—'],
+    ['هاتف المنشأة', v('f-phone')],
+    ['البريد الإلكتروني', v('f-email')],
+    ['الشخص الرئيسي للتواصل', v('f-con-name')],
+    ['جوال الشخص الرئيسي', v('f-con-mobile')],
+    ['وصف النشاط', (v('f-biz-desc') || '').slice(0, 80) + (v('f-biz-desc').length > 80 ? '...' : '')],
+    ['الوثائق المرفوعة', Object.keys(uploadedDocs).map(k =>
+      [...REQUIRED_DOCS,...OPTIONAL_DOCS].find(d=>d.id===k)?.name || k
+    ).join('، ') || '—'],
+  ];
+  document.getElementById('summary-body').innerHTML = rows.map(([label, val]) =>
+    `<div class="summary-row"><span class="summary-label">${label}</span><span class="summary-val">${val}</span></div>`
+  ).join('');
+}
+
+/* ════════════════════════════════════
+   SUBMIT
+   ════════════════════════════════════ */
+async function submitForm() {
+  // Validate compliance
+  const chks = document.querySelectorAll('.comp-chk');
+  const allChecked = [...chks].every(c => c.checked);
+  if (!allChecked) { toast('warn','يرجى الموافقة على جميع الإقرارات'); return; }
+
+  const repName  = document.getElementById('f-rep-name').value.trim();
+  const repTitle = document.getElementById('f-rep-title').value.trim();
+  const repId    = document.getElementById('f-rep-id').value.trim();
+  if (!repName)  { toast('warn','يرجى إدخال اسم ممثل المنشأة المفوض بالتوقيع'); return; }
+  if (!repTitle) { toast('warn','يرجى إدخال منصب ممثل المنشأة'); return; }
+  if (!repId)    { toast('warn','يرجى إدخال رقم هوية / إقامة ممثل المنشأة'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+
+  try {
+    // 1. Upload documents to Supabase Storage
+    const docPaths = {};
+    const docEntries = Object.entries(uploadedDocs);
+    for (let i = 0; i < docEntries.length; i++) {
+      const [docId, docData] = docEntries[i];
+      showProc(`رفع الوثائق... (${i+1}/${docEntries.length})`, docData.name);
+      try {
+        const ext  = docData.name.split('.').pop();
+        const path = `${regId}/${docId}/${Date.now()}.${ext}`;
+        const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
+          contentType: docData.file.type,
+          upsert: false
+        });
+        if (error) throw error;
+        docPaths[docId] = path;
+      } catch(e) {
+        toast('warn', `تحذير: تعذر رفع "${docData.name}" — ${e.message}`);
+      }
+    }
+
+    // 2. Collect form data
+    const getVal = id => document.getElementById(id)?.value?.trim() || null;
+    const entity  = document.querySelector('input[name=entity]:checked')?.value || null;
+    const scopes  = [...document.querySelectorAll('input[name=scope]:checked')].map(c=>c.value);
+    const sectors = [...document.querySelectorAll('input[name=sector]:checked')].map(c=>c.value);
+    const services = [...document.querySelectorAll('#services-tbody tr')].map(tr => {
+      const cells = tr.querySelectorAll('input,select');
+      return {
+        category:    cells[0]?.value || '',
+        description: cells[1]?.value || '',
+        role:        cells[2]?.value || '',
+        brands:      cells[3]?.value || '',
+        country:     cells[4]?.value || '',
+      };
+    }).filter(r => r.category || r.description);
+
+    const payload = {
+      id: regId,
+      // Section 1
+      legal_name_ar:      getVal('f-legal-ar'),
+      legal_name_en:      getVal('f-legal-en'),
+      trade_name:         getVal('f-trade-name'),
+      entity_type:        entity,
+      country:            getVal('f-country'),
+      city:               getVal('f-city'),
+      established_date:   getVal('f-est-date'),
+      established_hijri:  getVal('f-est-hijri'),
+      commercial_reg:     getVal('f-cr'),
+      cr_issue_date:      getVal('f-cr-issue'),
+      cr_expiry_date:     getVal('f-cr-expiry'),
+      chamber:            getVal('f-chamber'),
+      chamber_membership: getVal('f-chamber-num'),
+      chamber_expiry:     getVal('f-chamber-exp'),
+      vat_number:         getVal('f-vat'),
+      zakat_number:       getVal('f-zakat'),
+      gosi_number:        getVal('f-gosi'),
+      address:            getVal('f-address'),
+      po_box:             getVal('f-pobox'),
+      postal_code:        getVal('f-postal'),
+      phone:              getVal('f-phone'),
+      fax:                getVal('f-fax'),
+      website:            getVal('f-website'),
+      email:              getVal('f-email'),
+      // Section 2
+      contact_name:       getVal('f-con-name'),
+      contact_title:      getVal('f-con-title'),
+      contact_mobile:     getVal('f-con-mobile'),
+      contact_phone:      getVal('f-con-phone'),
+      contact_email:      getVal('f-con-email'),
+      sales_name:         getVal('f-sal-name'),
+      sales_mobile:       getVal('f-sal-mobile'),
+      sales_email:        getVal('f-sal-email'),
+      finance_name:       getVal('f-fin-name'),
+      finance_mobile:     getVal('f-fin-mobile'),
+      finance_email:      getVal('f-fin-email'),
+      // Section 3+4
+      business_description: getVal('f-biz-desc'),
+      activity_start_year:  getVal('f-start-year'),
+      paid_capital:         getVal('f-capital'),
+      employees_total:      getVal('f-emp-total'),
+      employees_saudi:      getVal('f-emp-saudi'),
+      contractor_grade:     getVal('f-contractor-grade'),
+      business_scope:       scopes,
+      sectors:              sectors,
+      products_services:    services,
+      // Section 9
+      rep_name:             repName,
+      rep_title:            repTitle,
+      rep_id_number:        repId,
+      // Meta
+      doc_paths:            docPaths,
+      status:               'pending',
+      submitted_at:         new Date().toISOString(),
+    };
+
+    showProc('جارٍ حفظ البيانات...', '');
+    const {error: insertErr} = await SB.from(REG_TABLE).insert(payload);
+    if (insertErr) throw insertErr;
+
+    hideProc();
+    document.getElementById('main-form').style.display = 'none';
+    const successEl = document.getElementById('success-screen');
+    successEl.style.display = 'flex';
+    document.getElementById('success-reg-id').textContent = 'رقم الطلب: ' + regId;
+    window.scrollTo({top:0});
+
+  } catch(e) {
+    hideProc();
+    btn.disabled = false;
+    toast('error', 'حدث خطأ أثناء الإرسال: ' + (e.message || e));
+    console.error(e);
+  }
+}
+
+/* ════════════════════════════════════
+   UI HELPERS
+   ════════════════════════════════════ */
+function showProc(title, sub) {
+  document.getElementById('proc-title').textContent = title;
+  document.getElementById('proc-sub').textContent   = sub;
+  document.getElementById('proc-overlay').classList.remove('hidden');
+}
+function hideProc() {
+  document.getElementById('proc-overlay').classList.add('hidden');
+}
+
+function toast(type, msg, duration = 4000) {
+  const wrap = document.getElementById('toast');
+  const el   = document.createElement('div');
+  el.className = 'toast-msg ' + type;
+  el.innerHTML = `<span>${msg}</span>`;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(), 400); }, duration);
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ════════ START ════════ */
+init();
+</script>
+</body>
+</html>
