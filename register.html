@@ -361,6 +361,13 @@ button{cursor:pointer;font-family:'Tajawal',inherit}
 
 /* ── Progress note (legacy) ── */
 .progress-note{display:none}
+
+/* ── Drag & drop state ── */
+.doc-card.drag-over{
+  border-color:var(--navy-mid);border-style:solid;
+  background:#e4eef8;transform:scale(1.03);
+  box-shadow:0 0 0 3px rgba(13,34,64,.12),var(--shadow);
+}
 </style>
 </head>
 <body>
@@ -461,14 +468,8 @@ button{cursor:pointer;font-family:'Tajawal',inherit}
       <div class="card-title">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         رفع الوثائق النظامية
-        <span class="ai-badge">AI</span>
       </div>
-      <div class="card-subtitle">ارفع الوثائق أدناه — الذكاء الاصطناعي سيستخرج البيانات تلقائياً وتوفر عليك الكتابة اليدوية</div>
-
-      <div class="ai-hint">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-        بعد رفع الوثائق الإلزامية سيقوم الذكاء الاصطناعي بقراءتها وتعبئة النموذج تلقائياً. تحقق من البيانات في الخطوة التالية.
-      </div>
+      <div class="card-subtitle">يرجى رفع الوثائق الرسمية المطلوبة — الوثائق الإلزامية ضرورية لإكمال الطلب وستتم مراجعتها من قِبل الفريق المختص</div>
 
       <div class="section-label">الوثائق الإلزامية</div>
       <div class="doc-grid" id="docs-required">
@@ -928,18 +929,18 @@ const regId = 'reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
 
 /* ── Document types ── */
 const REQUIRED_DOCS = [
-  {id:'cr',       name:'السجل التجاري',             hint:'PDF أو صورة واضحة',  icon:'📋'},
-  {id:'vat',      name:'شهادة الزكاة / VAT',          hint:'شهادة ZATCA سارية',  icon:'📄'},
-  {id:'gosi',     name:'شهادة التأمينات (GOSI)',      hint:'الشهادة السارية',     icon:'🛡️'},
-  {id:'chamber',  name:'شهادة الغرفة التجارية',       hint:'عضوية سارية المفعول', icon:'🏛️'},
+  {id:'cr',         name:'السجل التجاري',             hint:'PDF أو صورة واضحة',    icon:'📋'},
+  {id:'vat',        name:'شهادة الزكاة / VAT',          hint:'شهادة ZATCA سارية',    icon:'📄'},
+  {id:'gosi',       name:'شهادة التأمينات (GOSI)',      hint:'الشهادة السارية',       icon:'🛡️'},
+  {id:'chamber',    name:'شهادة الغرفة التجارية',       hint:'عضوية سارية المفعول',   icon:'🏛️'},
+  {id:'natl_addr',  name:'وثيقة العنوان الوطني',        hint:'من البريد السعودي',     icon:'📍'},
 ];
 const OPTIONAL_DOCS = [
-  {id:'municipal', name:'رخصة البلدية / الترخيص الصناعي', hint:'إن وجد', icon:'🏗️'},
-  {id:'articles',  name:'عقد التأسيس والنظام الأساسي',    hint:'للشركات', icon:'📜'},
-  {id:'quality',   name:'شهادات الجودة (ISO 9001...)',     hint:'اختياري', icon:'🏆'},
-  {id:'safety',    name:'شهادات السلامة والبيئة',          hint:'اختياري', icon:'⚙️'},
-  {id:'clients',   name:'قائمة أهم العملاء والمشاريع',     hint:'PDF أو Excel', icon:'🤝'},
-  {id:'brochure',  name:'بروشور / ملف تعريفي',             hint:'اختياري', icon:'📰'},
+  {id:'municipal', name:'رخصة البلدية / الترخيص الصناعي', hint:'إن وجد',        icon:'🏗️'},
+  {id:'quality',   name:'شهادات الجودة (ISO 9001...)',     hint:'اختياري',       icon:'🏆'},
+  {id:'safety',    name:'شهادات السلامة والبيئة',          hint:'اختياري',       icon:'⚙️'},
+  {id:'clients',   name:'قائمة أهم العملاء والمشاريع',     hint:'PDF أو Excel',  icon:'🤝'},
+  {id:'brochure',  name:'بروشور / ملف تعريفي',             hint:'اختياري',       icon:'📰'},
 ];
 
 const uploadedDocs = {};  // {docId: {file, name, size, path}}
@@ -1066,14 +1067,48 @@ function renderDocCards() {
 
 function docCard(d, required) {
   return `
-    <div class="doc-card ${required ? 'required-badge' : 'optional-badge'}" id="dc-${d.id}" onclick="triggerUpload('${d.id}')">
+    <div class="doc-card ${required ? 'required-badge' : 'optional-badge'}" id="dc-${d.id}"
+         onclick="triggerUpload('${d.id}')"
+         ondragover="docDragOver(event,'${d.id}')"
+         ondragleave="docDragLeave(event,'${d.id}')"
+         ondrop="docDrop(event,'${d.id}')">
       <div class="doc-card-icon">${d.icon}</div>
       <div class="doc-card-name">${d.name}</div>
       <div class="doc-card-hint">${d.hint}</div>
-      <div class="doc-card-status" id="dcs-${d.id}">انقر للرفع</div>
+      <div class="doc-card-status" id="dcs-${d.id}">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;vertical-align:middle;margin-inline-end:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        اسحب الملف هنا أو انقر
+      </div>
       <input type="file" id="fi-${d.id}" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp"
              onchange="handleDocFile(event,'${d.id}')">
     </div>`;
+}
+
+function docDragOver(event, docId) {
+  event.preventDefault();
+  if (uploadedDocs[docId]) return;
+  document.getElementById('dc-' + docId).classList.add('drag-over');
+}
+
+function docDragLeave(event, docId) {
+  document.getElementById('dc-' + docId).classList.remove('drag-over');
+}
+
+function docDrop(event, docId) {
+  event.preventDefault();
+  const card = document.getElementById('dc-' + docId);
+  card.classList.remove('drag-over');
+  if (uploadedDocs[docId]) return;
+  const file = event.dataTransfer?.files?.[0];
+  if (!file) return;
+  uploadedDocs[docId] = {file, name: file.name, size: file.size, path: null};
+  card.classList.add('uploaded');
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'doc-remove'; removeBtn.title = 'حذف'; removeBtn.textContent = '×';
+  removeBtn.onclick = (e) => { e.stopPropagation(); removeDoc(docId); };
+  card.appendChild(removeBtn);
+  const kb = Math.round(file.size / 1024);
+  document.getElementById('dcs-' + docId).textContent = `✓ ${file.name} (${kb} KB)`;
 }
 
 function triggerUpload(docId) {
@@ -1110,17 +1145,14 @@ function removeDoc(docId) {
    AI EXTRACTION
    ════════════════════════════════════ */
 async function extractAllDocs() {
-  if (!AI_KEY) {
-    toast('warn', 'مفتاح الذكاء الاصطناعي غير مُعدّ — يرجى تعبئة البيانات يدوياً');
-    return {};
-  }
+  if (!AI_KEY) { return {}; }
   const merged = {};
   const docsToExtract = Object.entries(uploadedDocs).filter(([,v]) => v.file);
   if (!docsToExtract.length) return {};
 
   for (const [docId, docData] of docsToExtract) {
     const docName = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find(d => d.id === docId)?.name || docId;
-    showProc('استخراج البيانات بالذكاء الاصطناعي...', `جارٍ قراءة: ${docName}`);
+    showProc('جارٍ معالجة الوثائق...', `${docName}`);
     try {
       const result = await extractFromFile(docData.file, docName);
       Object.keys(result).forEach(k => {
@@ -1318,19 +1350,14 @@ async function step1Next() {
     toast('warn', 'يرجى رفع الوثائق الإلزامية: ' + missing.join('، '));
     return;
   }
-  // Run AI extraction
-  showProc('الذكاء الاصطناعي يقرأ وثائقكم...', 'قد يستغرق دقيقة أو دقيقتين');
+  showProc('جارٍ التحقق من الوثائق...', 'يرجى الانتظار لحظة');
   try {
     const data = await extractAllDocs();
-    const filled = fillFromAI(data);
+    fillFromAI(data);
     hideProc();
-    if (filled > 0) {
-      document.getElementById('ai-fill-note').textContent = `✨ تم استخراج ${filled} حقلاً تلقائياً من وثائقكم — يرجى المراجعة والتصحيح إن لزم`;
-    }
     goStep(2);
   } catch(e) {
     hideProc();
-    toast('warn', 'تعذر الاستخراج التلقائي — يرجى تعبئة البيانات يدوياً');
     goStep(2);
   }
 }
