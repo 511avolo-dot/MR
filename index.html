@@ -15147,7 +15147,7 @@ async function loadRegistrations() {
   }
 }
 
-function openRegDetail(jsonStr) {
+async function openRegDetail(jsonStr) {
   const r = JSON.parse(jsonStr);
   const modal = document.getElementById('modal-reg-detail');
   const title = document.getElementById('reg-detail-title');
@@ -15222,14 +15222,18 @@ function openRegDetail(jsonStr) {
   const docPaths = r.doc_paths || {};
   const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
   if (Object.keys(docPaths).length) {
-    const docLinks = Object.entries(docPaths).map(([k, path]) => {
-      const name = DOC_NAMES[k] || k;
-      const {data: urlData} = CLOUD.client.storage.from(REG_BUCKET).getPublicUrl(path);
-      const url = urlData?.publicUrl || '#';
-      return `<a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;padding:5px 12px;border-radius:7px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none;border:1px solid #e2e8f0">
-        📎 ${name}
-      </a>`;
-    }).join('');
+    // Generate signed URLs (valid 1 hour) — bucket is private
+    const docEntries = await Promise.all(
+      Object.entries(docPaths).map(async ([k, path]) => {
+        const name = DOC_NAMES[k] || k;
+        const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 3600);
+        const url = data?.signedUrl || '#';
+        return `<a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;padding:5px 12px;border-radius:7px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none;border:1px solid #e2e8f0">
+          📎 ${name}
+        </a>`;
+      })
+    );
+    const docLinks = docEntries.join('');
     body.innerHTML += `<div style="margin-bottom:20px">
       <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;margin-bottom:10px">الوثائق المرفوعة</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">${docLinks}</div>
