@@ -15360,7 +15360,7 @@ async function rejectRegistration(regId) {
 }
 
 function copyRegLink() {
-  const url = location.origin + '/register.html';
+  const url = new URL('register.html', location.href).href;
   navigator.clipboard.writeText(url).then(() => toast('success', 'تم نسخ رابط التسجيل: ' + url));
 }
 
