@@ -2301,6 +2301,11 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         الموردون
         <span class="nav-count" id="count-sup">0</span>
       </a>
+      <a class="nav-item" data-page="registrations" onclick="loadRegistrations()">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        طلبات التسجيل
+        <span class="nav-count" id="count-regs" style="display:none">0</span>
+      </a>
       <a class="nav-item" data-page="reference">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
         منهجية التسمية
@@ -3049,6 +3054,71 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       </section>
 
       <!-- ============ AI PAGE ============ -->
+      <!-- ════ REGISTRATIONS PAGE ════ -->
+      <section class="page" id="page-registrations">
+        <div class="page-header">
+          <div class="page-eyebrow">بوابة الموردين</div>
+          <h1 class="page-title">طلبات تسجيل الموردين</h1>
+          <p class="page-subtitle">مراجعة الطلبات الواردة من بوابة التسجيل الإلكترونية والموافقة عليها أو رفضها.</p>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary" onclick="loadRegistrations()" style="gap:6px">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            تحديث
+          </button>
+          <button class="btn btn-ghost" onclick="copyRegLink()" style="gap:6px">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+            نسخ رابط التسجيل
+          </button>
+          <div style="margin-inline-start:auto;display:flex;gap:8px">
+            <select id="reg-filter" onchange="loadRegistrations()" style="border:1.5px solid var(--border,#e2e8f0);border-radius:7px;padding:7px 12px;font-size:13px;font-family:inherit">
+              <option value="pending">معلّق</option>
+              <option value="approved">مقبول</option>
+              <option value="rejected">مرفوض</option>
+              <option value="all">الكل</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="reg-list-wrap">
+          <div id="reg-loading" style="text-align:center;padding:40px;color:var(--text-muted,#64748b)">
+            جارٍ التحميل...
+          </div>
+          <div id="reg-empty" style="display:none;text-align:center;padding:60px;color:var(--text-muted,#64748b)">
+            <div style="font-size:48px;margin-bottom:12px">📭</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px">لا توجد طلبات</div>
+            <div style="font-size:13px">ستظهر طلبات تسجيل الموردين هنا عند ورودها من بوابة التسجيل.</div>
+          </div>
+          <div id="reg-table-wrap" style="display:none;overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="background:var(--navy,#1a3a5c);color:#fff">
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">اسم المنشأة</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">المدينة</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">الهاتف</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">تاريخ الطلب</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">الوثائق</th>
+                  <th style="padding:10px 12px;text-align:right;font-weight:600">الحالة</th>
+                  <th style="padding:10px 12px;text-align:center;font-weight:600">إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="reg-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Registration detail modal -->
+        <div id="modal-reg-detail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:4000;overflow-y:auto;padding:20px">
+          <div style="background:#fff;border-radius:12px;max-width:760px;margin:auto;padding:28px;position:relative">
+            <button onclick="closeRegDetail()" style="position:absolute;top:16px;left:16px;background:#f1f5f9;border:none;border-radius:7px;width:32px;height:32px;font-size:18px;cursor:pointer">×</button>
+            <h2 id="reg-detail-title" style="font-size:18px;font-weight:700;color:var(--navy,#1a3a5c);margin-bottom:20px"></h2>
+            <div id="reg-detail-body"></div>
+            <div id="reg-detail-actions" style="display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="page" id="page-ai">
         <div class="page-header">
           <div class="page-eyebrow">مدعوم بالذكاء الاصطناعي</div>
@@ -10055,6 +10125,82 @@ CREATE POLICY "Enable insert for all" ON proc_item_aliases FOR INSERT WITH CHECK
 CREATE POLICY "Enable update for all" ON proc_item_aliases FOR UPDATE USING (true);
 CREATE POLICY "Enable delete for all" ON proc_item_aliases FOR DELETE USING (true);
 
+-- 9) جدول طلبات تسجيل الموردين (بوابة التسجيل الخارجية)
+CREATE TABLE IF NOT EXISTS proc_supplier_registrations (
+  id TEXT PRIMARY KEY,
+  -- القسم 1: المعلومات العامة
+  legal_name_ar      TEXT,
+  legal_name_en      TEXT,
+  trade_name         TEXT,
+  entity_type        TEXT,
+  country            TEXT,
+  city               TEXT,
+  established_date   TEXT,
+  established_hijri  TEXT,
+  commercial_reg     TEXT,
+  cr_issue_date      TEXT,
+  cr_expiry_date     TEXT,
+  chamber            TEXT,
+  chamber_membership TEXT,
+  chamber_expiry     TEXT,
+  vat_number         TEXT,
+  zakat_number       TEXT,
+  gosi_number        TEXT,
+  address            TEXT,
+  po_box             TEXT,
+  postal_code        TEXT,
+  phone              TEXT,
+  fax                TEXT,
+  website            TEXT,
+  email              TEXT,
+  -- القسم 2: التواصل
+  contact_name       TEXT,
+  contact_title      TEXT,
+  contact_mobile     TEXT,
+  contact_phone      TEXT,
+  contact_email      TEXT,
+  sales_name         TEXT,
+  sales_mobile       TEXT,
+  sales_email        TEXT,
+  finance_name       TEXT,
+  finance_mobile     TEXT,
+  finance_email      TEXT,
+  -- القسم 3+4: النشاط والخدمات
+  business_description TEXT,
+  activity_start_year  TEXT,
+  paid_capital         TEXT,
+  employees_total      TEXT,
+  employees_saudi      TEXT,
+  contractor_grade     TEXT,
+  business_scope       JSONB DEFAULT '[]'::jsonb,
+  sectors              JSONB DEFAULT '[]'::jsonb,
+  products_services    JSONB DEFAULT '[]'::jsonb,
+  -- القسم 9: الإقرار
+  rep_name             TEXT,
+  rep_title            TEXT,
+  rep_id_number        TEXT,
+  -- الوثائق (مسارات Supabase Storage)
+  doc_paths            JSONB DEFAULT '{}'::jsonb,
+  -- حالة الطلب
+  status               TEXT DEFAULT 'pending',  -- pending | approved | rejected
+  submitted_at         TIMESTAMPTZ DEFAULT now(),
+  reviewed_by          TEXT,
+  reviewed_at          TIMESTAMPTZ,
+  review_notes         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reg_status ON proc_supplier_registrations(status);
+CREATE INDEX IF NOT EXISTS idx_reg_submitted ON proc_supplier_registrations(submitted_at DESC);
+ALTER TABLE proc_supplier_registrations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable insert for all" ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "Enable read for auth"  ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "Enable update for auth" ON proc_supplier_registrations;
+CREATE POLICY "Enable insert for all"  ON proc_supplier_registrations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Enable read for all"    ON proc_supplier_registrations FOR SELECT USING (true);
+CREATE POLICY "Enable update for all"  ON proc_supplier_registrations FOR UPDATE USING (true);
+
+-- Storage bucket: supplier-docs (يُنشأ يدوياً من Supabase Dashboard → Storage)
+-- المسار: supplier-docs/{reg_id}/{doc_type}/{filename}
+
 -- ✓ الجداول جاهزة! (يمكن تشغيل السكريبت أكثر من مرة بأمان)`;
 
 window.CLOUD = {
@@ -14932,6 +15078,287 @@ function getToolLabel(name){
     ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAgentMessage();}});
   }
 })();
+
+/* ════════════════════════════════════════════════════════
+   SUPPLIER REGISTRATIONS — بوابة تسجيل الموردين
+   ════════════════════════════════════════════════════════ */
+const REG_TABLE = 'proc_supplier_registrations';
+const REG_BUCKET = 'supplier-docs';
+
+async function loadRegistrations() {
+  if (!window.CLOUD || !CLOUD.enabled || !CLOUD.client) {
+    toast('warn', 'يرجى الاتصال بقاعدة البيانات السحابية أولاً');
+    return;
+  }
+  const filter   = document.getElementById('reg-filter')?.value || 'pending';
+  const loading  = document.getElementById('reg-loading');
+  const empty    = document.getElementById('reg-empty');
+  const tableWrap= document.getElementById('reg-table-wrap');
+  if (loading)   loading.style.display = '';
+  if (empty)     empty.style.display   = 'none';
+  if (tableWrap) tableWrap.style.display = 'none';
+
+  try {
+    let query = CLOUD.client.from(REG_TABLE).select('*').order('submitted_at', {ascending: false}).limit(100);
+    if (filter !== 'all') query = query.eq('status', filter);
+    const {data, error} = await query;
+    if (error) throw error;
+
+    if (loading) loading.style.display = 'none';
+    if (!data || !data.length) {
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (tableWrap) tableWrap.style.display = '';
+
+    const pendingCount = data.filter(r => r.status === 'pending').length;
+    const badge = document.getElementById('count-regs');
+    if (badge) {
+      badge.textContent = pendingCount;
+      badge.style.display = pendingCount ? '' : 'none';
+    }
+
+    const tbody = document.getElementById('reg-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = data.map(r => {
+      const docCount  = Object.keys(r.doc_paths || {}).length;
+      const date      = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '—';
+      const statusMap = {pending: {label:'معلّق', cls:'#f59e0b'}, approved: {label:'مقبول', cls:'#16a34a'}, rejected: {label:'مرفوض', cls:'#dc2626'}};
+      const st = statusMap[r.status] || {label: r.status, cls:'#64748b'};
+      return `<tr style="border-bottom:1px solid #f1f5f9">
+        <td style="padding:10px 12px;font-weight:600">${r.legal_name_ar || '—'}</td>
+        <td style="padding:10px 12px">${r.city || '—'}</td>
+        <td style="padding:10px 12px;direction:ltr">${r.phone || r.contact_mobile || '—'}</td>
+        <td style="padding:10px 12px">${date}</td>
+        <td style="padding:10px 12px;text-align:center">
+          <span style="background:#f0f4f8;padding:3px 8px;border-radius:12px;font-size:12px">${docCount} وثيقة</span>
+        </td>
+        <td style="padding:10px 12px">
+          <span style="background:${st.cls}20;color:${st.cls};padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">${st.label}</span>
+        </td>
+        <td style="padding:10px 12px;text-align:center">
+          <button onclick='openRegDetail(${JSON.stringify(JSON.stringify(r))})' style="background:var(--navy,#1a3a5c);color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit">تفاصيل</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    if (loading) loading.textContent = 'حدث خطأ: ' + e.message;
+    toast('error', 'فشل تحميل الطلبات: ' + e.message);
+  }
+}
+
+function openRegDetail(jsonStr) {
+  const r = JSON.parse(jsonStr);
+  const modal = document.getElementById('modal-reg-detail');
+  const title = document.getElementById('reg-detail-title');
+  const body  = document.getElementById('reg-detail-body');
+  const acts  = document.getElementById('reg-detail-actions');
+  if (!modal) return;
+  title.textContent = r.legal_name_ar || 'تفاصيل الطلب';
+  modal.style.display = '';
+
+  const sect = (label, rows) => `
+    <div style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;margin-bottom:10px">${label}</div>
+      ${rows.filter(([,v]) => v).map(([k, v]) =>
+        `<div style="display:flex;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px solid #f1f5f9">
+          <span style="color:#64748b;min-width:160px;flex-shrink:0">${k}</span>
+          <span style="font-weight:500">${v}</span>
+        </div>`
+      ).join('')}
+    </div>`;
+
+  const scopeLabel  = (r.business_scope || []).join('، ') || '—';
+  const sectorsLabel= (r.sectors || []).join('، ') || '—';
+
+  body.innerHTML = [
+    sect('المعلومات العامة', [
+      ['الاسم القانوني (عربي)', r.legal_name_ar],
+      ['الاسم القانوني (إنجليزي)', r.legal_name_en],
+      ['الاسم التجاري', r.trade_name],
+      ['نوع الكيان', r.entity_type],
+      ['المدينة / الدولة', [r.city, r.country].filter(Boolean).join(' — ')],
+      ['تاريخ التأسيس', r.established_date],
+      ['رقم السجل التجاري', r.commercial_reg],
+      ['تاريخ انتهاء السجل', r.cr_expiry_date],
+      ['الرقم الضريبي (VAT)', r.vat_number],
+      ['رقم الزكاة', r.zakat_number],
+      ['رقم التأمينات (GOSI)', r.gosi_number],
+      ['الغرفة التجارية', r.chamber],
+      ['رقم عضوية الغرفة', r.chamber_membership],
+      ['العنوان', r.address],
+      ['هاتف المنشأة', r.phone],
+      ['البريد الإلكتروني', r.email],
+      ['الموقع الإلكتروني', r.website],
+    ]),
+    sect('التواصل', [
+      ['الشخص الرئيسي', r.contact_name],
+      ['منصبه', r.contact_title],
+      ['جواله', r.contact_mobile],
+      ['بريده الإلكتروني', r.contact_email],
+      ['مسؤول المبيعات', r.sales_name],
+      ['جوال المبيعات', r.sales_mobile],
+      ['مسؤول المالية', r.finance_name],
+      ['جوال المالية', r.finance_mobile],
+    ]),
+    sect('النشاط والخدمات', [
+      ['وصف النشاط', r.business_description],
+      ['سنة بدء النشاط', r.activity_start_year],
+      ['رأس المال المدفوع', r.paid_capital ? r.paid_capital + ' ريال' : null],
+      ['إجمالي الموظفين', r.employees_total],
+      ['الموظفون السعوديون', r.employees_saudi],
+      ['نطاق العمل', scopeLabel],
+      ['القطاعات', sectorsLabel],
+      ['تصنيف المقاولين', r.contractor_grade],
+    ]),
+    sect('ممثل المنشأة', [
+      ['الاسم', r.rep_name],
+      ['المنصب', r.rep_title],
+      ['رقم الهوية / الإقامة', r.rep_id_number],
+    ]),
+  ].join('');
+
+  // Documents
+  const docPaths = r.doc_paths || {};
+  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  if (Object.keys(docPaths).length) {
+    const docLinks = Object.entries(docPaths).map(([k, path]) => {
+      const name = DOC_NAMES[k] || k;
+      const {data: urlData} = CLOUD.client.storage.from(REG_BUCKET).getPublicUrl(path);
+      const url = urlData?.publicUrl || '#';
+      return `<a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;padding:5px 12px;border-radius:7px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none;border:1px solid #e2e8f0">
+        📎 ${name}
+      </a>`;
+    }).join('');
+    body.innerHTML += `<div style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;margin-bottom:10px">الوثائق المرفوعة</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${docLinks}</div>
+    </div>`;
+  }
+
+  // Products/services table
+  const services = r.products_services || [];
+  if (services.length) {
+    body.innerHTML += `<div style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;margin-bottom:10px">المنتجات والخدمات</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f0f4f8">
+          <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">الفئة</th>
+          <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">الوصف</th>
+          <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">الدور</th>
+          <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">العلامات</th>
+          <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">بلد المنشأ</th>
+        </tr></thead>
+        <tbody>${services.map(s => `<tr>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.category||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.description||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.role||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.brands||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.country||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // Actions
+  acts.innerHTML = '';
+  if (r.status === 'pending') {
+    const approveBtn = document.createElement('button');
+    approveBtn.className = 'btn btn-primary';
+    approveBtn.innerHTML = '✓ موافقة وإضافة للموردين';
+    approveBtn.onclick = () => approveRegistration(r);
+    acts.appendChild(approveBtn);
+
+    const noteInp = document.createElement('input');
+    noteInp.type = 'text'; noteInp.placeholder = 'ملاحظة للرفض (اختياري)';
+    noteInp.style.cssText = 'border:1.5px solid #e2e8f0;border-radius:7px;padding:8px 12px;font-size:13px;flex:1;font-family:inherit';
+    noteInp.id = 'reg-reject-note';
+    acts.appendChild(noteInp);
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.style.cssText = 'background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer';
+    rejectBtn.textContent = '✕ رفض';
+    rejectBtn.onclick = () => rejectRegistration(r.id);
+    acts.appendChild(rejectBtn);
+  } else {
+    acts.innerHTML = `<span style="font-size:13px;color:#64748b">تمت المعالجة بتاريخ: ${r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString('ar-SA') : '—'} بواسطة ${r.reviewed_by || '—'}</span>`;
+  }
+}
+
+function closeRegDetail() {
+  document.getElementById('modal-reg-detail').style.display = 'none';
+}
+
+async function approveRegistration(reg) {
+  if (!CLOUD || !CLOUD.enabled) return;
+  try {
+    // Create supplier in proc_suppliers
+    const suppId  = 'sup_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const payload = {
+      id:             suppId,
+      name:           reg.legal_name_ar,
+      specialty:      (reg.sectors || []).join('، ') || (reg.products_services?.[0]?.category || ''),
+      contact:        reg.contact_name,
+      phone:          reg.phone,
+      mobile:         reg.contact_mobile,
+      email:          reg.email || reg.contact_email,
+      address:        reg.address,
+      commercial_reg: reg.commercial_reg,
+      tax_id:         reg.vat_number || reg.zakat_number,
+      notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
+      offers_count:   0,
+      created_by:     STATE.currentUser?.username || null,
+      updated_by:     STATE.currentUser?.username || null,
+      created_at:     new Date().toISOString(),
+      updated_at:     new Date().toISOString(),
+    };
+    const {error: insErr} = await CLOUD.client.from('proc_suppliers').insert(payload);
+    if (insErr) throw insErr;
+
+    // Update registration status
+    const {error: upErr} = await CLOUD.client.from(REG_TABLE).update({
+      status: 'approved',
+      reviewed_by: STATE.currentUser?.username || 'admin',
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', reg.id);
+    if (upErr) throw upErr;
+
+    closeRegDetail();
+    toast('success', `تمت الموافقة — تم إضافة "${reg.legal_name_ar}" كمورد معتمد`);
+    loadRegistrations();
+
+    // Reload suppliers in main app
+    if (CLOUD.loadAll) {
+      CLOUD.loadAll().then(d => { if (d) { STATE.suppliers = [...(d.suppliers||[])]; renderSuppliersPage?.(); updateCounts?.(); } });
+    }
+  } catch(e) {
+    toast('error', 'فشلت الموافقة: ' + e.message);
+  }
+}
+
+async function rejectRegistration(regId) {
+  if (!CLOUD || !CLOUD.enabled) return;
+  const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
+  try {
+    const {error} = await CLOUD.client.from(REG_TABLE).update({
+      status: 'rejected',
+      reviewed_by: STATE.currentUser?.username || 'admin',
+      reviewed_at: new Date().toISOString(),
+      review_notes: note || null,
+    }).eq('id', regId);
+    if (error) throw error;
+    closeRegDetail();
+    toast('info', 'تم رفض الطلب');
+    loadRegistrations();
+  } catch(e) {
+    toast('error', 'فشل الرفض: ' + e.message);
+  }
+}
+
+function copyRegLink() {
+  const url = location.origin + '/register.html';
+  navigator.clipboard.writeText(url).then(() => toast('success', 'تم نسخ رابط التسجيل: ' + url));
+}
 
 // Initialize agents page when navigated to
 (function(){
