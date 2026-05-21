@@ -3071,6 +3071,14 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
             نسخ رابط التسجيل
           </button>
+          <button class="btn btn-ghost" onclick="exportRegistrations()" style="gap:6px">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            تصدير Excel
+          </button>
+          <button class="btn btn-ghost" onclick="archiveAndClean()" style="gap:6px;color:#b45309;border-color:#fde68a">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            أرشفة وتنظيف
+          </button>
           <div style="margin-inline-start:auto;display:flex;gap:8px">
             <select id="reg-filter" onchange="loadRegistrations()" style="border:1.5px solid var(--border,#e2e8f0);border-radius:7px;padding:7px 12px;font-size:13px;font-family:inherit">
               <option value="pending">معلّق</option>
@@ -5953,7 +5961,7 @@ async function exportExcel(data, filename, cols, options = {}) {
   if (!data || !data.length) { toast('warn','لا توجد بيانات','لا يوجد شيء للتصدير'); return; }
   toast('info','جاري التصدير','جارٍ تحميل مكتبة Excel...');
   try {
-    await loadScriptOnce(SHEETJS_CDN, ()=>typeof XLSX !== 'undefined');
+    await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined');
     if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel — تحقق من الاتصال بالإنترنت');
 
     const wb = XLSX.utils.book_new();
@@ -9017,6 +9025,20 @@ const DOCX_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min
 const FILESAVER_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js';
 
 const _scriptLoadPromises = {};
+
+// Try multiple CDN fallbacks — reduces 25 s hard failure to fast failover
+async function loadLib(urls, globalCheck) {
+  const list = Array.isArray(urls) ? urls : [urls];
+  const chk  = typeof globalCheck === 'function' ? globalCheck : () => !!window[globalCheck];
+  if (chk()) return;
+  let lastErr;
+  for (const url of list) {
+    delete _scriptLoadPromises[url]; // clear any stale failed promise
+    try { await loadScriptOnce(url, globalCheck); return; } catch(e) { lastErr = e; }
+  }
+  throw lastErr || new Error('فشل تحميل المكتبة من جميع المصادر — تحقق من الاتصال وأعد تحميل الصفحة');
+}
+
 function loadScriptOnce(url, globalCheck){
   // If the global is already available, resolve immediately
   const checkGlobal = () => {
@@ -9053,7 +9075,7 @@ function loadScriptOnce(url, globalCheck){
       clearInterval(poller);
       if(checkGlobal()) finish(true);
       else finish(false, new Error('انتهت مهلة تحميل المكتبة. تحقق من اتصال الإنترنت وحاول مجدداً.'));
-    }, 25000);
+    }, 12000);
 
     const done = (ok, err) => { clearInterval(poller); clearTimeout(timeout); finish(ok, err); };
 
@@ -12440,6 +12462,9 @@ const SI_STATE = {
 const SHEETJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// Fallback CDN lists for resilience
+const SHEETJS_CDNS = [SHEETJS_CDN,'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'];
+const PDFJS_CDNS   = [PDFJS_CDN,'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
 
 function resetSmartImportState(){
   // Reset in-memory state
@@ -12571,7 +12596,7 @@ async function siHandleFile(file){
 /* === EXTRACTION: SPREADSHEET === */
 async function siExtractFromSpreadsheet(file){
   siShowProcessing('تحميل مكتبة Excel...', 'يستغرق ثوانٍ معدودة في المرة الأولى');
-  await loadScriptOnce(SHEETJS_CDN, ()=>typeof XLSX !== 'undefined');
+  await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined');
   if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel');
 
   siShowProcessing('قراءة جداول Excel...', file.name);
@@ -12629,7 +12654,7 @@ async function siExtractFromSpreadsheet(file){
 /* === EXTRACTION: PDF === */
 async function siExtractFromPDF(file){
   siShowProcessing('تحميل قارئ PDF...', 'يستغرق ثوانٍ معدودة في المرة الأولى');
-  await loadScriptOnce(PDFJS_CDN, ()=>typeof pdfjsLib !== 'undefined');
+  await loadLib(PDFJS_CDNS, ()=>typeof pdfjsLib !== 'undefined');
   if(typeof pdfjsLib === 'undefined') throw new Error('فشل تحميل مكتبة PDF');
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
 
@@ -14938,30 +14963,40 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
   const cfg = await loadAIConfig();
   if(!cfg.enabled) throw Object.assign(new Error('يلزم إعداد مفتاح Gemini API — اذهب للإعدادات → الذكاء الاصطناعي'), {code:'AI_NOT_CONFIGURED'});
   const functionDeclarations = tools.map(t => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.input_schema
+    name: t.name, description: t.description, parameters: t.input_schema
   }));
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      systemInstruction: {parts:[{text: systemPrompt}]},
-      contents: geminiContents,
-      tools: [{function_declarations: functionDeclarations}],
-      tool_config: {function_calling_config: {mode:'AUTO'}},
-      generationConfig: {temperature:0.7, maxOutputTokens:2048},
-      safetySettings:[
-        {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
-        {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'},
-        {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
-        {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
-      ]
-    })
+  const body = JSON.stringify({
+    systemInstruction: {parts:[{text: systemPrompt}]},
+    contents: geminiContents,
+    tools: [{function_declarations: functionDeclarations}],
+    tool_config: {function_calling_config: {mode:'AUTO'}},
+    generationConfig: {temperature:0.7, maxOutputTokens:2048},
+    safetySettings:[
+      {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
+    ]
   });
-  if(!res.ok){const e=await res.text();throw new Error(`Gemini ${res.status}: ${e.slice(0,200)}`);}
-  return await res.json();
+  // Fallback model list — try next on 503/429/overload
+  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash']
+    .filter((m,i,a)=>m&&a.indexOf(m)===i);
+  let lastErr;
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+    try {
+      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body});
+      if(res.status===503||res.status===429){
+        const e=await res.text(); lastErr=new Error(`Gemini ${res.status} (${model}): ${e.slice(0,150)}`); continue;
+      }
+      if(!res.ok){const e=await res.text();throw new Error(`Gemini ${res.status}: ${e.slice(0,200)}`);}
+      return await res.json();
+    } catch(e){
+      if(/503|429|UNAVAILABLE|overload/i.test(e.message)){lastErr=e;continue;}
+      throw e;
+    }
+  }
+  throw lastErr || new Error('جميع نماذج الذكاء الاصطناعي مشغولة حالياً — حاول بعد لحظة');
 }
 
 async function sendAgentMessage(){
@@ -15220,7 +15255,7 @@ async function openRegDetail(jsonStr) {
 
   // Documents
   const docPaths = r.doc_paths || {};
-  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
   if (Object.keys(docPaths).length) {
     // Generate signed URLs (valid 1 hour) — bucket is private
     const docEntries = await Promise.all(
@@ -15285,7 +15320,17 @@ async function openRegDetail(jsonStr) {
     rejectBtn.onclick = () => rejectRegistration(r.id);
     acts.appendChild(rejectBtn);
   } else {
-    acts.innerHTML = `<span style="font-size:13px;color:#64748b">تمت المعالجة بتاريخ: ${r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString('ar-SA') : '—'} بواسطة ${r.reviewed_by || '—'}</span>`;
+    const editSectorsBtn = document.createElement('button');
+    editSectorsBtn.className = 'btn btn-ghost';
+    editSectorsBtn.style.cssText = 'font-size:13px;gap:6px';
+    editSectorsBtn.innerHTML = '✏️ تعديل التصنيف';
+    editSectorsBtn.onclick = () => openEditClassification(r);
+    acts.appendChild(editSectorsBtn);
+
+    const statusLabel = document.createElement('span');
+    statusLabel.style.cssText = 'font-size:13px;color:#64748b;margin-inline-start:auto';
+    statusLabel.textContent = `تمت المعالجة بتاريخ: ${r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString('ar-SA') : '—'} بواسطة ${r.reviewed_by || '—'}`;
+    acts.appendChild(statusLabel);
   }
 }
 
@@ -15357,6 +15402,144 @@ async function rejectRegistration(regId) {
   } catch(e) {
     toast('error', 'فشل الرفض: ' + e.message);
   }
+}
+
+async function exportRegistrations() {
+  if (!CLOUD || !CLOUD.enabled) return;
+  toast('info', 'جارٍ التصدير', 'تحميل البيانات...');
+  try {
+    const {data, error} = await CLOUD.client.from(REG_TABLE).select('*').order('submitted_at', {ascending: false});
+    if (error) throw error;
+    if (!data || !data.length) { toast('warn', 'لا توجد بيانات'); return; }
+
+    const cols = [
+      {key:'id',                label:'رقم الطلب'},
+      {key:'status',            label:'الحالة'},
+      {key:'legal_name_ar',     label:'الاسم التجاري'},
+      {key:'commercial_reg',    label:'السجل التجاري'},
+      {key:'vat_number',        label:'رقم الزكاة/VAT'},
+      {key:'phone',             label:'هاتف المنشأة'},
+      {key:'email',             label:'البريد الإلكتروني'},
+      {key:'address',           label:'العنوان'},
+      {key:'contact_name',      label:'مسؤول التواصل'},
+      {key:'contact_mobile',    label:'جوال المسؤول'},
+      {key:'sales_name',        label:'مسؤول المبيعات'},
+      {key:'sales_mobile',      label:'جوال المبيعات'},
+      {key:'employees_total',   label:'إجمالي الموظفين'},
+      {key:'contractor_grade',  label:'تصنيف المقاول'},
+      {key:'submitted_at',      label:'تاريخ التقديم'},
+      {key:'reviewed_at',       label:'تاريخ المراجعة'},
+      {key:'reviewed_by',       label:'المراجع'},
+    ];
+
+    const rows = data.map(r => {
+      const flat = {...r};
+      flat.sectors = Array.isArray(r.sectors) ? r.sectors.join('، ') : (r.sectors || '');
+      flat.submitted_at = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '';
+      flat.reviewed_at  = r.reviewed_at  ? new Date(r.reviewed_at).toLocaleDateString('ar-SA')  : '';
+      return flat;
+    });
+
+    const dateStr = new Date().toISOString().slice(0,10);
+    await exportExcel(rows, `طلبات-تسجيل-الموردين-${dateStr}`, cols, {sheetName: 'الطلبات'});
+  } catch(e) {
+    toast('error', 'فشل التصدير', e.message);
+  }
+}
+
+async function archiveAndClean() {
+  if (!CLOUD || !CLOUD.enabled) return;
+
+  const filter = document.getElementById('reg-filter')?.value || 'all';
+  const isAll = filter === 'all';
+  const label = isAll ? 'جميع الطلبات المعالجة (مقبول + مرفوض)' : (filter === 'approved' ? 'الطلبات المقبولة' : 'الطلبات المرفوضة');
+
+  if (!confirm(`سيتم تصدير ${label} إلى Excel ثم حذفها من قاعدة البيانات لتحرير المساحة.\n\nهل تريد المتابعة؟`)) return;
+
+  toast('info', 'جارٍ الأرشفة', 'تحميل البيانات...');
+  try {
+    let query = CLOUD.client.from(REG_TABLE).select('*');
+    if (isAll) {
+      query = query.in('status', ['approved', 'rejected']);
+    } else {
+      query = query.eq('status', filter === 'approved' ? 'approved' : 'rejected');
+    }
+    const {data, error} = await query.order('submitted_at', {ascending: false});
+    if (error) throw error;
+    if (!data || !data.length) { toast('warn', 'لا توجد سجلات للأرشفة'); return; }
+
+    const cols = [
+      {key:'id',               label:'رقم الطلب'},
+      {key:'status',           label:'الحالة'},
+      {key:'legal_name_ar',    label:'الاسم التجاري'},
+      {key:'commercial_reg',   label:'السجل التجاري'},
+      {key:'vat_number',       label:'رقم الزكاة/VAT'},
+      {key:'phone',            label:'هاتف المنشأة'},
+      {key:'email',            label:'البريد الإلكتروني'},
+      {key:'address',          label:'العنوان'},
+      {key:'contact_name',     label:'مسؤول التواصل'},
+      {key:'contact_mobile',   label:'جوال المسؤول'},
+      {key:'sales_name',       label:'مسؤول المبيعات'},
+      {key:'sales_mobile',     label:'جوال المبيعات'},
+      {key:'business_description', label:'وصف النشاط'},
+      {key:'contractor_grade', label:'تصنيف المقاول'},
+      {key:'submitted_at',     label:'تاريخ التقديم'},
+      {key:'reviewed_at',      label:'تاريخ المراجعة'},
+      {key:'reviewed_by',      label:'المراجع'},
+      {key:'review_notes',     label:'ملاحظات المراجعة'},
+    ];
+
+    const rows = data.map(r => {
+      const flat = {...r};
+      flat.sectors = Array.isArray(r.sectors) ? r.sectors.join('، ') : (r.sectors || '');
+      flat.submitted_at = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '';
+      flat.reviewed_at  = r.reviewed_at  ? new Date(r.reviewed_at).toLocaleDateString('ar-SA')  : '';
+      return flat;
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    await exportExcel(rows, `أرشيف-الموردين-${dateStr}`, cols, {sheetName: 'الأرشيف'});
+
+    // Delete after successful export
+    const ids = data.map(r => r.id);
+    const {error: delErr} = await CLOUD.client.from(REG_TABLE).delete().in('id', ids);
+    if (delErr) throw delErr;
+
+    toast('success', 'تم الأرشفة والتنظيف', `تم أرشفة ${data.length} سجل وحذفها من قاعدة البيانات`);
+    loadRegistrations();
+  } catch(e) {
+    toast('error', 'فشلت الأرشفة', e.message);
+  }
+}
+
+function openEditClassification(reg) {
+  const current = Array.isArray(reg.sectors) ? reg.sectors.join('، ') : (reg.sectors || '');
+  const newSectors = prompt(`تعديل تصنيف المورد: ${reg.legal_name_ar}\n\nالتصنيف الحالي: ${current || '(غير محدد)'}\n\nأدخل التصنيف الجديد (يمكن الفصل بـ ،):`, current);
+  if (newSectors === null) return;
+  const sectorsArr = newSectors.split(/[،,]/).map(s => s.trim()).filter(Boolean);
+
+  if (!CLOUD || !CLOUD.enabled) return;
+  CLOUD.client.from(REG_TABLE).update({
+    sectors: sectorsArr,
+    updated_at: new Date().toISOString(),
+  }).eq('id', reg.id).then(({error}) => {
+    if (error) { toast('error', 'فشل التعديل', error.message); return; }
+    toast('success', 'تم تعديل التصنيف');
+    // Also update the supplier record if approved
+    if (reg.status === 'approved') {
+      CLOUD.client.from('proc_suppliers').update({
+        specialty: sectorsArr.join('، '),
+        updated_at: new Date().toISOString(),
+        updated_by: STATE.currentUser?.username || null,
+      }).eq('commercial_reg', reg.commercial_reg).then(({error: e2}) => {
+        if (!e2 && CLOUD.loadAll) {
+          CLOUD.loadAll().then(d => { if (d) { STATE.suppliers = [...(d.suppliers||[])]; renderSuppliersPage?.(); } });
+        }
+      });
+    }
+    closeRegDetail();
+    loadRegistrations();
+  });
 }
 
 function copyRegLink() {
