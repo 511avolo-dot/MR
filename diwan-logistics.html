@@ -616,6 +616,7 @@ function renderFarms() {
   <div class="page-header">
     <h1>إدارة المزارع</h1>
     <p>متابعة وإدارة مزارع التوت الحساوي في منطقة الأحساء</p>
+    <button class="btn btn-primary btn-sm" onclick="editFarmForm()">+ مزرعة جديدة</button>
   </div>
   <div class="farm-grid" style="margin-bottom:32px;">
     ${DATA.farms.map(f=>{
@@ -654,8 +655,8 @@ function renderFarms() {
           </div>
         </div>
         <div style="margin-top:16px;display:flex;gap:8px;">
-          <button class="btn btn-secondary btn-sm" onclick="showToast('تم فتح ملف المزرعة: ${f.name}','info')">عرض التفاصيل</button>
-          <button class="btn btn-ghost btn-sm" onclick="showToast('تم طلب تقرير الإنتاج','success')">تقرير الإنتاج</button>
+          <button class="btn btn-secondary btn-sm" onclick="viewFarm('${f.id}')">عرض التفاصيل</button>
+          <button class="btn btn-ghost btn-sm" onclick="editFarmForm('${f.id}')">تعديل البيانات</button>
         </div>
       </div>`;
     }).join('')}
@@ -675,8 +676,8 @@ function renderFarms() {
             <td>${f.farmer}</td>
             <td>${statusBadge(f.status)}</td>
             <td>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('تم فتح ملف: ${f.name}','info')">عرض</button>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('تحرير بيانات المزرعة','info')">تعديل</button>
+              <button class="btn btn-ghost btn-sm" onclick="viewFarm('${f.id}')">عرض</button>
+              <button class="btn btn-ghost btn-sm" onclick="editFarmForm('${f.id}')">تعديل</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -715,7 +716,7 @@ function renderManufacturing() {
   <div class="card">
     <div class="card-title">
       دفعات الإنتاج
-      <button class="btn btn-primary btn-sm" onclick="showToast('تم فتح نموذج دفعة جديدة','info')">+ دفعة جديدة</button>
+      <button class="btn btn-primary btn-sm" onclick="addBatch()">+ دفعة جديدة</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -740,8 +741,8 @@ function renderManufacturing() {
               <td>${dots}</td>
               <td>${statusBadge(m.status)}</td>
               <td>
-                <button class="btn btn-ghost btn-sm" onclick="showToast('عرض تفاصيل: ${m.id}','info')">عرض</button>
-                <button class="btn btn-ghost btn-sm" onclick="showToast('تحديث المرحلة: ${m.id}','success')">تحديث</button>
+                <button class="btn btn-ghost btn-sm" onclick="viewBatch('${m.id}')">عرض</button>
+                <button class="btn btn-ghost btn-sm" onclick="advanceBatch('${m.id}')">تحديث</button>
               </td>
             </tr>`;
           }).join('')}
@@ -775,7 +776,7 @@ function renderProducts(filter) {
   <div class="card">
     <div class="card-title">
       قائمة المنتجات
-      <button class="btn btn-primary btn-sm" onclick="showToast('نموذج إضافة منتج جديد','info')">+ منتج جديد</button>
+      <button class="btn btn-primary btn-sm" onclick="editProduct()">+ منتج جديد</button>
     </div>
     <div class="filter-tabs">
       ${cats.map(c=>`<button class="filter-tab ${productFilter===c?'active':''}" onclick="document.getElementById('main-content').innerHTML=renderProducts('${c}');lucide.createIcons();">${c}</button>`).join('')}
@@ -794,8 +795,8 @@ function renderProducts(filter) {
             <td class="td-num">${formatNum(p.reorderLevel)} ${p.unit}</td>
             <td>${statusBadge(p.status)}</td>
             <td>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('تعديل: ${p.name}','info')">تعديل</button>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('طلب إعادة تخزين: ${p.name}','success')">طلب</button>
+              <button class="btn btn-ghost btn-sm" onclick="editProduct('${p.id}')">تعديل</button>
+              <button class="btn btn-ghost btn-sm" onclick="restockProduct('${p.id}')">إعادة تخزين</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -843,8 +844,8 @@ function renderWarehouses() {
           <div class="farm-stat-item" style="grid-column:1/-1;"><div class="farm-stat-label">المتاح</div><div class="farm-stat-value">${formatNum(w.capacity-w.used)} كجم</div></div>
         </div>
         <div style="margin-top:16px;display:flex;gap:8px;">
-          <button class="btn btn-secondary btn-sm" onclick="showToast('عرض مخزون: ${w.name}','info')">عرض المخزون</button>
-          <button class="btn btn-ghost btn-sm" onclick="showToast('تقرير المستودع','success')">تقرير</button>
+          <button class="btn btn-secondary btn-sm" onclick="viewWarehouse('${w.id}')">عرض المخزون</button>
+          <button class="btn btn-ghost btn-sm" onclick="viewWarehouse('${w.id}')">تقرير</button>
         </div>
       </div>`;
     }).join('')}
@@ -944,8 +945,8 @@ function renderShipmentDetail(s) {
     }).join('')}
   </div>
   <div style="margin-top:24px;display:flex;gap:8px;">
-    <button class="btn btn-primary btn-sm" onclick="showToast('تم تحديث حالة الشحنة','success')">تحديث الحالة</button>
-    <button class="btn btn-secondary btn-sm" onclick="showToast('جاري طباعة بوليصة الشحن','info')">طباعة البوليصة</button>
+    <button class="btn btn-primary btn-sm" onclick="updateShipmentStatus('${s.id}')">تحديث الحالة</button>
+    <button class="btn btn-secondary btn-sm" onclick="printShipmentBOL('${s.id}')">طباعة البوليصة</button>
   </div>`;
 }
 function selectShipment(id) {
@@ -1011,7 +1012,7 @@ function renderFleet() {
               </td>
               <td class="td-num">${formatNum(v.km)}</td>
               <td>${statusBadge(v.status)}</td>
-              <td><button class="btn btn-ghost btn-sm" onclick="showToast('تفاصيل: ${v.id}','info')">عرض</button></td>
+              <td><button class="btn btn-ghost btn-sm" onclick="viewVehicle('${v.id}')">عرض</button></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -1158,7 +1159,7 @@ function renderInvoices(filter) {
   <div class="card">
     <div class="card-title">
       قائمة الفواتير
-      <button class="btn btn-primary btn-sm" onclick="showToast('فتح نموذج فاتورة جديدة','info')">+ فاتورة جديدة</button>
+      <button class="btn btn-primary btn-sm" onclick="addInvoice()">+ فاتورة جديدة</button>
     </div>
     <div class="filter-tabs">
       ${tabs.map(t=>`<button class="filter-tab ${invFilter===t?'active':''}" onclick="document.getElementById('main-content').innerHTML=renderInvoices('${t}');if(window.lucide)lucide.createIcons();">${t}</button>`).join('')}
@@ -1177,7 +1178,7 @@ function renderInvoices(filter) {
             <td>${statusBadge(inv.status)}</td>
             <td>
               <button class="btn btn-ghost btn-sm" onclick="printInvoice('${inv.id}')">طباعة</button>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('تنزيل: ${inv.id}','success')">تنزيل</button>
+              <button class="btn btn-ghost btn-sm" onclick="printInvoice('${inv.id}')">تنزيل PDF</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1191,41 +1192,152 @@ function printInvoice(id) {
   const sub = inv.items.reduce((s,it)=>s+(it.qty*it.price),0);
   const vatAmt = sub*(inv.vat/100);
   const total = sub+vatAmt;
-  const rows = inv.items.map(it=>`<tr><td>${it.name}</td><td style="text-align:center;">${formatNum(it.qty)}</td><td>${it.unit}</td><td style="text-align:end;">${formatNum(it.price)}</td><td style="text-align:end;">${formatNum(it.qty*it.price)}</td></tr>`).join('');
-  document.getElementById('print-invoice-content').innerHTML = `
-  <div class="print-header">
+  const rows = inv.items.map((it,i)=>`
+    <tr style="background:${i%2===0?'#fff':'#f9fcf9'};">
+      <td style="padding:10px 14px;border:1px solid #d4e6d4;">${it.name}</td>
+      <td style="padding:10px 14px;border:1px solid #d4e6d4;text-align:center;">${formatNum(it.qty)}</td>
+      <td style="padding:10px 14px;border:1px solid #d4e6d4;">${it.unit}</td>
+      <td style="padding:10px 14px;border:1px solid #d4e6d4;text-align:right;">${formatNum(it.price)}</td>
+      <td style="padding:10px 14px;border:1px solid #d4e6d4;text-align:right;font-weight:600;">${formatNum(it.qty*it.price)}</td>
+    </tr>`).join('');
+  const qrData = `${inv.id}|${inv.customer}|${formatNum(Math.round(total))}`;
+  const w = window.open('','_blank','width=850,height=1100,scrollbars=yes');
+  w.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>فاتورة ${inv.id}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Cairo',sans-serif;direction:rtl;background:#fff;color:#1a2e1a;font-size:13px;padding:20px;}
+  .page{max-width:780px;margin:0 auto;background:#fff;}
+  /* Header strip */
+  .inv-header{background:linear-gradient(135deg,#1a3a24 0%,#2d6a4f 100%);color:#fff;padding:28px 32px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:flex-start;}
+  .company-name{font-size:26px;font-weight:900;letter-spacing:-0.5px;}
+  .company-sub{font-size:13px;opacity:0.85;margin-top:4px;line-height:1.6;}
+  .inv-id-box{text-align:left;background:rgba(255,255,255,0.12);border-radius:6px;padding:12px 20px;}
+  .inv-label{font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.06em;}
+  .inv-number{font-size:28px;font-weight:900;margin-top:2px;}
+  /* Body */
+  .inv-body{border:1px solid #d4e6d4;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;}
+  .inv-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid #d4e6d4;}
+  .meta-cell{padding:14px 20px;border-left:1px solid #d4e6d4;}
+  .meta-cell:last-child{border-left:none;}
+  .meta-label{font-size:11px;color:#6b7b6b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;}
+  .meta-value{font-size:14px;font-weight:700;color:#1a2e1a;}
+  /* Table */
+  .inv-table{width:100%;border-collapse:collapse;}
+  .inv-table thead tr{background:#f0f7f0;}
+  .inv-table th{padding:10px 14px;text-align:right;font-size:11px;font-weight:700;color:#2d6a4f;text-transform:uppercase;letter-spacing:0.06em;border:1px solid #d4e6d4;}
+  .inv-table th:first-child{text-align:right;}
+  /* Totals */
+  .totals-section{display:flex;justify-content:flex-start;border-top:1px solid #d4e6d4;padding:20px;}
+  .totals-box{margin-right:auto;min-width:280px;}
+  .totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#555;}
+  .totals-row.sub{border-bottom:1px dashed #d4e6d4;margin-bottom:4px;}
+  .totals-row.total{font-size:18px;font-weight:900;color:#1a3a24;padding-top:8px;border-top:2px solid #2d6a4f;margin-top:4px;}
+  /* Signatures */
+  .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;padding:24px 20px;border-top:1px solid #d4e6d4;background:#f9fcf9;}
+  .sig-box{text-align:center;}
+  .sig-line{border-top:1px solid #999;margin-top:40px;padding-top:8px;font-size:11px;color:#777;}
+  /* Footer */
+  .inv-footer{background:#1a3a24;color:rgba(255,255,255,0.7);text-align:center;padding:10px;font-size:11px;border-radius:0 0 8px 8px;}
+  /* VAT badge */
+  .vat-badge{display:inline-block;background:#e8f5e9;color:#166534;border:1px solid #b7dfb8;border-radius:4px;padding:2px 10px;font-size:11px;font-weight:700;margin-top:6px;}
+  /* Watermark */
+  .status-stamp{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:64px;font-weight:900;opacity:0.05;color:#2d6a4f;pointer-events:none;white-space:nowrap;}
+  .relative{position:relative;}
+  @media print{
+    body{padding:0;}
+    .no-print{display:none!important;}
+    @page{margin:1cm;size:A4;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="inv-header">
     <div>
-      <div class="print-company-name">الديوان الاقتصادي</div>
-      <div class="print-company-info">التوت الحساوي — الأحساء، المملكة العربية السعودية<br>رقم السجل التجاري: 2054123456<br>الرقم الضريبي: 300123456700003</div>
+      <div class="company-name">🫐 الديوان الاقتصادي</div>
+      <div class="company-sub">
+        التوت الحساوي — الأحساء، المملكة العربية السعودية<br>
+        هاتف: 013-0000000 &nbsp;|&nbsp; info@hassawiberry.sa<br>
+        السجل التجاري: 2054123456 &nbsp;|&nbsp; الرقم الضريبي: 300123456700003
+      </div>
+      <div class="vat-badge">فاتورة ضريبية مبسطة</div>
     </div>
-    <div style="text-align:left;">
-      <div style="font-size:14px;color:#555;">رقم الفاتورة</div>
-      <div style="font-size:22px;font-weight:700;color:#1a3a24;">${inv.id}</div>
+    <div class="inv-id-box">
+      <div class="inv-label">رقم الفاتورة</div>
+      <div class="inv-number">${inv.id}</div>
     </div>
   </div>
-  <div class="print-doc-title">فاتورة ضريبية</div>
-  <div class="print-info-grid">
-    <div><div class="print-info-item"><label>العميل</label><span>${inv.customer}</span></div></div>
-    <div><div class="print-info-item"><label>تاريخ الفاتورة</label><span>${inv.date}</span></div></div>
-    <div><div class="print-info-item"><label>تاريخ الاستحقاق</label><span>${inv.dueDate}</span></div></div>
-    <div><div class="print-info-item"><label>الحالة</label><span>${inv.status}</span></div></div>
+  <div class="inv-body relative">
+    <div class="status-stamp">${inv.status}</div>
+    <div class="inv-meta">
+      <div class="meta-cell">
+        <div class="meta-label">اسم العميل</div>
+        <div class="meta-value">${inv.customer}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">تاريخ الفاتورة</div>
+        <div class="meta-value">${inv.date}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">تاريخ الاستحقاق</div>
+        <div class="meta-value" style="color:${inv.status==='متأخرة'?'#b91c1c':'inherit'}">${inv.dueDate}</div>
+      </div>
+    </div>
+    <table class="inv-table">
+      <thead>
+        <tr>
+          <th style="text-align:right;">المنتج / الخدمة</th>
+          <th style="text-align:center;">الكمية</th>
+          <th>الوحدة</th>
+          <th style="text-align:right;">سعر الوحدة</th>
+          <th style="text-align:right;">الإجمالي (ر.س)</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="totals-section">
+      <div style="flex:1;padding:0 20px;font-size:12px;color:#6b7b6b;max-width:300px;">
+        <div style="margin-bottom:6px;font-weight:600;color:#1a2e1a;">شروط الدفع</div>
+        <div>30 يوماً من تاريخ الفاتورة</div>
+        <div style="margin-top:8px;">التحويل البنكي: حساب رقم 1234567890</div>
+        <div>بنك الراجحي — الأحساء</div>
+      </div>
+      <div class="totals-box">
+        <div class="totals-row sub">
+          <span>المجموع قبل الضريبة</span>
+          <span>${formatNum(Math.round(sub))} ر.س</span>
+        </div>
+        <div class="totals-row">
+          <span>ضريبة القيمة المضافة (${inv.vat}%)</span>
+          <span>${formatNum(Math.round(vatAmt))} ر.س</span>
+        </div>
+        <div class="totals-row total">
+          <span>الإجمالي النهائي</span>
+          <span>${formatNum(Math.round(total))} ر.س</span>
+        </div>
+      </div>
+    </div>
+    <div class="sigs">
+      <div class="sig-box"><div class="sig-line">توقيع المحاسب</div></div>
+      <div class="sig-box"><div class="sig-line">اعتماد المدير</div></div>
+      <div class="sig-box"><div class="sig-line">توقيع المستلم / الختم</div></div>
+    </div>
   </div>
-  <table class="print-table">
-    <thead><tr><th>المنتج / الخدمة</th><th style="text-align:center;">الكمية</th><th>الوحدة</th><th style="text-align:end;">سعر الوحدة (ر.س)</th><th style="text-align:end;">الإجمالي (ر.س)</th></tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot>
-      <tr><td colspan="4" style="text-align:end;">المجموع قبل الضريبة</td><td style="text-align:end;">${formatNum(Math.round(sub))}</td></tr>
-      <tr><td colspan="4" style="text-align:end;">ضريبة القيمة المضافة (${inv.vat}%)</td><td style="text-align:end;">${formatNum(Math.round(vatAmt))}</td></tr>
-      <tr style="font-size:16px;"><td colspan="4" style="text-align:end;">الإجمالي مع الضريبة</td><td style="text-align:end;">${formatNum(Math.round(total))} ر.س</td></tr>
-    </tfoot>
-  </table>
-  <div class="print-footer">
-    <div><div class="print-signature-line">توقيع المحاسب</div></div>
-    <div><div class="print-signature-line">توقيع المدير</div></div>
-    <div><div class="print-signature-line">ختم الشركة</div></div>
+  <div class="inv-footer">
+    الديوان الاقتصادي للتوت الحساوي &nbsp;|&nbsp; ${inv.id} &nbsp;|&nbsp; صفحة 1 من 1
   </div>
-  <div class="print-page-num">الديوان الاقتصادي للتوت الحساوي — صفحة 1 من 1</div>`;
-  window.print();
+  <div class="no-print" style="text-align:center;margin-top:20px;">
+    <button onclick="window.print()" style="background:#2d6a4f;color:#fff;border:none;padding:10px 32px;border-radius:6px;font-family:'Cairo',sans-serif;font-size:15px;font-weight:600;cursor:pointer;">🖨️ طباعة الفاتورة</button>
+    <button onclick="window.close()" style="background:#f0f7f0;color:#1a2e1a;border:1px solid #d4e6d4;padding:10px 20px;border-radius:6px;font-family:'Cairo',sans-serif;font-size:15px;cursor:pointer;margin-right:10px;">إغلاق</button>
+  </div>
+</div>
+</body></html>`);
+  w.document.close();
 }
 
 // ═══════════════════════════════════════════
@@ -1240,7 +1352,7 @@ function renderLading() {
   <div class="card">
     <div class="card-title">
       قائمة بوليصات الشحن
-      <button class="btn btn-primary btn-sm" onclick="showToast('فتح نموذج بوليصة جديدة','info')">+ بوليصة جديدة</button>
+      <button class="btn btn-primary btn-sm" onclick="addBOL()">+ بوليصة جديدة</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -1259,7 +1371,7 @@ function renderLading() {
             <td><span class="badge badge-blue">${b.shipmentRef}</span></td>
             <td>
               <button class="btn btn-ghost btn-sm" onclick="printBOL('${b.id}')">طباعة</button>
-              <button class="btn btn-ghost btn-sm" onclick="showToast('عرض: ${b.id}','info')">عرض</button>
+              <button class="btn btn-ghost btn-sm" onclick="viewBOL('${b.id}')">عرض</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1270,44 +1382,197 @@ function renderLading() {
 function printBOL(id) {
   const b = DATA.billsOfLading.find(x=>x.id===id);
   if(!b) return;
-  document.getElementById('print-lading-content').innerHTML = `
-  <div class="print-header">
-    <div>
-      <div class="print-company-name">الديوان الاقتصادي</div>
-      <div class="print-company-info">التوت الحساوي — الأحساء، المملكة العربية السعودية<br>هاتف: 013-0000000 | info@hassawiberry.sa</div>
+  const w = window.open('','_blank','width=850,height=1100,scrollbars=yes');
+  w.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>بوليصة شحن ${b.id}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Cairo',sans-serif;direction:rtl;background:#f5f5f0;color:#1a1a1a;font-size:13px;padding:20px;}
+  .page{max-width:780px;margin:0 auto;background:#fff;border:2px solid #1a3a24;border-radius:4px;}
+  /* BOL Header - different from invoice: uses border + stamp style */
+  .bol-header{display:flex;border-bottom:3px double #1a3a24;}
+  .bol-logo-section{padding:20px 24px;flex:1;border-left:2px solid #1a3a24;}
+  .bol-title-section{padding:16px 24px;width:260px;text-align:center;background:#1a3a24;color:#fff;}
+  .bol-company{font-size:20px;font-weight:900;color:#1a3a24;}
+  .bol-company-sub{font-size:11px;color:#555;margin-top:4px;line-height:1.6;}
+  .bol-doc-title{font-size:22px;font-weight:900;letter-spacing:1px;text-transform:uppercase;}
+  .bol-doc-ar{font-size:18px;font-weight:700;margin-top:4px;opacity:0.9;}
+  .bol-num{font-size:26px;font-weight:900;margin-top:8px;background:rgba(255,255,255,0.15);border-radius:4px;padding:4px 12px;display:inline-block;}
+  /* Party boxes */
+  .parties{display:grid;grid-template-columns:1fr 1fr;border-bottom:2px solid #1a3a24;}
+  .party-box{padding:16px 20px;border-left:1px solid #ccc;}
+  .party-box:last-child{border-left:none;}
+  .party-label{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid #eee;padding-bottom:4px;margin-bottom:8px;}
+  .party-name{font-size:16px;font-weight:700;color:#1a3a24;}
+  /* Route section */
+  .route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:#f8faf8;border-bottom:1px solid #d4e6d4;padding:16px 24px;gap:12px;}
+  .route-point{text-align:center;}
+  .route-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;}
+  .route-value{font-size:14px;font-weight:700;margin-top:4px;}
+  .route-arrow{font-size:28px;color:#2d6a4f;font-weight:900;}
+  /* Details grid */
+  .details-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid #d4e6d4;}
+  .detail-cell{padding:12px 16px;border-left:1px solid #d4e6d4;}
+  .detail-cell:last-child{border-left:none;}
+  .detail-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;}
+  .detail-value{font-size:14px;font-weight:700;}
+  /* Cargo table */
+  .cargo-title{background:#2d6a4f;color:#fff;padding:10px 20px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
+  .cargo-table{width:100%;border-collapse:collapse;}
+  .cargo-table th{padding:10px 16px;background:#f0f7f0;text-align:right;font-size:11px;color:#2d6a4f;font-weight:700;border:1px solid #d4e6d4;}
+  .cargo-table td{padding:12px 16px;border:1px solid #d4e6d4;font-size:14px;}
+  .cargo-table .total-row{background:#f0f7f0;font-weight:700;font-size:15px;}
+  /* Cold chain warning */
+  .cold-chain{display:flex;align-items:center;gap:16px;background:#e8f4fd;border:1px solid #bce0f7;padding:14px 20px;margin:0;}
+  .temp-icon{font-size:32px;}
+  .cold-chain-text{font-size:12px;color:#1a3a24;line-height:1.6;}
+  .cold-chain-title{font-weight:700;font-size:13px;color:#1a3a24;}
+  .temp-range{display:inline-block;background:#1a3a24;color:#fff;border-radius:4px;padding:2px 10px;font-size:13px;font-weight:700;margin-top:4px;}
+  /* Signatures */
+  .sigs{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:2px solid #1a3a24;}
+  .sig-cell{padding:16px 20px;border-left:1px solid #ccc;text-align:center;}
+  .sig-cell:last-child{border-left:none;}
+  .sig-title{font-size:11px;font-weight:700;color:#1a3a24;margin-bottom:8px;}
+  .sig-line{border-top:1px dashed #999;margin-top:50px;padding-top:6px;font-size:11px;color:#888;}
+  /* Footer */
+  .bol-footer{background:#1a3a24;color:rgba(255,255,255,0.7);padding:8px 20px;font-size:11px;display:flex;justify-content:space-between;}
+  @media print{body{padding:0;background:#fff;}.no-print{display:none!important;}@page{margin:0.5cm;size:A4;}}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- HEADER -->
+  <div class="bol-header">
+    <div class="bol-logo-section">
+      <div class="bol-company">🫐 الديوان الاقتصادي</div>
+      <div class="bol-company-sub">
+        التوت الحساوي — الأحساء، المملكة العربية السعودية<br>
+        هاتف: 013-0000000 | info@hassawiberry.sa<br>
+        رخصة نقل: TRP-2024-1234 | مرخص من هيئة النقل
+      </div>
     </div>
-    <div style="text-align:left;">
-      <div style="font-size:13px;color:#555;">رقم البوليصة</div>
-      <div style="font-size:22px;font-weight:700;color:#1a3a24;">${b.id}</div>
+    <div class="bol-title-section">
+      <div class="bol-doc-title">BILL OF LADING</div>
+      <div class="bol-doc-ar">وثيقة شحن / بوليصة</div>
+      <div class="bol-num">${b.id}</div>
     </div>
   </div>
-  <div class="print-doc-title">بوليصة شحن — Bill of Lading</div>
-  <div class="print-info-grid">
-    <div><div class="print-info-item"><label>الشاحن</label><span>${b.shipper}</span></div></div>
-    <div><div class="print-info-item"><label>المستلم (المرسل إليه)</label><span>${b.consignee}</span></div></div>
-    <div><div class="print-info-item"><label>موقع الشحن (Origin)</label><span>${b.origin}</span></div></div>
-    <div><div class="print-info-item"><label>موقع التسليم (Destination)</label><span>${b.destination}</span></div></div>
-    <div><div class="print-info-item"><label>تاريخ الشحن</label><span>${b.date}</span></div></div>
-    <div><div class="print-info-item"><label>رقم الشحنة المرجعي</label><span>${b.shipmentRef}</span></div></div>
-    <div><div class="print-info-item"><label>السائق</label><span>${b.driver}</span></div></div>
-    <div><div class="print-info-item"><label>رقم المركبة</label><span>${b.vehicle}</span></div></div>
+  <!-- PARTIES -->
+  <div class="parties">
+    <div class="party-box">
+      <div class="party-label">📤 الشاحن / Shipper</div>
+      <div class="party-name">${b.shipper}</div>
+      <div style="font-size:12px;color:#555;margin-top:6px;">الأحساء — المملكة العربية السعودية</div>
+    </div>
+    <div class="party-box">
+      <div class="party-label">📥 المستلم / Consignee</div>
+      <div class="party-name">${b.consignee}</div>
+      <div style="font-size:12px;color:#555;margin-top:6px;">${b.destination}</div>
+    </div>
   </div>
-  <table class="print-table">
-    <thead><tr><th>البضاعة / المنتج</th><th>الكمية</th><th>الوحدة</th><th>الوزن الإجمالي (كجم)</th><th>ملاحظات</th></tr></thead>
+  <!-- ROUTE -->
+  <div class="route">
+    <div class="route-point">
+      <div class="route-label">🌱 نقطة الشحن / Origin</div>
+      <div class="route-value">${b.origin}</div>
+    </div>
+    <div class="route-arrow">⟶</div>
+    <div class="route-point">
+      <div class="route-label">📦 وجهة التسليم / Destination</div>
+      <div class="route-value">${b.destination}</div>
+    </div>
+  </div>
+  <!-- DETAILS -->
+  <div class="details-grid">
+    <div class="detail-cell">
+      <div class="detail-label">📅 تاريخ الشحن</div>
+      <div class="detail-value">${b.date}</div>
+    </div>
+    <div class="detail-cell">
+      <div class="detail-label">🔖 مرجع الشحنة</div>
+      <div class="detail-value">${b.shipmentRef}</div>
+    </div>
+    <div class="detail-cell">
+      <div class="detail-label">🚗 رقم المركبة</div>
+      <div class="detail-value">${b.vehicle}</div>
+    </div>
+    <div class="detail-cell">
+      <div class="detail-label">👤 السائق</div>
+      <div class="detail-value">${b.driver}</div>
+    </div>
+  </div>
+  <!-- CARGO -->
+  <div class="cargo-title">📋 بيان البضاعة / Cargo Description</div>
+  <table class="cargo-table">
+    <thead>
+      <tr>
+        <th>البضاعة / Cargo</th>
+        <th style="text-align:center;">الكمية / Qty</th>
+        <th style="text-align:center;">الوحدة / Unit</th>
+        <th style="text-align:center;">الوزن الإجمالي / Gross Weight</th>
+        <th>ملاحظات / Remarks</th>
+      </tr>
+    </thead>
     <tbody>
-      <tr><td>${b.product}</td><td style="text-align:center;">${b.qty}</td><td>${b.unit}</td><td style="text-align:center;">${b.weight}</td><td>${b.notes}</td></tr>
+      <tr>
+        <td style="font-weight:700;">${b.product}</td>
+        <td style="text-align:center;font-weight:700;font-size:16px;">${b.qty}</td>
+        <td style="text-align:center;">${b.unit}</td>
+        <td style="text-align:center;font-weight:700;">${b.weight} كجم</td>
+        <td style="font-size:12px;color:#555;">${b.notes}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="3" style="text-align:right;font-size:12px;color:#555;">الوزن الكلي للشحنة:</td>
+        <td style="text-align:center;font-size:16px;">${b.weight} كجم</td>
+        <td></td>
+      </tr>
     </tbody>
   </table>
-  <div class="print-footer">
-    <div><div class="print-signature-line">توقيع الشاحن / Shipper</div></div>
-    <div><div class="print-signature-line">توقيع السائق / Driver</div></div>
-    <div><div class="print-signature-line">توقيع المستلم / Consignee</div></div>
+  <!-- COLD CHAIN WARNING -->
+  <div class="cold-chain">
+    <div class="temp-icon">❄️</div>
+    <div class="cold-chain-text">
+      <div class="cold-chain-title">تنبيه سلسلة التبريد / Cold Chain Notice</div>
+      <div>هذه البضاعة مبردة وقابلة للتلف. يجب الحفاظ على درجة الحرارة المحددة طوال مدة النقل.</div>
+      <div>This cargo is refrigerated and perishable. Temperature must be maintained throughout transportation.</div>
+      <div class="temp-range">درجة حرارة النقل: 0°C — 4°C</div>
+    </div>
   </div>
-  <div style="margin-top:16px;padding:12px;border:1px solid #d4e6d4;border-radius:4px;font-size:12px;color:#555;">
-    <strong>تنبيه:</strong> البضاعة المشحونة طازجة وقابلة للتلف. يجب الحفاظ على سلسلة التبريد (0 — 4°C). الديوان الاقتصادي للتوت الحساوي غير مسؤول عن أي تلف ناجم عن الإهمال في النقل.
+  <!-- SIGNATURES -->
+  <div class="sigs">
+    <div class="sig-cell">
+      <div class="sig-title">الشاحن / Shipper</div>
+      <div style="font-size:11px;color:#888;">الديوان الاقتصادي للتوت الحساوي</div>
+      <div class="sig-line">التوقيع والختم</div>
+    </div>
+    <div class="sig-cell">
+      <div class="sig-title">السائق / Driver</div>
+      <div style="font-size:13px;font-weight:600;color:#1a3a24;">${b.driver}</div>
+      <div class="sig-line">التوقيع وبصمة الإبهام</div>
+    </div>
+    <div class="sig-cell">
+      <div class="sig-title">المستلم / Consignee</div>
+      <div style="font-size:11px;color:#888;">${b.consignee}</div>
+      <div class="sig-line">التوقيع والختم + التاريخ</div>
+    </div>
   </div>
-  <div class="print-page-num">الديوان الاقتصادي للتوت الحساوي — بوليصة شحن — ${b.id}</div>`;
-  window.print();
+  <!-- FOOTER -->
+  <div class="bol-footer">
+    <span>الديوان الاقتصادي للتوت الحساوي | ${b.id}</span>
+    <span>وثيقة شحن رسمية — Original Bill of Lading</span>
+    <span>صفحة 1 من 1</span>
+  </div>
+</div>
+<div class="no-print" style="text-align:center;margin-top:20px;">
+  <button onclick="window.print()" style="background:#1a3a24;color:#fff;border:none;padding:10px 32px;border-radius:6px;font-family:'Cairo',sans-serif;font-size:15px;font-weight:600;cursor:pointer;">🖨️ طباعة البوليصة</button>
+  <button onclick="window.close()" style="background:#f5f5f0;color:#1a1a1a;border:1px solid #ccc;padding:10px 20px;border-radius:6px;font-family:'Cairo',sans-serif;font-size:15px;cursor:pointer;margin-right:10px;">إغلاق</button>
+</div>
+</body></html>`);
+  w.document.close();
 }
 
 // ═══════════════════════════════════════════
@@ -1332,6 +1597,7 @@ function renderCRM(filter, search) {
   <div class="page-header">
     <h1>إدارة العملاء</h1>
     <p>متابعة العملاء وسجل الطلبات وإدارة العلاقات</p>
+    <button class="btn btn-primary btn-sm" onclick="addCustomer()">+ عميل جديد</button>
   </div>
   <div class="search-bar" style="max-width:400px;">
     <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);flex-shrink:0;"></i>
@@ -1460,6 +1726,648 @@ function renderReports() {
       </table>
     </div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — FARMS
+// ═══════════════════════════════════════════
+function viewFarm(id) {
+  const f = DATA.farms.find(x=>x.id===id);
+  if(!f) return;
+  const relShipments = DATA.shipments.filter(s=>s.from===f.name);
+  const pct = Math.min(100, Math.round(f.monthlyProduction/3500*100));
+  openModal(`
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--ink);">${f.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;">${f.id} · تأسست ${f.established}</div>
+    </div>
+    ${statusBadge(f.status)}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">الموقع</div><div style="font-weight:600;margin-top:4px;">📍 ${f.location}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">المساحة</div><div style="font-weight:600;margin-top:4px;">${f.area} هكتار</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">المزارع المسؤول</div><div style="font-weight:600;margin-top:4px;">${f.farmer}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">التواصل</div><div style="font-weight:600;margin-top:4px;direction:ltr;text-align:right;">${f.phone}</div></div>
+    <div style="background:var(--accent-bg);border-radius:var(--radius-sm);padding:12px 16px;grid-column:1/-1;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">المحاصيل</div><div style="font-weight:600;margin-top:4px;">🌱 ${f.crops}</div></div>
+  </div>
+  <div style="margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+      <span style="color:var(--muted);">الإنتاج الشهري</span>
+      <span style="font-weight:700;">${formatNum(f.monthlyProduction)} كجم <span style="color:var(--muted);font-weight:400;">من أصل 3,500</span></span>
+    </div>
+    <div class="progress-bar" style="height:10px;"><div class="progress-fill" style="width:${pct}%;"></div></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:4px;">${pct}% من الهدف الشهري</div>
+  </div>
+  ${relShipments.length>0?`
+  <div style="font-weight:600;margin-bottom:10px;">آخر الشحنات من هذه المزرعة</div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:var(--surface-2);">
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الشحنة</th>
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الوجهة</th>
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الكمية</th>
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الحالة</th>
+    </tr></thead>
+    <tbody>${relShipments.map(s=>`
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);font-weight:600;">${s.id}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);color:var(--muted);">${s.to}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);">${s.qty}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);">${statusBadge(s.status)}</td>
+      </tr>`).join('')}</tbody>
+  </table>`:'<div style="color:var(--muted);font-size:13px;padding:12px 0;">لا توجد شحنات مسجلة لهذه المزرعة</div>'}
+  <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+    <button class="btn btn-primary btn-sm" onclick="editFarmForm('${f.id}')">✏️ تعديل البيانات</button>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal();showToast('تم إرسال طلب التقرير','success')">📊 تقرير الإنتاج</button>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">إغلاق</button>
+  </div>`);
+}
+
+function editFarmForm(id) {
+  const f = id ? DATA.farms.find(x=>x.id===id) : null;
+  const title = f ? `تعديل: ${f.name}` : 'إضافة مزرعة جديدة';
+  openModal(`
+  <div class="modal-title">${title}</div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">اسم المزرعة</label><input class="form-input" id="fm-name" value="${f?f.name:''}" placeholder="مزرعة ..."></div>
+    <div class="form-group"><label class="form-label">رقم المعرّف</label><input class="form-input" id="fm-id" value="${f?f.id:'FRM-00X'}" ${f?'readonly':''} style="${f?'background:var(--surface-2);':''}" placeholder="FRM-XXX"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">الموقع</label><input class="form-input" id="fm-loc" value="${f?f.location:''}" placeholder="الأحساء — المنطقة"></div>
+    <div class="form-group"><label class="form-label">المساحة (هكتار)</label><input class="form-input" id="fm-area" type="number" value="${f?f.area:''}" placeholder="0"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">اسم المزارع</label><input class="form-input" id="fm-farmer" value="${f?f.farmer:''}" placeholder="الاسم الكامل"></div>
+    <div class="form-group"><label class="form-label">رقم الجوال</label><input class="form-input" id="fm-phone" value="${f?f.phone:''}" placeholder="05XXXXXXXX"></div>
+  </div>
+  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">المحاصيل</label><input class="form-input" id="fm-crops" value="${f?f.crops:''}" placeholder="توت أحمر، توت أسود، ..."></div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">الإنتاج الشهري (كجم)</label><input class="form-input" id="fm-prod" type="number" value="${f?f.monthlyProduction:''}" placeholder="0"></div>
+    <div class="form-group"><label class="form-label">الحالة</label>
+      <select class="form-input" id="fm-status">
+        <option ${f&&f.status==='نشطة'?'selected':''}>نشطة</option>
+        <option ${f&&f.status==='صيانة موسمية'?'selected':''}>صيانة موسمية</option>
+        <option ${f&&f.status==='متوقفة'?'selected':''}>متوقفة</option>
+      </select>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="saveFarm('${id||''}')">💾 حفظ</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+
+function saveFarm(id) {
+  if(id) {
+    const f = DATA.farms.find(x=>x.id===id);
+    if(f) {
+      f.name = document.getElementById('fm-name').value || f.name;
+      f.location = document.getElementById('fm-loc').value || f.location;
+      f.area = parseInt(document.getElementById('fm-area').value)||f.area;
+      f.farmer = document.getElementById('fm-farmer').value||f.farmer;
+      f.phone = document.getElementById('fm-phone').value||f.phone;
+      f.crops = document.getElementById('fm-crops').value||f.crops;
+      f.monthlyProduction = parseInt(document.getElementById('fm-prod').value)||f.monthlyProduction;
+      f.status = document.getElementById('fm-status').value||f.status;
+    }
+    showToast('تم تحديث بيانات المزرعة بنجاح','success');
+  } else {
+    const newFarm = {
+      id: 'FRM-00'+(DATA.farms.length+1),
+      name: document.getElementById('fm-name').value||'مزرعة جديدة',
+      location: document.getElementById('fm-loc').value||'الأحساء',
+      area: parseInt(document.getElementById('fm-area').value)||0,
+      farmer: document.getElementById('fm-farmer').value||'',
+      phone: document.getElementById('fm-phone').value||'',
+      crops: document.getElementById('fm-crops').value||'',
+      monthlyProduction: parseInt(document.getElementById('fm-prod').value)||0,
+      status: document.getElementById('fm-status').value||'نشطة',
+      established: new Date().getFullYear()
+    };
+    DATA.farms.push(newFarm);
+    showToast('تم إضافة المزرعة بنجاح','success');
+  }
+  closeModal();
+  navigate('farms');
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — MANUFACTURING
+// ═══════════════════════════════════════════
+function viewBatch(id) {
+  const m = DATA.manufacturing.find(x=>x.id===id);
+  if(!m) return;
+  openModal(`
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+    <div>
+      <div style="font-size:20px;font-weight:800;">${m.id}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px;">${m.batch}</div>
+    </div>
+    ${statusBadge(m.status)}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">المنتج</div><div style="font-weight:700;margin-top:4px;">🏭 ${m.product}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">الكمية</div><div style="font-weight:700;margin-top:4px;">${formatNum(m.qty)} ${m.unit}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">المزرعة المورّدة</div><div style="font-weight:600;margin-top:4px;">${m.farm}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">تاريخ البدء</div><div style="font-weight:600;margin-top:4px;">${m.startDate}</div></div>
+  </div>
+  <div style="font-weight:600;margin-bottom:12px;">مسار مراحل الإنتاج</div>
+  <div style="position:relative;padding-inline-start:28px;">
+    ${m.stages.map((s,i)=>{
+      const done = m.status==='مكتمل' || i<m.stage;
+      const current = m.status==='جارٍ' && i===m.stage-1;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:${i<m.stages.length-1?'1px dashed var(--border)':'none'};">
+        <div style="width:28px;height:28px;border-radius:50%;background:${done?'var(--primary)':current?'var(--primary-light)':'var(--border)'};color:${done||current?'#fff':'var(--muted)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${done?'✓':i+1}</div>
+        <div>
+          <div style="font-weight:${current?'700':'500'};color:${done?'var(--ink)':current?'var(--primary)':'var(--muted)'};">${s}</div>
+          <div style="font-size:11px;color:var(--muted);">${done?'مكتملة':current?'جارية الآن':'في الانتظار'}</div>
+        </div>
+        ${current?'<span class="badge badge-blue" style="margin-inline-start:auto;">الحالية</span>':''}
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="modal-footer">
+    ${m.status==='جارٍ'?`<button class="btn btn-primary" onclick="advanceBatch('${m.id}')">⏩ الانتقال للمرحلة التالية</button>`:''}
+    ${m.status==='قيد الانتظار'?`<button class="btn btn-primary" onclick="advanceBatch('${m.id}')">▶️ بدء الإنتاج</button>`:''}
+    <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
+  </div>`);
+}
+
+function advanceBatch(id) {
+  const m = DATA.manufacturing.find(x=>x.id===id);
+  if(!m) return;
+  if(m.status==='مكتمل') { showToast('هذه الدفعة مكتملة بالفعل','info'); return; }
+  if(m.status==='قيد الانتظار') { m.status='جارٍ'; m.stage=1; showToast(`بدأ تصنيع ${m.product}`,'success'); }
+  else if(m.stage<6) { m.stage++; if(m.stage===6){ m.status='مكتمل'; m.endDate=new Date().toISOString().slice(0,10); showToast(`اكتملت دفعة ${m.id} — جاهزة للمستودع`,'success'); } else { showToast(`انتقلت إلى: ${m.stages[m.stage-1]}`,'success'); } }
+  closeModal();
+  navigate('manufacturing');
+}
+
+function addBatch() {
+  openModal(`
+  <div class="modal-title">+ دفعة إنتاج جديدة</div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">المنتج</label>
+      <select class="form-input" id="nb-product">${DATA.products.map(p=>`<option value="${p.name}">${p.name}</option>`).join('')}</select>
+    </div>
+    <div class="form-group"><label class="form-label">المزرعة المورّدة</label>
+      <select class="form-input" id="nb-farm">${DATA.farms.map(f=>`<option value="${f.name}">${f.name}</option>`).join('')}</select>
+    </div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">الكمية</label><input class="form-input" id="nb-qty" type="number" placeholder="0"></div>
+    <div class="form-group"><label class="form-label">الوحدة</label>
+      <select class="form-input" id="nb-unit"><option>كجم</option><option>عبوة</option><option>لتر</option><option>قطعة</option></select>
+    </div>
+  </div>
+  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">تاريخ البدء</label><input class="form-input" id="nb-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="saveNewBatch()">💾 إنشاء الدفعة</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+
+function saveNewBatch() {
+  const n = DATA.manufacturing.length+1;
+  DATA.manufacturing.push({
+    id: 'MFG-0'+(n<10?'0':'')+n,
+    product: document.getElementById('nb-product').value,
+    batch: `دفعة 2024-${n<10?'0':''}${n}`,
+    qty: parseInt(document.getElementById('nb-qty').value)||0,
+    unit: document.getElementById('nb-unit').value,
+    farm: document.getElementById('nb-farm').value,
+    startDate: document.getElementById('nb-date').value,
+    endDate: null, status:'قيد الانتظار', stage:0,
+    stages:['استلام المواد','الفرز والغسيل','التصنيع','التعبئة','ضبط الجودة','المستودع']
+  });
+  showToast('تم إنشاء دفعة الإنتاج بنجاح','success');
+  closeModal();
+  navigate('manufacturing');
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — PRODUCTS
+// ═══════════════════════════════════════════
+function editProduct(id) {
+  const p = id ? DATA.products.find(x=>x.id===id) : null;
+  openModal(`
+  <div class="modal-title">${p?`تعديل: ${p.name}`:'+ منتج جديد'}</div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">اسم المنتج</label><input class="form-input" id="ep-name" value="${p?p.name:''}" placeholder="اسم المنتج"></div>
+    <div class="form-group"><label class="form-label">الفئة</label>
+      <select class="form-input" id="ep-cat">
+        ${['توت طازج','مربى التوت','عصير التوت','توت مجفف','ماسكات التوت','منتجات العناية'].map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">السعر (ر.س)</label><input class="form-input" id="ep-price" type="number" value="${p?p.price:''}" placeholder="0"></div>
+    <div class="form-group"><label class="form-label">الوحدة</label>
+      <select class="form-input" id="ep-unit">${['كجم','عبوة','لتر','قطعة'].map(u=>`<option ${p&&p.unit===u?'selected':''}>${u}</option>`).join('')}</select>
+    </div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">المخزون الحالي</label><input class="form-input" id="ep-stock" type="number" value="${p?p.stock:''}" placeholder="0"></div>
+    <div class="form-group"><label class="form-label">مستوى إعادة الطلب</label><input class="form-input" id="ep-reorder" type="number" value="${p?p.reorderLevel:''}" placeholder="0"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">الرمز (Emoji)</label><input class="form-input" id="ep-emoji" value="${p?p.emoji:'📦'}" placeholder="📦"></div>
+    <div class="form-group"><label class="form-label">الحالة</label>
+      <select class="form-input" id="ep-status">
+        <option ${p&&p.status==='متوفر'?'selected':''}>متوفر</option>
+        <option ${p&&p.status==='مخزون منخفض'?'selected':''}>مخزون منخفض</option>
+        <option ${p&&p.status==='نفد المخزون'?'selected':''}>نفد المخزون</option>
+      </select>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="saveProduct('${id||''}')">💾 حفظ</button>
+    ${p?`<button class="btn btn-danger" onclick="deleteProduct('${p.id}')" style="margin-inline-start:auto;">🗑️ حذف</button>`:''}
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+
+function saveProduct(id) {
+  const stockVal = parseInt(document.getElementById('ep-stock').value)||0;
+  const reorderVal = parseInt(document.getElementById('ep-reorder').value)||0;
+  const autoStatus = stockVal===0?'نفد المخزون':stockVal<=reorderVal?'مخزون منخفض':'متوفر';
+  if(id) {
+    const p = DATA.products.find(x=>x.id===id);
+    if(p){ p.name=document.getElementById('ep-name').value||p.name; p.category=document.getElementById('ep-cat').value; p.price=parseFloat(document.getElementById('ep-price').value)||p.price; p.unit=document.getElementById('ep-unit').value; p.stock=stockVal; p.reorderLevel=reorderVal; p.emoji=document.getElementById('ep-emoji').value||p.emoji; p.status=autoStatus; }
+    showToast('تم تحديث المنتج بنجاح','success');
+  } else {
+    DATA.products.push({ id:'PRD-0'+(DATA.products.length+1<10?'0':'')+(DATA.products.length+1), name:document.getElementById('ep-name').value, category:document.getElementById('ep-cat').value, stock:stockVal, unit:document.getElementById('ep-unit').value, price:parseFloat(document.getElementById('ep-price').value)||0, status:autoStatus, emoji:document.getElementById('ep-emoji').value||'📦', reorderLevel:reorderVal });
+    showToast('تم إضافة المنتج بنجاح','success');
+  }
+  closeModal(); navigate('products');
+}
+
+function deleteProduct(id) {
+  if(!confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
+  const idx = DATA.products.findIndex(p=>p.id===id);
+  if(idx>-1) DATA.products.splice(idx,1);
+  showToast('تم حذف المنتج','info');
+  closeModal(); navigate('products');
+}
+
+function restockProduct(id) {
+  const p = DATA.products.find(x=>x.id===id);
+  if(!p) return;
+  openModal(`
+  <div class="modal-title">إضافة مخزون: ${p.name}</div>
+  <div style="background:var(--surface-2);border-radius:var(--radius-md);padding:16px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+    <span style="font-size:32px;">${p.emoji}</span>
+    <div><div style="font-weight:700;">${p.name}</div><div style="font-size:12px;color:var(--muted);">المخزون الحالي: ${formatNum(p.stock)} ${p.unit}</div></div>
+  </div>
+  <div class="form-group" style="margin-bottom:16px;">
+    <label class="form-label">الكمية المضافة (${p.unit})</label>
+    <input class="form-input" id="rs-qty" type="number" min="1" placeholder="0" style="font-size:20px;height:50px;">
+  </div>
+  <div class="form-group" style="margin-bottom:16px;"><label class="form-label">ملاحظة</label><input class="form-input" id="rs-note" placeholder="سبب إضافة المخزون..."></div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="
+      const qty=parseInt(document.getElementById('rs-qty').value)||0;
+      if(qty<=0){showToast('أدخل كمية صحيحة','error');return;}
+      const p=DATA.products.find(x=>x.id==='${id}');
+      p.stock+=qty;
+      p.status=p.stock===0?'نفد المخزون':p.stock<=p.reorderLevel?'مخزون منخفض':'متوفر';
+      showToast('تمت إضافة ${p.unit} بنجاح','success');
+      closeModal();navigate('products');
+    ">✅ تأكيد الإضافة</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — FLEET / VEHICLES
+// ═══════════════════════════════════════════
+function viewVehicle(id) {
+  const v = DATA.vehicles.find(x=>x.id===id);
+  if(!v) return;
+  const relShip = DATA.shipments.find(s=>s.vehicle===v.id&&s.status==='جاري الشحن');
+  const tempOk = v.temp!=null&&v.temp>=0&&v.temp<=4;
+  openModal(`
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+    <div>
+      <div style="font-size:20px;font-weight:800;">${v.id} — ${v.plate}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px;">${v.type}</div>
+    </div>
+    ${statusBadge(v.status)}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">درجة الحرارة</div>
+      <div style="font-size:28px;font-weight:900;color:${v.temp==null?'var(--muted)':tempOk?'#16a34a':'var(--danger)'};">${v.temp!=null?v.temp+'°C':'—'}</div>
+      <div style="font-size:11px;color:var(--muted);">النطاق: 0 — 4°C</div>
+    </div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">الوقود</div>
+      <div style="font-size:28px;font-weight:900;color:${v.fuel<30?'var(--danger)':v.fuel<60?'#d97706':'#16a34a'};">${v.fuel}%</div>
+      <div class="progress-bar" style="margin-top:6px;"><div class="progress-fill" style="width:${v.fuel}%;background:${v.fuel<30?'var(--danger)':v.fuel<60?'#d97706':'var(--primary)'};"></div></div>
+    </div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">الحمولة</div>
+      <div style="font-size:28px;font-weight:900;">${Math.round(v.load/v.capacity*100)}%</div>
+      <div style="font-size:11px;color:var(--muted);">${formatNum(v.load)} / ${formatNum(v.capacity)} كجم</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">السائق</div><div style="font-weight:700;margin-top:4px;">👤 ${v.driver}</div><div style="font-size:12px;color:var(--muted);direction:ltr;text-align:right;">${v.phone}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">المسافة المقطوعة</div><div style="font-weight:700;margin-top:4px;">🛣️ ${formatNum(v.km)} كم</div></div>
+  </div>
+  ${relShip?`<div style="background:var(--accent-bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px;margin-bottom:16px;">
+    <div style="font-weight:700;margin-bottom:6px;">📦 الشحنة الحالية</div>
+    <div style="font-size:13px;">${relShip.id} — ${relShip.product}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">${relShip.from} ← → ${relShip.to} | ${relShip.qty}</div>
+  </div>`:''}
+  ${!tempOk&&v.temp!=null?`<div style="background:rgba(185,28,28,0.07);border:1px solid rgba(185,28,28,0.2);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;color:var(--danger);font-weight:600;">⚠️ تنبيه: درجة الحرارة خارج النطاق الآمن (${v.temp}°C)</div>`:''}
+  <div class="modal-footer">
+    <button class="btn btn-primary btn-sm" onclick="
+      const v=DATA.vehicles.find(x=>x.id==='${v.id}');
+      const newTemp=(Math.random()*4).toFixed(1);
+      v.temp=parseFloat(newTemp);
+      showToast('تم تحديث قراءة الحرارة: '+newTemp+'°C','success');
+      closeModal();navigate('fleet');
+    ">🔄 تحديث بيانات المركبة</button>
+    <button class="btn btn-secondary btn-sm" onclick="closeModal()">إغلاق</button>
+  </div>`);
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — WAREHOUSES
+// ═══════════════════════════════════════════
+function viewWarehouse(id) {
+  const w = DATA.warehouses.find(x=>x.id===id);
+  if(!w) return;
+  const pct = Math.round(w.used/w.capacity*100);
+  const color = pct>85?'var(--danger)':pct>65?'#d97706':'var(--primary)';
+  const wProducts = DATA.products.slice(0, 6).map(p=>{
+    const portion = id==='WH-001'?0.6:id==='WH-002'?0.25:0.15;
+    return {...p, warehouseStock: Math.round(p.stock*portion)};
+  });
+  openModal(`
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+    <div>
+      <div style="font-size:20px;font-weight:800;">${w.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px;">📍 ${w.location}</div>
+    </div>
+    <span class="badge badge-green">نشط</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">نسبة الامتلاء</div>
+      <div style="font-size:28px;font-weight:900;color:${color};">${pct}%</div>
+    </div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">مستخدم</div>
+      <div style="font-size:20px;font-weight:900;">${formatNum(w.used)}</div>
+      <div style="font-size:11px;color:var(--muted);">كجم</div>
+    </div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);">متاح</div>
+      <div style="font-size:20px;font-weight:900;color:var(--primary);">${formatNum(w.capacity-w.used)}</div>
+      <div style="font-size:11px;color:var(--muted);">كجم</div>
+    </div>
+  </div>
+  <div style="margin-bottom:8px;">
+    <div class="progress-bar" style="height:12px;"><div class="progress-fill" style="width:${pct}%;background:${color};"></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">المدير</div><div style="font-weight:700;margin-top:4px;">${w.manager}</div></div>
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;"><div style="font-size:11px;color:var(--muted);">نطاق الحرارة</div><div style="font-weight:700;margin-top:4px;">❄️ ${w.temp}</div></div>
+  </div>
+  <div style="font-weight:600;margin-bottom:10px;">المخزون الحالي (أعلى 6 أصناف)</div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="background:var(--surface-2);">
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">المنتج</th>
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الكمية</th>
+      <th style="padding:8px 12px;text-align:right;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);">الحالة</th>
+    </tr></thead>
+    <tbody>${wProducts.map(p=>`
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);">${p.emoji} ${p.name}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);text-align:right;font-weight:600;">${formatNum(p.warehouseStock)} ${p.unit}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid var(--border);">${statusBadge(p.status)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
+  </div>`);
+}
+
+// ═══════════════════════════════════════════
+//  MODAL FUNCTIONS — INVOICES
+// ═══════════════════════════════════════════
+function addInvoice() {
+  let items = [{qty:1,price:0,name:'',unit:'كجم'}];
+  function renderItems() {
+    return items.map((it,i)=>`
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;">
+      <div><select class="form-input" style="height:36px;" onchange="
+        const p=DATA.products.find(x=>x.name===this.value);
+        if(p){this.closest('div').parentNode.querySelectorAll('input')[0].value=p.price;
+        this.closest('div').parentNode.querySelectorAll('select')[1].value=p.unit;}
+        window.__invItems[${i}].name=this.value;" >
+        <option value="">— اختر منتجاً —</option>
+        ${DATA.products.map(p=>`<option ${it.name===p.name?'selected':''}>${p.name}</option>`).join('')}
+      </select></div>
+      <div><input class="form-input" style="height:36px;" type="number" placeholder="الكمية" value="${it.qty}" oninput="window.__invItems[${i}].qty=parseFloat(this.value)||0;updateInvTotal();" min="1"></div>
+      <div><select class="form-input" style="height:36px;" onchange="window.__invItems[${i}].unit=this.value;">
+        ${['كجم','عبوة','لتر','قطعة'].map(u=>`<option ${it.unit===u?'selected':''}>${u}</option>`).join('')}
+      </select></div>
+      <div><input class="form-input" style="height:36px;" type="number" placeholder="السعر" value="${it.price}" oninput="window.__invItems[${i}].price=parseFloat(this.value)||0;updateInvTotal();" min="0"></div>
+      <button class="btn btn-ghost btn-sm" onclick="window.__invItems.splice(${i},1);document.getElementById('inv-items-box').innerHTML=window.renderInvItemsHTML();updateInvTotal();" style="height:36px;padding:0 10px;">×</button>
+    </div>`).join('');
+  }
+  window.__invItems = items;
+  window.renderInvItemsHTML = renderItems;
+  window.updateInvTotal = function() {
+    const sub = window.__invItems.reduce((s,it)=>s+(it.qty*it.price),0);
+    const vat = sub*0.15;
+    const el = document.getElementById('inv-total-preview');
+    if(el) el.innerHTML = `<span style="color:var(--muted);">المجموع قبل الضريبة: <strong>${formatNum(Math.round(sub))} ر.س</strong></span>&nbsp;&nbsp;|&nbsp;&nbsp;<span style="color:var(--muted);">الضريبة 15%: <strong>${formatNum(Math.round(vat))} ر.س</strong></span>&nbsp;&nbsp;|&nbsp;&nbsp;<strong style="font-size:16px;color:var(--ink);">الإجمالي: ${formatNum(Math.round(sub+vat))} ر.س</strong>`;
+  };
+  openModal(`
+  <div class="modal-title">+ إنشاء فاتورة جديدة</div>
+  <div class="form-row" style="margin-bottom:16px;">
+    <div class="form-group"><label class="form-label">العميل</label>
+      <select class="form-input" id="ni-customer">
+        ${DATA.customers.map(c=>`<option value="${c.name}">${c.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">تاريخ الاستحقاق</label><input class="form-input" id="ni-due" type="date" value="${new Date(Date.now()+30*86400000).toISOString().slice(0,10)}"></div>
+  </div>
+  <div style="font-weight:600;margin-bottom:10px;">بنود الفاتورة</div>
+  <div id="inv-items-box">${renderItems()}</div>
+  <button class="btn btn-ghost btn-sm" style="margin-bottom:16px;" onclick="window.__invItems.push({qty:1,price:0,name:'',unit:'كجم'});document.getElementById('inv-items-box').innerHTML=window.renderInvItemsHTML();updateInvTotal();">+ إضافة بند</button>
+  <div id="inv-total-preview" style="background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:13px;">الإجمالي: 0 ر.س</div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="
+      const customer=document.getElementById('ni-customer').value;
+      const due=document.getElementById('ni-due').value;
+      const items=window.__invItems.filter(it=>it.name&&it.qty>0&&it.price>0);
+      if(!customer||items.length===0){showToast('أضف عميلاً وبنداً واحداً على الأقل','error');return;}
+      const today=new Date().toISOString().slice(0,10);
+      const n=DATA.invoices.length+1;
+      DATA.invoices.push({id:'INV-0'+(n<10?'0':'')+n,customer,date:today,dueDate:due,items:items.map(it=>({name:it.name,qty:it.qty,unit:it.unit,price:it.price})),status:'معلقة',vat:15});
+      showToast('تم إنشاء الفاتورة بنجاح','success');
+      closeModal();navigate('invoices');
+    ">💾 حفظ الفاتورة</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+  setTimeout(()=>{ if(window.lucide) lucide.createIcons(); updateInvTotal(); }, 50);
+}
+
+// ═══════════════════════════════════════════
+//  SHIPMENT HELPERS
+// ═══════════════════════════════════════════
+const SHIPMENT_STATUSES = ['قيد التحضير','في الطريق','وصل المستودع','جاري التوزيع','تم التسليم'];
+function updateShipmentStatus(id) {
+  const s = DATA.shipments.find(x=>x.id===id);
+  if(!s) return;
+  const idx = SHIPMENT_STATUSES.indexOf(s.status);
+  if(idx >= SHIPMENT_STATUSES.length-1) { showToast('الشحنة وصلت بالفعل إلى نهاية المسار','info'); return; }
+  const next = SHIPMENT_STATUSES[idx+1] || s.status;
+  openModal(`
+  <div class="modal-title">تحديث حالة الشحنة ${s.id}</div>
+  <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px;">
+    ${SHIPMENT_STATUSES.map((st,i)=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius-sm);border:2px solid ${s.status===st?'var(--primary)':'var(--border)'};cursor:pointer;background:${s.status===st?'var(--accent-bg)':''};">
+      <input type="radio" name="ship-status" value="${st}" ${s.status===st?'checked':''} style="accent-color:var(--primary);">
+      <span style="font-weight:${s.status===st?'700':'400'}">${st}</span>
+    </label>`).join('')}
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="
+      const sel=document.querySelector('input[name=ship-status]:checked');
+      if(!sel)return;
+      const ship=DATA.shipments.find(x=>x.id==='${id}');
+      if(ship){ship.status=sel.value;ship.timeline=ship.timeline||[];const t=ship.timeline.find(t=>t.step===sel.value);if(t)t.done=true;}
+      showToast('تم تحديث الحالة إلى: '+sel.value,'success');
+      closeModal();selectShipment('${id}');
+    ">حفظ</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+function printShipmentBOL(shipId) {
+  const bol = DATA.billsOfLading.find(b=>b.shipmentRef===shipId);
+  if(bol) { printBOL(bol.id); return; }
+  const s = DATA.shipments.find(x=>x.id===shipId);
+  if(!s) return;
+  showToast('لا توجد بوليصة شحن مرتبطة بهذه الشحنة','info');
+}
+
+// ═══════════════════════════════════════════
+//  BOL HELPERS
+// ═══════════════════════════════════════════
+function viewBOL(id) {
+  const b = DATA.billsOfLading.find(x=>x.id===id);
+  if(!b) return;
+  openModal(`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <div class="modal-title">بوليصة شحن: ${b.id}</div>
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
+  </div>
+  <div class="detail-grid" style="margin-bottom:20px;">
+    <div class="detail-item"><label>الشاحن</label><span>${b.shipper}</span></div>
+    <div class="detail-item"><label>المستلم</label><span>${b.consignee}</span></div>
+    <div class="detail-item"><label>المنتج</label><span>${b.product}</span></div>
+    <div class="detail-item"><label>الكمية</label><span>${b.qty} ${b.unit}</span></div>
+    <div class="detail-item"><label>الوزن</label><span>${b.weight} كجم</span></div>
+    <div class="detail-item"><label>السائق</label><span>${b.driver}</span></div>
+    <div class="detail-item"><label>التاريخ</label><span>${b.date}</span></div>
+    <div class="detail-item"><label>الشحنة المرجعية</label><span>${b.shipmentRef}</span></div>
+  </div>
+  <div style="background:#e8f5e9;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:20px;font-size:13px;display:flex;align-items:center;gap:8px;">
+    <span style="font-size:18px;">❄️</span>
+    <span>شرط سلسلة البرودة: يُحفظ المنتج بين <strong>0°C و 4°C</strong> طوال فترة النقل</span>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="closeModal();printBOL('${b.id}')">🖨 طباعة البوليصة</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
+  </div>`);
+}
+function addBOL() {
+  const shipOptions = DATA.shipments.map(s=>`<option value="${s.id}">${s.id} — ${s.product} → ${s.to}</option>`).join('');
+  const driverOptions = DATA.vehicles.map(v=>`<option value="${v.driver}">${v.driver} (${v.plate})</option>`).join('');
+  openModal(`
+  <div class="modal-title">إضافة بوليصة شحن جديدة</div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">الشاحن</label><input class="form-input" id="bol-shipper" value="الديوان الاقتصادي — التوت الحساوي"></div>
+    <div class="form-group"><label class="form-label">المستلم</label><input class="form-input" id="bol-consignee" placeholder="اسم المستلم"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">المنتج</label><input class="form-input" id="bol-product" placeholder="اسم المنتج"></div>
+    <div class="form-group"><label class="form-label">الكمية</label><input class="form-input" type="number" id="bol-qty" placeholder="0"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">الوحدة</label><select class="form-input" id="bol-unit"><option>كجم</option><option>صندوق</option><option>طن</option></select></div>
+    <div class="form-group"><label class="form-label">الوزن الإجمالي (كجم)</label><input class="form-input" type="number" id="bol-weight" placeholder="0"></div>
+  </div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">السائق</label><select class="form-input" id="bol-driver">${driverOptions}</select></div>
+    <div class="form-group"><label class="form-label">شحنة مرجعية</label><select class="form-input" id="bol-ref">${shipOptions}</select></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="
+      const shipper=document.getElementById('bol-shipper').value;
+      const consignee=document.getElementById('bol-consignee').value;
+      const product=document.getElementById('bol-product').value;
+      const qty=parseFloat(document.getElementById('bol-qty').value)||0;
+      const unit=document.getElementById('bol-unit').value;
+      const weight=parseFloat(document.getElementById('bol-weight').value)||0;
+      const driver=document.getElementById('bol-driver').value;
+      const ref=document.getElementById('bol-ref').value;
+      if(!consignee||!product||qty<=0){showToast('أكمل الحقول المطلوبة','error');return;}
+      const n=DATA.billsOfLading.length+1;
+      const newBOL={id:'BOL-00'+n,shipper,consignee,product,qty,unit,weight,driver,shipmentRef:ref,date:new Date().toISOString().slice(0,10)};
+      DATA.billsOfLading.push(newBOL);
+      showToast('تم إنشاء بوليصة الشحن بنجاح','success');
+      closeModal();navigate('lading');
+    ">💾 حفظ البوليصة</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
+}
+
+// ═══════════════════════════════════════════
+//  CRM HELPERS
+// ═══════════════════════════════════════════
+function addCustomer() {
+  openModal(`
+  <div class="modal-title">إضافة عميل جديد</div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">الاسم الكامل</label><input class="form-input" id="cu-name" placeholder="الاسم الكامل"></div>
+    <div class="form-group"><label class="form-label">نوع العميل</label>
+      <select class="form-input" id="cu-type"><option>فرد</option><option>شركة</option><option>جمعية</option></select></div>
+  </div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">المدينة</label><input class="form-input" id="cu-city" placeholder="الأحساء"></div>
+    <div class="form-group"><label class="form-label">رقم الجوال</label><input class="form-input" id="cu-phone" placeholder="05XXXXXXXX"></div>
+  </div>
+  <div class="form-group" style="margin-bottom:14px;"><label class="form-label">البريد الإلكتروني</label><input class="form-input" id="cu-email" placeholder="name@email.com"></div>
+  <div class="form-row" style="margin-bottom:14px;">
+    <div class="form-group"><label class="form-label">إجمالي المشتريات (ر.س)</label><input class="form-input" type="number" id="cu-purchases" value="0"></div>
+    <div class="form-group"><label class="form-label">درجة الولاء</label>
+      <select class="form-input" id="cu-loyalty"><option>برونزي</option><option>فضي</option><option>ذهبي</option></select></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-primary" onclick="
+      const name=document.getElementById('cu-name').value;
+      const type=document.getElementById('cu-type').value;
+      const city=document.getElementById('cu-city').value;
+      const phone=document.getElementById('cu-phone').value;
+      const email=document.getElementById('cu-email').value;
+      const purchases=parseFloat(document.getElementById('cu-purchases').value)||0;
+      const loyalty=document.getElementById('cu-loyalty').value;
+      if(!name){showToast('أدخل اسم العميل','error');return;}
+      const n=DATA.customers.length+1;
+      DATA.customers.push({id:'CUS-0'+(n<10?'0':'')+n,name,type,city,phone,email,totalPurchases:purchases,orders:0,lastOrder:'—',loyalty});
+      showToast('تم إضافة العميل بنجاح','success');
+      closeModal();navigate('crm');
+    ">💾 حفظ</button>
+    <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+  </div>`);
 }
 
 // ═══════════════════════════════════════════
