@@ -360,10 +360,10 @@
     </nav>
     <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08);">
       <div style="display:flex;align-items:center;gap:10px;">
-        <div class="user-avatar">أح</div>
+        <div class="user-avatar" id="sidebar-user-avatar">أح</div>
         <div>
-          <div style="color:#fff;font-size:13px;font-weight:600;">أحمد الحساوي</div>
-          <div style="color:var(--sidebar-text);font-size:11px;">مدير النظام</div>
+          <div id="sidebar-user-name" style="color:#fff;font-size:13px;font-weight:600;">أحمد الحساوي</div>
+          <div id="sidebar-user-role" style="color:var(--sidebar-text);font-size:11px;">مدير النظام</div>
         </div>
       </div>
     </div>
@@ -384,7 +384,7 @@
       <button class="topbar-btn" title="إعدادات" onclick="openSettings()">
         <i data-lucide="settings" style="width:20px;height:20px;"></i>
       </button>
-      <div class="user-avatar" onclick="openUserProfile()" title="الملف الشخصي">أح</div>
+      <div class="user-avatar" id="topbar-user-avatar" onclick="openUserProfile()" title="الملف الشخصي">أح</div>
     </header>
     <main id="main-content"></main>
   </div>
@@ -3865,6 +3865,18 @@ const SETTINGS = {
   printLogo: true, currency: 'ر.س', dateFormat: 'YYYY-MM-DD',
   lang: 'ar', theme: 'light'
 };
+function updateUserDisplay() {
+  const initials = USER.name.trim().slice(0,2);
+  const sAvatar = document.getElementById('sidebar-user-avatar');
+  if(sAvatar) sAvatar.textContent = initials;
+  const sName = document.getElementById('sidebar-user-name');
+  if(sName) sName.textContent = USER.name;
+  const sRole = document.getElementById('sidebar-user-role');
+  if(sRole) sRole.textContent = USER.role;
+  const tAvatar = document.getElementById('topbar-user-avatar');
+  if(tAvatar) tAvatar.textContent = initials;
+}
+
 function openSettings() {
   openModal(`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -3931,11 +3943,10 @@ function openSettings() {
       SETTINGS.printLogo=document.getElementById('s-printLogo').checked;
       const newName=document.getElementById('s-displayname').value.trim();
       const newRole=document.getElementById('s-role').value.trim();
-      if(newName){USER.name=newName;USER.role=newRole||USER.role;}
-      document.querySelectorAll('.user-avatar').forEach(el=>el.textContent=(USER.name||'م').slice(0,2));
-      const nameEl=document.querySelector('#sidebar [style*=\"color:#fff\"]');
-      if(nameEl) nameEl.textContent=USER.name;
-      showToast('تم حفظ الإعدادات','success');
+      if(newName) USER.name=newName;
+      if(newRole) USER.role=newRole;
+      updateUserDisplay();
+      showToast('تم حفظ الإعدادات ✓','success');
       closeModal();
     ">💾 حفظ الإعدادات</button>
     <button class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
@@ -3985,12 +3996,12 @@ function openUserProfile() {
       const pw=document.getElementById('up-pw').value;
       const pw2=document.getElementById('up-pw2').value;
       if(pw && pw!==pw2){showToast('كلمتا المرور غير متطابقتين','error');return;}
-      USER.name=document.getElementById('up-name').value;
+      const n=document.getElementById('up-name').value.trim();
+      if(n) USER.name=n;
       USER.phone=document.getElementById('up-phone').value;
       USER.email=document.getElementById('up-email').value;
-      document.querySelector('#sidebar .user-avatar').textContent=USER.name.slice(0,2);
-      document.querySelectorAll('#topbar .user-avatar').forEach(el=>el.textContent=USER.name.slice(0,2));
-      showToast('تم تحديث الملف الشخصي','success');
+      updateUserDisplay();
+      showToast('تم تحديث الملف الشخصي ✓','success');
       closeModal();
     ">💾 حفظ التغييرات</button>
     <button class="btn btn-ghost" style="color:var(--danger);" onclick="
