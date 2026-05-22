@@ -1163,6 +1163,50 @@ function renderFleetMap() {
     const ta=v.temp!=null&&(v.temp>4||v.temp<0);
     return '<div onclick="selectMapVehicle(\''+v.id+'\')" style="flex:0 0 auto;background:'+bg+';border:1px solid '+(ta?'rgba(239,68,68,0.5)':sc+'33')+';border-radius:8px;padding:7px 11px;cursor:pointer;min-width:96px;transition:border-color 0.15s;" onmouseover="this.style.borderColor=\''+(ta?'#ef4444':sc)+'\'" onmouseout="this.style.borderColor=\''+(ta?'rgba(239,68,68,0.5)':sc+'33')+'\'"><div style="font-size:11px;font-weight:700;color:'+(ta?'#ef4444':sc)+';margin-bottom:2px;">'+v.id+(ta?' 🚨':'')+'</div><div style="font-size:10px;color:rgba(163,212,181,0.6);">'+v.driver.split(' ')[0]+'</div><div style="font-size:10px;color:'+sc+';margin-top:2px;">'+v.status+'</div>'+(v.temp!=null?'<div style="font-size:10px;color:'+(ta?'#ef4444':'rgba(163,212,181,0.6)')+';font-weight:'+(ta?700:400)+';">'+v.temp+'°C</div>':'')+'</div>';
   }).join('');
+
+  // ── Active delivery destinations (customer markers) ──
+  const activeDOs = DATA.deliveryOrders.filter(o=>o.status==='في الطريق'||o.status==='معلق');
+  const deliveryCounts = {};
+  activeDOs.forEach(o=>{ if(o.city!=='الأحساء') deliveryCounts[o.city]=(deliveryCounts[o.city]||0)+1; });
+  const cityCoords = {'الرياض':{x:122,y:238},'الدمام':{x:650,y:198},'الخبر':{x:686,y:215}};
+  const customerRoutes = Object.entries(deliveryCounts).map(([city,count])=>{
+    const pos=cityCoords[city]; if(!pos) return '';
+    return '<line x1="418" y1="265" x2="'+pos.x+'" y2="'+pos.y+'" stroke="rgba(255,140,0,0.3)" stroke-width="1.5" stroke-dasharray="8,5"/>';
+  }).join('');
+  const customerMarkers = Object.entries(deliveryCounts).map(([city,count])=>{
+    const pos=cityCoords[city]; if(!pos) return '';
+    return '<g transform="translate('+pos.x+','+(pos.y-30)+')" onclick="showCityDeliveries(\''+city+'\')" style="cursor:pointer;">'
+      +'<path d="M0,-13 C-6,-13 -11,-8 -11,-1 C-11,8.5 0,20 0,20 C0,20 11,8.5 11,-1 C11,-8 6,-13 0,-13 Z" fill="rgba(255,130,0,0.9)" stroke="rgba(255,210,60,0.75)" stroke-width="1.5" filter="url(#fGlowOrange)"/>'
+      +'<circle cx="0" cy="-1" r="5.5" fill="white" opacity="0.93"/>'
+      +'<text x="0" y="2" font-size="7.5" fill="rgba(180,55,0,1)" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">'+count+'</text>'
+      +'<text x="0" y="30" font-size="8" fill="rgba(255,185,60,0.7)" text-anchor="middle" font-family="Cairo,sans-serif">'+city+'</text>'
+      +'</g>';
+  }).join('');
+
+  // ── Pre-compute HTML overlays to avoid nested template literals ──
+  const onRoad = DATA.vehicles.filter(v=>v.status==='في الطريق').length;
+  const inWH   = DATA.vehicles.filter(v=>v.status==='في المستودع').length;
+  const waiting= DATA.vehicles.filter(v=>v.status==='في الانتظار').length;
+  const maint  = DATA.vehicles.filter(v=>v.status==='في الصيانة').length;
+  const activePct = Math.round((onRoad+waiting)/DATA.vehicles.length*100);
+  const tempAV = DATA.vehicles.filter(v=>v.temp!=null&&(v.temp>4||v.temp<0));
+
+  const statsOverlay =
+    '<div style="position:absolute;top:10px;left:10px;background:rgba(8,16,12,0.9);border:1px solid rgba(82,183,136,0.22);border-radius:8px;padding:10px 13px;min-width:152px;direction:rtl;z-index:6;pointer-events:none;backdrop-filter:blur(4px);">'
+    +'<div style="font-size:10px;color:#52b788;font-weight:700;text-align:center;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(82,183,136,0.12);">إحصاء الأسطول</div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#a3d4b5;"><div style="width:8px;height:8px;border-radius:50%;background:rgba(45,106,79,0.3);border:1.5px solid #52b788;flex-shrink:0;"></div>في الطريق</div><span style="color:#52b788;font-weight:700;font-size:11px;">'+onRoad+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#a3d4b5;"><div style="width:8px;height:8px;border-radius:50%;background:rgba(107,114,128,0.2);border:1.5px solid #6b7280;flex-shrink:0;"></div>في المستودع</div><span style="color:#9ca3af;font-weight:700;font-size:11px;">'+inWH+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#a3d4b5;"><div style="width:8px;height:8px;border-radius:50%;background:rgba(217,119,6,0.2);border:1.5px solid #d97706;flex-shrink:0;"></div>في الانتظار</div><span style="color:#d97706;font-weight:700;font-size:11px;">'+waiting+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;"><div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#a3d4b5;"><div style="width:8px;height:8px;border-radius:50%;background:rgba(107,114,128,0.12);border:1.5px dashed #9ca3af;flex-shrink:0;"></div>في الصيانة</div><span style="color:#9ca3af;font-weight:700;font-size:11px;">'+maint+'</span></div>'
+    +'<div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(82,183,136,0.08);"><div style="background:rgba(82,183,136,0.08);border-radius:2px;height:3px;overflow:hidden;margin-bottom:3px;"><div style="background:linear-gradient(90deg,#2d6a4f,#52b788);height:3px;border-radius:2px;width:'+activePct+'%;"></div></div>'
+    +'<div style="font-size:9px;color:rgba(82,183,136,0.45);">'+activePct+'% من الأسطول نشط</div></div></div>';
+
+  let tempAlertOverlay = '';
+  if(tempAV.length > 0) {
+    const tItems = tempAV.map(v=>'<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><div style="width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulseOp 0.8s infinite;flex-shrink:0;"></div><span style="font-size:10px;color:#fca5a5;font-weight:700;">تنبيه حرارة — '+v.id+'</span></div><div style="font-size:9px;color:rgba(252,165,165,0.65);margin-bottom:2px;padding-right:15px;">'+v.temp+'°C — خارج النطاق (0–4°C)</div><div style="font-size:9px;color:rgba(252,165,165,0.45);padding-right:15px;">السائق: '+v.driver+'</div>').join('<div style="margin:4px 0;border-top:1px solid rgba(220,50,50,0.18);"></div>');
+    tempAlertOverlay = '<div style="position:absolute;top:10px;right:10px;background:rgba(20,4,4,0.93);border:1px solid rgba(220,50,50,0.45);border-radius:8px;padding:8px 12px;direction:rtl;z-index:6;pointer-events:none;backdrop-filter:blur(4px);">'+tItems+'</div>';
+  }
+
   return `
   <div class="card" style="padding:0;overflow:hidden;background:#0a110e;border:1px solid rgba(82,183,136,0.2);">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(45,106,79,0.12);border-bottom:1px solid rgba(82,183,136,0.12);flex-wrap:wrap;gap:8px;">
@@ -1173,11 +1217,17 @@ function renderFleetMap() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
         ${filterBtns}
-        <span id="fleet-live-clock" style="color:rgba(82,183,136,0.6);font-size:11px;margin-inline-start:8px;font-family:'Cairo',monospace;">${timeStr}</span>
+        <div style="display:flex;align-items:center;gap:3px;margin-inline-start:4px;">
+          <button onclick="fleetZoom(1)" title="تقريب" style="background:rgba(82,183,136,0.1);border:1px solid rgba(82,183,136,0.22);color:#52b788;width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:700;line-height:1;padding:0;font-family:monospace;">+</button>
+          <span id="fleet-zoom-level" style="color:rgba(82,183,136,0.55);font-size:10px;min-width:34px;text-align:center;font-family:monospace;">100%</span>
+          <button onclick="fleetZoom(-1)" title="إبعاد" style="background:rgba(82,183,136,0.1);border:1px solid rgba(82,183,136,0.22);color:#52b788;width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:16px;font-weight:700;line-height:1;padding:0;font-family:monospace;">−</button>
+          <button onclick="fleetZoom(0)" title="إعادة تعيين" style="background:rgba(82,183,136,0.06);border:1px solid rgba(82,183,136,0.15);color:rgba(82,183,136,0.6);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:13px;line-height:1;padding:0;">↺</button>
+        </div>
+        <span id="fleet-live-clock" style="color:rgba(82,183,136,0.6);font-size:11px;margin-inline-start:4px;font-family:'Cairo',monospace;">${timeStr}</span>
       </div>
     </div>
     <div style="position:relative;height:460px;overflow:hidden;">
-      <svg id="fleet-map-svg" width="100%" height="100%" viewBox="0 0 920 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#0a110e;">
+      <svg id="fleet-map-svg" width="100%" height="100%" viewBox="0 0 920 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#0a110e;cursor:grab;user-select:none;">
         <defs>
           <radialGradient id="mapBgGrad" cx="40%" cy="55%" r="65%">
             <stop offset="0%" stop-color="#0f2318"/>
@@ -1205,6 +1255,10 @@ function renderFleetMap() {
           </filter>
           <filter id="fGlowYellow" x="-80%" y="-80%" width="260%" height="260%">
             <feGaussianBlur stdDeviation="5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="fGlowOrange" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="blur"/>
             <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
           <!-- Animated route paths (referenced by animateMotion mpath) -->
@@ -1255,6 +1309,9 @@ function renderFleetMap() {
 
         <!-- ── Secondary road: Ahsa → Qatif ── -->
         <path d="M418,263 L482,248 L562,236 L622,223 L660,270" stroke="rgba(130,130,130,0.12)" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="5,4"/>
+
+        <!-- ── Customer delivery routes (Ahsa → active destinations) ── -->
+        ${customerRoutes}
 
         <!-- ── Ahsa hub glow ── -->
         <circle cx="418" cy="265" r="55" fill="url(#ahsaGlow)"/>
@@ -1406,35 +1463,8 @@ function renderFleetMap() {
           <text x="0" y="4" font-size="8" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH8</text>
         </g>
 
-        <!-- ── STATS OVERLAY (top-left) ── -->
-        <g transform="translate(18,32)">
-          <rect width="150" height="98" rx="7" fill="rgba(8,16,12,0.88)" stroke="rgba(82,183,136,0.2)" stroke-width="1"/>
-          <text x="75" y="18" font-size="10" fill="#52b788" text-anchor="middle" font-family="Cairo,sans-serif" font-weight="700">إحصاء الأسطول</text>
-          <line x1="10" y1="25" x2="140" y2="25" stroke="rgba(82,183,136,0.12)" stroke-width="1"/>
-          <circle cx="20" cy="41" r="5" fill="rgba(45,106,79,0.3)" stroke="#52b788" stroke-width="1.5"/>
-          <text x="30" y="45" font-size="9" fill="#a3d4b5" font-family="Cairo,sans-serif">في الطريق</text>
-          <text x="140" y="45" font-size="11" fill="#52b788" text-anchor="end" font-family="Cairo,sans-serif" font-weight="700">4</text>
-          <circle cx="20" cy="58" r="5" fill="rgba(107,114,128,0.2)" stroke="#6b7280" stroke-width="1.5"/>
-          <text x="30" y="62" font-size="9" fill="#a3d4b5" font-family="Cairo,sans-serif">في المستودع</text>
-          <text x="140" y="62" font-size="11" fill="#9ca3af" text-anchor="end" font-family="Cairo,sans-serif" font-weight="700">2</text>
-          <circle cx="20" cy="75" r="5" fill="rgba(217,119,6,0.2)" stroke="#d97706" stroke-width="1.5"/>
-          <text x="30" y="79" font-size="9" fill="#a3d4b5" font-family="Cairo,sans-serif">في الانتظار</text>
-          <text x="140" y="79" font-size="11" fill="#d97706" text-anchor="end" font-family="Cairo,sans-serif" font-weight="700">1</text>
-          <rect x="10" y="88" width="130" height="4" rx="2" fill="rgba(82,183,136,0.08)"/>
-          <rect x="10" y="88" width="81" height="4" rx="2" fill="rgba(82,183,136,0.45)"/>
-          <text x="30" y="96" font-size="7.5" fill="rgba(82,183,136,0.45)" font-family="Cairo,sans-serif">62.5% من الأسطول نشط</text>
-        </g>
-
-        <!-- ── TEMP ALERT OVERLAY ── -->
-        <g transform="translate(560,32)">
-          <rect width="158" height="54" rx="7" fill="rgba(20,4,4,0.92)" stroke="rgba(220,50,50,0.45)" stroke-width="1"/>
-          <circle cx="16" cy="16" r="5" fill="#ef4444">
-            <animate attributeName="opacity" values="1;0.25;1" dur="0.8s" repeatCount="indefinite"/>
-          </circle>
-          <text x="25" y="20" font-size="9" fill="#fca5a5" font-family="Cairo,sans-serif" font-weight="700">تنبيه حرارة — VH-006</text>
-          <text x="12" y="36" font-size="8" fill="rgba(252,165,165,0.65)" font-family="Cairo,sans-serif">5.8°C — خارج النطاق (0-4°C)</text>
-          <text x="12" y="48" font-size="7.5" fill="rgba(252,165,165,0.45)" font-family="Cairo,sans-serif">السائق: فيصل العتيبي</text>
-        </g>
+        <!-- ── CUSTOMER DELIVERY MARKERS ── -->
+        ${customerMarkers}
 
         <!-- ── COMPASS ── -->
         <g transform="translate(876,385)">
@@ -1459,8 +1489,8 @@ function renderFleetMap() {
         </g>
 
         <!-- ── LEGEND BAR ── -->
-        <g transform="translate(185,432)">
-          <rect width="430" height="21" rx="4" fill="rgba(8,16,12,0.82)" stroke="rgba(82,183,136,0.12)" stroke-width="1"/>
+        <g transform="translate(115,432)">
+          <rect width="560" height="21" rx="4" fill="rgba(8,16,12,0.82)" stroke="rgba(82,183,136,0.12)" stroke-width="1"/>
           <circle cx="14" cy="10.5" r="5" fill="rgba(45,106,79,0.3)" stroke="#52b788" stroke-width="1.5"/>
           <text x="23" y="14.5" font-size="8" fill="rgba(82,183,136,0.78)" font-family="Cairo,sans-serif">في الطريق</text>
           <circle cx="92" cy="10.5" r="5" fill="rgba(107,114,128,0.2)" stroke="#6b7280" stroke-width="1.5"/>
@@ -1470,10 +1500,26 @@ function renderFleetMap() {
           <circle cx="266" cy="10.5" r="5" fill="rgba(107,114,128,0.12)" stroke="#9ca3af" stroke-width="1.3" stroke-dasharray="3,2"/>
           <text x="275" y="14.5" font-size="8" fill="rgba(155,155,155,0.65)" font-family="Cairo,sans-serif">في الصيانة</text>
           <circle cx="346" cy="10.5" r="5" fill="rgba(185,28,28,0.3)" stroke="#ef4444" stroke-width="1.5"/>
-          <text x="355" y="14.5" font-size="8" fill="rgba(252,165,165,0.78)" font-family="Cairo,sans-serif">🚨 تنبيه حرارة</text>
+          <text x="355" y="14.5" font-size="8" fill="rgba(252,165,165,0.78)" font-family="Cairo,sans-serif">🚨 حرارة</text>
+          <path d="M436,3 C432.7,3 430,5.7 430,9 C430,14 436,20 436,20 C436,20 442,14 442,9 C442,5.7 439.3,3 436,3 Z" fill="rgba(255,130,0,0.88)" stroke="rgba(255,210,60,0.7)" stroke-width="1"/>
+          <circle cx="436" cy="9" r="3.5" fill="white" opacity="0.9"/>
+          <text x="446" y="14.5" font-size="8" fill="rgba(255,175,60,0.78)" font-family="Cairo,sans-serif">تسليم عملاء</text>
         </g>
 
       </svg>
+
+      <!-- HTML overlays (rendered outside SVG to fix Arabic RTL text rendering) -->
+      ${statsOverlay}
+      ${tempAlertOverlay}
+
+      <!-- City deliveries panel -->
+      <div id="map-city-panel" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(8,16,12,0.97);border:1px solid rgba(255,140,0,0.4);border-radius:10px;padding:14px 18px;min-width:280px;max-width:340px;z-index:11;backdrop-filter:blur(10px);direction:rtl;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(255,140,0,0.15);padding-bottom:7px;">
+          <span id="mcp-title" style="color:rgba(255,165,50,0.95);font-weight:700;font-size:14px;"></span>
+          <button onclick="document.getElementById('map-city-panel').style.display='none'" style="background:none;border:none;color:rgba(255,140,0,0.45);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+        </div>
+        <div id="mcp-body" style="font-size:12px;color:#a3d4b5;max-height:200px;overflow-y:auto;"></div>
+      </div>
 
       <!-- Vehicle info panel -->
       <div id="map-vehicle-panel" style="display:none;position:absolute;top:58px;left:50%;transform:translateX(-50%);background:rgba(8,16,12,0.96);border:1px solid rgba(82,183,136,0.35);border-radius:10px;padding:14px 18px;min-width:290px;z-index:10;backdrop-filter:blur(10px);">
@@ -4014,7 +4060,119 @@ function openUserProfile() {
 // ═══════════════════════════════════════════
 //  INIT CHARTS
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+//  FLEET MAP ZOOM / PAN
+// ═══════════════════════════════════════════
+let fleetVB = {x:0, y:0, w:920, h:460};
+let fleetDrag = {on:false, sx:0, sy:0, ox:0, oy:0};
+
+function initFleetMap() {
+  const svg = document.getElementById('fleet-map-svg');
+  if(!svg) return;
+  // Reset viewbox when re-entering the section
+  fleetVB = {x:0, y:0, w:920, h:460};
+  svg.setAttribute('viewBox','0 0 920 460');
+  const zlEl = document.getElementById('fleet-zoom-level');
+  if(zlEl) zlEl.textContent = '100%';
+
+  svg.addEventListener('wheel', function(e){
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top) / rect.height;
+    const factor = e.deltaY > 0 ? 1.18 : 0.85;
+    const nw = Math.min(920, Math.max(180, fleetVB.w * factor));
+    const nh = Math.min(460, Math.max(90,  fleetVB.h * factor));
+    fleetVB.x = Math.max(0, Math.min(920 - nw, fleetVB.x + (fleetVB.w - nw) * mx));
+    fleetVB.y = Math.max(0, Math.min(460 - nh, fleetVB.y + (fleetVB.h - nh) * my));
+    fleetVB.w = nw; fleetVB.h = nh;
+    _applyFleetVB();
+  }, {passive:false});
+
+  svg.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    fleetDrag = {on:true, sx:e.clientX, sy:e.clientY, ox:fleetVB.x, oy:fleetVB.y};
+    svg.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mousemove', function(e){
+    if(!fleetDrag.on) return;
+    const rect = document.getElementById('fleet-map-svg').getBoundingClientRect();
+    if(!rect) return;
+    const dx = (e.clientX - fleetDrag.sx) * (fleetVB.w / rect.width);
+    const dy = (e.clientY - fleetDrag.sy) * (fleetVB.h / rect.height);
+    fleetVB.x = Math.max(0, Math.min(920 - fleetVB.w, fleetDrag.ox - dx));
+    fleetVB.y = Math.max(0, Math.min(460 - fleetVB.h, fleetDrag.oy - dy));
+    _applyFleetVB();
+  });
+  window.addEventListener('mouseup', function(){
+    if(!fleetDrag.on) return;
+    fleetDrag.on = false;
+    const svg = document.getElementById('fleet-map-svg');
+    if(svg) svg.style.cursor = 'grab';
+  });
+
+  // Touch support
+  let tPrev = null;
+  svg.addEventListener('touchstart', function(e){ tPrev = e.touches[0]; }, {passive:true});
+  svg.addEventListener('touchmove', function(e){
+    e.preventDefault();
+    if(e.touches.length === 1 && tPrev) {
+      const rect = svg.getBoundingClientRect();
+      const dx = (e.touches[0].clientX - tPrev.clientX) * (fleetVB.w / rect.width);
+      const dy = (e.touches[0].clientY - tPrev.clientY) * (fleetVB.h / rect.height);
+      fleetVB.x = Math.max(0, Math.min(920 - fleetVB.w, fleetVB.x - dx));
+      fleetVB.y = Math.max(0, Math.min(460 - fleetVB.h, fleetVB.y - dy));
+      _applyFleetVB();
+      tPrev = e.touches[0];
+    }
+  }, {passive:false});
+  svg.addEventListener('touchend', function(){ tPrev = null; }, {passive:true});
+}
+
+function _applyFleetVB() {
+  const svg = document.getElementById('fleet-map-svg');
+  if(!svg) return;
+  svg.setAttribute('viewBox', fleetVB.x+' '+fleetVB.y+' '+fleetVB.w+' '+fleetVB.h);
+  const zl = document.getElementById('fleet-zoom-level');
+  if(zl) zl.textContent = Math.round(920 / fleetVB.w * 100) + '%';
+}
+
+function fleetZoom(dir) {
+  if(dir === 0) { fleetVB = {x:0,y:0,w:920,h:460}; }
+  else {
+    const f = dir > 0 ? 0.72 : 1.38;
+    const nw = Math.min(920, Math.max(180, fleetVB.w * f));
+    const nh = Math.min(460, Math.max(90,  fleetVB.h * f));
+    fleetVB.x = Math.max(0, Math.min(920 - nw, fleetVB.x + (fleetVB.w - nw) / 2));
+    fleetVB.y = Math.max(0, Math.min(460 - nh, fleetVB.y + (fleetVB.h - nh) / 2));
+    fleetVB.w = nw; fleetVB.h = nh;
+  }
+  _applyFleetVB();
+}
+
+function showCityDeliveries(city) {
+  const panel = document.getElementById('map-city-panel');
+  const title = document.getElementById('mcp-title');
+  const body  = document.getElementById('mcp-body');
+  if(!panel || !title || !body) return;
+  const orders = DATA.deliveryOrders.filter(o=>o.city===city&&(o.status==='في الطريق'||o.status==='معلق'));
+  title.textContent = 'تسليمات ' + city + ' (' + orders.length + ')';
+  const stColors = {'في الطريق':'#52b788','معلق':'#d97706'};
+  body.innerHTML = orders.map(o=>`
+    <div style="background:rgba(255,130,0,0.06);border:1px solid rgba(255,140,0,0.15);border-radius:6px;padding:8px 10px;margin-bottom:7px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-weight:700;color:rgba(255,165,50,0.9);">${o.id}</span>
+        <span style="font-size:10px;font-weight:600;color:${stColors[o.status]||'#9ca3af'};background:rgba(255,130,0,0.08);padding:2px 7px;border-radius:10px;">${o.status}</span>
+      </div>
+      <div style="font-size:11px;color:#c8e6d5;margin-bottom:2px;">👤 ${o.customer}</div>
+      <div style="font-size:10px;color:rgba(163,212,181,0.55);">📍 ${o.address}</div>
+      <div style="font-size:10px;color:rgba(163,212,181,0.5);margin-top:3px;">🚗 ${o.vehicle} — ${o.driver}</div>
+    </div>`).join('') || '<div style="color:rgba(163,212,181,0.4);text-align:center;padding:12px;">لا توجد تسليمات نشطة</div>';
+  panel.style.display = 'block';
+}
+
 function initCharts(section) {
+  if(section==='fleet') { setTimeout(initFleetMap, 80); return; }
   if(section==='dashboard') {
     const salesCtx = document.getElementById('chart-sales');
     if(salesCtx) {
