@@ -1115,6 +1115,17 @@ function renderFleet() {
 function renderFleetMap() {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'});
+  const gridLines =
+    Array.from({length:14},(_,i)=>`<line x1="${i*70}" y1="0" x2="${i*70}" y2="460" stroke="rgba(82,183,136,0.04)" stroke-width="1"/>`).join('') +
+    Array.from({length:8}, (_,i)=>`<line x1="0" y1="${i*66}" x2="920" y2="${i*66}" stroke="rgba(82,183,136,0.04)" stroke-width="1"/>`).join('');
+  const filterBtns = ['الكل','في الطريق','في المستودع','في الانتظار','في الصيانة']
+    .map((f,i)=>`<button class="fleet-filter-btn${i===0?' active':''}" onclick="fleetFilterMap('${f}',this)">${f}</button>`).join('');
+  const vehicleStrip = DATA.vehicles.map(v=>{
+    const sc={'في الطريق':'#52b788','في المستودع':'#6b7280','في الانتظار':'#d97706','في الصيانة':'#9ca3af'}[v.status]||'#6b7280';
+    const bg={'في الطريق':'rgba(45,106,79,0.14)','في المستودع':'rgba(107,114,128,0.09)','في الانتظار':'rgba(217,119,6,0.1)','في الصيانة':'rgba(107,114,128,0.07)'}[v.status]||'rgba(107,114,128,0.09)';
+    const ta=v.temp!=null&&(v.temp>4||v.temp<0);
+    return '<div onclick="selectMapVehicle(\''+v.id+'\')" style="flex:0 0 auto;background:'+bg+';border:1px solid '+(ta?'rgba(239,68,68,0.5)':sc+'33')+';border-radius:8px;padding:7px 11px;cursor:pointer;min-width:96px;transition:border-color 0.15s;" onmouseover="this.style.borderColor=\''+(ta?'#ef4444':sc)+'\'" onmouseout="this.style.borderColor=\''+(ta?'rgba(239,68,68,0.5)':sc+'33')+'\'"><div style="font-size:11px;font-weight:700;color:'+(ta?'#ef4444':sc)+';margin-bottom:2px;">'+v.id+(ta?' 🚨':'')+'</div><div style="font-size:10px;color:rgba(163,212,181,0.6);">'+v.driver.split(' ')[0]+'</div><div style="font-size:10px;color:'+sc+';margin-top:2px;">'+v.status+'</div>'+(v.temp!=null?'<div style="font-size:10px;color:'+(ta?'#ef4444':'rgba(163,212,181,0.6)')+';font-weight:'+(ta?700:400)+';">'+v.temp+'°C</div>':'')+'</div>';
+  }).join('');
   return `
   <div class="card" style="padding:0;overflow:hidden;background:#0a110e;border:1px solid rgba(82,183,136,0.2);">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(45,106,79,0.12);border-bottom:1px solid rgba(82,183,136,0.12);flex-wrap:wrap;gap:8px;">
@@ -1124,13 +1135,12 @@ function renderFleetMap() {
         <span style="background:rgba(82,183,136,0.12);border:1px solid rgba(82,183,136,0.3);color:#52b788;font-size:9px;padding:2px 7px;border-radius:10px;animation:pulseOp 2s infinite;">● مباشر</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-        ${['الكل','في الطريق','في المستودع','في الانتظار','في الصيانة'].map((f,i)=>`
-        <button class="fleet-filter-btn${i===0?' active':''}" onclick="fleetFilterMap('${f}',this)">${f}</button>`).join('')}
+        ${filterBtns}
         <span id="fleet-live-clock" style="color:rgba(82,183,136,0.6);font-size:11px;margin-inline-start:8px;font-family:'Cairo',monospace;">${timeStr}</span>
       </div>
     </div>
-    <div style="position:relative;height:430px;overflow:hidden;">
-      <svg id="fleet-map-svg" width="100%" height="100%" viewBox="0 0 920 430" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+    <div style="position:relative;height:460px;overflow:hidden;">
+      <svg id="fleet-map-svg" width="100%" height="100%" viewBox="0 0 920 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;background:#0a110e;">
         <defs>
           <radialGradient id="mapBgGrad" cx="40%" cy="55%" r="65%">
             <stop offset="0%" stop-color="#0f2318"/>
@@ -1168,15 +1178,14 @@ function renderFleetMap() {
         </defs>
 
         <!-- ── Background ── -->
-        <rect width="920" height="430" fill="url(#mapBgGrad)"/>
+        <rect width="920" height="460" fill="url(#mapBgGrad)"/>
 
         <!-- Grid lines -->
-        ${Array.from({length:14},(_,i)=>`<line x1="${i*70}" y1="0" x2="${i*70}" y2="430" stroke="rgba(82,183,136,0.04)" stroke-width="1"/>`).join('')}
-        ${Array.from({length:8},(_,i)=>`<line x1="0" y1="${i*62}" x2="920" y2="${i*62}" stroke="rgba(82,183,136,0.04)" stroke-width="1"/>`).join('')}
+        ${gridLines}
 
         <!-- ── Arabian Gulf ── -->
-        <path d="M755,0 L920,0 L920,430 L755,430 L728,378 L718,308 L698,238 L708,168 L728,98 L748,48 Z" fill="url(#gulfGrad)"/>
-        <path d="M755,0 L920,0 L920,430 L755,430 L728,378 L718,308 L698,238 L708,168 L728,98 L748,48 Z" fill="none" stroke="rgba(30,100,160,0.25)" stroke-width="1.5"/>
+        <path d="M755,0 L920,0 L920,460 L755,460 L728,400 L718,318 L698,245 L708,168 L728,98 L748,48 Z" fill="url(#gulfGrad)"/>
+        <path d="M755,0 L920,0 L920,460 L755,460 L728,400 L718,318 L698,245 L708,168 L728,98 L748,48 Z" fill="none" stroke="rgba(30,100,160,0.25)" stroke-width="1.5"/>
         <!-- Gulf shimmer -->
         <line x1="775" y1="55" x2="870" y2="75" stroke="rgba(30,100,160,0.12)" stroke-width="1.5"/>
         <line x1="765" y1="135" x2="895" y2="155" stroke="rgba(30,100,160,0.10)" stroke-width="1.5"/>
@@ -1214,7 +1223,8 @@ function renderFleetMap() {
         <circle cx="418" cy="265" r="55" fill="url(#ahsaGlow)"/>
 
         <!-- ── WAREHOUSES ── -->
-        <g transform="translate(443,292)">
+        <!-- Ahsa warehouse: east of Ahsa hub, away from vehicles -->
+        <g transform="translate(498,308)">
           <rect x="-13" y="-11" width="26" height="22" rx="3" fill="rgba(45,106,79,0.28)" stroke="#52b788" stroke-width="1.5"/>
           <rect x="-9" y="-7" width="18" height="13" rx="2" fill="rgba(45,106,79,0.45)"/>
           <polygon points="0,-16 -15,-5 15,-5" fill="#2d6a4f" stroke="#52b788" stroke-width="1.2"/>
@@ -1224,12 +1234,14 @@ function renderFleetMap() {
             <animate attributeName="opacity" values="0.4;0;0.4" dur="3s" repeatCount="indefinite"/>
           </circle>
         </g>
-        <g transform="translate(657,220)">
+        <!-- Dammam warehouse: below Dammam city -->
+        <g transform="translate(632,230)">
           <rect x="-11" y="-9" width="22" height="18" rx="2" fill="rgba(45,106,79,0.25)" stroke="#52b788" stroke-width="1.3"/>
           <polygon points="0,-13 -13,-4 13,-4" fill="#2d6a4f" stroke="#52b788" stroke-width="1"/>
           <text x="0" y="21" font-size="7.5" fill="rgba(82,183,136,0.7)" text-anchor="middle" font-family="Cairo,sans-serif">مستودع الدمام</text>
         </g>
-        <g transform="translate(112,258)">
+        <!-- Riyadh warehouse: northwest of Riyadh city -->
+        <g transform="translate(85,215)">
           <rect x="-11" y="-9" width="22" height="18" rx="2" fill="rgba(45,106,79,0.25)" stroke="#52b788" stroke-width="1.3"/>
           <polygon points="0,-13 -13,-4 13,-4" fill="#2d6a4f" stroke="#52b788" stroke-width="1"/>
           <text x="0" y="21" font-size="7.5" fill="rgba(82,183,136,0.7)" text-anchor="middle" font-family="Cairo,sans-serif">مستودع الرياض</text>
@@ -1292,39 +1304,37 @@ function renderFleetMap() {
 
         <!-- ── VEHICLES ── -->
 
-        <!-- VH-001: في المستودع (Ahsa) -->
-        <g id="map-vh-001" class="fleet-v-btn" onclick="selectMapVehicle('VH-001')" transform="translate(396,298)" style="cursor:pointer;">
+        <!-- VH-001: في المستودع (Ahsa) — positioned away from hub+warehouse -->
+        <g id="map-vh-001" class="fleet-v-btn" onclick="selectMapVehicle('VH-001')" transform="translate(468,298)" style="cursor:pointer;">
           <circle class="v-ring" cx="0" cy="0" r="15" fill="rgba(107,114,128,0.12)" stroke="#6b7280" stroke-width="1.5"/>
           <text x="0" y="4" font-size="9" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH1</text>
-          <text x="0" y="-23" font-size="7.5" fill="rgba(156,163,175,0.7)" text-anchor="middle" font-family="Cairo,sans-serif">مستودع</text>
         </g>
 
         <!-- VH-002: في الطريق → Dammam (ANIMATED) -->
         <g id="map-vh-002" class="fleet-v-btn" onclick="selectMapVehicle('VH-002')" style="cursor:pointer;">
           <circle class="v-ring" r="14" fill="rgba(45,106,79,0.28)" stroke="#52b788" stroke-width="2" filter="url(#fGlowGreen)"/>
           <text y="4" font-size="8" fill="#52b788" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH2</text>
-          <animateMotion dur="13s" repeatCount="indefinite" rotate="auto"><mpath href="#rAhDam1"/></animateMotion>
+          <animateMotion dur="3600s" begin="-900s" repeatCount="indefinite"><mpath href="#rAhDam1"/></animateMotion>
         </g>
 
         <!-- VH-003: في الطريق → Dammam offset (ANIMATED) -->
         <g id="map-vh-003" class="fleet-v-btn" onclick="selectMapVehicle('VH-003')" style="cursor:pointer;">
           <circle class="v-ring" r="14" fill="rgba(45,106,79,0.28)" stroke="#52b788" stroke-width="2" filter="url(#fGlowGreen)"/>
           <text y="4" font-size="8" fill="#52b788" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH3</text>
-          <animateMotion dur="13s" begin="-6.5s" repeatCount="indefinite" rotate="auto"><mpath href="#rAhDam2"/></animateMotion>
+          <animateMotion dur="3600s" begin="-2160s" repeatCount="indefinite"><mpath href="#rAhDam2"/></animateMotion>
         </g>
 
         <!-- VH-004: في الطريق local loop (ANIMATED) -->
         <g id="map-vh-004" class="fleet-v-btn" onclick="selectMapVehicle('VH-004')" style="cursor:pointer;">
           <circle class="v-ring" r="13" fill="rgba(45,106,79,0.22)" stroke="#52b788" stroke-width="1.8" filter="url(#fGlowGreen)"/>
           <text y="4" font-size="8" fill="#52b788" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH4</text>
-          <animateMotion dur="9s" repeatCount="indefinite" rotate="auto"><mpath href="#rLocalLoop"/></animateMotion>
+          <animateMotion dur="1800s" begin="-450s" repeatCount="indefinite"><mpath href="#rLocalLoop"/></animateMotion>
         </g>
 
-        <!-- VH-005: في المستودع (Riyadh) -->
-        <g id="map-vh-005" class="fleet-v-btn" onclick="selectMapVehicle('VH-005')" transform="translate(148,258)" style="cursor:pointer;">
+        <!-- VH-005: في المستودع (Riyadh) — below Riyadh city, away from warehouse -->
+        <g id="map-vh-005" class="fleet-v-btn" onclick="selectMapVehicle('VH-005')" transform="translate(150,272)" style="cursor:pointer;">
           <circle class="v-ring" cx="0" cy="0" r="14" fill="rgba(107,114,128,0.12)" stroke="#6b7280" stroke-width="1.5"/>
           <text x="0" y="4" font-size="8" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH5</text>
-          <text x="0" y="-22" font-size="7.5" fill="rgba(156,163,175,0.65)" text-anchor="middle" font-family="Cairo,sans-serif">مستودع</text>
         </g>
 
         <!-- VH-006: 🚨 TEMP ALERT → Khobar (ANIMATED, RED) -->
@@ -1340,29 +1350,27 @@ function renderFleetMap() {
             <text y="1" font-size="7" fill="white" text-anchor="middle" dominant-baseline="middle" font-weight="700">⚠</text>
           </g>
           <text y="-24" font-size="8" fill="#ef4444" text-anchor="middle" font-family="Cairo,sans-serif" font-weight="700">5.8°C !</text>
-          <animateMotion dur="19s" begin="-5s" repeatCount="indefinite" rotate="auto"><mpath href="#rAhKhb"/></animateMotion>
+          <animateMotion dur="2700s" begin="-675s" repeatCount="indefinite"><mpath href="#rAhKhb"/></animateMotion>
         </g>
 
-        <!-- VH-007: في الانتظار (Dammam) -->
-        <g id="map-vh-007" class="fleet-v-btn" onclick="selectMapVehicle('VH-007')" transform="translate(670,237)" style="cursor:pointer;">
+        <!-- VH-007: في الانتظار (Dammam area) — below warehouse, no overlap -->
+        <g id="map-vh-007" class="fleet-v-btn" onclick="selectMapVehicle('VH-007')" transform="translate(672,255)" style="cursor:pointer;">
           <circle class="v-ring" cx="0" cy="0" r="14" fill="rgba(217,119,6,0.18)" stroke="#d97706" stroke-width="1.5"/>
           <text x="0" y="4" font-size="8" fill="#d97706" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH7</text>
-          <text x="0" y="-22" font-size="7.5" fill="rgba(217,119,6,0.75)" text-anchor="middle" font-family="Cairo,sans-serif">انتظار</text>
-          <circle cx="0" cy="0" r="19" fill="none" stroke="rgba(217,119,6,0.25)" stroke-width="1">
-            <animate attributeName="r" values="15;22;15" dur="2.2s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.5;0;0.5" dur="2.2s" repeatCount="indefinite"/>
+          <circle cx="0" cy="0" r="19" fill="none" stroke="rgba(217,119,6,0.2)" stroke-width="1">
+            <animate attributeName="r" values="14;21;14" dur="2.5s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite"/>
           </circle>
         </g>
 
-        <!-- VH-008: في الصيانة (Ahsa) -->
-        <g id="map-vh-008" class="fleet-v-btn" onclick="selectMapVehicle('VH-008')" transform="translate(386,315)" style="cursor:pointer;">
+        <!-- VH-008: في الصيانة (southwest of Ahsa) — well away from other elements -->
+        <g id="map-vh-008" class="fleet-v-btn" onclick="selectMapVehicle('VH-008')" transform="translate(355,318)" style="cursor:pointer;">
           <circle class="v-ring" cx="0" cy="0" r="14" fill="rgba(107,114,128,0.15)" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,2"/>
           <text x="0" y="4" font-size="8" fill="#9ca3af" text-anchor="middle" dominant-baseline="middle" font-family="Cairo,sans-serif" font-weight="700">VH8</text>
-          <text x="0" y="-22" font-size="7.5" fill="rgba(156,163,175,0.75)" text-anchor="middle" font-family="Cairo,sans-serif">🔧 صيانة</text>
         </g>
 
         <!-- ── STATS OVERLAY (top-left) ── -->
-        <g transform="translate(18,18)">
+        <g transform="translate(18,32)">
           <rect width="150" height="98" rx="7" fill="rgba(8,16,12,0.88)" stroke="rgba(82,183,136,0.2)" stroke-width="1"/>
           <text x="75" y="18" font-size="10" fill="#52b788" text-anchor="middle" font-family="Cairo,sans-serif" font-weight="700">إحصاء الأسطول</text>
           <line x1="10" y1="25" x2="140" y2="25" stroke="rgba(82,183,136,0.12)" stroke-width="1"/>
@@ -1381,7 +1389,7 @@ function renderFleetMap() {
         </g>
 
         <!-- ── TEMP ALERT OVERLAY ── -->
-        <g transform="translate(572,18)">
+        <g transform="translate(560,32)">
           <rect width="158" height="54" rx="7" fill="rgba(20,4,4,0.92)" stroke="rgba(220,50,50,0.45)" stroke-width="1"/>
           <circle cx="16" cy="16" r="5" fill="#ef4444">
             <animate attributeName="opacity" values="1;0.25;1" dur="0.8s" repeatCount="indefinite"/>
@@ -1392,7 +1400,7 @@ function renderFleetMap() {
         </g>
 
         <!-- ── COMPASS ── -->
-        <g transform="translate(876,393)">
+        <g transform="translate(876,385)">
           <circle cx="0" cy="0" r="26" fill="rgba(8,16,12,0.82)" stroke="rgba(82,183,136,0.18)" stroke-width="1"/>
           <polygon points="0,-20 4,-5 0,-9 -4,-5" fill="#52b788" filter="url(#fGlowGreen)"/>
           <polygon points="0,20 4,5 0,9 -4,5" fill="rgba(82,183,136,0.28)"/>
@@ -1405,7 +1413,7 @@ function renderFleetMap() {
         </g>
 
         <!-- ── SCALE BAR ── -->
-        <g transform="translate(20,407)">
+        <g transform="translate(20,432)">
           <rect width="86" height="4" rx="2" fill="rgba(82,183,136,0.22)"/>
           <rect width="43" height="4" rx="2" fill="rgba(82,183,136,0.55)"/>
           <text x="0" y="-3" font-size="7.5" fill="rgba(82,183,136,0.45)" font-family="Cairo,sans-serif">0</text>
@@ -1414,7 +1422,7 @@ function renderFleetMap() {
         </g>
 
         <!-- ── LEGEND BAR ── -->
-        <g transform="translate(185,407)">
+        <g transform="translate(185,432)">
           <rect width="430" height="21" rx="4" fill="rgba(8,16,12,0.82)" stroke="rgba(82,183,136,0.12)" stroke-width="1"/>
           <circle cx="14" cy="10.5" r="5" fill="rgba(45,106,79,0.3)" stroke="#52b788" stroke-width="1.5"/>
           <text x="23" y="14.5" font-size="8" fill="rgba(82,183,136,0.78)" font-family="Cairo,sans-serif">في الطريق</text>
@@ -1442,17 +1450,7 @@ function renderFleetMap() {
 
     <!-- Vehicle strip -->
     <div style="display:flex;gap:7px;padding:10px 14px;background:rgba(8,16,12,0.65);border-top:1px solid rgba(82,183,136,0.08);overflow-x:auto;-webkit-overflow-scrolling:touch;">
-      ${DATA.vehicles.map(v=>{
-        const stColor={'في الطريق':'#52b788','في المستودع':'#6b7280','في الانتظار':'#d97706','في الصيانة':'#9ca3af'}[v.status]||'#6b7280';
-        const stBg={'في الطريق':'rgba(45,106,79,0.14)','في المستودع':'rgba(107,114,128,0.09)','في الانتظار':'rgba(217,119,6,0.1)','في الصيانة':'rgba(107,114,128,0.07)'}[v.status]||'rgba(107,114,128,0.09)';
-        const tAlert=v.temp!=null&&(v.temp>4||v.temp<0);
-        return `<div onclick="selectMapVehicle('${v.id}')" style="flex:0 0 auto;background:${stBg};border:1px solid ${tAlert?'rgba(239,68,68,0.5)':stColor+'33'};border-radius:8px;padding:7px 11px;cursor:pointer;min-width:96px;transition:border-color 0.15s;" onmouseover="this.style.borderColor='${tAlert?'#ef4444':stColor}'" onmouseout="this.style.borderColor='${tAlert?'rgba(239,68,68,0.5)':stColor+'33'}'">
-          <div style="font-size:11px;font-weight:700;color:${tAlert?'#ef4444':stColor};margin-bottom:2px;">${v.id}${tAlert?' 🚨':''}</div>
-          <div style="font-size:10px;color:rgba(163,212,181,0.6);">${v.driver.split(' ')[0]}</div>
-          <div style="font-size:10px;color:${stColor};margin-top:2px;">${v.status}</div>
-          ${v.temp!=null?`<div style="font-size:10px;color:${tAlert?'#ef4444':'rgba(163,212,181,0.6)'};font-weight:${tAlert?700:400};">${v.temp}°C</div>`:''}
-        </div>`;
-      }).join('')}
+      ${vehicleStrip}
     </div>
   </div>`;
 }
