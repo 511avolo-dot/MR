@@ -329,6 +329,14 @@
         <i data-lucide="truck" class="icon"></i><span>تتبع الشحنات</span>
         <span class="nav-badge">2</span>
       </div>
+      <div class="nav-item" onclick="navigate('transferOrders')" id="nav-transferOrders">
+        <i data-lucide="arrow-left-right" class="icon"></i><span>أوامر النقل</span>
+        <span class="nav-badge">3</span>
+      </div>
+      <div class="nav-item" onclick="navigate('deliveryOrders')" id="nav-deliveryOrders">
+        <i data-lucide="package-check" class="icon"></i><span>أوامر التسليم</span>
+        <span class="nav-badge">2</span>
+      </div>
       <div class="nav-item" onclick="navigate('fleet')" id="nav-fleet">
         <i data-lucide="car" class="icon"></i><span>إدارة الأسطول</span>
       </div>
@@ -497,6 +505,34 @@ const DATA = {
     { id:'CUS-018', name:'شركة الخبراء للتوزيع', type:'شركة', loyalty:'فضي', totalPurchases:44000, lastOrder:'2024-01-05', phone:'011-2221100', email:'expert@dist.sa', city:'الرياض', orders:28 },
     { id:'CUS-019', name:'عبدالرحمن خالد المسلم', type:'فرد', loyalty:'برونزي', totalPurchases:4800, lastOrder:'2024-01-04', phone:'0501112233', email:'abdulrahman@mail.sa', city:'الخبر', orders:4 },
     { id:'CUS-020', name:'مستودعات الجزيرة', type:'شركة', loyalty:'فضي', totalPurchases:29000, lastOrder:'2024-01-03', phone:'011-8887766', email:'jazira@warehouse.sa', city:'الرياض', orders:19 }
+  ],
+  transferOrders: [
+    { id:'TO-001', date:'2026-05-01', fromType:'مزرعة', from:'مزرعة النخيل', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أحمر طازج', qty:800, unit:'كجم', vehicle:'VH-001', driver:'علي السعيد', status:'مكتمل', scheduled:'2026-05-01 07:00', completed:'2026-05-01 10:30', priority:'عادي', notes:'تم التسليم بدون ملاحظات' },
+    { id:'TO-002', date:'2026-05-03', fromType:'مزرعة', from:'مزرعة الواحة', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أسود طازج', qty:600, unit:'كجم', vehicle:'VH-003', driver:'خالد العتيبي', status:'مكتمل', scheduled:'2026-05-03 06:30', completed:'2026-05-03 09:45', priority:'عادي', notes:'' },
+    { id:'TO-003', date:'2026-05-07', fromType:'مستودع', from:'المستودع الرئيسي', toType:'مستودع', to:'مستودع الرياض', product:'مربى التوت الأحمر', qty:300, unit:'عبوة', vehicle:'VH-002', driver:'محمد الغامدي', status:'مكتمل', scheduled:'2026-05-07 08:00', completed:'2026-05-07 14:00', priority:'عاجل', notes:'تسليم مسبق لأمر شراء كبير' },
+    { id:'TO-004', date:'2026-05-10', fromType:'مزرعة', from:'مزرعة الربيع', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أحمر طازج', qty:1200, unit:'كجم', vehicle:'VH-004', driver:'سعود الحربي', status:'مكتمل', scheduled:'2026-05-10 07:00', completed:'2026-05-10 11:00', priority:'عادي', notes:'' },
+    { id:'TO-005', date:'2026-05-12', fromType:'مستودع', from:'المستودع الرئيسي', toType:'مستودع', to:'مستودع الدمام', product:'عصير التوت المركز', qty:150, unit:'لتر', vehicle:'VH-001', driver:'علي السعيد', status:'مكتمل', scheduled:'2026-05-12 09:00', completed:'2026-05-12 13:30', priority:'عادي', notes:'' },
+    { id:'TO-006', date:'2026-05-15', fromType:'مزرعة', from:'مزرعة الفردوس', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أسود طازج', qty:700, unit:'كجم', vehicle:'VH-003', driver:'خالد العتيبي', status:'مكتمل', scheduled:'2026-05-15 07:30', completed:'2026-05-15 10:45', priority:'عادي', notes:'' },
+    { id:'TO-007', date:'2026-05-18', fromType:'مستودع', from:'مستودع الرياض', toType:'مستودع', to:'مستودع الدمام', product:'مربى التوت الأسود', qty:200, unit:'عبوة', vehicle:'VH-005', driver:'عمر الزهراني', status:'مكتمل', scheduled:'2026-05-18 10:00', completed:'2026-05-18 17:00', priority:'عادي', notes:'موازنة المخزون بين الفروع' },
+    { id:'TO-008', date:'2026-05-20', fromType:'مزرعة', from:'مزرعة النخيل', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أحمر طازج', qty:950, unit:'كجم', vehicle:'VH-002', driver:'محمد الغامدي', status:'جاري التنفيذ', scheduled:'2026-05-20 07:00', completed:null, priority:'عاجل', notes:'دفعة موسمية — الحمولة مبردة' },
+    { id:'TO-009', date:'2026-05-21', fromType:'مستودع', from:'المستودع الرئيسي', toType:'مستودع', to:'مستودع الرياض', product:'توت مجفف ممتاز', qty:120, unit:'كجم', vehicle:'VH-004', driver:'سعود الحربي', status:'جاري التنفيذ', scheduled:'2026-05-21 08:00', completed:null, priority:'عادي', notes:'' },
+    { id:'TO-010', date:'2026-05-22', fromType:'مزرعة', from:'مزرعة الربيع', toType:'مستودع', to:'المستودع الرئيسي', product:'توت بري طبيعي', qty:500, unit:'كجم', vehicle:'VH-001', driver:'علي السعيد', status:'مجدول', scheduled:'2026-05-22 07:00', completed:null, priority:'عادي', notes:'' },
+    { id:'TO-011', date:'2026-05-22', fromType:'مستودع', from:'المستودع الرئيسي', toType:'مستودع', to:'مستودع الدمام', product:'عسل السدر الطبيعي', qty:80, unit:'كجم', vehicle:'VH-003', driver:'خالد العتيبي', status:'مجدول', scheduled:'2026-05-22 10:00', completed:null, priority:'عاجل', notes:'طلب عاجل من عميل الدمام' },
+    { id:'TO-012', date:'2026-05-10', fromType:'مزرعة', from:'مزرعة السلام', toType:'مستودع', to:'المستودع الرئيسي', product:'توت أحمر طازج', qty:400, unit:'كجم', vehicle:'VH-008', driver:'إبراهيم الدوسري', status:'ملغي', scheduled:'2026-05-10 07:00', completed:null, priority:'عادي', notes:'تأجيل بسبب صيانة المركبة VH-008' }
+  ],
+  deliveryOrders: [
+    { id:'DO-001', date:'2026-05-18', customer:'شركة الأمانة للتوزيع', address:'الرياض، حي العليا، شارع العروبة 45', city:'الرياض', phone:'0112233445', items:[{product:'توت أحمر طازج',qty:200,unit:'كجم',price:45},{product:'مربى التوت الأحمر',qty:50,unit:'عبوة',price:25}], vehicle:'VH-002', driver:'محمد الغامدي', status:'مسلم', scheduledTime:'09:00 - 12:00', deliveredAt:'2026-05-18 10:45', signature:true, notes:'' },
+    { id:'DO-002', date:'2026-05-18', customer:'مجمع العرين التجاري', address:'الأحساء، الهفوف، شارع الملك فيصل', city:'الأحساء', phone:'013-6665544', items:[{product:'توت أحمر طازج',qty:350,unit:'كجم',price:45},{product:'توت أسود طازج',qty:200,unit:'كجم',price:55}], vehicle:'VH-004', driver:'سعود الحربي', status:'مسلم', scheduledTime:'10:00 - 13:00', deliveredAt:'2026-05-18 11:30', signature:true, notes:'عميل مميز — التسليم للمستودع الخلفي' },
+    { id:'DO-003', date:'2026-05-19', customer:'شركة الغذاء الطازج', address:'الرياض، حي الصناعية، طريق الأمير محمد', city:'الرياض', phone:'011-9990000', items:[{product:'عصير التوت المركز',qty:100,unit:'لتر',price:35},{product:'مربى التوت الأسود',qty:80,unit:'عبوة',price:28}], vehicle:'VH-002', driver:'محمد الغامدي', status:'مسلم', scheduledTime:'08:00 - 11:00', deliveredAt:'2026-05-19 09:20', signature:true, notes:'' },
+    { id:'DO-004', date:'2026-05-19', customer:'فندق الديوان الفاخر', address:'الدمام، الكورنيش، طريق الأمير محمد بن فهد', city:'الدمام', phone:'013-2234455', items:[{product:'توت أحمر طازج',qty:50,unit:'كجم',price:45},{product:'عسل السدر الطبيعي',qty:15,unit:'كجم',price:350}], vehicle:'VH-003', driver:'خالد العتيبي', status:'مسلم', scheduledTime:'12:00 - 15:00', deliveredAt:'2026-05-19 13:10', signature:true, notes:'فندق 5 نجوم — تسليم للمطبخ مباشرة' },
+    { id:'DO-005', date:'2026-05-20', customer:'شركة الأمانة للتوزيع', address:'الرياض، حي العليا، شارع العروبة 45', city:'الرياض', phone:'0112233445', items:[{product:'توت أسود طازج',qty:300,unit:'كجم',price:55},{product:'توت مجفف ممتاز',qty:40,unit:'كجم',price:85}], vehicle:'VH-002', driver:'محمد الغامدي', status:'في الطريق', scheduledTime:'09:00 - 12:00', deliveredAt:null, signature:false, notes:'دفعة أسبوعية' },
+    { id:'DO-006', date:'2026-05-20', customer:'مطعم نخيل الأحساء', address:'الأحساء، الهفوف، شارع الملك عبدالعزيز', city:'الأحساء', phone:'013-7776655', items:[{product:'توت أحمر طازج',qty:30,unit:'كجم',price:45},{product:'مربى التوت الأحمر',qty:20,unit:'عبوة',price:25}], vehicle:'VH-004', driver:'سعود الحربي', status:'في الطريق', scheduledTime:'11:00 - 14:00', deliveredAt:null, signature:false, notes:'' },
+    { id:'DO-007', date:'2026-05-21', customer:'شركة التقطير الطبيعي', address:'الرياض، حي الصناعية الثانية، شارع 15', city:'الرياض', phone:'011-4443322', items:[{product:'عصير التوت المركز',qty:200,unit:'لتر',price:35},{product:'توت أحمر طازج',qty:100,unit:'كجم',price:45}], vehicle:'VH-002', driver:'محمد الغامدي', status:'معلق', scheduledTime:'08:00 - 11:00', deliveredAt:null, signature:false, notes:'ينتظر تأكيد العميل' },
+    { id:'DO-008', date:'2026-05-21', customer:'جمعية البر الخيرية', address:'الأحساء، الهفوف، حي المبرز', city:'الأحساء', phone:'013-4445555', items:[{product:'توت أحمر طازج',qty:100,unit:'كجم',price:38},{product:'مربى التوت الأحمر',qty:30,unit:'عبوة',price:20}], vehicle:'VH-001', driver:'علي السعيد', status:'معلق', scheduledTime:'14:00 - 17:00', deliveredAt:null, signature:false, notes:'سعر خاص للجمعية' },
+    { id:'DO-009', date:'2026-05-22', customer:'مجمع العرين التجاري', address:'الأحساء، الهفوف، شارع الملك فيصل', city:'الأحساء', phone:'013-6665544', items:[{product:'توت أحمر طازج',qty:500,unit:'كجم',price:45},{product:'توت أسود طازج',qty:300,unit:'كجم',price:55},{product:'مربى التوت الأحمر',qty:100,unit:'عبوة',price:25}], vehicle:'VH-004', driver:'سعود الحربي', status:'معلق', scheduledTime:'08:00 - 12:00', deliveredAt:null, signature:false, notes:'طلب أسبوعي دوري' },
+    { id:'DO-010', date:'2026-05-22', customer:'شركة الخبراء للتوزيع', address:'الرياض، حي الملقا، طريق الملك سلمان', city:'الرياض', phone:'011-2221100', items:[{product:'عسل السدر الطبيعي',qty:30,unit:'كجم',price:350},{product:'زيت التوت',qty:20,unit:'لتر',price:120}], vehicle:'VH-002', driver:'محمد الغامدي', status:'معلق', scheduledTime:'10:00 - 13:00', deliveredAt:null, signature:false, notes:'' },
+    { id:'DO-011', date:'2026-05-17', customer:'أحمد بن سعد الراشد', address:'الدمام، حي الشاطئ، شارع الأمير نايف', city:'الدمام', phone:'0507891234', items:[{product:'توت أحمر طازج',qty:20,unit:'كجم',price:45},{product:'مربى التوت الأسود',qty:10,unit:'عبوة',price:28}], vehicle:'VH-003', driver:'خالد العتيبي', status:'مرتجع', scheduledTime:'15:00 - 18:00', deliveredAt:null, signature:false, notes:'رفض العميل الاستلام — جودة غير مقبولة بزعم العميل' },
+    { id:'DO-012', date:'2026-05-20', customer:'شركة الأمانة للتوزيع', address:'الرياض، حي العليا، شارع العروبة 45', city:'الرياض', phone:'0112233445', items:[{product:'توت بري طبيعي',qty:150,unit:'كجم',price:65},{product:'عصير التوت المركز',qty:60,unit:'لتر',price:35}], vehicle:'VH-006', driver:'فيصل العتيبي', status:'مرتجع', scheduledTime:'13:00 - 16:00', deliveredAt:null, signature:false, notes:'مشكلة درجة حرارة VH-006 — البضاعة مُرجعة للمستودع' }
   ]
 };
 
@@ -564,7 +600,8 @@ const SECTION_TITLES = {
   dashboard:'لوحة التحكم الرئيسية', farms:'إدارة المزارع', manufacturing:'التصنيع والإنتاج',
   products:'إدارة المنتجات', warehouses:'إدارة المستودعات', shipments:'تتبع الشحنات',
   fleet:'إدارة الأسطول', temperature:'مراقبة درجة الحرارة', invoices:'الفواتير',
-  lading:'بوليصات الشحن', crm:'إدارة العملاء', reports:'التقارير والإحصائيات'
+  lading:'بوليصات الشحن', crm:'إدارة العملاء', reports:'التقارير والإحصائيات',
+  transferOrders:'أوامر النقل', deliveryOrders:'أوامر التسليم'
 };
 function navigate(section) {
   closeSidebar();
@@ -577,7 +614,7 @@ function navigate(section) {
   main.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);"><i data-lucide="loader-2" style="width:32px;height:32px;animation:spin 1s linear infinite;"></i></div>';
   if(window.lucide) lucide.createIcons();
   setTimeout(() => {
-    const renders = { dashboard:renderDashboard, farms:renderFarms, manufacturing:renderManufacturing, products:renderProducts, warehouses:renderWarehouses, shipments:renderShipments, fleet:renderFleet, temperature:renderTemperature, invoices:renderInvoices, lading:renderLading, crm:renderCRM, reports:renderReports };
+    const renders = { dashboard:renderDashboard, farms:renderFarms, manufacturing:renderManufacturing, products:renderProducts, warehouses:renderWarehouses, shipments:renderShipments, fleet:renderFleet, temperature:renderTemperature, invoices:renderInvoices, lading:renderLading, crm:renderCRM, reports:renderReports, transferOrders:renderTransferOrders, deliveryOrders:renderDeliveryOrders };
     if(renders[section]) main.innerHTML = renders[section]();
     if(window.lucide) lucide.createIcons();
     initCharts(section);
@@ -2098,6 +2135,458 @@ function showCustomerDetail(id) {
     <button class="btn btn-primary" onclick="showToast('تم حفظ بيانات العميل','success');closeModal()">حفظ</button>
     <button class="btn btn-secondary" onclick="closeModal()">إغلاق</button>
   </div>`);
+}
+
+// ═══════════════════════════════════════════
+//  RENDER: TRANSFER ORDERS
+// ═══════════════════════════════════════════
+function renderTransferOrders(filter) {
+  filter = filter || 'الكل';
+  const all = DATA.transferOrders;
+  const counts = {
+    'مكتمل':   all.filter(t=>t.status==='مكتمل').length,
+    'جاري التنفيذ': all.filter(t=>t.status==='جاري التنفيذ').length,
+    'مجدول':   all.filter(t=>t.status==='مجدول').length,
+    'ملغي':    all.filter(t=>t.status==='ملغي').length
+  };
+  const list = filter==='الكل' ? all : all.filter(t=>t.status===filter);
+  const stClr = {'مكتمل':'#16a34a','جاري التنفيذ':'#2563eb','مجدول':'#d97706','ملغي':'#dc2626'};
+  const stBg  = {'مكتمل':'rgba(22,163,74,0.1)','جاري التنفيذ':'rgba(37,99,235,0.1)','مجدول':'rgba(217,119,6,0.1)','ملغي':'rgba(220,38,38,0.08)'};
+  const prClr = {'عاجل':'#dc2626','عادي':'var(--muted)'};
+  const totalKg = all.filter(t=>t.status!=='ملغي').reduce((s,t)=>s+(t.unit==='كجم'||t.unit==='لتر'?t.qty:0),0);
+  return `
+  <h1>أوامر النقل</h1>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-label">إجمالي الأوامر</div><div class="kpi-value">${all.length}</div><div class="kpi-delta neutral">هذا الشهر</div></div>
+    <div class="kpi-card"><div class="kpi-label">جاري التنفيذ</div><div class="kpi-value" style="color:#2563eb;">${counts['جاري التنفيذ']}</div><div class="kpi-delta neutral">مركبات في الطريق</div></div>
+    <div class="kpi-card"><div class="kpi-label">مكتملة</div><div class="kpi-value" style="color:#16a34a;">${counts['مكتمل']}</div><div class="kpi-delta up">تم التسليم</div></div>
+    <div class="kpi-card"><div class="kpi-label">مجدولة</div><div class="kpi-value" style="color:#d97706;">${counts['مجدول']}</div><div class="kpi-delta neutral">قيد الانتظار</div></div>
+    <div class="kpi-card"><div class="kpi-label">إجمالي المنقول</div><div class="kpi-value">${formatNum(totalKg)}</div><div class="kpi-delta neutral">كجم / لتر</div></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div class="card-title" style="margin:0;">قائمة أوامر النقل</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        ${['الكل','جاري التنفيذ','مجدول','مكتمل','ملغي'].map(f=>`<button onclick="document.getElementById('main-content').innerHTML=renderTransferOrders('${f}');if(window.lucide)lucide.createIcons();" style="padding:5px 12px;border-radius:20px;border:1px solid ${f===filter?'var(--primary)':'var(--border)'};background:${f===filter?'var(--primary-light)':'transparent'};color:${f===filter?'var(--primary)':'var(--muted)'};font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer;">${f}</button>`).join('')}
+        <button class="btn btn-primary btn-sm" onclick="newTransferOrderModal()">+ أمر نقل جديد</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>الرقم</th><th>التاريخ</th><th>من</th><th>إلى</th><th>المنتج</th><th>الكمية</th><th>المركبة / السائق</th><th>الأولوية</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+        <tbody>
+          ${list.length===0?`<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:30px;">لا توجد أوامر بهذه الحالة</td></tr>`:''}
+          ${list.map(t=>`
+          <tr>
+            <td><strong style="color:var(--primary);">${t.id}</strong></td>
+            <td>${t.date}</td>
+            <td>
+              <span style="font-size:10px;background:rgba(45,106,79,0.08);border-radius:4px;padding:1px 5px;color:var(--primary);">${t.fromType}</span>
+              <div style="font-size:12px;margin-top:2px;">${t.from}</div>
+            </td>
+            <td>
+              <span style="font-size:10px;background:rgba(37,99,235,0.07);border-radius:4px;padding:1px 5px;color:#2563eb;">${t.toType}</span>
+              <div style="font-size:12px;margin-top:2px;">${t.to}</div>
+            </td>
+            <td style="max-width:130px;">${t.product}</td>
+            <td class="td-num">${formatNum(t.qty)} ${t.unit}</td>
+            <td>
+              <div style="font-size:12px;font-weight:600;">${t.vehicle}</div>
+              <div style="font-size:11px;color:var(--muted);">${t.driver}</div>
+            </td>
+            <td><span style="font-size:11px;font-weight:600;color:${prClr[t.priority]||'var(--muted)'};">${t.priority==='عاجل'?'🔴 عاجل':'عادي'}</span></td>
+            <td><span style="background:${stBg[t.status]};color:${stClr[t.status]};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">${t.status}</span></td>
+            <td>
+              <button class="btn btn-ghost btn-sm" onclick="viewTransferOrder('${t.id}')">عرض</button>
+              ${t.status==='مجدول'?`<button class="btn btn-ghost btn-sm" onclick="cancelTransferOrder('${t.id}')" style="color:var(--danger);">إلغاء</button>`:''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function viewTransferOrder(id) {
+  const t = DATA.transferOrders.find(x=>x.id===id);
+  if(!t) return;
+  const stClr = {'مكتمل':'#16a34a','جاري التنفيذ':'#2563eb','مجدول':'#d97706','ملغي':'#dc2626'};
+  const stBg  = {'مكتمل':'rgba(22,163,74,0.1)','جاري التنفيذ':'rgba(37,99,235,0.1)','مجدول':'rgba(217,119,6,0.1)','ملغي':'rgba(220,38,38,0.08)'};
+  openModal(`
+  <div style="max-width:560px;direction:rtl;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+      <div>
+        <div style="font-size:22px;font-weight:700;color:var(--primary);">أمر نقل ${t.id}</div>
+        <span style="background:${stBg[t.status]};color:${stClr[t.status]};padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;">${t.status}</span>
+        ${t.priority==='عاجل'?'<span style="background:rgba(220,38,38,0.08);color:#dc2626;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-inline-start:6px;">🔴 عاجل</span>':''}
+      </div>
+      <div style="font-size:13px;color:var(--muted);">${t.date}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--primary-light);border-radius:8px;padding:12px;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">من</div>
+        <div style="font-size:11px;color:var(--primary);font-weight:600;">${t.fromType}</div>
+        <div style="font-size:14px;font-weight:700;">${t.from}</div>
+      </div>
+      <div style="background:rgba(37,99,235,0.06);border-radius:8px;padding:12px;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">إلى</div>
+        <div style="font-size:11px;color:#2563eb;font-weight:600;">${t.toType}</div>
+        <div style="font-size:14px;font-weight:700;">${t.to}</div>
+      </div>
+    </div>
+    <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600;">تفاصيل الشحنة</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+        <div><span style="color:var(--muted);">المنتج:</span> <strong>${t.product}</strong></div>
+        <div><span style="color:var(--muted);">الكمية:</span> <strong>${formatNum(t.qty)} ${t.unit}</strong></div>
+        <div><span style="color:var(--muted);">المركبة:</span> <strong>${t.vehicle}</strong></div>
+        <div><span style="color:var(--muted);">السائق:</span> <strong>${t.driver}</strong></div>
+        <div><span style="color:var(--muted);">موعد التنفيذ:</span> <strong>${t.scheduled}</strong></div>
+        <div><span style="color:var(--muted);">تاريخ الاكتمال:</span> <strong>${t.completed||'—'}</strong></div>
+      </div>
+    </div>
+    ${t.notes?`<div style="background:rgba(255,200,50,0.08);border:1px solid rgba(255,200,50,0.2);border-radius:8px;padding:10px;font-size:13px;"><span style="color:var(--muted);">ملاحظات: </span>${t.notes}</div>`:''}
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closeModal()">إغلاق</button>
+      <button class="btn btn-primary" onclick="window.print()">طباعة</button>
+    </div>
+  </div>`);
+}
+
+function cancelTransferOrder(id) {
+  const t = DATA.transferOrders.find(x=>x.id===id);
+  if(!t) return;
+  openModal(`<div style="direction:rtl;text-align:center;padding:10px;">
+    <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px;">إلغاء أمر النقل ${id}</div>
+    <div style="color:var(--muted);margin-bottom:20px;">هل أنت متأكد من إلغاء هذا الأمر؟ لا يمكن التراجع عن هذا الإجراء.</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-ghost" onclick="closeModal()">تراجع</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger);" onclick="t=DATA.transferOrders.find(x=>x.id==='${id}');if(t)t.status='ملغي';closeModal();navigate('transferOrders');">تأكيد الإلغاء</button>
+    </div>
+  </div>`);
+}
+
+function newTransferOrderModal() {
+  const farmOptions = DATA.farms.map(f=>`<option value="${f.name}">${f.name}</option>`).join('');
+  const whOptions = ['المستودع الرئيسي','مستودع الرياض','مستودع الدمام'].map(w=>`<option value="${w}">${w}</option>`).join('');
+  const vhOptions = DATA.vehicles.filter(v=>v.status!=='في الصيانة').map(v=>`<option value="${v.id}">${v.id} — ${v.driver}</option>`).join('');
+  const prdOptions = DATA.products.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+  openModal(`<div style="direction:rtl;min-width:480px;">
+    <div style="font-size:18px;font-weight:700;color:var(--primary);margin-bottom:16px;">+ أمر نقل جديد</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label style="font-size:12px;color:var(--muted);">نوع المصدر</label>
+        <select id="nto-fromType" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">
+          <option value="مزرعة">مزرعة</option><option value="مستودع">مستودع</option>
+        </select></div>
+      <div><label style="font-size:12px;color:var(--muted);">المصدر</label>
+        <select id="nto-from" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${farmOptions}${whOptions}</select></div>
+      <div><label style="font-size:12px;color:var(--muted);">الوجهة</label>
+        <select id="nto-to" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${whOptions}</select></div>
+      <div><label style="font-size:12px;color:var(--muted);">المنتج</label>
+        <select id="nto-product" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${prdOptions}</select></div>
+      <div><label style="font-size:12px;color:var(--muted);">الكمية</label>
+        <input id="nto-qty" type="number" min="1" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;box-sizing:border-box;"/></div>
+      <div><label style="font-size:12px;color:var(--muted);">الوحدة</label>
+        <select id="nto-unit" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">
+          <option>كجم</option><option>لتر</option><option>عبوة</option><option>صندوق</option>
+        </select></div>
+      <div><label style="font-size:12px;color:var(--muted);">المركبة / السائق</label>
+        <select id="nto-vehicle" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${vhOptions}</select></div>
+      <div><label style="font-size:12px;color:var(--muted);">الأولوية</label>
+        <select id="nto-priority" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">
+          <option>عادي</option><option>عاجل</option>
+        </select></div>
+      <div style="grid-column:1/-1;"><label style="font-size:12px;color:var(--muted);">موعد التنفيذ</label>
+        <input id="nto-scheduled" type="datetime-local" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;box-sizing:border-box;"/></div>
+      <div style="grid-column:1/-1;"><label style="font-size:12px;color:var(--muted);">ملاحظات</label>
+        <textarea id="nto-notes" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;resize:vertical;box-sizing:border-box;"></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewTransferOrder()">حفظ الأمر</button>
+    </div>
+  </div>`);
+}
+
+function saveNewTransferOrder() {
+  const vSel = document.getElementById('nto-vehicle').value;
+  const vData = DATA.vehicles.find(v=>v.id===vSel)||{};
+  const newId = 'TO-' + String(DATA.transferOrders.length+1).padStart(3,'0');
+  DATA.transferOrders.unshift({
+    id: newId,
+    date: new Date().toISOString().slice(0,10),
+    fromType: document.getElementById('nto-fromType').value,
+    from: document.getElementById('nto-from').value,
+    toType: 'مستودع',
+    to: document.getElementById('nto-to').value,
+    product: document.getElementById('nto-product').value,
+    qty: parseInt(document.getElementById('nto-qty').value)||0,
+    unit: document.getElementById('nto-unit').value,
+    vehicle: vSel,
+    driver: vData.driver||'—',
+    status: 'مجدول',
+    scheduled: document.getElementById('nto-scheduled').value||'—',
+    completed: null,
+    priority: document.getElementById('nto-priority').value,
+    notes: document.getElementById('nto-notes').value
+  });
+  closeModal();
+  navigate('transferOrders');
+  showToast('تم إنشاء أمر النقل '+newId+' بنجاح ✓');
+}
+
+// ═══════════════════════════════════════════
+//  RENDER: DELIVERY ORDERS
+// ═══════════════════════════════════════════
+function renderDeliveryOrders(filter) {
+  filter = filter || 'الكل';
+  const all = DATA.deliveryOrders;
+  const counts = {
+    'معلق':      all.filter(d=>d.status==='معلق').length,
+    'في الطريق': all.filter(d=>d.status==='في الطريق').length,
+    'مسلم':      all.filter(d=>d.status==='مسلم').length,
+    'مرتجع':     all.filter(d=>d.status==='مرتجع').length
+  };
+  const list = filter==='الكل' ? all : all.filter(d=>d.status===filter);
+  const stClr = {'معلق':'#d97706','في الطريق':'#2563eb','مسلم':'#16a34a','مرتجع':'#dc2626'};
+  const stBg  = {'معلق':'rgba(217,119,6,0.1)','في الطريق':'rgba(37,99,235,0.1)','مسلم':'rgba(22,163,74,0.1)','مرتجع':'rgba(220,38,38,0.08)'};
+  const totalDelivered = all.filter(d=>d.status==='مسلم').reduce((s,d)=>{
+    return s + d.items.reduce((ss,it)=>ss+(it.qty*it.price),0);
+  },0);
+  return `
+  <h1>أوامر التسليم</h1>
+  <div class="kpi-row">
+    <div class="kpi-card"><div class="kpi-label">إجمالي الأوامر</div><div class="kpi-value">${all.length}</div><div class="kpi-delta neutral">هذا الشهر</div></div>
+    <div class="kpi-card"><div class="kpi-label">في الطريق</div><div class="kpi-value" style="color:#2563eb;">${counts['في الطريق']}</div><div class="kpi-delta neutral">جاري التوصيل</div></div>
+    <div class="kpi-card"><div class="kpi-label">مسلمة</div><div class="kpi-value" style="color:#16a34a;">${counts['مسلم']}</div><div class="kpi-delta up">تم التوقيع</div></div>
+    <div class="kpi-card"><div class="kpi-label">معلقة</div><div class="kpi-value" style="color:#d97706;">${counts['معلق']}</div><div class="kpi-delta neutral">تنتظر التنفيذ</div></div>
+    <div class="kpi-card"><div class="kpi-label">مرتجعة</div><div class="kpi-value" style="color:#dc2626;">${counts['مرتجع']}</div><div class="kpi-delta down">تحتاج مراجعة</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
+    <div class="card" style="padding:16px;display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">💰</div>
+      <div><div style="font-size:12px;color:var(--muted);">إيرادات مُسلَّمة</div><div style="font-size:18px;font-weight:700;color:var(--primary);">${formatNum(totalDelivered)} ر.س</div></div>
+    </div>
+    <div class="card" style="padding:16px;display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;border-radius:50%;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">✍️</div>
+      <div><div style="font-size:12px;color:var(--muted);">نسبة التوقيع</div><div style="font-size:18px;font-weight:700;color:var(--primary);">${Math.round(all.filter(d=>d.signature).length/Math.max(all.filter(d=>d.status==='مسلم').length,1)*100)}%</div></div>
+    </div>
+    <div class="card" style="padding:16px;display:flex;align-items:center;gap:12px;">
+      <div style="width:42px;height:42px;border-radius:50%;background:rgba(220,38,38,0.08);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">↩️</div>
+      <div><div style="font-size:12px;color:var(--muted);">نسبة الإرجاع</div><div style="font-size:18px;font-weight:700;color:#dc2626;">${Math.round(counts['مرتجع']/all.length*100)}%</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div class="card-title" style="margin:0;">قائمة أوامر التسليم</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        ${['الكل','في الطريق','معلق','مسلم','مرتجع'].map(f=>`<button onclick="document.getElementById('main-content').innerHTML=renderDeliveryOrders('${f}');if(window.lucide)lucide.createIcons();" style="padding:5px 12px;border-radius:20px;border:1px solid ${f===filter?'var(--primary)':'var(--border)'};background:${f===filter?'var(--primary-light)':'transparent'};color:${f===filter?'var(--primary)':'var(--muted)'};font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer;">${f}</button>`).join('')}
+        <button class="btn btn-primary btn-sm" onclick="newDeliveryOrderModal()">+ أمر تسليم جديد</button>
+      </div>
+    </div>
+    <div style="display:grid;gap:10px;">
+      ${list.length===0?'<div style="text-align:center;padding:30px;color:var(--muted);">لا توجد أوامر بهذه الحالة</div>':''}
+      ${list.map(d=>{
+        const subtotal = d.items.reduce((s,it)=>s+(it.qty*it.price),0);
+        return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 12px rgba(45,106,79,0.1)'" onmouseout="this.style.boxShadow=''">
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;">
+            <div style="width:44px;height:44px;border-radius:50%;background:${stBg[d.status]};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${stClr[d.status]};flex-shrink:0;">${d.id.replace('DO-','')}</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:14px;">${d.customer}</span>
+                <span style="background:${stBg[d.status]};color:${stClr[d.status]};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">${d.status}</span>
+                ${d.status==='في الطريق'?'<span style="background:rgba(37,99,235,0.08);color:#2563eb;font-size:10px;padding:1px 6px;border-radius:10px;animation:pulseOp 1.5s infinite;">● مباشر</span>':''}
+                ${d.signature?'<span style="color:#16a34a;font-size:11px;">✍️ موقع</span>':''}
+              </div>
+              <div style="font-size:12px;color:var(--muted);">📍 ${d.address}</div>
+              <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;color:var(--muted);">🗓 ${d.date}</span>
+                <span style="font-size:11px;color:var(--muted);">⏰ ${d.scheduledTime}</span>
+                <span style="font-size:11px;color:var(--muted);">🚛 ${d.vehicle} — ${d.driver}</span>
+                ${d.deliveredAt?`<span style="font-size:11px;color:#16a34a;">✅ سُلِّم ${d.deliveredAt}</span>`:''}
+              </div>
+              <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+                ${d.items.map(it=>`<span style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;">${it.product} <strong>${it.qty} ${it.unit}</strong></span>`).join('')}
+              </div>
+            </div>
+            <div style="text-align:end;min-width:90px;">
+              <div style="font-size:16px;font-weight:700;color:var(--primary);">${formatNum(subtotal)}</div>
+              <div style="font-size:10px;color:var(--muted);">ر.س</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+            <button class="btn btn-ghost btn-sm" onclick="viewDeliveryOrder('${d.id}')">التفاصيل</button>
+            ${d.status==='في الطريق'?`<button class="btn btn-primary btn-sm" onclick="confirmDelivery('${d.id}')">تأكيد التسليم</button>`:''}
+            ${d.status==='معلق'?`<button class="btn btn-ghost btn-sm" onclick="startDelivery('${d.id}')">ابدأ التوصيل</button>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function viewDeliveryOrder(id) {
+  const d = DATA.deliveryOrders.find(x=>x.id===id);
+  if(!d) return;
+  const stClr = {'معلق':'#d97706','في الطريق':'#2563eb','مسلم':'#16a34a','مرتجع':'#dc2626'};
+  const stBg  = {'معلق':'rgba(217,119,6,0.1)','في الطريق':'rgba(37,99,235,0.1)','مسلم':'rgba(22,163,74,0.1)','مرتجع':'rgba(220,38,38,0.08)'};
+  const subtotal = d.items.reduce((s,it)=>s+(it.qty*it.price),0);
+  const vat = Math.round(subtotal*0.15);
+  openModal(`
+  <div style="direction:rtl;min-width:520px;max-width:580px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:var(--primary);">أمر تسليم ${d.id}</div>
+        <span style="background:${stBg[d.status]};color:${stClr[d.status]};padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;">${d.status}</span>
+        ${d.signature?'<span style="background:rgba(22,163,74,0.1);color:#16a34a;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-inline-start:6px;">✍️ موقع</span>':''}
+      </div>
+      <div style="text-align:end;">
+        <div style="font-size:12px;color:var(--muted);">${d.date}</div>
+        <div style="font-size:11px;color:var(--muted);">⏰ ${d.scheduledTime}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="background:var(--bg);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">العميل</div>
+        <div style="font-size:14px;font-weight:700;">${d.customer}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">📍 ${d.address}</div>
+        <div style="font-size:12px;color:var(--muted);">📞 ${d.phone}</div>
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">التوصيل</div>
+        <div style="font-size:13px;font-weight:600;">🚛 ${d.vehicle}</div>
+        <div style="font-size:12px;color:var(--muted);">السائق: ${d.driver}</div>
+        ${d.deliveredAt?`<div style="font-size:12px;color:#16a34a;margin-top:4px;">✅ ${d.deliveredAt}</div>`:'<div style="font-size:12px;color:var(--muted);margin-top:4px;">لم يُسلَّم بعد</div>'}
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">البنود</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:var(--bg);">
+          <th style="padding:7px 10px;text-align:right;border-bottom:1px solid var(--border);">المنتج</th>
+          <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border);">الكمية</th>
+          <th style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border);">السعر</th>
+          <th style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border);">الإجمالي</th>
+        </tr></thead>
+        <tbody>
+          ${d.items.map(it=>`<tr>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--border);">${it.product}</td>
+            <td style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border);">${it.qty} ${it.unit}</td>
+            <td style="padding:7px 10px;text-align:center;border-bottom:1px solid var(--border);">${it.price} ر.س</td>
+            <td style="padding:7px 10px;text-align:left;border-bottom:1px solid var(--border);font-weight:600;">${formatNum(it.qty*it.price)} ر.س</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="3" style="padding:7px 10px;text-align:right;color:var(--muted);">المجموع قبل الضريبة</td><td style="padding:7px 10px;text-align:left;font-weight:600;">${formatNum(subtotal)} ر.س</td></tr>
+          <tr><td colspan="3" style="padding:7px 10px;text-align:right;color:var(--muted);">ضريبة القيمة المضافة (15%)</td><td style="padding:7px 10px;text-align:left;font-weight:600;">${formatNum(vat)} ر.س</td></tr>
+          <tr style="background:var(--primary-light);"><td colspan="3" style="padding:8px 10px;text-align:right;font-weight:700;color:var(--primary);">الإجمالي شامل الضريبة</td><td style="padding:8px 10px;text-align:left;font-weight:700;color:var(--primary);font-size:15px;">${formatNum(subtotal+vat)} ر.س</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    ${d.notes?`<div style="background:rgba(255,200,50,0.08);border:1px solid rgba(255,200,50,0.25);border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px;"><span style="color:var(--muted);">ملاحظات: </span>${d.notes}</div>`:''}
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closeModal()">إغلاق</button>
+      ${d.status==='معلق'?`<button class="btn btn-primary" onclick="startDelivery('${d.id}');closeModal();">ابدأ التوصيل</button>`:''}
+      ${d.status==='في الطريق'?`<button class="btn btn-primary" onclick="confirmDelivery('${d.id}');closeModal();">تأكيد التسليم</button>`:''}
+    </div>
+  </div>`);
+}
+
+function startDelivery(id) {
+  const d = DATA.deliveryOrders.find(x=>x.id===id);
+  if(d){ d.status='في الطريق'; navigate('deliveryOrders'); showToast('تم تحديث الحالة إلى "في الطريق" ✓'); }
+}
+
+function confirmDelivery(id) {
+  const d = DATA.deliveryOrders.find(x=>x.id===id);
+  if(!d) return;
+  openModal(`<div style="direction:rtl;text-align:center;padding:10px;min-width:320px;">
+    <div style="font-size:48px;margin-bottom:12px;">✅</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px;">تأكيد التسليم ${id}</div>
+    <div style="color:var(--muted);margin-bottom:16px;">تأكيد استلام العميل <strong>${d.customer}</strong></div>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" id="sig-check" style="width:16px;height:16px;"/> الحصول على توقيع العميل
+    </label>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+      <button class="btn btn-primary" onclick="
+        const d=DATA.deliveryOrders.find(x=>x.id==='${id}');
+        if(d){d.status='مسلم';d.deliveredAt=new Date().toLocaleString('ar-SA');d.signature=document.getElementById('sig-check').checked;}
+        closeModal();navigate('deliveryOrders');showToast('تم تسجيل التسليم بنجاح ✓');">تأكيد</button>
+    </div>
+  </div>`);
+}
+
+function newDeliveryOrderModal() {
+  const cusOptions = DATA.customers.map(c=>`<option value="${c.name}">${c.name} — ${c.city}</option>`).join('');
+  const vhOptions = DATA.vehicles.filter(v=>v.status!=='في الصيانة').map(v=>`<option value="${v.id}">${v.id} — ${v.driver}</option>`).join('');
+  const prdOptions = DATA.products.map(p=>`<option value="${p.name}|${p.price}|${p.unit}">${p.name} (${p.price} ر.س/${p.unit})</option>`).join('');
+  openModal(`<div style="direction:rtl;min-width:500px;">
+    <div style="font-size:18px;font-weight:700;color:var(--primary);margin-bottom:16px;">+ أمر تسليم جديد</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="grid-column:1/-1;"><label style="font-size:12px;color:var(--muted);">العميل</label>
+        <select id="ndo-customer" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${cusOptions}</select></div>
+      <div style="grid-column:1/-1;"><label style="font-size:12px;color:var(--muted);">العنوان</label>
+        <input id="ndo-address" type="text" placeholder="المدينة، الحي، الشارع" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;box-sizing:border-box;"/></div>
+      <div><label style="font-size:12px;color:var(--muted);">المركبة / السائق</label>
+        <select id="ndo-vehicle" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;">${vhOptions}</select></div>
+      <div><label style="font-size:12px;color:var(--muted);">الوقت المجدول</label>
+        <input id="ndo-time" type="text" placeholder="09:00 - 12:00" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;box-sizing:border-box;"/></div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;">البنود</div>
+      <div id="ndo-items-container">
+        <div class="ndo-item" style="display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px;">
+          <select style="padding:7px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;">${prdOptions}</select>
+          <input type="number" min="1" placeholder="الكمية" style="padding:7px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;"/>
+          <button onclick="this.closest('.ndo-item').remove()" style="background:#fee2e2;border:none;border-radius:6px;padding:0 10px;cursor:pointer;color:#dc2626;">✕</button>
+        </div>
+      </div>
+      <button onclick="addDeliveryItem()" class="btn btn-ghost btn-sm" style="margin-top:4px;">+ إضافة بند</button>
+    </div>
+    <div><label style="font-size:12px;color:var(--muted);">ملاحظات</label>
+      <textarea id="ndo-notes" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;margin-top:4px;resize:vertical;box-sizing:border-box;"></textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-ghost" onclick="closeModal()">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveNewDeliveryOrder()">حفظ الأمر</button>
+    </div>
+  </div>`);
+}
+
+function addDeliveryItem() {
+  const prdOptions = DATA.products.map(p=>`<option value="${p.name}|${p.price}|${p.unit}">${p.name} (${p.price} ر.س/${p.unit})</option>`).join('');
+  const row = document.createElement('div');
+  row.className='ndo-item';
+  row.style.cssText='display:grid;grid-template-columns:2fr 1fr auto;gap:8px;margin-bottom:6px;';
+  row.innerHTML=`<select style="padding:7px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;">${prdOptions}</select><input type="number" min="1" placeholder="الكمية" style="padding:7px;border:1px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;"/><button onclick="this.closest('.ndo-item').remove()" style="background:#fee2e2;border:none;border-radius:6px;padding:0 10px;cursor:pointer;color:#dc2626;">✕</button>`;
+  document.getElementById('ndo-items-container').appendChild(row);
+}
+
+function saveNewDeliveryOrder() {
+  const vSel = document.getElementById('ndo-vehicle').value;
+  const vData = DATA.vehicles.find(v=>v.id===vSel)||{};
+  const items = [...document.querySelectorAll('.ndo-item')].map(row=>{
+    const sel=row.querySelector('select').value.split('|');
+    const qty=parseInt(row.querySelector('input').value)||1;
+    return {product:sel[0],qty,unit:sel[2]||'كجم',price:parseFloat(sel[1])||0};
+  }).filter(it=>it.product);
+  if(!items.length){showToast('يرجى إضافة بند واحد على الأقل');return;}
+  const newId='DO-'+String(DATA.deliveryOrders.length+1).padStart(3,'0');
+  DATA.deliveryOrders.unshift({
+    id:newId, date:new Date().toISOString().slice(0,10),
+    customer:document.getElementById('ndo-customer').value,
+    address:document.getElementById('ndo-address').value||'—',
+    city:'—', phone:'—', items,
+    vehicle:vSel, driver:vData.driver||'—',
+    status:'معلق', scheduledTime:document.getElementById('ndo-time').value||'—',
+    deliveredAt:null, signature:false,
+    notes:document.getElementById('ndo-notes').value
+  });
+  closeModal();
+  navigate('deliveryOrders');
+  showToast('تم إنشاء أمر التسليم '+newId+' بنجاح ✓');
 }
 
 // ═══════════════════════════════════════════
