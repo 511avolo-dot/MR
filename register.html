@@ -1163,7 +1163,11 @@ const PDFJS_CDNS    = [PDFJS_CDN, 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js
 let SB = null;
 let AI_KEY = null, AI_MODEL = AI_MODELS[0];
 let currentStep = 1;
-const regId = 'reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+const _urlParams = new URLSearchParams(location.search);
+const _resumeId = _urlParams.get('resume') || null;
+let regId = _resumeId || ('reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+let _resumeData = null;   // holds existing registration when in resume mode
+let _existingDocPaths = {};  // doc_paths already in storage from previous submission
 
 /* ── Document types ── */
 const _ic = {
@@ -1242,12 +1246,158 @@ async function connectSupabase(url, key) {
       // If error is "already exists" that's fine. Any other error is silently ignored.
     } catch(e) {}
     hideProc();
-    showMainForm();
+    if (_resumeId) {
+      await loadResumeData();
+    } else {
+      showMainForm();
+    }
   } catch(e) {
     hideProc();
     toast('error', 'فشل الاتصال: ' + e.message);
     document.getElementById('setup-screen').classList.remove('hidden');
   }
+}
+
+async function loadResumeData() {
+  showProc('جارٍ تحميل بيانات طلبك...', '');
+  try {
+    const {data, error} = await SB.from(REG_TABLE).select('*').eq('id', _resumeId).maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      hideProc();
+      toast('error', 'لم يُعثر على الطلب — تحقق من الرابط');
+      showMainForm();
+      return;
+    }
+    if (data.status !== 'needs_revision') {
+      hideProc();
+      toast('warn', data.status === 'approved' ? 'تم قبول طلبك مسبقاً' : 'هذا الطلب لا يحتاج إلى تعديل');
+      showMainForm();
+      return;
+    }
+    _resumeData = data;
+    _existingDocPaths = data.doc_paths || {};
+    let revisionInfo = {};
+    try { revisionInfo = JSON.parse(data.review_notes || '{}'); } catch(e) {}
+    hideProc();
+    showResumeBanner(revisionInfo);
+    showMainForm();
+    prefillForm(data);
+    highlightRevisionFields(revisionInfo);
+  } catch(e) {
+    hideProc();
+    toast('error', 'فشل تحميل بيانات الطلب: ' + e.message);
+    showMainForm();
+  }
+}
+
+function showResumeBanner(rv) {
+  const DOC_NAMES_R = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية'};
+  const SEC_NAMES_R = {general_info:'المعلومات العامة', contact_info:'بيانات التواصل', activity_info:'النشاط والخدمات'};
+  const docsList = (rv.fields || []).map(f => DOC_NAMES_R[f] || f).join('، ');
+  const secsList = (rv.sections || []).map(s => SEC_NAMES_R[s] || s).join('، ');
+  const banner = document.createElement('div');
+  banner.id = 'resume-banner';
+  banner.style.cssText = 'background:#fffbeb;border:2px solid #f59e0b;border-radius:12px;padding:16px 20px;margin-bottom:20px;direction:rtl';
+  banner.innerHTML = `<div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:8px">⚠ تم إرجاع طلبك للتعديل</div>
+    ${rv.general ? `<div style="font-size:13px;color:#78350f;margin-bottom:8px">${rv.general}</div>` : ''}
+    ${docsList ? `<div style="font-size:13px;color:#92400e;margin-bottom:4px"><b>الوثائق المطلوب إعادة رفعها:</b> ${docsList}</div>` : ''}
+    ${secsList ? `<div style="font-size:13px;color:#92400e"><b>الأقسام التي تحتاج مراجعة:</b> ${secsList}</div>` : ''}
+    <div style="font-size:12px;color:#78350f;margin-top:8px;opacity:.8">ستحتفظ بنفس رقم الطلب: <b>${_resumeId}</b></div>`;
+  const form = document.getElementById('main-form');
+  if (form) form.insertBefore(banner, form.firstChild);
+}
+
+function prefillForm(data) {
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val != null) el.value = val;
+  };
+  // Entity type radio
+  if (data.entity_type) {
+    const radio = document.querySelector(`input[name=entity][value="${data.entity_type}"]`);
+    if (radio) radio.checked = true;
+  }
+  setVal('f-legal-ar', data.legal_name_ar);
+  setVal('f-legal-en', data.legal_name_en);
+  setVal('f-trade-name', data.trade_name);
+  setVal('f-country', data.country);
+  setVal('f-city', data.city);
+  setVal('f-est-date', data.established_date);
+  setVal('f-est-hijri', data.established_hijri);
+  setVal('f-cr', data.commercial_reg);
+  setVal('f-cr-issue', data.cr_issue_date);
+  setVal('f-cr-expiry', data.cr_expiry_date);
+  setVal('f-chamber', data.chamber);
+  setVal('f-chamber-num', data.chamber_membership);
+  setVal('f-chamber-exp', data.chamber_expiry);
+  setVal('f-vat', data.vat_number);
+  setVal('f-zakat', data.zakat_number);
+  setVal('f-gosi', data.gosi_number);
+  setVal('f-address', data.address);
+  setVal('f-pobox', data.po_box);
+  setVal('f-postal', data.postal_code);
+  setVal('f-phone', data.phone);
+  setVal('f-fax', data.fax);
+  setVal('f-email', data.email);
+  setVal('f-website', data.website);
+  setVal('f-con-name', data.contact_name);
+  setVal('f-con-title', data.contact_title);
+  setVal('f-con-mobile', data.contact_mobile);
+  setVal('f-con-phone', data.contact_phone);
+  setVal('f-con-email', data.contact_email);
+  setVal('f-sal-name', data.sales_name);
+  setVal('f-sal-mobile', data.sales_mobile);
+  setVal('f-sal-email', data.sales_email);
+  setVal('f-fin-name', data.finance_name);
+  setVal('f-fin-mobile', data.finance_mobile);
+  setVal('f-fin-email', data.finance_email);
+  setVal('f-biz-desc', data.business_description);
+  setVal('f-start-year', data.activity_start_year);
+  setVal('f-capital', data.paid_capital);
+  setVal('f-emp-total', data.employees_total);
+  setVal('f-emp-saudi', data.employees_saudi);
+  setVal('f-rep-name', data.rep_name);
+  setVal('f-rep-title', data.rep_title);
+  setVal('f-rep-id', data.rep_id_number);
+  setVal('f-contractor-grade', data.contractor_grade);
+  // Checkboxes for scope
+  (data.business_scope || []).forEach(v => {
+    const cb = document.querySelector(`input[name=scope][value="${v}"]`);
+    if (cb) cb.checked = true;
+  });
+  // Checkboxes for sectors
+  (data.sectors || []).forEach(v => {
+    const cb = document.querySelector(`input[name=sector][value="${v}"]`);
+    if (cb) cb.checked = true;
+  });
+  // Mark existing docs as already uploaded
+  Object.keys(_existingDocPaths).forEach(docId => {
+    const statusEl = document.getElementById('dcs-' + docId);
+    const card = document.getElementById('dc-' + docId);
+    if (statusEl) statusEl.innerHTML = `<span style="color:#16a34a;font-size:11px">✓ مرفوع مسبقاً — انقر للاستبدال</span>`;
+    if (card) card.style.borderColor = '#16a34a';
+  });
+}
+
+function highlightRevisionFields(rv) {
+  const docFields = rv.fields || [];
+  const sections = rv.sections || [];
+  // Highlight document cards that need re-upload
+  docFields.forEach(docId => {
+    const card = document.getElementById('dc-' + docId);
+    const statusEl = document.getElementById('dcs-' + docId);
+    if (card) { card.style.borderColor = '#d97706'; card.style.background = '#fffbeb'; }
+    if (statusEl) statusEl.innerHTML = `<span style="color:#d97706;font-weight:600;font-size:11px">⚠ يحتاج إعادة رفع</span>`;
+  });
+  // Section highlight via query — find relevant step indicators
+  const sectionStepMap = {general_info: 2, contact_info: 3, activity_info: 4};
+  sections.forEach(sec => {
+    const stepNum = sectionStepMap[sec];
+    if (!stepNum) return;
+    const stepEl = document.querySelector(`.step-item:nth-child(${stepNum})`);
+    if (stepEl) stepEl.style.outline = '2px solid #d97706';
+  });
 }
 
 function loadSupabaseLib() {
@@ -1747,7 +1897,8 @@ async function submitForm() {
 
   try {
     // 1. Upload documents to Supabase Storage
-    const docPaths = {};
+    // In resume mode, start with existing paths and overlay only newly uploaded ones
+    const docPaths = _resumeId ? {..._existingDocPaths} : {};
     const docEntries = Object.entries(uploadedDocs);
     for (let i = 0; i < docEntries.length; i++) {
       const [docId, docData] = docEntries[i];
@@ -1757,7 +1908,7 @@ async function submitForm() {
         const path = `${regId}/${docId}/${Date.now()}.${ext}`;
         const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
           contentType: docData.file.type,
-          upsert: false
+          upsert: true
         });
         if (error) throw error;
         docPaths[docId] = path;
@@ -1846,14 +1997,33 @@ async function submitForm() {
     };
 
     showProc('جارٍ حفظ البيانات...', '');
-    const {error: insertErr} = await SB.from(REG_TABLE).insert(payload);
-    if (insertErr) throw insertErr;
+    let dbErr;
+    if (_resumeId) {
+      // Resume mode: update existing record, reset status to pending
+      const updatePayload = {...payload};
+      delete updatePayload.id;
+      delete updatePayload.submitted_at;
+      updatePayload.status = 'pending';
+      updatePayload.review_notes = null;
+      updatePayload.reviewed_by = null;
+      updatePayload.reviewed_at = null;
+      const {error} = await SB.from(REG_TABLE).update(updatePayload).eq('id', regId);
+      dbErr = error;
+    } else {
+      const {error} = await SB.from(REG_TABLE).insert(payload);
+      dbErr = error;
+    }
+    if (dbErr) throw dbErr;
 
     hideProc();
     document.getElementById('main-form').style.display = 'none';
     const successEl = document.getElementById('success-screen');
     successEl.style.display = 'flex';
     document.getElementById('success-reg-id').textContent = 'رقم الطلب: ' + regId;
+    if (_resumeId) {
+      const subTitle = successEl.querySelector('.success-sub');
+      if (subTitle) subTitle.textContent = 'تم تحديث طلبك بنجاح وإعادة إرساله للمراجعة. سيتواصل معك فريق المشتريات قريباً.';
+    }
     window.scrollTo({top:0});
 
   } catch(e) {

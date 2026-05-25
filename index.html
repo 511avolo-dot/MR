@@ -3082,6 +3082,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <div style="margin-inline-start:auto;display:flex;gap:8px">
             <select id="reg-filter" onchange="loadRegistrations()" style="border:1.5px solid var(--border,#e2e8f0);border-radius:7px;padding:7px 12px;font-size:13px;font-family:inherit">
               <option value="pending">معلّق</option>
+              <option value="needs_revision">يحتاج تعديل</option>
               <option value="approved">مقبول</option>
               <option value="rejected">مرفوض</option>
               <option value="all">الكل</option>
@@ -12486,6 +12487,7 @@ const PDFJS_CDN   = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.
 const PDFJS_WORKER_CDN  = PDFJS_WORKER_LOCAL; // always local for worker
 const SHEETJS_CDNS = [SHEETJS_LOCAL, SHEETJS_CDN, 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
 const PDFJS_CDNS   = [PDFJS_LOCAL,   PDFJS_CDN,   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
+const JSZIP_CDNS   = ['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'];
 
 function resetSmartImportState(){
   // Reset in-memory state
@@ -15296,7 +15298,7 @@ async function loadRegistrations() {
     tbody.innerHTML = data.map(r => {
       const docCount  = Object.keys(r.doc_paths || {}).length;
       const date      = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '—';
-      const statusMap = {pending: {label:'معلّق', cls:'#f59e0b'}, approved: {label:'مقبول', cls:'#16a34a'}, rejected: {label:'مرفوض', cls:'#dc2626'}};
+      const statusMap = {pending: {label:'معلّق', cls:'#f59e0b'}, approved: {label:'مقبول', cls:'#16a34a'}, rejected: {label:'مرفوض', cls:'#dc2626'}, needs_revision: {label:'يحتاج تعديل', cls:'#d97706'}};
       const st = statusMap[r.status] || {label: r.status, cls:'#64748b'};
       return `<tr style="border-bottom:1px solid #f1f5f9">
         <td style="padding:10px 12px;font-weight:600">${r.legal_name_ar || '—'}</td>
@@ -15333,9 +15335,9 @@ async function openRegDetail(jsonStr) {
   title.textContent = r.legal_name_ar || 'تفاصيل الطلب';
   modal.style.display = 'flex';
 
-  const statusMap = {pending:'معلّق', approved:'مقبول', rejected:'مرفوض'};
-  const statusColor = {pending:'#f59e0b', approved:'#16a34a', rejected:'#dc2626'};
-  const statusBg    = {pending:'#fef3c7', approved:'#f0fdf4', rejected:'#fef2f2'};
+  const statusMap = {pending:'معلّق', approved:'مقبول', rejected:'مرفوض', needs_revision:'يحتاج تعديل'};
+  const statusColor = {pending:'#f59e0b', approved:'#16a34a', rejected:'#dc2626', needs_revision:'#d97706'};
+  const statusBg    = {pending:'#fef3c7', approved:'#f0fdf4', rejected:'#fef2f2', needs_revision:'#fffbeb'};
   const st = r.status || 'pending';
 
   const sect = (label, rows) => {
@@ -15358,11 +15360,40 @@ async function openRegDetail(jsonStr) {
   const sectorsLabel= (r.sectors || []).join('، ') || null;
 
   // Status banner at top
-  const statusBanner = `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:${statusBg[st]};border-radius:8px;margin-bottom:20px;border:1px solid ${statusColor[st]}33">
+  let revisionBanner = '';
+  if (st === 'needs_revision' && r.review_notes) {
+    let rv = {};
+    try { rv = JSON.parse(r.review_notes); } catch(e) { rv = {general: r.review_notes}; }
+    const DOC_NAMES_REV = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية'};
+    const SECTION_NAMES = {'general_info':'المعلومات العامة', 'contact_info':'بيانات التواصل', 'activity_info':'النشاط والخدمات'};
+    const resumeUrl = `${location.origin}${location.pathname.replace('index.html','').replace(/\/[^\/]*$/, '/')  }register.html?resume=${encodeURIComponent(r.id)}`;
+    const fieldsList = (rv.fields || []).map(f => DOC_NAMES_REV[f] || f).join('، ');
+    const sectionsList = (rv.sections || []).map(s => SECTION_NAMES[s] || s).join('، ');
+    revisionBanner = `<div style="background:#fffbeb;border:1.5px solid #d97706;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-weight:700;color:#b45309;font-size:13px;margin-bottom:8px">⚠ الطلب يحتاج إلى تعديل</div>
+      ${rv.general ? `<div style="font-size:13px;color:#78350f;margin-bottom:8px">${escapeHtml(rv.general)}</div>` : ''}
+      ${fieldsList ? `<div style="font-size:12px;color:#92400e;margin-bottom:4px"><b>الوثائق المطلوب إعادة رفعها:</b> ${escapeHtml(fieldsList)}</div>` : ''}
+      ${sectionsList ? `<div style="font-size:12px;color:#92400e;margin-bottom:8px"><b>الأقسام المطلوب مراجعتها:</b> ${escapeHtml(sectionsList)}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#78350f">رابط التعديل للمورد:</span>
+        <code style="font-size:11px;background:#fef3c7;padding:3px 8px;border-radius:5px;color:#92400e;flex:1;word-break:break-all">${escapeHtml(resumeUrl)}</code>
+        <button onclick="navigator.clipboard.writeText('${escapeHtml(resumeUrl)}').then(()=>toast('success','تم نسخ الرابط'))" style="background:#d97706;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;white-space:nowrap;font-family:inherit">نسخ الرابط</button>
+      </div>
+    </div>`;
+  }
+  if ((st === 'rejected') && r.review_notes) {
+    let noteText = r.review_notes;
+    try { const p = JSON.parse(r.review_notes); noteText = p.general || r.review_notes; } catch(e) {}
+    revisionBanner = `<div style="background:#fef2f2;border:1.5px solid #dc2626;border-radius:10px;padding:12px 16px;margin-bottom:16px">
+      <div style="font-weight:700;color:#b91c1c;font-size:13px;margin-bottom:4px">سبب الرفض</div>
+      <div style="font-size:13px;color:#991b1b">${escapeHtml(noteText)}</div>
+    </div>`;
+  }
+  const statusBanner = `<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:${statusBg[st]};border-radius:8px;margin-bottom:${revisionBanner ? '12px' : '20px'};border:1px solid ${statusColor[st]}33">
     <span style="font-size:13px;font-weight:700;color:${statusColor[st]}">${statusMap[st] || st}</span>
     <span style="font-size:12px;color:#64748b;margin-inline-start:auto">رقم الطلب: ${escapeHtml(r.id || '—')}</span>
     ${r.submitted_at ? `<span style="font-size:11px;color:#94a3b8">${new Date(r.submitted_at).toLocaleDateString('ar-SA')}</span>` : ''}
-  </div>`;
+  </div>${revisionBanner}`;
 
   body.innerHTML = statusBanner + [
     sect('المعلومات العامة', [
@@ -15421,14 +15452,21 @@ async function openRegDetail(jsonStr) {
         const name = DOC_NAMES[k] || k;
         const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 3600);
         const url = data?.signedUrl || '#';
-        return `<a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#f0f4f8;padding:5px 12px;border-radius:7px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none;border:1px solid #e2e8f0">
-          📎 ${name}
-        </a>`;
+        const safeName = escapeHtml(name);
+        const safeUrl = escapeHtml(url);
+        const safePath = escapeHtml(path);
+        return `<div style="display:inline-flex;align-items:center;gap:4px;background:#f0f4f8;border-radius:7px;border:1px solid #e2e8f0;overflow:hidden">
+          <a href="${safeUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none">📎 ${safeName}</a>
+          <button onclick="downloadNamedDoc('${safeUrl}','${safeName}','${safePath}')" title="تحميل" style="background:none;border:none;border-right:1px solid #e2e8f0;padding:5px 8px;cursor:pointer;color:#64748b;font-size:13px">⬇</button>
+        </div>`;
       })
     );
     const docLinks = docEntries.join('');
     body.innerHTML += `<div style="margin-bottom:20px">
-      <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;margin-bottom:10px">الوثائق المرفوعة</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;flex:1">الوثائق المرفوعة</div>
+        <button onclick="downloadAllDocs(_regDetailCurrent)" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;white-space:nowrap">⬇ تحميل الكل ZIP</button>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">${docLinks}</div>
     </div>`;
   }
@@ -15459,18 +15497,49 @@ async function openRegDetail(jsonStr) {
 
   // Actions footer
   acts.innerHTML = '';
-  if (r.status === 'pending') {
+  if (r.status === 'pending' || r.status === 'needs_revision') {
     acts.innerHTML = `
-      <button class="btn btn-primary" onclick="approveRegistration(_regDetailCurrent)" style="gap:8px;padding:10px 22px;font-size:14px">
+      ${r.status === 'pending' ? `<button class="btn btn-primary" onclick="approveRegistration(_regDetailCurrent)" style="gap:8px;padding:10px 22px;font-size:14px">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
         موافقة وإضافة للموردين
-      </button>
-      <div style="display:flex;gap:8px;flex:1;margin-inline-start:auto">
-        <input type="text" id="reg-reject-note" placeholder="سبب الرفض (اختياري)" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 14px;font-size:13px;flex:1;font-family:inherit;min-width:180px">
-        <button style="background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px" onclick="rejectRegistration(_regDetailCurrent.id)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          رفض
-        </button>
+      </button>` : ''}
+      <div style="display:flex;gap:8px;flex:1;margin-inline-start:auto;flex-wrap:wrap">
+        <textarea id="reg-reject-note" placeholder="سبب الرفض أو ملاحظات التعديل..." rows="1" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 14px;font-size:13px;flex:1;font-family:inherit;min-width:200px;resize:none;line-height:1.4"></textarea>
+        <div style="display:flex;gap:6px;flex-direction:column;align-items:stretch">
+          <button style="background:#fffbeb;color:#d97706;border:1.5px solid #fcd34d;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit" onclick="openRevisionPanel(_regDetailCurrent.id)">
+            ✏ إعادة للتعديل
+          </button>
+          <button style="background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px;font-family:inherit" onclick="rejectRegistration(_regDetailCurrent.id)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            رفض نهائي
+          </button>
+        </div>
+      </div>
+      <div id="revision-panel" style="display:none;width:100%;margin-top:12px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:14px">
+        <div style="font-weight:700;color:#92400e;font-size:13px;margin-bottom:10px">تحديد الحقول التي تحتاج تعديل</div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600;color:#78350f;margin-bottom:6px">الوثائق:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${['cr:السجل التجاري','vat:شهادة الزكاة/VAT','gosi:شهادة التأمينات','chamber:الغرفة التجارية','natl_addr:العنوان الوطني','municipal:رخصة البلدية'].map(d => {
+              const [id, label] = d.split(':');
+              return `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid #fcd34d">
+                <input type="checkbox" class="rev-doc-cb" value="${id}"> ${label}
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:#78350f;margin-bottom:6px">الأقسام:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${['general_info:المعلومات العامة','contact_info:بيانات التواصل','activity_info:النشاط والخدمات'].map(s => {
+              const [id, label] = s.split(':');
+              return `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid #fcd34d">
+                <input type="checkbox" class="rev-sec-cb" value="${id}"> ${label}
+              </label>`;
+            }).join('')}
+          </div>
+        </div>
+        <button onclick="returnForRevision(_regDetailCurrent.id)" style="background:#d97706;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">إرسال الطلب للتعديل</button>
       </div>`;
   } else {
     const processed = r.reviewed_at
@@ -15538,19 +15607,109 @@ async function approveRegistration(reg) {
 async function rejectRegistration(regId) {
   if (!CLOUD || !CLOUD.enabled) return;
   const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
+  if (!note && !confirm('هل تريد الرفض النهائي بدون سبب؟')) return;
   try {
     const {error} = await CLOUD.client.from(REG_TABLE).update({
       status: 'rejected',
       reviewed_by: STATE.currentUser?.username || 'admin',
       reviewed_at: new Date().toISOString(),
-      review_notes: note || null,
+      review_notes: note ? JSON.stringify({type:'rejection', general: note}) : null,
     }).eq('id', regId);
     if (error) throw error;
     closeRegDetail();
-    toast('info', 'تم رفض الطلب');
+    toast('info', 'تم رفض الطلب نهائياً');
     loadRegistrations();
   } catch(e) {
     toast('error', 'فشل الرفض: ' + e.message);
+  }
+}
+
+function openRevisionPanel(regId) {
+  const panel = document.getElementById('revision-panel');
+  if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none';
+}
+
+async function returnForRevision(regId) {
+  if (!CLOUD || !CLOUD.enabled) return;
+  const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
+  const fields = [...document.querySelectorAll('.rev-doc-cb:checked')].map(c => c.value);
+  const sections = [...document.querySelectorAll('.rev-sec-cb:checked')].map(c => c.value);
+  if (!note && !fields.length && !sections.length) {
+    toast('warn', 'يرجى تحديد سبب التعديل أو الحقول المطلوبة');
+    return;
+  }
+  const revisionData = {type: 'revision', general: note || '', fields, sections};
+  try {
+    const {error} = await CLOUD.client.from(REG_TABLE).update({
+      status: 'needs_revision',
+      reviewed_by: STATE.currentUser?.username || 'admin',
+      reviewed_at: new Date().toISOString(),
+      review_notes: JSON.stringify(revisionData),
+    }).eq('id', regId);
+    if (error) throw error;
+    const resumeUrl = `${location.origin}${location.pathname.replace(/[^\/]*$/, '')}register.html?resume=${encodeURIComponent(regId)}`;
+    closeRegDetail();
+    toast('success', 'تم إرجاع الطلب للتعديل');
+    navigator.clipboard?.writeText(resumeUrl).catch(() => {});
+    loadRegistrations();
+  } catch(e) {
+    toast('error', 'فشلت العملية: ' + e.message);
+  }
+}
+
+async function downloadNamedDoc(signedUrl, docName, filePath) {
+  try {
+    const ext = filePath.split('.').pop().split('?')[0];
+    const filename = `${docName}.${ext}`;
+    toast('info', 'جارٍ التحميل...', filename);
+    const response = await fetch(signedUrl);
+    const blob = await response.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch(e) {
+    toast('error', 'فشل التحميل: ' + e.message);
+  }
+}
+
+async function downloadAllDocs(reg) {
+  if (!reg || !reg.doc_paths || !Object.keys(reg.doc_paths).length) {
+    toast('warn', 'لا توجد وثائق لتحميلها');
+    return;
+  }
+  try { await loadLib(JSZIP_CDNS, () => typeof JSZip !== 'undefined'); } catch(e) {
+    toast('error', 'تعذر تحميل مكتبة الضغط — تحقق من الاتصال');
+    return;
+  }
+  const DOC_NAMES_DL = {cr:'السجل التجاري', vat:'شهادة الزكاة_VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  const zip = new JSZip();
+  const supplierName = (reg.legal_name_ar || reg.id || 'مورد').replace(/[\s\/\\:*?"<>|]/g, '_');
+  toast('info', 'جارٍ تجميع الملفات...');
+  try {
+    for (const [docId, path] of Object.entries(reg.doc_paths || {})) {
+      const docName = DOC_NAMES_DL[docId] || docId;
+      const ext = path.split('.').pop().split('?')[0];
+      const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 300);
+      if (error || !data?.signedUrl) continue;
+      const response = await fetch(data.signedUrl);
+      const blob = await response.blob();
+      zip.file(`${docName}.${ext}`, blob);
+    }
+    const content = await zip.generateAsync({type: 'blob'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = `وثائق-${supplierName}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    toast('success', 'تم تحميل الملف المجمع');
+  } catch(e) {
+    toast('error', 'فشل التحميل: ' + e.message);
   }
 }
 
