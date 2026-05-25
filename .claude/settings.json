@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(node --input-type=module)"
+    ],
+    "deny": []
+  }
+}
