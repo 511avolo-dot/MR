@@ -2972,13 +2972,20 @@ function prefillForm(data) {
 
 function highlightRevisionFields(rv) {
   const docFields = rv.fields || [];
+  const flaggedSet = new Set(docFields);
   const sections = rv.sections || [];
-  // Highlight document cards that need re-upload
+  // Highlight document cards that need re-upload; remove already-uploaded style to avoid conflict
   docFields.forEach(docId => {
     const card = document.getElementById('dc-' + docId);
     const statusEl = document.getElementById('dcs-' + docId);
-    if (card) card.classList.add('revision-needed');
+    if (card) { card.classList.remove('already-uploaded'); card.classList.add('revision-needed'); }
     if (statusEl) statusEl.innerHTML = `<span>⚠ يحتاج إعادة رفع</span>`;
+  });
+  // Non-flagged existing docs: disable click to prevent accidental replacement
+  Object.keys(_existingDocPaths).forEach(docId => {
+    if (flaggedSet.has(docId)) return;
+    const card = document.getElementById('dc-' + docId);
+    if (card) card.setAttribute('data-locked', '1');
   });
   // Section highlight via query — find relevant step indicators
   const sectionStepMap = {general_info: 2, contact_info: 3, activity_info: 4};
@@ -3121,6 +3128,8 @@ function docDrop(event, docId) {
 
 function triggerUpload(docId) {
   if (uploadedDocs[docId]) return;
+  const card = document.getElementById('dc-' + docId);
+  if (card?.getAttribute('data-locked')) return; // non-flagged existing doc — no accidental replacement
   document.getElementById('fi-' + docId).click();
 }
 
@@ -3146,7 +3155,14 @@ function removeDoc(docId) {
   card.classList.remove('uploaded');
   const btn = card.querySelector('.doc-remove');
   if (btn) btn.remove();
-  document.getElementById('dcs-' + docId).innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> اسحب أو انقر للرفع`;
+  const statusEl = document.getElementById('dcs-' + docId);
+  // Restore appropriate status: if doc already existed in storage, show "already uploaded" again
+  if (_existingDocPaths[docId]) {
+    card.classList.add('already-uploaded');
+    statusEl.innerHTML = `<span>✓ مرفوع مسبقاً — انقر للاستبدال</span>`;
+  } else {
+    statusEl.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> اسحب أو انقر للرفع`;
+  }
 }
 
 /* ════════════════════════════════════
@@ -3354,7 +3370,13 @@ function updateStepBar() {
   document.getElementById('prog-bar').style.width = pct + '%';
 }
 
+let _step1Busy = false;
 async function step1Next() {
+  if (_step1Busy) return;
+  _step1Busy = true;
+  try { await _step1NextImpl(); } finally { _step1Busy = false; }
+}
+async function _step1NextImpl() {
   // In resume mode: doc is satisfied if newly uploaded, OR already in storage and not flagged for re-upload
   const flaggedDocs = new Set(_revisionInfo.fields || []);
   const missing = REQUIRED_DOCS.filter(d => {
