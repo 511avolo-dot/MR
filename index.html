@@ -15703,43 +15703,89 @@ async function downloadAllDocs(reg) {
     toast('warn', 'لا توجد وثائق لتحميلها');
     return;
   }
-  try { await loadLib(JSZIP_CDNS, () => typeof JSZip !== 'undefined'); } catch(e) {
-    toast('error', 'تعذر تحميل مكتبة الضغط — تحقق من الاتصال');
-    return;
-  }
   const DOC_NAMES_DL = {cr:'السجل التجاري', vat:'شهادة الزكاة_VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
-  const zip = new JSZip();
   const supplierName = (reg.legal_name_ar || reg.id || 'مورد').replace(/[\s\/\\:*?"<>|]/g, '_');
-  toast('info', 'جارٍ تجميع الملفات...');
+  const docEntries = Object.entries(reg.doc_paths);
+
+  // Helper: fetch one file as blob via fresh signed URL
+  async function fetchDocBlob(docId, path) {
+    const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 120);
+    if (error || !data?.signedUrl) throw new Error('فشل إنشاء الرابط');
+    const response = await fetch(data.signedUrl);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.blob();
+  }
+
+  // Helper: trigger browser download for a blob
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  // Try ZIP path first
+  let zipAvailable = false;
   try {
+    await loadLib(JSZIP_CDNS, () => typeof JSZip !== 'undefined');
+    zipAvailable = true;
+  } catch(e) {
+    console.warn('JSZip unavailable, falling back to individual downloads:', e.message);
+  }
+
+  if (zipAvailable) {
+    const zip = new JSZip();
     const failedDocs = [];
-    for (const [docId, path] of Object.entries(reg.doc_paths || {})) {
+    toast('info', `جارٍ تجميع ${docEntries.length} ملفات...`);
+    for (const [docId, path] of docEntries) {
       try {
         const docName = DOC_NAMES_DL[docId] || docId;
         const ext = path.split('.').pop().split('?')[0];
-        const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 60);
-        if (error || !data?.signedUrl) { failedDocs.push(DOC_NAMES_DL[docId] || docId); continue; }
-        const response = await fetch(data.signedUrl);
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        const blob = await response.blob();
+        const blob = await fetchDocBlob(docId, path);
         zip.file(`${docName}.${ext}`, blob);
       } catch(fileErr) {
         failedDocs.push(DOC_NAMES_DL[docId] || docId);
       }
     }
     if (failedDocs.length) toast('warn', 'تعذر تضمين: ' + failedDocs.join('، '));
-    const content = await zip.generateAsync({type: 'blob'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(content);
-    a.download = `وثائق-${supplierName}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-    toast('success', 'تم تحميل الملف المجمع');
-  } catch(e) {
-    toast('error', 'فشل التحميل: ' + e.message);
+    const addedCount = Object.keys(zip.files).length;
+    if (addedCount === 0) {
+      toast('error', 'فشل تحميل جميع الملفات — سيتم التحميل بشكل منفصل');
+      zipAvailable = false; // fall through to individual downloads
+    } else {
+      try {
+        const content = await zip.generateAsync({type: 'blob'});
+        triggerBlobDownload(content, `وثائق-${supplierName}.zip`);
+        toast('success', `تم تحميل ${addedCount} ملفات في ZIP`);
+        return;
+      } catch(e) {
+        toast('error', 'فشل إنشاء ZIP: ' + e.message);
+        return;
+      }
+    }
   }
+
+  // Fallback: individual sequential downloads
+  toast('info', `سيتم تحميل ${docEntries.length} ملفات بشكل منفصل...`);
+  let downloaded = 0;
+  for (const [docId, path] of docEntries) {
+    try {
+      const docName = DOC_NAMES_DL[docId] || docId;
+      const ext = path.split('.').pop().split('?')[0];
+      const blob = await fetchDocBlob(docId, path);
+      triggerBlobDownload(blob, `${docName}.${ext}`);
+      downloaded++;
+      await new Promise(r => setTimeout(r, 800));
+    } catch(e) {
+      console.warn('Failed to download', docId, e.message);
+    }
+  }
+  toast(downloaded > 0 ? 'success' : 'error',
+    downloaded > 0 ? `تم تحميل ${downloaded} من ${docEntries.length} ملفات` : 'فشل تحميل الملفات');
 }
 
 async function exportRegistrations() {
