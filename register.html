@@ -3481,6 +3481,7 @@ async function submitForm() {
   if (!repId)    { toast('warn','يرجى إدخال رقم هوية / إقامة ممثل المنشأة'); return; }
 
   const btn = document.getElementById('submit-btn');
+  if (!btn) return;
   btn.disabled = true;
 
   try {
@@ -3523,6 +3524,13 @@ async function submitForm() {
           : `تعذر رفع "${docData.name}" — ${e.message}`;
         toast('warn', msg);
       }
+    }
+
+    // Abort if any required document is missing (failed validation or upload error)
+    const missingRequired = REQUIRED_DOCS.filter(d => !docPaths[d.id]).map(d => d.name);
+    if (missingRequired.length) {
+      toast('error', `لا يمكن إتمام الإرسال. الوثائق التالية ناقصة أو فشل رفعها:\n${missingRequired.join('، ')}`);
+      return;
     }
 
     // 2. Collect form data

@@ -15629,6 +15629,9 @@ function copyToClipboard(text) {
 }
 
 function generateRevisionToken() {
+  if (typeof crypto === 'undefined' || !crypto.getRandomValues) {
+    throw new Error('متصفحك لا يدعم التشفير الآمن. يرجى استخدام متصفح حديث.');
+  }
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -15649,7 +15652,13 @@ async function returnForRevision(regId) {
     return;
   }
   const revisionData = {type: 'revision', general: note || '', fields, sections};
-  const revisionToken = generateRevisionToken();
+  let revisionToken;
+  try {
+    revisionToken = generateRevisionToken();
+  } catch(e) {
+    toast('error', e.message);
+    return;
+  }
   try {
     const {error} = await CLOUD.client.from(REG_TABLE).update({
       status: 'needs_revision',
