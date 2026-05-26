@@ -15520,8 +15520,15 @@ async function openRegDetail(jsonStr) {
             }).join('')}
           </div>
         </div>
-        <button onclick="returnForRevision(_regDetailCurrent.id)" style="background:#d97706;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">إرسال الطلب للتعديل</button>
-      </div>`;
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="returnForRevision(_regDetailCurrent.id)" style="background:#d97706;color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">إرسال الطلب للتعديل</button>
+          <button onclick="document.getElementById('revision-panel').style.display='none'" style="background:#f1f5f9;color:#64748b;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">إلغاء</button>
+        </div>
+      </div>
+      <button onclick="closeRegDetail()" style="margin-inline-start:auto;background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        إغلاق
+      </button>`;
   } else {
     const processed = r.reviewed_at
       ? `تمت المعالجة ${new Date(r.reviewed_at).toLocaleDateString('ar-SA')} بواسطة ${r.reviewed_by || '—'}`
@@ -15531,7 +15538,11 @@ async function openRegDetail(jsonStr) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         تعديل التصنيف
       </button>
-      <span style="font-size:12px;color:#94a3b8;margin-inline-start:auto">${escapeHtml(processed)}</span>`;
+      <span style="font-size:12px;color:#94a3b8;margin-inline-start:auto">${escapeHtml(processed)}</span>
+      <button onclick="closeRegDetail()" style="background:#f1f5f9;color:#475569;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        إغلاق
+      </button>`;
   }
 }
 
