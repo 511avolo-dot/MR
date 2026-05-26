@@ -1293,7 +1293,7 @@ body.print-preview-active .print-document{display:block}
 /* Mobile */
 @media (max-width:900px){
   .app{grid-template-columns:1fr}
-  .sidebar{position:fixed;top:0;right:0;transform:translateX(100%);transition:transform 0.3s;z-index:100;width:260px;box-shadow:-8px 0 32px rgba(0,0,0,0.2)}
+  .sidebar{position:fixed;top:0;right:0;transform:translateX(100%);transition:transform 0.3s;z-index:100;width:260px;box-shadow:-8px 0 32px rgba(0,0,0,0.2);overflow-y:auto;-webkit-overflow-scrolling:touch}
   .sidebar.open{transform:translateX(0)}
   .mobile-toggle{display:flex!important}
   .topbar{padding:14px 20px}
