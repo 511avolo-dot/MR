@@ -4399,11 +4399,11 @@ const STATE = {
 // Bootstrap users used ONLY if cloud is not available yet.
 // Once cloud is connected and proc_users table has data, those take over.
 const AUTH_BOOTSTRAP_USERS = {
-  'Abdullah': { password: 'Abdullah0012', role: 'admin', displayName: 'عبدالله',
+  'Abdullah': { password_hash: '2bcc16a449e9524274aa3ac893a13d9efa2d0e7f4d22d693bcb418d2c72c89a0', role: 'admin', displayName: 'عبدالله',
     permissions: {can_delete:true, can_export:true, can_import:true, can_manage_suppliers:true, can_manage_cloud:true, can_manage_users:true} },
-  'Mostafa':  { password: 'Mostafa2003',  role: 'user',  displayName: 'مصطفى خليل',
+  'Mostafa':  { password_hash: '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', role: 'user',  displayName: 'مصطفى خليل',
     permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} },
-  'Mahmoud':  { password: 'Mahmoud2025',  role: 'user',  displayName: 'محمود العمودي',
+  'Mahmoud':  { password_hash: '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', role: 'user',  displayName: 'محمود العمودي',
     permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} }
 };
 
@@ -4578,7 +4578,8 @@ async function attemptLogin(username, password){
     // Cloud not enabled at all → bootstrap mode (initial setup before
     // connecting Supabase). Plaintext bootstrap passwords are used here.
     const bu = AUTH_BOOTSTRAP_USERS[username];
-    if(bu && bu.password === password){
+    const bootstrapHash = await sha256Hex(password);
+    if(bu && bu.password_hash === bootstrapHash){
       validUser = username;
       validRole = bu.role;
       validDisplayName = bu.displayName;
@@ -15346,7 +15347,7 @@ async function openRegDetail(jsonStr) {
     try { rv = JSON.parse(r.review_notes); } catch(e) { rv = {general: r.review_notes}; }
     const DOC_NAMES_REV = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية'};
     const SECTION_NAMES = {'general_info':'المعلومات العامة', 'contact_info':'بيانات التواصل', 'activity_info':'النشاط والخدمات'};
-    const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(r.id)}`;
+    const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(r.id)}${r.revision_token ? '&t=' + r.revision_token : ''}`;
     const fieldsList = (rv.fields || []).map(f => DOC_NAMES_REV[f] || f).join('، ');
     const sectionsList = (rv.sections || []).map(s => SECTION_NAMES[s] || s).join('، ');
     revisionBanner = `<div style="background:#fffbeb;border:1.5px solid #d97706;border-radius:10px;padding:14px 16px;margin-bottom:16px">
@@ -15606,11 +15607,24 @@ async function rejectRegistration(regId) {
 
 function openRevisionPanel(regId) {
   const panel = document.getElementById('revision-panel');
-  if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  if (regId) panel.dataset.regId = regId;
+}
+
+function generateRevisionToken() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function returnForRevision(regId) {
   if (!CLOUD || !CLOUD.enabled) return;
+  const panel = document.getElementById('revision-panel');
+  if (panel?.dataset?.regId && panel.dataset.regId !== String(regId)) {
+    toast('warn', 'تعارض في البيانات — أغلق اللوحة وافتحها مجدداً');
+    return;
+  }
   const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
   const fields = [...document.querySelectorAll('.rev-doc-cb:checked')].map(c => c.value);
   const sections = [...document.querySelectorAll('.rev-sec-cb:checked')].map(c => c.value);
@@ -15619,18 +15633,20 @@ async function returnForRevision(regId) {
     return;
   }
   const revisionData = {type: 'revision', general: note || '', fields, sections};
+  const revisionToken = generateRevisionToken();
   try {
     const {error} = await CLOUD.client.from(REG_TABLE).update({
       status: 'needs_revision',
       reviewed_by: STATE.currentUser?.username || 'admin',
       reviewed_at: new Date().toISOString(),
       review_notes: JSON.stringify(revisionData),
+      revision_token: revisionToken,
     }).eq('id', regId);
     if (error) throw error;
-    const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(regId)}`;
+    const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(regId)}&t=${revisionToken}`;
     closeRegDetail();
     toast('success', 'تم إرجاع الطلب للتعديل');
-    navigator.clipboard?.writeText(resumeUrl).catch(() => {});
+    navigator.clipboard?.writeText(resumeUrl).catch(()=>{});
     loadRegistrations();
   } catch(e) {
     toast('error', 'فشلت العملية: ' + e.message);
@@ -15643,6 +15659,7 @@ async function downloadNamedDoc(signedUrl, docName, filePath) {
     const filename = `${docName}.${ext}`;
     toast('info', 'جارٍ التحميل...', filename);
     const response = await fetch(signedUrl);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
     const blob = await response.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -15670,15 +15687,22 @@ async function downloadAllDocs(reg) {
   const supplierName = (reg.legal_name_ar || reg.id || 'مورد').replace(/[\s\/\\:*?"<>|]/g, '_');
   toast('info', 'جارٍ تجميع الملفات...');
   try {
+    const failedDocs = [];
     for (const [docId, path] of Object.entries(reg.doc_paths || {})) {
-      const docName = DOC_NAMES_DL[docId] || docId;
-      const ext = path.split('.').pop().split('?')[0];
-      const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 300);
-      if (error || !data?.signedUrl) continue;
-      const response = await fetch(data.signedUrl);
-      const blob = await response.blob();
-      zip.file(`${docName}.${ext}`, blob);
+      try {
+        const docName = DOC_NAMES_DL[docId] || docId;
+        const ext = path.split('.').pop().split('?')[0];
+        const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 60);
+        if (error || !data?.signedUrl) { failedDocs.push(DOC_NAMES_DL[docId] || docId); continue; }
+        const response = await fetch(data.signedUrl);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const blob = await response.blob();
+        zip.file(`${docName}.${ext}`, blob);
+      } catch(fileErr) {
+        failedDocs.push(DOC_NAMES_DL[docId] || docId);
+      }
     }
+    if (failedDocs.length) toast('warn', 'تعذر تضمين: ' + failedDocs.join('، '));
     const content = await zip.generateAsync({type: 'blob'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(content);

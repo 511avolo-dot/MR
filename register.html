@@ -2728,6 +2728,7 @@ let AI_KEY = null, AI_MODEL = AI_MODELS[0];
 let currentStep = 1;
 const _urlParams = new URLSearchParams(location.search);
 const _resumeId = _urlParams.get('resume') || null;
+const _resumeToken = _urlParams.get('t') || null;
 let regId = _resumeId || ('reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
 let _resumeData = null;   // holds existing registration when in resume mode
 let _existingDocPaths = {};  // doc_paths already in storage from previous submission
@@ -2822,6 +2823,12 @@ async function connectSupabase(url, key) {
 }
 
 async function loadResumeData() {
+  // Validate ID format to prevent IDOR/injection
+  if (!_resumeId || !/^reg_\d+_[a-z0-9]+$/.test(_resumeId)) {
+    toast('error', 'رابط التعديل غير صالح');
+    showMainForm();
+    return;
+  }
   showProc('جارٍ تحميل بيانات طلبك...', '');
   try {
     const {data, error} = await SB.from(REG_TABLE).select('*').eq('id', _resumeId).maybeSingle();
@@ -2832,9 +2839,21 @@ async function loadResumeData() {
       showMainForm();
       return;
     }
+    // Verify revision token to prevent unauthorized access
+    if (!_resumeToken || data.revision_token !== _resumeToken) {
+      hideProc();
+      toast('error', 'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد');
+      showMainForm();
+      return;
+    }
     if (data.status !== 'needs_revision') {
       hideProc();
-      toast('warn', data.status === 'approved' ? 'تم قبول طلبك مسبقاً' : 'هذا الطلب لا يحتاج إلى تعديل');
+      const statusMsgs = {
+        approved: 'تم قبول طلبك مسبقاً — لا يمكن إجراء تعديلات',
+        rejected: 'تم رفض طلبك نهائياً — تواصل مع المشتريات للاستيضاح',
+        pending:  'طلبك قيد المراجعة حالياً — لا حاجة لإجراء تعديلات'
+      };
+      toast('warn', statusMsgs[data.status] || 'هذا الطلب لا يحتاج إلى تعديل');
       showMainForm();
       return;
     }
@@ -2862,15 +2881,16 @@ function showResumeBanner(rv) {
   const banner = document.createElement('div');
   banner.id = 'resume-banner';
   banner.className = 'resume-banner';
+  const _esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   banner.innerHTML = `
     <div class="resume-title">
       <svg viewBox="0 0 24 24" stroke-width="1.6"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
       تم إرجاع طلبك للمراجعة
     </div>
-    ${rv.general ? `<div class="resume-detail">${rv.general}</div>` : ''}
-    ${docsList ? `<div class="resume-detail"><b>الوثائق المطلوب إعادة رفعها:</b> ${docsList}</div>` : ''}
-    ${secsList ? `<div class="resume-detail"><b>الأقسام التي تحتاج مراجعة:</b> ${secsList}</div>` : ''}
-    <div class="resume-id">رقم الطلب المحفوظ: <b style="color:var(--ink)">${_resumeId}</b></div>`;
+    ${rv.general ? `<div class="resume-detail">${_esc(rv.general)}</div>` : ''}
+    ${docsList ? `<div class="resume-detail"><b>الوثائق المطلوب إعادة رفعها:</b> ${_esc(docsList)}</div>` : ''}
+    ${secsList ? `<div class="resume-detail"><b>الأقسام التي تحتاج مراجعة:</b> ${_esc(secsList)}</div>` : ''}
+    <div class="resume-id">رقم الطلب المحفوظ: <b style="color:var(--ink)">${_esc(_resumeId)}</b></div>`;
   const form = document.getElementById('main-form');
   if (form) form.insertBefore(banner, form.firstChild);
 }
@@ -3466,12 +3486,28 @@ async function submitForm() {
     // 1. Upload documents to Supabase Storage
     // In resume mode, start with existing paths and overlay only newly uploaded ones
     const docPaths = _resumeId ? {..._existingDocPaths} : {};
+    const ALLOWED_TYPES = ['application/pdf','image/jpeg','image/jpg','image/png'];
+    const ALLOWED_EXTS  = ['pdf','jpg','jpeg','png'];
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     const docEntries = Object.entries(uploadedDocs);
     for (let i = 0; i < docEntries.length; i++) {
       const [docId, docData] = docEntries[i];
       showProc(`رفع الوثائق... (${i+1}/${docEntries.length})`, docData.name);
+      // Validate file type and size
+      const ext = docData.name.split('.').pop().toLowerCase();
+      if (!ALLOWED_EXTS.includes(ext) || !ALLOWED_TYPES.includes(docData.file.type)) {
+        toast('warn', `"${docData.name}" — نوع الملف غير مقبول. المسموح: PDF, JPG, PNG فقط`);
+        continue;
+      }
+      if (docData.file.size > MAX_FILE_SIZE) {
+        toast('warn', `"${docData.name}" — حجم الملف يتجاوز 10 ميجابايت`);
+        continue;
+      }
       try {
-        const ext  = docData.name.split('.').pop();
+        // In resume mode: delete old file if it exists
+        if (_resumeId && _existingDocPaths[docId]) {
+          await SB.storage.from(BUCKET).remove([_existingDocPaths[docId]]).catch(()=>{});
+        }
         const path = `${regId}/${docId}/${Date.now()}.${ext}`;
         const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
           contentType: docData.file.type,
@@ -3574,6 +3610,8 @@ async function submitForm() {
       updatePayload.review_notes = null;
       updatePayload.reviewed_by = null;
       updatePayload.reviewed_at = null;
+      updatePayload.revision_token = null;
+      updatePayload.resubmitted_at = new Date().toISOString();
       updatePayload.submitted_at = new Date().toISOString();
       const {error} = await SB.from(REG_TABLE).update(updatePayload).eq('id', regId);
       dbErr = error;
@@ -3596,9 +3634,11 @@ async function submitForm() {
 
   } catch(e) {
     hideProc();
-    btn.disabled = false;
     toast('error', 'حدث خطأ أثناء الإرسال: ' + (e.message || e));
     console.error(e);
+  } finally {
+    // Always restore button so double-submit is prevented for success AND failure
+    btn.disabled = false;
   }
 }
 
