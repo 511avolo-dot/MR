@@ -2732,6 +2732,7 @@ const _resumeToken = _urlParams.get('t') || null;
 let regId = _resumeId || ('reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
 let _resumeData = null;   // holds existing registration when in resume mode
 let _existingDocPaths = {};  // doc_paths already in storage from previous submission
+let _revisionInfo = {};      // parsed review_notes from admin (fields/sections flagged)
 
 /* ── Document types ── */
 const _ic = {
@@ -2861,6 +2862,7 @@ async function loadResumeData() {
     _existingDocPaths = data.doc_paths || {};
     let revisionInfo = {};
     try { revisionInfo = JSON.parse(data.review_notes || '{}'); } catch(e) {}
+    _revisionInfo = revisionInfo;
     hideProc();
     showResumeBanner(revisionInfo);
     showMainForm();
@@ -3353,11 +3355,22 @@ function updateStepBar() {
 }
 
 async function step1Next() {
-  const missing = REQUIRED_DOCS.filter(d => !uploadedDocs[d.id]).map(d => d.name);
+  // In resume mode: doc is satisfied if newly uploaded, OR already in storage and not flagged for re-upload
+  const flaggedDocs = new Set(_revisionInfo.fields || []);
+  const missing = REQUIRED_DOCS.filter(d => {
+    if (uploadedDocs[d.id]) return false;
+    if (_resumeId && _existingDocPaths[d.id] && !flaggedDocs.has(d.id)) return false;
+    return true;
+  }).map(d => d.name);
   if (missing.length) {
-    toast('warn', 'يرجى رفع الوثائق الإلزامية: ' + missing.join('، '));
+    const msg = _resumeId && flaggedDocs.size > 0
+      ? 'يرجى رفع الوثائق المطلوب تعديلها: ' + missing.join('، ')
+      : 'يرجى رفع الوثائق الإلزامية: ' + missing.join('، ');
+    toast('warn', msg);
     return;
   }
+  // Skip AI extraction in resume mode — form is already pre-filled from saved data
+  if (_resumeId) { goStep(2); return; }
   showProc('جارٍ قراءة وثائقك...', 'يرجى الانتظار — نحلل المستندات لتعبئة النموذج تلقائياً');
   let filled = 0;
   try {
@@ -3526,10 +3539,18 @@ async function submitForm() {
       }
     }
 
-    // Abort if any required document is missing (failed validation or upload error)
-    const missingRequired = REQUIRED_DOCS.filter(d => !docPaths[d.id]).map(d => d.name);
+    // Abort if required docs are missing: in resume mode flagged docs MUST be re-uploaded
+    const submitFlaggedDocs = new Set(_revisionInfo.fields || []);
+    const missingRequired = REQUIRED_DOCS.filter(d => {
+      if (!docPaths[d.id]) return true;                           // completely missing ✗
+      if (_resumeId && submitFlaggedDocs.has(d.id) && !uploadedDocs[d.id]) return true; // flagged but not re-uploaded ✗
+      return false;
+    }).map(d => d.name);
     if (missingRequired.length) {
-      toast('error', `لا يمكن إتمام الإرسال. الوثائق التالية ناقصة أو فشل رفعها:\n${missingRequired.join('، ')}`);
+      const errMsg = _resumeId && submitFlaggedDocs.size > 0
+        ? `يرجى رفع الوثائق المطلوب تعديلها: ${missingRequired.join('، ')}`
+        : `لا يمكن إتمام الإرسال — الوثائق التالية ناقصة: ${missingRequired.join('، ')}`;
+      toast('error', errMsg);
       return;
     }
 
