@@ -2898,10 +2898,11 @@ function showResumeBanner(rv) {
 function prefillForm(data) {
   const setVal = (id, val) => {
     const el = document.getElementById(id);
+    if (!el && val != null) console.warn('[prefillForm] field not found:', id);
     if (el && val != null) el.value = val;
   };
   // Entity type radio
-  if (data.entity_type) {
+  if (data.entity_type && ['individual','company','partnership','government'].includes(data.entity_type)) {
     const radio = document.querySelector(`input[name=entity][value="${data.entity_type}"]`);
     if (radio) radio.checked = true;
   }

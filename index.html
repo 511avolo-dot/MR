@@ -15612,6 +15612,22 @@ function openRevisionPanel(regId) {
   if (regId) panel.dataset.regId = regId;
 }
 
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast('info', 'تم نسخ الرابط'); } catch(e) {}
+      document.body.removeChild(ta);
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('info', 'تم نسخ الرابط'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+
 function generateRevisionToken() {
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
@@ -15646,7 +15662,7 @@ async function returnForRevision(regId) {
     const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(regId)}&t=${revisionToken}`;
     closeRegDetail();
     toast('success', 'تم إرجاع الطلب للتعديل');
-    navigator.clipboard?.writeText(resumeUrl).catch(()=>{});
+    copyToClipboard(resumeUrl);
     loadRegistrations();
   } catch(e) {
     toast('error', 'فشلت العملية: ' + e.message);
