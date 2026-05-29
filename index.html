@@ -6307,10 +6307,52 @@ async function loadAIConfig(force){
       }
     }catch(e){ /* ignore */ }
   }
-  cfg.enabled = !!(cfg.apiKey && cfg.apiKey.length > 10);
+  // إن لم يوجد مفتاح محلي، استخدم الوسيط الآمن على الخادم (سرّ Cloudflare) إن كان متاحاً.
+  cfg.useProxy = false;
+  if(!cfg.apiKey){
+    cfg.useProxy = await aiProbeProxy();
+  }
+  cfg.enabled = (!!cfg.apiKey && cfg.apiKey.length > 10) || cfg.useProxy === true;
   __AI_CONFIG_CACHE = cfg;
   __AI_CONFIG_FETCHED_AT = now;
   return cfg;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   نقل الذكاء الاصطناعي (AI transport)
+   - عند عدم وجود مفتاح محلي: تُوجَّه الطلبات إلى الوسيط /api/ai
+     الذي يحتفظ بالمفتاح على الخادم (لا يُكشف المفتاح للمتصفح إطلاقاً).
+   - عند وجود مفتاح محلي (وضع تجريبي/محلي): يُستدعى Gemini مباشرة
+     عبر ترويسة x-goog-api-key بدل وضعه في رابط الطلب (يمنع تسريبه في السجلات).
+   ════════════════════════════════════════════════════════════════ */
+const AI_PROXY_ENDPOINT = '/api/ai';
+let __AI_PROXY_OK = null;
+async function aiProbeProxy(){
+  if(__AI_PROXY_OK !== null) return __AI_PROXY_OK;
+  try{
+    const r = await fetch(AI_PROXY_ENDPOINT, { method:'GET' });
+    const ct = r.headers.get('content-type') || '';
+    // 200 + JSON = وسيط حقيقي. (يتجنّب الإيجابية الكاذبة عند إعادة توجيه SPA لـ HTML)
+    __AI_PROXY_OK = r.ok && ct.includes('application/json');
+  }catch(e){ __AI_PROXY_OK = false; }
+  return __AI_PROXY_OK;
+}
+function aiUseProxy(cfg){ return !(cfg && cfg.apiKey); }
+async function aiFetch(model, action, reqBody, cfg){
+  if(aiUseProxy(cfg)){
+    return fetch(AI_PROXY_ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ model, action, body: reqBody })
+    });
+  }
+  const qs = action === 'streamGenerateContent' ? '?alt=sse' : '';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}${qs}`;
+  return fetch(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-goog-api-key': cfg.apiKey },
+    body: JSON.stringify(reqBody)
+  });
 }
 
 async function saveAIConfig(apiKey, options){
@@ -6447,8 +6489,6 @@ async function aiComplete(opts){
   let data = null;
 
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
-
     // Retry this model up to 3 times with exponential backoff on transient overload
     const MAX_ATTEMPTS = 3;
     let modelSucceeded = false;
@@ -6456,11 +6496,7 @@ async function aiComplete(opts){
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       let response;
       try{
-        response = await fetch(url, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
+        response = await aiFetch(model, 'generateContent', body, cfg);
       }catch(e){
         // Network error — retry once after short delay, then bail
         if(attempt < MAX_ATTEMPTS){
@@ -6561,9 +6597,12 @@ async function aiComplete(opts){
   if(modelUsed !== cfg.model){
     console.info(`[AI] Auto-switched from ${cfg.model} to ${modelUsed} (original was unavailable)`);
     // Save the working model so future requests don't waste retries
-    try{
-      await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit});
-    }catch(e){}
+    // (يُتخطّى في وضع الوسيط حيث لا يوجد مفتاح محلي يُحفظ)
+    if(cfg.apiKey){
+      try{
+        await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit});
+      }catch(e){}
+    }
   }
 
   const tokens = data?.usageMetadata?.totalTokenCount || 0;
@@ -6636,18 +6675,13 @@ async function aiCompleteStream(opts){
   let finishReason = null;
 
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(cfg.apiKey)}`;
     let response;
     const MAX_ATTEMPTS = 3;
     let advanceModel = false;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try{
-        response = await fetch(url, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
+        response = await aiFetch(model, 'streamGenerateContent', body, cfg);
       }catch(e){
         if(attempt < MAX_ATTEMPTS){ await _sleep(1500 * attempt); continue; }
         logAIUsage(feature, false, 0);
@@ -6742,7 +6776,7 @@ async function aiCompleteStream(opts){
 
     // Save working model
     if(modelUsed !== cfg.model){
-      try{ await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit}); }catch(e){}
+      if(cfg.apiKey){ try{ await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit}); }catch(e){} }
     }
 
     // Auto-continue if response was cut off (MAX_TOKENS)
@@ -8043,19 +8077,22 @@ async function testAIConnection(){
       const cur = await loadAIConfig(true);
       testKey = cur.apiKey;
     }
-    if(!testKey){
+    // إن لم يوجد مفتاح محلي، نختبر الوسيط الآمن على الخادم بدلاً من ذلك.
+    const useProxyTest = !testKey;
+    if(useProxyTest && !(await aiProbeProxy())){
       resultEl.style.background = 'rgba(155,44,44,0.08)';
       resultEl.style.color = 'var(--danger)';
-      resultEl.innerHTML = '❌ لا يوجد مفتاح للاختبار. أدخل المفتاح أولاً.';
+      resultEl.innerHTML = '❌ لا يوجد مفتاح محلي، ولم يُضبط الوسيط على الخادم (GEMINI_API_KEY). راجع دليل النشر.';
       return;
     }
 
-    // Step 1: List available models for this API key
-    resultEl.innerHTML = '⏳ جاري فحص النماذج المتاحة لمفتاحك...';
+    // Step 1: List available models (via proxy or directly with the entered key)
+    resultEl.innerHTML = '⏳ جاري فحص النماذج المتاحة...';
     let availableModels = [];
     try{
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(testKey)}`;
-      const listResp = await fetch(listUrl);
+      const listResp = useProxyTest
+        ? await fetch(AI_PROXY_ENDPOINT, { method:'GET' })
+        : await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers:{ 'x-goog-api-key': testKey } });
       if(listResp.ok){
         const listData = await listResp.json();
         availableModels = (listData.models || [])
@@ -8095,15 +8132,21 @@ async function testAIConnection(){
       }
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${encodeURIComponent(testKey)}`;
-    const response = await fetch(url, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents:[{role:'user', parts:[{text:'قل "مرحبا" فقط'}]}],
-        generationConfig:{maxOutputTokens:20}
-      })
-    });
+    const testBody = {
+      contents:[{role:'user', parts:[{text:'قل "مرحبا" فقط'}]}],
+      generationConfig:{maxOutputTokens:20}
+    };
+    const response = useProxyTest
+      ? await fetch(AI_PROXY_ENDPOINT, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model: modelToUse, action:'generateContent', body: testBody })
+        })
+      : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'x-goog-api-key': testKey},
+          body: JSON.stringify(testBody)
+        });
     if(!response.ok){
       const errData = await response.json().catch(()=>({}));
       throw new Error(errData?.error?.message || `HTTP ${response.status}`);
@@ -13051,16 +13094,11 @@ async function siAIExtractFromImage(base64, mimeType){
 
   let lastError = null;
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     const MAX_ATTEMPTS = 3;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
+        const resp = await aiFetch(model, 'generateContent', body, cfg);
         if(!resp.ok){
           let emsg = `HTTP ${resp.status}`;
           try { const e = await resp.json(); emsg = e?.error?.message || emsg; } catch(_){}
@@ -15086,7 +15124,7 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
   const functionDeclarations = tools.map(t => ({
     name: t.name, description: t.description, parameters: t.input_schema
   }));
-  const body = JSON.stringify({
+  const bodyObj = {
     systemInstruction: {parts:[{text: systemPrompt}]},
     contents: geminiContents,
     tools: [{function_declarations: functionDeclarations}],
@@ -15098,15 +15136,14 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
       {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
       {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
     ]
-  });
+  };
   // Fallback model list — try next on 503/429/overload
-  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash']
+  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-001','gemini-2.5-flash-lite']
     .filter((m,i,a)=>m&&a.indexOf(m)===i);
   let lastErr;
   for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     try {
-      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body});
+      const res = await aiFetch(model, 'generateContent', bodyObj, cfg);
       if(res.status===503||res.status===429){
         const e=await res.text(); lastErr=new Error(`Gemini ${res.status} (${model}): ${e.slice(0,150)}`); continue;
       }
