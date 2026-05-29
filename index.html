@@ -4429,6 +4429,39 @@ const DEFAULT_PERMISSIONS = {
 const AUTH_EMAIL_DOMAIN = 'aldeyabi.local';
 function usernameToEmail(u){ return String(u || '').trim().toLowerCase() + '@' + AUTH_EMAIL_DOMAIN; }
 
+// ── إدارة المستخدمين عبر الخادم (service_role) ──
+// دالة /api/admin-users تتولّى إنشاء/حذف حسابات Auth وإعادة تعيين كلمات المرور.
+// إن لم تُنشَر بعد (لا سرّ خادم) يتراجع التطبيق لسلوكه الأساسي.
+const ADMIN_USERS_ENDPOINT = '/api/admin-users';
+let __ADMIN_API_OK = null;
+async function adminApiAvailable(){
+  if(__ADMIN_API_OK !== null) return __ADMIN_API_OK;
+  try{
+    const r = await fetch(ADMIN_USERS_ENDPOINT, {method:'GET'});
+    const ct = r.headers.get('content-type') || '';
+    if(r.ok && ct.includes('application/json')){
+      const j = await r.json();
+      __ADMIN_API_OK = !!(j && j.ok);
+    } else { __ADMIN_API_OK = false; }
+  }catch(e){ __ADMIN_API_OK = false; }
+  return __ADMIN_API_OK;
+}
+async function adminUsersCall(action, body){
+  try{
+    const { data } = await CLOUD.client.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if(!token) return {ok:false, error:'جلسة غير صالحة — أعد تسجيل الدخول'};
+    const r = await fetch(ADMIN_USERS_ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+      body: JSON.stringify({ action, ...body })
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) return {ok:false, error: j.error || ('HTTP ' + r.status)};
+    return {ok:true, data:j};
+  }catch(e){ return {ok:false, error: e.message || 'فشل الاتصال بخدمة الإدارة'}; }
+}
+
 // SHA-256 hashing using Web Crypto API (browser-native, no library needed)
 async function sha256Hex(text){
   if(typeof crypto !== 'undefined' && crypto.subtle){
@@ -4894,6 +4927,22 @@ async function createUser(data){
   const role = data.role==='admin' ? 'admin' : 'user';
   const permissions = data.permissions || DEFAULT_PERMISSIONS[role];
 
+  // المسار المفضّل: خدمة الإدارة على الخادم (service_role) — تنشئ حساب Auth + الملف التعريفي.
+  if(await adminApiAvailable()){
+    const res = await adminUsersCall('create', {
+      username: data.username, password: data.password, displayName: data.displayName,
+      role, permissions, active: data.active !== false
+    });
+    if(!res.ok) return {ok:false, error: res.error};
+    pushAuditToCloud({
+      username: STATE.currentUser.username, display_name: STATE.currentUser.displayName,
+      user_role: STATE.currentUser.role, action:'add', entity_type:'user', entity_id:data.username,
+      old_value:null, new_value:{username:data.username, display_name:data.displayName, role, permissions, active:data.active!==false}, meta:{}
+    });
+    CLOUD_USERS_CACHE = null; CLOUD_USERS_LAST_FETCH = 0;
+    return {ok:true};
+  }
+
   // أنشئ حساب الدخول في Supabase Auth عبر عميل مؤقت (لئلا تُستبدل جلسة المدير الحالي).
   try{
     const cfg = CLOUD.config || {};
@@ -4977,14 +5026,22 @@ async function updateUser(username, updates){
         const { error: pwErr } = await CLOUD.client.auth.updateUser({ password: updates.password });
         if(pwErr) return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + pwErr.message};
       }catch(e){ return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + (e.message||'')}; }
+    } else if(await adminApiAvailable()){
+      // تغيير كلمة مرور مستخدم آخر عبر خدمة الإدارة (service_role).
+      const res = await adminUsersCall('setPassword', {username, password: updates.password});
+      if(!res.ok) return {ok:false, error: res.error};
     } else {
-      // تغيير كلمة مرور مستخدم آخر يتطلب صلاحية إدارية (service_role) على الخادم.
-      return {ok:false, error:'تغيير كلمة مرور مستخدم آخر يتم من لوحة Supabase (Authentication → Users).'};
+      // لا خدمة إدارة منشورة → يتم من لوحة Supabase.
+      return {ok:false, error:'تغيير كلمة مرور مستخدم آخر يتم من لوحة Supabase (Authentication → Users)، أو انشر خدمة الإدارة.'};
     }
     payload.password_hash = await sha256Hex(updates.password); // توافق المخطط فقط
   }
   const {error} = await CLOUD.client.from('proc_users').update(payload).eq('username', username);
   if(error) return {ok:false, error: error.message};
+  // عند تغيير حالة التفعيل: احظر/افكّ الحظر على مستوى Auth أيضاً (best-effort)
+  if(updates.active !== undefined && await adminApiAvailable()){
+    try{ await adminUsersCall('setActive', {username, active: !!updates.active}); }catch(e){}
+  }
   // Audit (don't include password_hash in old/new)
   const oldRecord = {role:target.role, permissions:target.permissions, active:target.active, display_name:target.displayName};
   const newRecord = {...oldRecord};
@@ -5034,8 +5091,14 @@ async function deleteUser(username){
       return {ok:false, error:'لا يمكن حذف آخر مدير في النظام'};
     }
   }
-  const {error} = await CLOUD.client.from('proc_users').delete().eq('username', username);
-  if(error) return {ok:false, error: error.message};
+  // المسار المفضّل: خدمة الإدارة (تحذف حساب Auth + الملف التعريفي معاً).
+  if(await adminApiAvailable()){
+    const res = await adminUsersCall('delete', {username});
+    if(!res.ok) return {ok:false, error: res.error};
+  } else {
+    const {error} = await CLOUD.client.from('proc_users').delete().eq('username', username);
+    if(error) return {ok:false, error: error.message};
+  }
   pushAuditToCloud({
     username: STATE.currentUser.username,
     display_name: STATE.currentUser.displayName,

@@ -2851,15 +2851,16 @@ async function loadResumeData() {
   }
   showProc('جارٍ تحميل بيانات طلبك...', '');
   try {
-    const {data, error} = await SB.from(REG_TABLE).select('*').eq('id', _resumeId).maybeSingle();
+    // قراءة آمنة عبر RPC محقّقة بالـ token (تعمل حتى بعد إغلاق RLS).
+    const {data, error} = await SB.rpc('get_registration_for_resume', {p_id: _resumeId, p_token: _resumeToken});
     if (error) throw error;
     if (!data) {
       hideProc();
-      toast('error', 'لم يُعثر على الطلب — تحقق من الرابط');
+      toast('error', 'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد');
       showMainForm();
       return;
     }
-    // Verify revision token to prevent unauthorized access
+    // Defense-in-depth: تأكيد مطابقة الـ token (الدالة تفرضه أصلاً)
     if (!_resumeToken || data.revision_token !== _resumeToken) {
       hideProc();
       toast('error', 'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد');
@@ -3677,18 +3678,12 @@ async function submitForm() {
     showProc('جارٍ حفظ البيانات...', '');
     let dbErr;
     if (_resumeId) {
-      // Resume mode: update existing record, reset status to pending
-      const updatePayload = {...payload};
-      delete updatePayload.id;
-      delete updatePayload.submitted_at;
-      updatePayload.status = 'pending';
-      updatePayload.review_notes = null;
-      updatePayload.reviewed_by = null;
-      updatePayload.reviewed_at = null;
-      updatePayload.revision_token = null;
-      updatePayload.resubmitted_at = new Date().toISOString();
-      updatePayload.submitted_at = new Date().toISOString();
-      const {error} = await SB.from(REG_TABLE).update(updatePayload).eq('id', regId);
+      // Resume mode: تحديث آمن عبر RPC محقّقة بالـ token (الدالة تفرض status/token).
+      const {error} = await SB.rpc('resubmit_registration', {
+        p_id: regId,
+        p_token: _resumeToken,
+        p_data: payload
+      });
       dbErr = error;
     } else {
       const {error} = await SB.from(REG_TABLE).insert(payload);

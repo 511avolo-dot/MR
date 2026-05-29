@@ -88,17 +88,38 @@
 
 ---
 
+## 👥 إدارة المستخدمين (اختياري — للوحة إدارة كاملة)
+
+دالة `functions/api/admin-users.js` تتيح إنشاء/حذف المستخدمين وإعادة تعيين
+كلمات المرور وتعطيلها من داخل الواجهة، دون وضع مفتاح `service_role` في المتصفح.
+
+**الإعداد:** أضف سرّين في Cloudflare Pages → Environment variables:
+- `SUPABASE_URL` — رابط المشروع.
+- `SUPABASE_SERVICE_ROLE_KEY` — مفتاح service_role (**سرّ** — لا يُكشف أبداً).
+
+الأمان: كل طلب يتحقّق من رمز جلسة المستدعي ويتأكد أنه **مدير نشط** قبل التنفيذ.
+إن لم تُنشَر الدالة، يتراجع التطبيق تلقائياً (تُدار كلمات المرور من لوحة Supabase).
+
+## 🔁 استئناف طلب التسجيل (بعد إغلاق RLS)
+
+بعد المرحلة 1 من RLS يُمنع anon من قراءة جدول التسجيل. دالتا RPC في
+`db/secure-resume.sql` تتيحان للمورد استئناف طلبه عبر (id + token) السرّي فقط،
+دون فتح الجدول. **شغّل هذا السكريبت قبل تطبيق المرحلة 1** إن كنت تستخدم الاستئناف.
+
 ## 🗂️ الملفات
 
 ```
-index.html              لوحة التسعير/الإدارة
-register.html           تسجيل الموردين
-functions/api/ai.js     وسيط Gemini الآمن (Cloudflare Pages Function)
-db/hardened-rls.sql     سكريبت تحصين سياسات RLS
-_headers                ترويسات الأمان (CSP وغيرها)
-_redirects              توجيه SPA
-lib/                    مكتبات محلية (pdf.js, xlsx)
-wrangler.toml           إعداد Cloudflare
+index.html                   لوحة التسعير/الإدارة
+register.html                تسجيل الموردين
+functions/api/ai.js          وسيط Gemini الآمن
+functions/api/admin-users.js خدمة إدارة المستخدمين (service_role)
+db/hardened-rls.sql          تحصين سياسات RLS (مرحلتان)
+db/auth-migration.md         دليل ترحيل Supabase Auth
+db/secure-resume.sql         دالتا RPC لاستئناف الطلب بأمان
+_headers                     ترويسات الأمان (CSP وغيرها)
+_redirects                   توجيه SPA
+lib/                         مكتبات محلية (pdf.js, xlsx)
+wrangler.toml                إعداد Cloudflare
 ```
 
 ---
