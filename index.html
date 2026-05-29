@@ -4423,6 +4423,12 @@ const DEFAULT_PERMISSIONS = {
   user:  {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false}
 };
 
+// ── Supabase Auth ──
+// المصادقة الحقيقية تتم عبر Supabase Auth (JWT) لتُفعّل سياسات RLS على الخادم.
+// المستخدم يكتب اسمه فقط (Abdullah)، ونحوّله داخلياً إلى بريد اصطلاحي ثابت.
+const AUTH_EMAIL_DOMAIN = 'aldeyabi.local';
+function usernameToEmail(u){ return String(u || '').trim().toLowerCase() + '@' + AUTH_EMAIL_DOMAIN; }
+
 // SHA-256 hashing using Web Crypto API (browser-native, no library needed)
 async function sha256Hex(text){
   if(typeof crypto !== 'undefined' && crypto.subtle){
@@ -4542,38 +4548,41 @@ async function attemptLogin(username, password){
   let validDisplayName = null;
   let validPermissions = null;
 
-  // If cloud is enabled, authenticate ONLY against cloud users — never fall
-  // back to hard-coded bootstrap passwords (which would silently bypass any
-  // password change an admin made in the cloud user management UI).
+  // If cloud is enabled, authenticate via Supabase Auth (never the local
+  // bootstrap passwords — those are only for pre-cloud first-time setup).
   const cloudIsEnabled = !!(window.CLOUD && CLOUD.enabled && CLOUD.client);
-  const cloudUsers = cloudIsEnabled ? await fetchCloudUsers(true) : null;
 
   if(cloudIsEnabled){
-    // Cloud is connected: only cloud users are trusted.
-    if(cloudUsers && Object.keys(cloudUsers).length === 0){
-      // Empty result — likely Supabase RLS blocking anon reads on proc_users.
-      // This happens when the table has RLS enabled without a public SELECT policy.
-      return { ok:false, error: 'تعذّر قراءة المستخدمين من قاعدة البيانات (RLS). يرجى تشغيل SQL المطلوب في Supabase → راجع الإعدادات → إدارة المستخدمين.', lockedOut: false };
-    }
-    if(cloudUsers && cloudUsers[username]){
-      const u = cloudUsers[username];
-      if(u.active === false){
+    // Cloud is connected: authenticate via Supabase Auth (issues a JWT that RLS trusts).
+    const email = usernameToEmail(username);
+    let authData = null, authErr = null;
+    try{
+      const res = await CLOUD.client.auth.signInWithPassword({ email, password });
+      authData = res.data; authErr = res.error;
+    }catch(e){ authErr = e; }
+
+    if(authErr || !authData || !authData.user){
+      // Wrong credentials (or unknown user) → fall through to invalid-attempt counting.
+      // (لا نكشف ما إذا كان الاسم موجوداً أم لا)
+    } else {
+      // Authenticated. Load the authorization profile (role/permissions) from proc_users.
+      let profile = null;
+      try{
+        const all = await fetchCloudUsers(true);
+        profile = all && all[username] ? all[username] : null;
+      }catch(e){ /* ignore — fall back to defaults */ }
+
+      if(profile && profile.active === false){
+        try{ await CLOUD.client.auth.signOut(); }catch(e){}
         return { ok:false, error: 'هذا الحساب معطّل. اتصل بالمسؤول لتفعيله.', lockedOut: false };
       }
-      const candidateHash = await sha256Hex(password);
-      if(candidateHash === u.password_hash){
-        validUser = username;
-        validRole = u.role;
-        validDisplayName = u.displayName;
-        validPermissions = u.permissions;
-      }
-    } else if(cloudUsers === null){
-      return { ok:false, error: 'تعذّر التحقق من المستخدمين عبر السحابة. تحقق من الاتصال وحاول مجدداً.', lockedOut: false };
-    } else {
-      // User not found in cloud users list
-      return { ok:false, error: 'اسم المستخدم غير موجود. تحقق من الاسم أو اطلب من المسؤول إنشاء الحساب.', lockedOut: false };
+      validUser = username;
+      validRole = profile ? profile.role : 'user';
+      validDisplayName = (profile && profile.displayName) ? profile.displayName : username;
+      validPermissions = (profile && profile.permissions) ? profile.permissions
+                         : (DEFAULT_PERMISSIONS[validRole] || DEFAULT_PERMISSIONS.user);
     }
-    // if username found but password wrong → fall through to invalid count
+    // if auth failed → fall through to invalid count
   } else {
     // Cloud not enabled at all → bootstrap mode (initial setup before
     // connecting Supabase). Plaintext bootstrap passwords are used here.
@@ -4622,8 +4631,8 @@ async function attemptLogin(username, password){
   try{ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session)); }catch(e){}
   STATE.currentUser = session;
 
-  // Update last_login in cloud (best-effort)
-  if(window.CLOUD && CLOUD.enabled && CLOUD.client && cloudUsers){
+  // Update last_login in cloud (best-effort; now authenticated)
+  if(window.CLOUD && CLOUD.enabled && CLOUD.client){
     try{
       CLOUD.client.from('proc_users').update({last_login: new Date().toISOString()}).eq('username', validUser).then(()=>{});
     }catch(e){}
@@ -4641,6 +4650,22 @@ async function attemptLogin(username, password){
     meta: { ts: new Date().toISOString(), user_agent: (typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 200) : '') }
   });
   return { ok: true };
+}
+
+// بعد اتصال السحابة: تحقّق أن جلسة Supabase (JWT) ما زالت سارية.
+// إن كانت واجهة المستخدم «مسجّلة الدخول» بينما انتهت جلسة Supabase،
+// نُجبر إعادة الدخول حتى لا تفشل طلبات قاعدة البيانات بصمت تحت RLS.
+async function verifyAuthSession(){
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  if(!STATE.currentUser) return;
+  try{
+    const { data } = await CLOUD.client.auth.getSession();
+    if(!data || !data.session){
+      try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+      STATE.currentUser = null;
+      if(typeof showLoginScreen === 'function') showLoginScreen();
+    }
+  }catch(e){ /* تجاهل — لا نطرد المستخدم بسبب خطأ شبكة عابر */ }
 }
 
 function getCurrentSession(){
@@ -4671,6 +4696,8 @@ function logout(){
     });
   }
   try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+  // إنهاء جلسة Supabase (إبطال الـ JWT) — أفضل جهد
+  try{ if(window.CLOUD && CLOUD.client) CLOUD.client.auth.signOut(); }catch(e){}
   STATE.currentUser = null;
   setTimeout(()=>window.location.reload(), 200);
 }
@@ -4866,6 +4893,21 @@ async function createUser(data){
   }
   const role = data.role==='admin' ? 'admin' : 'user';
   const permissions = data.permissions || DEFAULT_PERMISSIONS[role];
+
+  // أنشئ حساب الدخول في Supabase Auth عبر عميل مؤقت (لئلا تُستبدل جلسة المدير الحالي).
+  try{
+    const cfg = CLOUD.config || {};
+    if(cfg.url && cfg.key){
+      const tmp = window.supabase.createClient(cfg.url, cfg.key, {auth:{persistSession:false, autoRefreshToken:false}});
+      const { error: suErr } = await tmp.auth.signUp({ email: usernameToEmail(data.username), password: data.password });
+      if(suErr && !/already\s*registered|already\s*exists|User already/i.test(suErr.message||'')){
+        return {ok:false, error:'تعذّر إنشاء حساب الدخول: ' + suErr.message};
+      }
+    }
+  }catch(e){ return {ok:false, error:'تعذّر إنشاء حساب الدخول: ' + (e.message||'')}; }
+
+  // ملف التعريف (الدور/الصلاحيات) في proc_users. password_hash لم يعد يُستخدم للدخول
+  // (المصادقة عبر Supabase Auth) لكنه يبقى لتوافق المخطط.
   const password_hash = await sha256Hex(data.password);
   const payload = {
     username: data.username,
@@ -4929,7 +4971,17 @@ async function updateUser(username, updates){
   if(updates.notes !== undefined) payload.notes = updates.notes;
   if(updates.password){
     if(updates.password.length < 6) return {ok:false, error:'كلمة السر يجب أن تكون 6 أحرف على الأقل'};
-    payload.password_hash = await sha256Hex(updates.password);
+    if(isSelf){
+      // تغيير كلمة المرور الذاتية عبر Supabase Auth
+      try{
+        const { error: pwErr } = await CLOUD.client.auth.updateUser({ password: updates.password });
+        if(pwErr) return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + pwErr.message};
+      }catch(e){ return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + (e.message||'')}; }
+    } else {
+      // تغيير كلمة مرور مستخدم آخر يتطلب صلاحية إدارية (service_role) على الخادم.
+      return {ok:false, error:'تغيير كلمة مرور مستخدم آخر يتم من لوحة Supabase (Authentication → Users).'};
+    }
+    payload.password_hash = await sha256Hex(updates.password); // توافق المخطط فقط
   }
   const {error} = await CLOUD.client.from('proc_users').update(payload).eq('username', username);
   if(error) return {ok:false, error: error.message};
@@ -10280,7 +10332,9 @@ window.CLOUD = {
       throw new Error('مكتبة Supabase لم يتم تحميلها. تأكد من اتصالك بالإنترنت.');
     }
     this.client = window.supabase.createClient(url, key, {
-      auth: {persistSession: false},
+      // persistSession=true: يبقى رمز جلسة المستخدم (JWT) بعد إعادة التحميل،
+      // وهو ضروري لتعمل سياسات RLS المعتمِدة على authenticated.
+      auth: {persistSession: true, autoRefreshToken: true},
       realtime: {params: {eventsPerSecond: 5}}
     });
     this.url = url;
@@ -10291,6 +10345,8 @@ window.CLOUD = {
     }
     this.enabled = true;
     this.config = {url, key};
+    // تحقّق من جلسة المستخدم (JWT) بعد الاتصال — يطرد الجلسات المنتهية
+    try { verifyAuthSession(); } catch(e) {}
     // Preload learned aliases for smart import (best-effort, non-blocking)
     try { siLoadLearnedAliases(true); } catch(e) {}
     return true;
