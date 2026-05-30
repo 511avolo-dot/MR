@@ -4414,6 +4414,8 @@ const AUTH_LOCKOUT_KEY = 'proc_auth_lockout';
 // تُشتق منه تلقائياً. userDefault = القيمة الافتراضية لدور «مستخدم» (تحافظ على
 // السلوك الحالي: ما هو مفتوح اليوم افتراضه مسموح ليقيّده الأدمن، والإداري ممنوع).
 const PERMISSION_DEFS = [
+  { key:'can_enter_prices',         label:'إدخال وتسعير الأسعار',          short:'تسعير',         cat:'البيانات',   userDefault:true  },
+  { key:'can_manage_items',         label:'إضافة وتعديل الأصناف',          short:'أصناف',         cat:'البيانات',   userDefault:true  },
   { key:'can_delete',               label:'حذف السجلات والأصناف',          short:'حذف',           cat:'البيانات',   userDefault:false },
   { key:'can_export',               label:'تصدير CSV / Excel',             short:'تصدير',         cat:'البيانات',   userDefault:true  },
   { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:false },
@@ -5636,6 +5638,7 @@ function setupEntry(){
 
 function submitEntry(){
   if(STATE.entryMode==='new'){ submitNewItem(); return; }
+  if(!requirePermission('can_enter_prices', 'إدخال الأسعار')) return;
 
   const code = document.getElementById('f-code').value.trim();
   const name = document.getElementById('f-name').value.trim();
@@ -5678,6 +5681,7 @@ function submitEntry(){
 }
 
 function submitNewItem(){
+  if(!requirePermission('can_manage_items', 'إضافة الأصناف')) return;
   const code = document.getElementById('f-code-new').value.trim();
   const category = document.getElementById('f-category-select').value;
   const name = document.getElementById('f-name').value.trim();
@@ -7239,6 +7243,7 @@ function removeUserSupplier(id){
 
 /* Save/load edits to original suppliers */
 function saveSupplierEdit(name, edits){
+  if(!requirePermission('can_manage_suppliers', 'تعديل الموردين')) return;
   try{
     const stored = localStorage.getItem('proc_supplier_edits');
     const obj = stored? JSON.parse(stored): {};
@@ -7303,6 +7308,7 @@ function openEditSupplier(supplier){
 }
 
 async function saveSupplierForm(){
+  if(!requirePermission('can_manage_suppliers', 'إدارة الموردين')) return;
   const name = document.getElementById('sf-name').value.trim();
   const specialty = document.getElementById('sf-specialty').value.trim();
   const contact = document.getElementById('sf-contact').value.trim();
@@ -7490,6 +7496,7 @@ function saveEditItem(){
 }
 
 function saveItemEdit(code, edits){
+  if(!requirePermission('can_manage_items', 'تعديل الأصناف')) return;
   try{
     const stored = localStorage.getItem('proc_item_edits');
     const obj = stored? JSON.parse(stored) : {};
@@ -15875,6 +15882,7 @@ function generateRevisionToken() {
 }
 
 async function returnForRevision(regId) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   const panel = document.getElementById('revision-panel');
   if (panel?.dataset?.regId && panel.dataset.regId !== String(regId)) {
