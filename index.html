@@ -4421,6 +4421,8 @@ const PERMISSION_DEFS = [
   { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:false },
   { key:'can_manage_suppliers',     label:'إدارة الموردين',                short:'موردين',        cat:'الموردون',   userDefault:true  },
   { key:'can_review_registrations', label:'مراجعة طلبات تسجيل الموردين',    short:'مراجعة طلبات',  cat:'الموردون',   userDefault:true  },
+  { key:'can_approve_l1',           label:'اعتماد الشراء (مدير المشتريات)', short:'اعتماد 1',      cat:'الاعتمادات', userDefault:false },
+  { key:'can_approve_l2',           label:'اعتماد الشراء (المدير العام)',   short:'اعتماد 2',      cat:'الاعتمادات', userDefault:false },
   { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
   { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
   { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
@@ -11470,6 +11472,276 @@ function init(){
 /* ============================================================
    APP BOOTSTRAP (auth-aware)
    ============================================================ */
+/* ════════════════════════════════════════════════════════════════
+   وحدة سير العمل — الإشعارات داخل النظام + اعتمادات الشراء
+   مبنية بالكامل داخل Supabase/Cloudflare (بلا مورّد خارجي).
+   الجداول: proc_purchase_requests, proc_notifications (db/workflows.sql)
+   ════════════════════════════════════════════════════════════════ */
+const WF = { threshold: 50000, pollTimer: null };
+
+function wfLevelName(lvl){ return lvl >= 2 ? 'المدير العام' : 'مدير المشتريات'; }
+
+async function wfLoadThreshold(){
+  try{
+    if(CLOUD && CLOUD.enabled){
+      const {data} = await CLOUD.client.from('proc_settings').select('value').eq('key','approval_threshold').maybeSingle();
+      if(data && data.value){ const v = typeof data.value==='string'?JSON.parse(data.value):data.value; if(v && v.amount) WF.threshold = Number(v.amount) || WF.threshold; }
+    }
+  }catch(e){}
+}
+
+function wfCanApprove(req){
+  if(!req) return false;
+  if(req.required_level >= 2) return hasPermission('can_approve_l2');
+  return hasPermission('can_approve_l1') || hasPermission('can_approve_l2');
+}
+function wfIsApprover(){ return hasPermission('can_approve_l1') || hasPermission('can_approve_l2'); }
+
+async function wfNotify(recipient, type, title, body, link){
+  if(!recipient || !(CLOUD && CLOUD.enabled)) return;
+  try{ await CLOUD.client.from('proc_notifications').insert({
+    id:'ntf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    recipient, type, title, body: body||'', link: link||null, read:false
+  }); }catch(e){}
+}
+
+async function wfApprovers(level){
+  const users = (await fetchCloudUsers(true)) || {};
+  const key = level >= 2 ? 'can_approve_l2' : 'can_approve_l1';
+  return Object.values(users).filter(u => u.active !== false && (
+    u.role === 'admin' || (u.permissions && (u.permissions[key] || (level < 2 && u.permissions['can_approve_l2'])))
+  ));
+}
+
+async function submitPurchaseRequest(data){
+  if(!(CLOUD && CLOUD.enabled)){ toast('error','غير متصل','يلزم الاتصال بالسحابة'); return {ok:false}; }
+  const amount = parseFloat(data.amount) || 0;
+  if(!data.title || amount <= 0){ toast('error','بيانات ناقصة','أدخل الوصف والمبلغ'); return {ok:false}; }
+  const level = amount > WF.threshold ? 2 : 1;
+  const id = 'pr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const payload = { id, title:data.title, supplier:data.supplier||null, amount, currency:'SAR',
+    details:data.details||{}, requested_by:STATE.currentUser.username, requested_by_name:STATE.currentUser.displayName||STATE.currentUser.username,
+    status:'pending', required_level:level };
+  const {error} = await CLOUD.client.from('proc_purchase_requests').insert(payload);
+  if(error){ toast('error','فشل الإرسال', error.message); return {ok:false}; }
+  const approvers = await wfApprovers(level);
+  for(const a of approvers){ if(a.username !== STATE.currentUser.username) await wfNotify(a.username,'approval','طلب اعتماد جديد', `${data.title} — ${fmtPrice(amount)} ر.س (${wfLevelName(level)})`, 'approvals'); }
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'add', entity_type:'purchase_request', entity_id:id, old_value:null, new_value:{title:data.title, amount, level}, meta:{}}); }catch(e){}
+  toast('success','تم الإرسال','الطلب بانتظار اعتماد '+wfLevelName(level));
+  return {ok:true};
+}
+
+async function decidePurchaseRequest(id, approve, note){
+  if(!(CLOUD && CLOUD.enabled)) return {ok:false};
+  const {data:req} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('id', id).maybeSingle();
+  if(!req || req.status !== 'pending'){ toast('warn','غير متاح','الطلب غير موجود أو سبق البتّ فيه'); return {ok:false}; }
+  if(!wfCanApprove(req)){ toast('error','صلاحية مرفوضة','لا تملك اعتماد هذا المستوى'); return {ok:false}; }
+  const {error} = await CLOUD.client.from('proc_purchase_requests').update({status: approve?'approved':'rejected', decided_by:STATE.currentUser.username, decided_at:new Date().toISOString(), decision_note:note||null}).eq('id', id).eq('status','pending');
+  if(error){ toast('error','فشل', error.message); return {ok:false}; }
+  await wfNotify(req.requested_by, 'decision', approve?'تم اعتماد طلبك ✓':'رُفض طلبك ✗', `${req.title} — ${fmtPrice(req.amount)} ر.س${note?(' · '+note):''}`, 'approvals');
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:approve?'approve':'reject', entity_type:'purchase_request', entity_id:id, old_value:{status:'pending'}, new_value:{status:approve?'approved':'rejected'}, meta:{note:note||''}}); }catch(e){}
+  toast('success', approve?'تم الاعتماد':'تم الرفض','');
+  return {ok:true};
+}
+
+/* ── الإشعارات (جرس) ── */
+async function wfFetchNotifications(){
+  if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return [];
+  try{ const {data} = await CLOUD.client.from('proc_notifications').select('*').eq('recipient', STATE.currentUser.username).order('created_at',{ascending:false}).limit(30); return data||[]; }catch(e){ return []; }
+}
+async function wfRefreshBell(){
+  if(!STATE.currentUser) return;
+  const list = await wfFetchNotifications();
+  const unread = list.filter(n=>!n.read).length;
+  const badge = document.getElementById('wf-bell-badge');
+  if(badge){ badge.textContent = unread; badge.style.display = unread?'flex':'none'; }
+  const panel = document.getElementById('wf-notif-list');
+  if(panel){
+    panel.innerHTML = list.length ? list.map(n=>`
+      <div class="wf-notif ${n.read?'':'unread'}" data-id="${escapeHtml(n.id)}" data-link="${escapeHtml(n.link||'')}">
+        <div class="wf-notif-title">${escapeHtml(n.title)}</div>
+        <div class="wf-notif-body">${escapeHtml(n.body||'')}</div>
+        <div class="wf-notif-time">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn',{dateStyle:'short',timeStyle:'short'})}</div>
+      </div>`).join('') : '<div class="wf-empty">لا توجد إشعارات</div>';
+    panel.querySelectorAll('.wf-notif').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        const nid = el.getAttribute('data-id'); const link = el.getAttribute('data-link');
+        try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('id', nid); }catch(e){}
+        const pop = document.getElementById('wf-notif-panel'); if(pop) pop.style.display='none';
+        if(link === 'approvals') openApprovalsModal(wfIsApprover() ? 'inbox' : 'mine');
+        wfRefreshBell();
+      });
+    });
+  }
+}
+async function wfMarkAllRead(){
+  if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return;
+  try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('recipient', STATE.currentUser.username).eq('read', false); }catch(e){}
+  wfRefreshBell();
+}
+
+/* ── نافذة الاعتمادات ── */
+function openApprovalsModal(tab){
+  const m = document.getElementById('modal-approvals'); if(!m) return;
+  m.style.display = 'flex';
+  const inboxTab = document.getElementById('wf-tab-inbox');
+  if(inboxTab) inboxTab.style.display = wfIsApprover() ? '' : 'none';
+  wfSwitchApprovalsTab(tab || (wfIsApprover() ? 'inbox' : 'new'));
+}
+function wfSwitchApprovalsTab(tab){
+  ['new','mine','inbox'].forEach(t=>{
+    const b = document.getElementById('wf-tab-'+t), p = document.getElementById('wf-pane-'+t);
+    if(b) b.classList.toggle('active', t===tab);
+    if(p) p.style.display = (t===tab) ? '' : 'none';
+  });
+  if(tab==='mine') wfRenderMyRequests();
+  if(tab==='inbox') wfRenderInbox();
+}
+function wfStatusBadge(s){ return s==='approved'?'<span class="wf-b ok">معتمد</span>': s==='rejected'?'<span class="wf-b no">مرفوض</span>':'<span class="wf-b pend">قيد الاعتماد</span>'; }
+function wfRequestCard(r, withActions){
+  return `<div class="wf-card">
+    <div class="wf-card-h"><span class="wf-card-title">${escapeHtml(r.title)}</span>${wfStatusBadge(r.status)}</div>
+    <div class="wf-card-meta">${fmtPrice(r.amount)} ر.س · ${escapeHtml(r.supplier||'—')} · يعتمده: ${wfLevelName(r.required_level)}</div>
+    <div class="wf-card-meta">مُقدّم الطلب: ${escapeHtml(r.requested_by_name||r.requested_by)} · ${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
+    ${r.decision_note?`<div class="wf-card-note">ملاحظة: ${escapeHtml(r.decision_note)}</div>`:''}
+    ${withActions?`<div class="wf-card-act"><input id="wfnote-${escapeHtml(r.id)}" class="wf-note" placeholder="ملاحظة (اختياري)"><button class="btn btn-accent btn-sm" data-approve data-id="${escapeHtml(r.id)}">اعتماد</button><button class="btn btn-ghost btn-sm" data-reject data-id="${escapeHtml(r.id)}">رفض</button></div>`:''}
+  </div>`;
+}
+async function wfRenderMyRequests(){
+  const el = document.getElementById('wf-pane-mine'); if(!el) return;
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  try{
+    const {data} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('requested_by', STATE.currentUser.username).order('created_at',{ascending:false}).limit(50);
+    el.innerHTML = (data && data.length) ? data.map(r=>wfRequestCard(r,false)).join('') : '<div class="wf-empty">لا توجد طلبات</div>';
+  }catch(e){ el.innerHTML = '<div class="wf-empty">تعذّر التحميل</div>'; }
+}
+async function wfRenderInbox(){
+  const el = document.getElementById('wf-pane-inbox'); if(!el) return;
+  if(!wfIsApprover()){ el.innerHTML = '<div class="wf-empty">لا تملك صلاحية الاعتماد</div>'; return; }
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  try{
+    const {data} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('status','pending').order('created_at',{ascending:true}).limit(100);
+    const mine = (data||[]).filter(wfCanApprove);
+    el.innerHTML = mine.length ? mine.map(r=>wfRequestCard(r,true)).join('') : '<div class="wf-empty">لا توجد طلبات بانتظار اعتمادك</div>';
+    el.querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click', async()=>{ const id=b.getAttribute('data-id'); const n=document.getElementById('wfnote-'+id); await decidePurchaseRequest(id,true,n?n.value:''); wfRenderInbox(); wfRefreshBell(); }));
+    el.querySelectorAll('[data-reject]').forEach(b=>b.addEventListener('click', async()=>{ const id=b.getAttribute('data-id'); const n=document.getElementById('wfnote-'+id); await decidePurchaseRequest(id,false,n?n.value:''); wfRenderInbox(); wfRefreshBell(); }));
+  }catch(e){ el.innerHTML = '<div class="wf-empty">تعذّر التحميل</div>'; }
+}
+
+/* ── حقن واجهة الوحدة (مرة واحدة) ── */
+let __WF_BUILT = false;
+function wfInjectUI(){
+  if(__WF_BUILT || !document.body) return;
+  __WF_BUILT = true;
+  const css = `
+    .wf-bell{position:fixed;bottom:20px;inset-inline-start:20px;z-index:900;width:48px;height:48px;border-radius:50%;background:#231F20;color:#C4A265;border:1px solid rgba(196,162,101,0.4);box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .wf-bell:hover{transform:translateY(-1px)}
+    .wf-bell-badge{position:absolute;top:-4px;inset-inline-end:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#b8434a;color:#fff;font-size:11px;font-weight:700;display:none;align-items:center;justify-content:center}
+    #wf-notif-panel{position:fixed;bottom:76px;inset-inline-start:20px;z-index:901;width:320px;max-height:60vh;overflow:auto;background:var(--surface,#fff);border:1px solid var(--border,#e5e0d5);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.18);display:none}
+    .wf-notif-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border,#eee);font-weight:700;font-size:13px;position:sticky;top:0;background:var(--surface,#fff)}
+    .wf-notif{padding:10px 14px;border-bottom:1px solid var(--border,#f0ece2);cursor:pointer}
+    .wf-notif:hover{background:var(--surface-2,#faf8f3)}
+    .wf-notif.unread{background:rgba(196,162,101,0.08)}
+    .wf-notif-title{font-size:13px;font-weight:600;color:var(--ink,#231F20)}
+    .wf-notif-body{font-size:12px;color:var(--ink-2,#555);margin-top:2px}
+    .wf-notif-time{font-size:10.5px;color:var(--muted,#999);margin-top:3px}
+    .wf-empty{padding:24px 14px;text-align:center;color:var(--muted,#999);font-size:13px}
+    #modal-approvals{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:20px}
+    .wf-modal{width:min(640px,96vw);max-height:88vh;overflow:auto;background:var(--surface,#fff);border-radius:14px;border:1px solid var(--border,#e5e0d5)}
+    .wf-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border,#eee)}
+    .wf-modal-head h3{margin:0;font-size:16px}
+    .wf-tabs{display:flex;gap:6px;padding:12px 20px 0}
+    .wf-tab{padding:8px 14px;border:none;background:transparent;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;font-size:13px;color:var(--muted,#999);font-weight:600}
+    .wf-tab.active{color:var(--ink,#231F20);border-bottom-color:var(--accent-2,#C4A265)}
+    .wf-pane{padding:16px 20px}
+    .wf-field{margin-bottom:12px}
+    .wf-field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+    .wf-field input,.wf-field textarea{width:100%;padding:9px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-family:inherit;font-size:13px}
+    .wf-card{border:1px solid var(--border,#eee);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface-2,#faf8f3)}
+    .wf-card-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .wf-card-title{font-weight:700;font-size:14px}
+    .wf-card-meta{font-size:12px;color:var(--ink-2,#555);margin-top:4px}
+    .wf-card-note{font-size:12px;color:var(--accent-2,#8a6a30);margin-top:6px}
+    .wf-card-act{display:flex;gap:8px;margin-top:10px;align-items:center}
+    .wf-note{flex:1;padding:7px 10px;border:1px solid var(--border,#ddd);border-radius:7px;font-family:inherit;font-size:12.5px}
+    .wf-b{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+    .wf-b.ok{background:rgba(45,157,111,0.15);color:#1f7a55}
+    .wf-b.no{background:rgba(184,67,74,0.15);color:#a23b41}
+    .wf-b.pend{background:rgba(196,162,101,0.18);color:#8a6a30}
+  `;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+
+  const bell = document.createElement('button');
+  bell.className = 'wf-bell'; bell.id = 'wf-bell'; bell.title = 'الإشعارات';
+  bell.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="wf-bell-badge" id="wf-bell-badge"></span>`;
+  document.body.appendChild(bell);
+
+  const panel = document.createElement('div');
+  panel.id = 'wf-notif-panel';
+  panel.innerHTML = `
+    <div class="wf-notif-head"><span>الإشعارات</span>
+      <span style="display:flex;gap:10px">
+        <a id="wf-open-approvals" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">الاعتمادات</a>
+        <a id="wf-mark-read" style="font-size:12px;color:var(--muted,#999);cursor:pointer">تحديد الكل مقروء</a>
+      </span>
+    </div>
+    <div id="wf-notif-list"></div>`;
+  document.body.appendChild(panel);
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-approvals';
+  modal.innerHTML = `
+    <div class="wf-modal">
+      <div class="wf-modal-head"><h3>اعتمادات الشراء</h3><button id="wf-modal-close" class="btn btn-ghost btn-sm">✕</button></div>
+      <div class="wf-tabs">
+        <button class="wf-tab" id="wf-tab-new">طلب اعتماد جديد</button>
+        <button class="wf-tab" id="wf-tab-mine">طلباتي</button>
+        <button class="wf-tab" id="wf-tab-inbox">بانتظار اعتمادي</button>
+      </div>
+      <div class="wf-pane" id="wf-pane-new">
+        <div class="wf-field"><label>وصف الطلب *</label><input id="wf-new-title" placeholder="مثال: توريد حديد تسليح لمشروع كذا"></div>
+        <div class="wf-field"><label>المورد</label><input id="wf-new-supplier" placeholder="اسم المورد (اختياري)"></div>
+        <div class="wf-field"><label>المبلغ (ر.س) *</label><input id="wf-new-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="wf-field"><label>ملاحظات</label><textarea id="wf-new-note" rows="2" placeholder="تفاصيل إضافية (اختياري)"></textarea></div>
+        <div style="font-size:12px;color:var(--muted,#999);margin-bottom:10px">يُوجَّه الطلب تلقائياً حسب المبلغ: حتى ${fmtPrice(WF.threshold)} ر.س → مدير المشتريات، وأكثر → المدير العام.</div>
+        <button class="btn btn-accent" id="wf-new-submit">إرسال للاعتماد</button>
+      </div>
+      <div class="wf-pane" id="wf-pane-mine" style="display:none"></div>
+      <div class="wf-pane" id="wf-pane-inbox" style="display:none"></div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // الأحداث
+  bell.addEventListener('click', ()=>{ const p=document.getElementById('wf-notif-panel'); const open = p.style.display!=='none'; p.style.display = open?'none':'block'; if(!open) wfRefreshBell(); });
+  document.getElementById('wf-mark-read').addEventListener('click', wfMarkAllRead);
+  document.getElementById('wf-open-approvals').addEventListener('click', ()=>{ document.getElementById('wf-notif-panel').style.display='none'; openApprovalsModal(); });
+  document.getElementById('wf-modal-close').addEventListener('click', ()=>{ modal.style.display='none'; });
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+  document.getElementById('wf-tab-new').addEventListener('click', ()=>wfSwitchApprovalsTab('new'));
+  document.getElementById('wf-tab-mine').addEventListener('click', ()=>wfSwitchApprovalsTab('mine'));
+  document.getElementById('wf-tab-inbox').addEventListener('click', ()=>wfSwitchApprovalsTab('inbox'));
+  document.getElementById('wf-new-submit').addEventListener('click', async ()=>{
+    const res = await submitPurchaseRequest({
+      title: document.getElementById('wf-new-title').value.trim(),
+      supplier: document.getElementById('wf-new-supplier').value.trim(),
+      amount: document.getElementById('wf-new-amount').value,
+      details: { note: document.getElementById('wf-new-note').value.trim() }
+    });
+    if(res && res.ok){ document.getElementById('wf-new-title').value=''; document.getElementById('wf-new-supplier').value=''; document.getElementById('wf-new-amount').value=''; document.getElementById('wf-new-note').value=''; wfSwitchApprovalsTab('mine'); wfRefreshBell(); }
+  });
+  // إغلاق لوحة الإشعارات عند النقر خارجها
+  document.addEventListener('click', e=>{ const p=document.getElementById('wf-notif-panel'); if(p && p.style.display!=='none' && !p.contains(e.target) && !bell.contains(e.target)) p.style.display='none'; });
+}
+
+async function initWorkflows(){
+  if(!STATE.currentUser) return;
+  wfInjectUI();
+  await wfLoadThreshold();
+  wfRefreshBell();
+  if(WF.pollTimer) clearInterval(WF.pollTimer);
+  WF.pollTimer = setInterval(()=>{ if(STATE.currentUser) wfRefreshBell(); }, 45000);
+}
+
 let __APP_STARTED = false;
 function startApp(){
   // Idempotent — safe to call from login form after login
@@ -11478,6 +11750,7 @@ function startApp(){
   applyUserRoleToUI();
   init();
   startCloudAutoReconnect();
+  try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
 }
 
 async function bootstrap(){
