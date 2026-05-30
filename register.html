@@ -3073,7 +3073,8 @@ async function setupSave() {
     await loadSupabaseLib();
     const client = window.supabase.createClient(url, key, {auth:{persistSession:false}});
     const {error} = await client.from('proc_items').select('code').limit(1);
-    if (error) throw error;
+    // خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي بعد التحصين) → لا نعتبره فشلاً.
+    if (error && !/permission|rls|row-level|denied|policy|JWT/i.test(error.message || '')) throw error;
     localStorage.setItem('proc_cloud_config', JSON.stringify({url, key}));
     document.getElementById('setup-screen').classList.add('hidden');
     SB = client;

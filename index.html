@@ -4595,6 +4595,21 @@ async function attemptLogin(username, password){
     }catch(e){ authErr = e; }
 
     if(authErr || !authData || !authData.user){
+      // إن كان السبب أن مصادقة Supabase غير مفعّلة بعد → رسالة إرشادية واضحة
+      // (بدل احتسابها كلمة مرور خاطئة، تفاديًا للالتباس أثناء الترحيل).
+      const _m = (authErr && authErr.message ? authErr.message : '').toLowerCase();
+      if(_m.includes('disabled') || _m.includes('not enabled') || _m.includes('email logins') || _m.includes('provider')){
+        // مصادقة Supabase غير مفعّلة بعد → سماح انتقالي للمسؤولين عبر المسار القديم
+        // (يختفي تلقائياً فور تفعيل Auth، فلا يحدث قفل خارج النظام عند النشر).
+        const _bu = AUTH_BOOTSTRAP_USERS[username];
+        const _bh = await sha256Hex(password);
+        if(_bu && _bu.password_hash === _bh){
+          validUser = username; validRole = _bu.role;
+          validDisplayName = _bu.displayName; validPermissions = _bu.permissions;
+        } else {
+          return { ok:false, error:'لم تُفعّل مصادقة Supabase بعد. أكمل خطوات db/auth-migration.md (تفعيل Email وإنشاء الحسابات).', lockedOut:false };
+        }
+      }
       // Wrong credentials (or unknown user) → fall through to invalid-attempt counting.
       // (لا نكشف ما إذا كان الاسم موجوداً أم لا)
     } else {
@@ -10401,9 +10416,10 @@ window.CLOUD = {
       realtime: {params: {eventsPerSecond: 5}}
     });
     this.url = url;
-    // Test connection
+    // Test connection. خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي قبل
+    // الدخول أو بعد تحصين RLS) → لا نعتبره فشلاً في الاتصال.
     const {error} = await this.client.from('proc_items').select('code').limit(1);
-    if(error){
+    if(error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message || '')){
       throw new Error(error.message + (error.hint? ' ('+error.hint+')':''));
     }
     this.enabled = true;
@@ -11431,7 +11447,7 @@ function startApp(){
   startCloudAutoReconnect();
 }
 
-function bootstrap(){
+async function bootstrap(){
   // STRICT WESTERN DIGITS: block/auto-convert Eastern numerals on every field
   installGlobalDigitGuard();
   // Wire up login form (always)
@@ -11444,12 +11460,36 @@ function bootstrap(){
   // Wire up reconnect button (always)
   const reconnectBtn = document.getElementById('btn-cloud-reconnect');
   if(reconnectBtn) reconnectBtn.addEventListener('click', manualReconnectCloud);
+
+  // اتصال مبكر بالسحابة (العميل فقط، بلا تحميل بيانات) كي تعمل مصادقة Supabase
+  // على شاشة الدخول من أول محاولة. تحميل البيانات يتم بعد الدخول عبر startApp.
+  try{
+    const stored = localStorage.getItem('proc_cloud_config');
+    if(stored){
+      const {url, key} = JSON.parse(stored);
+      if(url && key){
+        if(!window.supabase){ try{ await loadSupabaseLib(); }catch(e){} }
+        if(window.supabase){ await CLOUD.init(url, key); }
+      }
+    }
+  }catch(e){ /* تُعرض رسالة مناسبة عند محاولة الدخول */ }
+
   // Check for existing session
   const session = getCurrentSession();
   if(session){
-    STATE.currentUser = session;
-    hideLoginScreen();
-    startApp();
+    // تأكّد أن جلسة Supabase (JWT) ما زالت سارية قبل فتح النظام
+    let jwtOk = true;
+    if(window.CLOUD && CLOUD.enabled && CLOUD.client){
+      try{ const {data} = await CLOUD.client.auth.getSession(); jwtOk = !!(data && data.session); }catch(e){}
+    }
+    if(jwtOk){
+      STATE.currentUser = session;
+      hideLoginScreen();
+      startApp();
+    } else {
+      try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+      showLoginScreen();
+    }
   } else {
     showLoginScreen();
   }
