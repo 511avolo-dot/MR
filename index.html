@@ -2039,6 +2039,8 @@ body.dark .form-card { background:linear-gradient(145deg,var(--surface) 0%,rgba(
 
 /* Hide admin-only elements when user is not admin */
 body.role-user .admin-only{ display:none !important; }
+/* إخفاء العناصر التي تتطلب صلاحية لا يملكها المستخدم (data-requires-perm) */
+.perm-hidden{ display:none !important; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
@@ -2389,7 +2391,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                 <div style="font-size:12px;color:var(--muted)">رؤى مدعومة بالذكاء الاصطناعي من بيانات المشتريات</div>
               </div>
             </div>
-            <button id="btn-ai-analyze" onclick="triggerAIInsights()" style="display:flex;align-items:center;gap:8px;padding:9px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+            <button id="btn-ai-analyze" data-requires-perm="can_use_ai" onclick="triggerAIInsights()" style="display:flex;align-items:center;gap:8px;padding:9px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               تحليل الآن
             </button>
@@ -3990,14 +3992,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       </div>
       <div style="margin-top:16px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--ink)">الصلاحيات التفصيلية</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-delete"> حذف السجلات والأصناف</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-export"> تصدير CSV</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-import"> استيراد CSV الجماعي</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-suppliers"> إدارة الموردين</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-cloud"> إدارة الإعدادات السحابية</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-users"> إدارة المستخدمين</label>
-        </div>
+        <div id="uf-perms-grid"><!-- تُولَّد ديناميكياً من PERMISSION_DEFS --></div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px">المدير لديه كل الصلاحيات تلقائياً ولا يمكن تقييده.</div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px">
@@ -4399,12 +4394,9 @@ const STATE = {
 // Bootstrap users used ONLY if cloud is not available yet.
 // Once cloud is connected and proc_users table has data, those take over.
 const AUTH_BOOTSTRAP_USERS = {
-  'Abdullah': { password_hash: '2bcc16a449e9524274aa3ac893a13d9efa2d0e7f4d22d693bcb418d2c72c89a0', role: 'admin', displayName: 'عبدالله',
-    permissions: {can_delete:true, can_export:true, can_import:true, can_manage_suppliers:true, can_manage_cloud:true, can_manage_users:true} },
-  'Mostafa':  { password_hash: '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', role: 'user',  displayName: 'مصطفى خليل',
-    permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} },
-  'Mahmoud':  { password_hash: '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', role: 'user',  displayName: 'محمود العمودي',
-    permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} }
+  'Abdullah': { password_hash: '2bcc16a449e9524274aa3ac893a13d9efa2d0e7f4d22d693bcb418d2c72c89a0', role: 'admin', displayName: 'عبدالله' },
+  'Mostafa':  { password_hash: '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', role: 'user',  displayName: 'مصطفى خليل' },
+  'Mahmoud':  { password_hash: '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', role: 'user',  displayName: 'محمود العمودي' }
 };
 
 // Runtime cache of cloud users (populated on cloud connect)
@@ -4417,10 +4409,27 @@ const AUTH_LOCKOUT_MS = 10 * 60 * 1000; // 10 minutes
 const AUTH_SESSION_KEY = 'proc_auth_session';
 const AUTH_LOCKOUT_KEY = 'proc_auth_lockout';
 
-// Default permission sets by role
+// ── سجل الصلاحيات (مصدر واحد) ──
+// إضافة صلاحية جديدة = سطر واحد هنا. النموذج، العرض، الفرض، وفئات CSS كلها
+// تُشتق منه تلقائياً. userDefault = القيمة الافتراضية لدور «مستخدم» (تحافظ على
+// السلوك الحالي: ما هو مفتوح اليوم افتراضه مسموح ليقيّده الأدمن، والإداري ممنوع).
+const PERMISSION_DEFS = [
+  { key:'can_delete',               label:'حذف السجلات والأصناف',          short:'حذف',           cat:'البيانات',   userDefault:false },
+  { key:'can_export',               label:'تصدير CSV / Excel',             short:'تصدير',         cat:'البيانات',   userDefault:true  },
+  { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:false },
+  { key:'can_manage_suppliers',     label:'إدارة الموردين',                short:'موردين',        cat:'الموردون',   userDefault:true  },
+  { key:'can_review_registrations', label:'مراجعة طلبات تسجيل الموردين',    short:'مراجعة طلبات',  cat:'الموردون',   userDefault:true  },
+  { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
+  { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
+  { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
+  { key:'can_manage_users',         label:'إدارة المستخدمين',              short:'مستخدمين',      cat:'النظام',     userDefault:false },
+];
+const PERMISSION_KEYS = PERMISSION_DEFS.map(d => d.key);
+
+// Default permission sets by role (مشتقة من السجل)
 const DEFAULT_PERMISSIONS = {
-  admin: {can_delete:true, can_export:true, can_import:true, can_manage_suppliers:true, can_manage_cloud:true, can_manage_users:true},
-  user:  {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false}
+  admin: Object.fromEntries(PERMISSION_KEYS.map(k => [k, true])),
+  user:  Object.fromEntries(PERMISSION_DEFS.map(d => [d.key, d.userDefault])),
 };
 
 // ── Supabase Auth ──
@@ -4758,7 +4767,11 @@ function hasPermission(permKey){
   if(!STATE.currentUser) return false;
   if(STATE.currentUser.role === 'admin') return true; // admin always has all permissions
   const perms = STATE.currentUser.permissions || {};
-  return perms[permKey] === true;
+  if(perms[permKey] === true) return true;
+  if(perms[permKey] === false) return false;
+  // مفتاح غير محفوظ (صلاحية أُضيفت لاحقاً) → استخدم افتراضي الدور بدل سحبها ضمنياً
+  const def = DEFAULT_PERMISSIONS[STATE.currentUser.role] || DEFAULT_PERMISSIONS.user;
+  return def[permKey] === true;
 }
 
 function requireAdmin(actionDescription){
@@ -4781,14 +4794,13 @@ function applyUserRoleToUI(){
   if(!STATE.currentUser) return;
   document.body.classList.remove('role-admin', 'role-user');
   document.body.classList.add('role-' + STATE.currentUser.role);
-  // Apply per-permission body classes for granular CSS hiding
-  const perms = STATE.currentUser.permissions || {};
-  ['can_delete','can_export','can_import','can_manage_suppliers','can_manage_cloud','can_manage_users'].forEach(p => {
-    if(STATE.currentUser.role === 'admin' || perms[p]){
-      document.body.classList.add('perm-'+p);
-    } else {
-      document.body.classList.remove('perm-'+p);
-    }
+  // Apply per-permission body classes (مشتقة من السجل) + إخفاء العناصر الموسومة
+  PERMISSION_KEYS.forEach(p => {
+    document.body.classList.toggle('perm-'+p, hasPermission(p));
+  });
+  // أي عنصر يحمل data-requires-perm="can_X" يُخفى تلقائياً لمن لا يملك الصلاحية
+  document.querySelectorAll('[data-requires-perm]').forEach(el => {
+    el.classList.toggle('perm-hidden', !hasPermission(el.getAttribute('data-requires-perm')));
   });
   const badge = document.getElementById('user-badge');
   const nameEl = document.getElementById('user-badge-name');
@@ -5821,7 +5833,7 @@ function renderHistory(){
 }
 
 function deleteEntry(num){
-  if(!requireAdmin('حذف السجلات')) return;
+  if(!requirePermission('can_delete', 'حذف السجلات')) return;
   if(!confirm('هل تريد حذف هذا السجل؟'))return;
   const entry = STATE.history.find(h=>h.num===num);
   deleteUserEntry(num);
@@ -6070,6 +6082,7 @@ function toast(type,title,msg){
 }
 
 function exportCSV(data, filename, cols){
+  if(!requirePermission('can_export', 'التصدير')) return;
   const headers = cols.map(c=>c.label);
   const rows = data.map(r=>cols.map(c=>{
     const v = r[c.key];
@@ -6086,6 +6099,7 @@ function exportCSV(data, filename, cols){
 }
 
 async function exportExcel(data, filename, cols, options = {}) {
+  if(!requirePermission('can_export', 'التصدير')) return;
   if (!data || !data.length) { toast('warn','لا توجد بيانات','لا يوجد شيء للتصدير'); return; }
   toast('info','جاري التصدير','جارٍ تحميل مكتبة Excel...');
   try {
@@ -7367,7 +7381,7 @@ async function saveSupplierForm(){
 
 async function deleteSupplier(supplier){
   if(!supplier) return;
-  if(!requireAdmin('حذف الموردين')) return;
+  if(!requirePermission('can_delete', 'حذف الموردين')) return;
   // Check if supplier has any history records
   const histCount = STATE.history.filter(h=>h.supplier===supplier.name).length;
   let msg = `هل أنت متأكد من حذف المورد "${supplier.name}"؟`;
@@ -7498,7 +7512,7 @@ function loadItemEdits(){
 }
 
 async function deleteItem(code){
-  if(!requireAdmin('حذف الأصناف')) return;
+  if(!requirePermission('can_delete', 'حذف الأصناف')) return;
   const item = STATE.items.find(i=>i.code===code); if(!item) return;
   const histCount = STATE.history.filter(h=>h.code===code).length;
   const userHistCount = STATE.history.filter(h=>h.code===code && h._user).length;
@@ -7967,7 +7981,7 @@ function parseCSV(text){
 }
 
 function importCSV(file){
-  if(!requireAdmin('استيراد CSV')) return;
+  if(!requirePermission('can_import', 'استيراد CSV')) return;
   const reader = new FileReader();
   reader.onload = e=>{
     try{
@@ -9649,12 +9663,7 @@ async function renderUsersList(){
     const permList = [];
     if(isAdminUser){ permList.push('كل الصلاحيات'); }
     else {
-      if(perms.can_delete) permList.push('حذف');
-      if(perms.can_export) permList.push('تصدير');
-      if(perms.can_import) permList.push('استيراد');
-      if(perms.can_manage_suppliers) permList.push('موردين');
-      if(perms.can_manage_cloud) permList.push('سحابة');
-      if(perms.can_manage_users) permList.push('مستخدمين');
+      PERMISSION_DEFS.forEach(d => { if(perms[d.key]) permList.push(d.short); });
       if(!permList.length) permList.push('قراءة فقط');
     }
     const statusBadge = u.active === false
@@ -9749,31 +9758,47 @@ async function openUserForm(mode, username){
     passHint.textContent = '(اتركها فارغة للإبقاء على الحالية)';
     roleSel.value = u.role;
     activeChk.checked = u.active !== false;
-    setUserFormPermissions(u.permissions || DEFAULT_PERMISSIONS[u.role]);
+    // دمج صلاحيات المستخدم فوق افتراضات دوره، حتى لا تظهر الصلاحيات المُضافة
+    // حديثاً (غير المحفوظة) كغير مُحدّدة فتُسحب عند الحفظ بالخطأ.
+    setUserFormPermissions(Object.assign({}, DEFAULT_PERMISSIONS[u.role] || DEFAULT_PERMISSIONS.user, u.permissions || {}));
   }
   closeModal('modal-users');
   setTimeout(()=>openModal('modal-user-form'), 150);
 }
 
+// يبني شبكة الصلاحيات في النموذج من السجل، مجمّعة حسب الفئة (مرة واحدة)
+function renderUserFormPermissions(){
+  const grid = document.getElementById('uf-perms-grid');
+  if(!grid || grid.dataset.built === '1') return;
+  const cats = [];
+  PERMISSION_DEFS.forEach(d => { if(!cats.includes(d.cat)) cats.push(d.cat); });
+  grid.innerHTML = cats.map(cat => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:6px">${escapeHtml(cat)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        ${PERMISSION_DEFS.filter(d => d.cat === cat).map(d =>
+          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}</label>`
+        ).join('')}
+      </div>
+    </div>`).join('');
+  grid.dataset.built = '1';
+}
+
 function setUserFormPermissions(p){
+  renderUserFormPermissions();
   p = p || {};
-  document.getElementById('uf-perm-delete').checked = !!p.can_delete;
-  document.getElementById('uf-perm-export').checked = !!p.can_export;
-  document.getElementById('uf-perm-import').checked = !!p.can_import;
-  document.getElementById('uf-perm-suppliers').checked = !!p.can_manage_suppliers;
-  document.getElementById('uf-perm-cloud').checked = !!p.can_manage_cloud;
-  document.getElementById('uf-perm-users').checked = !!p.can_manage_users;
+  document.querySelectorAll('#uf-perms-grid input[data-perm]').forEach(cb => {
+    cb.checked = p[cb.getAttribute('data-perm')] === true;
+  });
 }
 
 function readUserFormPermissions(){
-  return {
-    can_delete: document.getElementById('uf-perm-delete').checked,
-    can_export: document.getElementById('uf-perm-export').checked,
-    can_import: document.getElementById('uf-perm-import').checked,
-    can_manage_suppliers: document.getElementById('uf-perm-suppliers').checked,
-    can_manage_cloud: document.getElementById('uf-perm-cloud').checked,
-    can_manage_users: document.getElementById('uf-perm-users').checked
-  };
+  renderUserFormPermissions();
+  const out = {};
+  document.querySelectorAll('#uf-perms-grid input[data-perm]').forEach(cb => {
+    out[cb.getAttribute('data-perm')] = cb.checked;
+  });
+  return out;
 }
 
 async function saveUserForm(){
@@ -9880,6 +9905,7 @@ async function confirmDeleteUser(username){
 let __auditCurrentTab = 'local';
 
 function openAuditModal(){
+  if(!requirePermission('can_view_audit', 'عرض سجل التدقيق')) return;
   __auditCurrentTab = 'local';
   // Wire up tab buttons (idempotent - innerHTML reset clears listeners but we re-attach)
   setTimeout(()=>{
@@ -10813,7 +10839,7 @@ async function tryAutoConnectCloud(){
 
 /* === Cloud Setup Wizard === */
 function openCloudSetup(){
-  if(!requireAdmin('إعداد الاتصال السحابي')) return;
+  if(!requirePermission('can_manage_cloud', 'إعداد الاتصال السحابي')) return;
   // Reset to step 1
   showCloudStep(1);
   document.getElementById('cloud-sql-script').textContent = CLOUD_SQL_SCRIPT;
@@ -10953,7 +10979,7 @@ async function finishCloudSetup(){
 }
 
 function disconnectCloud(){
-  if(!requireAdmin('قطع الاتصال السحابي')) return;
+  if(!requirePermission('can_manage_cloud', 'قطع الاتصال السحابي')) return;
   if(!confirm('هل تريد قطع الاتصال بالسحابة؟ ستعود البيانات إلى التخزين المحلي. لن يتم حذف أي بيانات من السحابة.')) return;
   CLOUD.disconnect();
   // Reload to refresh data
@@ -14641,6 +14667,7 @@ function saveAIKey() {
 }
 
 async function triggerAIInsights() {
+  if(!requirePermission('can_use_ai', 'استخدام الذكاء الاصطناعي')) return;
   const geminiKey = localStorage.getItem('proc_ai_key') || '';
   const noKey = document.getElementById('ai-no-key');
   const loading = document.getElementById('ai-loading');
@@ -15318,6 +15345,7 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
 
 async function sendAgentMessage(){
   if(AGENT_BUSY)return;
+  if(!requirePermission('can_use_ai', 'استخدام الذكاء الاصطناعي')) return;
   const input=document.getElementById('agent-input');
   const sendBtn=document.getElementById('agent-send-btn');
   const q=(input?.value||'').trim();
@@ -15747,6 +15775,7 @@ function closeRegDetail() {
 }
 
 async function approveRegistration(reg) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   try {
     // Create supplier in proc_suppliers
@@ -15793,6 +15822,7 @@ async function approveRegistration(reg) {
 }
 
 async function rejectRegistration(regId) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
   if (!note && !confirm('هل تريد الرفض النهائي بدون سبب؟')) return;
