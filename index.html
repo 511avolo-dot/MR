@@ -11908,7 +11908,14 @@ async function rfqAIImport(si, sups, lines){
 }
 
 // ── بوابة المورّد: توليد روابط الدعوة ومتابعة الاستجابة ──
-function rfqGenToken(){ return 'tk_'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); }
+function rfqGenToken(){
+  // عشوائية مشفّرة — التوكن يحمي عروض المورّدين من التخمين
+  try{
+    if(window.crypto && crypto.randomUUID) return 'tk_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8);
+    const a=new Uint8Array(24); crypto.getRandomValues(a);
+    return 'tk_'+Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return 'tk_'+Date.now().toString(36)+Math.random().toString(36).slice(2,12); }
+}
 async function rfqEnsureToken(rfqId, supplier){
   const qid = rfqId+'__'+rfqSlug(supplier);
   const {data:ex} = await CLOUD.client.from('proc_rfq_quotes').select('token,prices,attrs,note,status').eq('id',qid).maybeSingle();
@@ -16543,6 +16550,8 @@ async function openRegDetail(jsonStr) {
 
   // التحقق الحكومي (يظهر إن توفّر رقم سجل/ضريبي)
   body.innerHTML += govVerifyBar(r);
+  const _gvb = document.getElementById('gov-verify-btn');
+  if(_gvb) _gvb.addEventListener('click', ()=>govVerifyRun(r.commercial_reg||'', r.vat_number||''));
 
   // Actions footer
   acts.innerHTML = '';
@@ -16618,9 +16627,10 @@ async function openRegDetail(jsonStr) {
 function govVerifyBar(r){
   const cr = (r&&r.commercial_reg)||''; const vat=(r&&r.vat_number)||'';
   if(!cr && !vat) return '';
+  // لا نضمّن بيانات المورّد داخل onclick (تمنع XSS المخزّن)؛ تُمرَّر القيم لاحقاً عبر مستمع حدث.
   return `<div style="margin-bottom:20px;padding:12px 14px;border:1px dashed var(--border,#ccd2da);border-radius:8px">
     <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--navy,#1a3a5c)">التحقق الحكومي</div>
-    <button class="btn btn-ghost btn-sm" onclick="govVerifyRun('${escapeHtml(String(cr))}','${escapeHtml(String(vat))}')">تحقّق من السجل التجاري</button>
+    <button class="btn btn-ghost btn-sm" id="gov-verify-btn">تحقّق من السجل التجاري</button>
     <span id="gov-verify-out" style="font-size:12px;margin-inline-start:8px;color:var(--muted,#888)"></span>
   </div>`;
 }

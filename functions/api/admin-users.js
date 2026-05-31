@@ -50,12 +50,15 @@ function sb(env) {
       return u && u.email ? u : null;
     },
     async getProfile(username) {
-      // ilike (بلا حروف بدل) = مطابقة غير حسّاسة لحالة الأحرف — لأن البريد يُشتق
-      // بحروف صغيرة بينما username في proc_users قد يكون بأحرف كبيرة (Abdullah).
-      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(username)}&select=username,role,active`, { headers });
+      // مطابقة غير حسّاسة لحالة الأحرف (البريد lowercase وusername قد يكون Abdullah)،
+      // مع تهريب أحرف البدل في ILIKE (% _ \) لمنع مطابقة أوسع تُطابق مستخدماً آخر.
+      const safe = String(username).replace(/[\\%_]/g, c => '\\' + c);
+      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`, { headers });
       if (!r.ok) return null;
       const rows = await r.json();
-      return rows && rows[0] ? rows[0] : null;
+      // تأكيد المطابقة الدقيقة (بلا حساسية حالة) دفاعياً
+      const u = String(username).toLowerCase();
+      return (rows || []).find(x => String(x.username).toLowerCase() === u) || null;
     },
     async findAuthUserByEmail(email) {
       // قائمة المستخدمين (فريق داخلي صغير — صفحة واحدة تكفي)
