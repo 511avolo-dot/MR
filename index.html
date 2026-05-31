@@ -2039,6 +2039,12 @@ body.dark .form-card { background:linear-gradient(145deg,var(--surface) 0%,rgba(
 
 /* Hide admin-only elements when user is not admin */
 body.role-user .admin-only{ display:none !important; }
+/* إخفاء العناصر التي تتطلب صلاحية لا يملكها المستخدم (data-requires-perm) */
+.perm-hidden{ display:none !important; }
+/* إيقاف وحدة «وكلاء الذكاء الاصطناعي» — يُكتفى بتحليلات الذكاء (analytics).
+   نُبقي الكود لإعادة تفعيله مستقبلاً عند الحاجة. */
+[data-page="agents"]{ display:none !important; }
+#page-agents{ display:none !important; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
@@ -2389,7 +2395,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                 <div style="font-size:12px;color:var(--muted)">رؤى مدعومة بالذكاء الاصطناعي من بيانات المشتريات</div>
               </div>
             </div>
-            <button id="btn-ai-analyze" onclick="triggerAIInsights()" style="display:flex;align-items:center;gap:8px;padding:9px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
+            <button id="btn-ai-analyze" data-requires-perm="can_use_ai" onclick="triggerAIInsights()" style="display:flex;align-items:center;gap:8px;padding:9px 20px;background:#C4A265;color:#231F20;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.2s" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               تحليل الآن
             </button>
@@ -3990,14 +3996,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       </div>
       <div style="margin-top:16px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--ink)">الصلاحيات التفصيلية</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-delete"> حذف السجلات والأصناف</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-export"> تصدير CSV</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-import"> استيراد CSV الجماعي</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-suppliers"> إدارة الموردين</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-cloud"> إدارة الإعدادات السحابية</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="uf-perm-users"> إدارة المستخدمين</label>
-        </div>
+        <div id="uf-perms-grid"><!-- تُولَّد ديناميكياً من PERMISSION_DEFS --></div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px">المدير لديه كل الصلاحيات تلقائياً ولا يمكن تقييده.</div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px">
@@ -4399,12 +4398,9 @@ const STATE = {
 // Bootstrap users used ONLY if cloud is not available yet.
 // Once cloud is connected and proc_users table has data, those take over.
 const AUTH_BOOTSTRAP_USERS = {
-  'Abdullah': { password_hash: '2bcc16a449e9524274aa3ac893a13d9efa2d0e7f4d22d693bcb418d2c72c89a0', role: 'admin', displayName: 'عبدالله',
-    permissions: {can_delete:true, can_export:true, can_import:true, can_manage_suppliers:true, can_manage_cloud:true, can_manage_users:true} },
-  'Mostafa':  { password_hash: '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', role: 'user',  displayName: 'مصطفى خليل',
-    permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} },
-  'Mahmoud':  { password_hash: '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', role: 'user',  displayName: 'محمود العمودي',
-    permissions: {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false} }
+  'Abdullah': { password_hash: '2bcc16a449e9524274aa3ac893a13d9efa2d0e7f4d22d693bcb418d2c72c89a0', role: 'admin', displayName: 'عبدالله' },
+  'Mostafa':  { password_hash: '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', role: 'user',  displayName: 'مصطفى خليل' },
+  'Mahmoud':  { password_hash: '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', role: 'user',  displayName: 'محمود العمودي' }
 };
 
 // Runtime cache of cloud users (populated on cloud connect)
@@ -4417,11 +4413,82 @@ const AUTH_LOCKOUT_MS = 10 * 60 * 1000; // 10 minutes
 const AUTH_SESSION_KEY = 'proc_auth_session';
 const AUTH_LOCKOUT_KEY = 'proc_auth_lockout';
 
-// Default permission sets by role
+// ── سجل الصلاحيات (مصدر واحد) ──
+// إضافة صلاحية جديدة = سطر واحد هنا. النموذج، العرض، الفرض، وفئات CSS كلها
+// تُشتق منه تلقائياً. userDefault = القيمة الافتراضية لدور «مستخدم» (تحافظ على
+// السلوك الحالي: ما هو مفتوح اليوم افتراضه مسموح ليقيّده الأدمن، والإداري ممنوع).
+const PERMISSION_DEFS = [
+  { key:'can_enter_prices',         label:'إدخال وتسعير الأسعار',          short:'تسعير',         cat:'البيانات',   userDefault:true  },
+  { key:'can_manage_items',         label:'إضافة وتعديل الأصناف',          short:'أصناف',         cat:'البيانات',   userDefault:true  },
+  { key:'can_delete',               label:'حذف السجلات والأصناف',          short:'حذف',           cat:'البيانات',   userDefault:false },
+  { key:'can_export',               label:'تصدير CSV / Excel',             short:'تصدير',         cat:'البيانات',   userDefault:true  },
+  { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:false },
+  { key:'can_manage_suppliers',     label:'إدارة الموردين',                short:'موردين',        cat:'الموردون',   userDefault:true  },
+  { key:'can_review_registrations', label:'مراجعة طلبات تسجيل الموردين',    short:'مراجعة طلبات',  cat:'الموردون',   userDefault:true  },
+  { key:'can_manage_rfq',           label:'طلبات عروض الأسعار (RFQ)',       short:'عروض أسعار',    cat:'الموردون',   userDefault:true  },
+  { key:'can_approve_l1',           label:'اعتماد الشراء (مدير المشتريات)', short:'اعتماد 1',      cat:'الاعتمادات', userDefault:false },
+  { key:'can_approve_l2',           label:'اعتماد الشراء (المدير العام)',   short:'اعتماد 2',      cat:'الاعتمادات', userDefault:false },
+  { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
+  { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
+  { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
+  { key:'can_manage_users',         label:'إدارة المستخدمين',              short:'مستخدمين',      cat:'النظام',     userDefault:false },
+];
+const PERMISSION_KEYS = PERMISSION_DEFS.map(d => d.key);
+
+// Default permission sets by role (مشتقة من السجل)
 const DEFAULT_PERMISSIONS = {
-  admin: {can_delete:true, can_export:true, can_import:true, can_manage_suppliers:true, can_manage_cloud:true, can_manage_users:true},
-  user:  {can_delete:false, can_export:false, can_import:false, can_manage_suppliers:true, can_manage_cloud:false, can_manage_users:false}
+  admin: Object.fromEntries(PERMISSION_KEYS.map(k => [k, true])),
+  user:  Object.fromEntries(PERMISSION_DEFS.map(d => [d.key, d.userDefault])),
 };
+
+// ── Supabase Auth ──
+// المصادقة الحقيقية تتم عبر Supabase Auth (JWT) لتُفعّل سياسات RLS على الخادم.
+// المستخدم يكتب اسمه فقط (Abdullah)، ونحوّله داخلياً إلى بريد اصطلاحي ثابت.
+const AUTH_EMAIL_DOMAIN = 'aldeyabi.com';
+// خريطة صريحة: اسم المستخدم → بريده الفعلي (لأن بعض البُرُد لا تطابق الاسم، مثل supply@).
+// المفاتيح بحروف صغيرة. المستخدمون الجدد (بلا إدخال هنا) يأخذون username@aldeyabi.com.
+const AUTH_EMAIL_MAP = {
+  abdullah: 'abdullah@aldeyabi.com',
+  mostafa:  'supply@aldeyabi.com',
+  mahmoud:  'mahmoud@aldeyabi.com'   // معرّف دخول مستقل (لكلمة مرور خاصة)
+};
+function usernameToEmail(u){
+  const k = String(u || '').trim().toLowerCase();
+  return AUTH_EMAIL_MAP[k] || (k + '@' + AUTH_EMAIL_DOMAIN);
+}
+
+// ── إدارة المستخدمين عبر الخادم (service_role) ──
+// دالة /api/admin-users تتولّى إنشاء/حذف حسابات Auth وإعادة تعيين كلمات المرور.
+// إن لم تُنشَر بعد (لا سرّ خادم) يتراجع التطبيق لسلوكه الأساسي.
+const ADMIN_USERS_ENDPOINT = '/api/admin-users';
+let __ADMIN_API_OK = null;
+async function adminApiAvailable(){
+  if(__ADMIN_API_OK !== null) return __ADMIN_API_OK;
+  try{
+    const r = await fetch(ADMIN_USERS_ENDPOINT, {method:'GET'});
+    const ct = r.headers.get('content-type') || '';
+    if(r.ok && ct.includes('application/json')){
+      const j = await r.json();
+      __ADMIN_API_OK = !!(j && j.ok);
+    } else { __ADMIN_API_OK = false; }
+  }catch(e){ __ADMIN_API_OK = false; }
+  return __ADMIN_API_OK;
+}
+async function adminUsersCall(action, body){
+  try{
+    const { data } = await CLOUD.client.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if(!token) return {ok:false, error:'جلسة غير صالحة — أعد تسجيل الدخول'};
+    const r = await fetch(ADMIN_USERS_ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+      body: JSON.stringify({ action, ...body })
+    });
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) return {ok:false, error: j.error || ('HTTP ' + r.status)};
+    return {ok:true, data:j};
+  }catch(e){ return {ok:false, error: e.message || 'فشل الاتصال بخدمة الإدارة'}; }
+}
 
 // SHA-256 hashing using Web Crypto API (browser-native, no library needed)
 async function sha256Hex(text){
@@ -4542,38 +4609,56 @@ async function attemptLogin(username, password){
   let validDisplayName = null;
   let validPermissions = null;
 
-  // If cloud is enabled, authenticate ONLY against cloud users — never fall
-  // back to hard-coded bootstrap passwords (which would silently bypass any
-  // password change an admin made in the cloud user management UI).
+  // If cloud is enabled, authenticate via Supabase Auth (never the local
+  // bootstrap passwords — those are only for pre-cloud first-time setup).
   const cloudIsEnabled = !!(window.CLOUD && CLOUD.enabled && CLOUD.client);
-  const cloudUsers = cloudIsEnabled ? await fetchCloudUsers(true) : null;
 
   if(cloudIsEnabled){
-    // Cloud is connected: only cloud users are trusted.
-    if(cloudUsers && Object.keys(cloudUsers).length === 0){
-      // Empty result — likely Supabase RLS blocking anon reads on proc_users.
-      // This happens when the table has RLS enabled without a public SELECT policy.
-      return { ok:false, error: 'تعذّر قراءة المستخدمين من قاعدة البيانات (RLS). يرجى تشغيل SQL المطلوب في Supabase → راجع الإعدادات → إدارة المستخدمين.', lockedOut: false };
-    }
-    if(cloudUsers && cloudUsers[username]){
-      const u = cloudUsers[username];
-      if(u.active === false){
+    // Cloud is connected: authenticate via Supabase Auth (issues a JWT that RLS trusts).
+    const email = usernameToEmail(username);
+    let authData = null, authErr = null;
+    try{
+      const res = await CLOUD.client.auth.signInWithPassword({ email, password });
+      authData = res.data; authErr = res.error;
+    }catch(e){ authErr = e; }
+
+    if(authErr || !authData || !authData.user){
+      // إن كان السبب أن مصادقة Supabase غير مفعّلة بعد → رسالة إرشادية واضحة
+      // (بدل احتسابها كلمة مرور خاطئة، تفاديًا للالتباس أثناء الترحيل).
+      const _m = (authErr && authErr.message ? authErr.message : '').toLowerCase();
+      if(_m.includes('disabled') || _m.includes('not enabled') || _m.includes('email logins') || _m.includes('provider')){
+        // مصادقة Supabase غير مفعّلة بعد → سماح انتقالي للمسؤولين عبر المسار القديم
+        // (يختفي تلقائياً فور تفعيل Auth، فلا يحدث قفل خارج النظام عند النشر).
+        const _bu = AUTH_BOOTSTRAP_USERS[username];
+        const _bh = await sha256Hex(password);
+        if(_bu && _bu.password_hash === _bh){
+          validUser = username; validRole = _bu.role;
+          validDisplayName = _bu.displayName; validPermissions = _bu.permissions;
+        } else {
+          return { ok:false, error:'لم تُفعّل مصادقة Supabase بعد. أكمل خطوات db/auth-migration.md (تفعيل Email وإنشاء الحسابات).', lockedOut:false };
+        }
+      }
+      // Wrong credentials (or unknown user) → fall through to invalid-attempt counting.
+      // (لا نكشف ما إذا كان الاسم موجوداً أم لا)
+    } else {
+      // Authenticated. Load the authorization profile (role/permissions) from proc_users.
+      let profile = null;
+      try{
+        const all = await fetchCloudUsers(true);
+        profile = all && all[username] ? all[username] : null;
+      }catch(e){ /* ignore — fall back to defaults */ }
+
+      if(profile && profile.active === false){
+        try{ await CLOUD.client.auth.signOut(); }catch(e){}
         return { ok:false, error: 'هذا الحساب معطّل. اتصل بالمسؤول لتفعيله.', lockedOut: false };
       }
-      const candidateHash = await sha256Hex(password);
-      if(candidateHash === u.password_hash){
-        validUser = username;
-        validRole = u.role;
-        validDisplayName = u.displayName;
-        validPermissions = u.permissions;
-      }
-    } else if(cloudUsers === null){
-      return { ok:false, error: 'تعذّر التحقق من المستخدمين عبر السحابة. تحقق من الاتصال وحاول مجدداً.', lockedOut: false };
-    } else {
-      // User not found in cloud users list
-      return { ok:false, error: 'اسم المستخدم غير موجود. تحقق من الاسم أو اطلب من المسؤول إنشاء الحساب.', lockedOut: false };
+      validUser = username;
+      validRole = profile ? profile.role : 'user';
+      validDisplayName = (profile && profile.displayName) ? profile.displayName : username;
+      validPermissions = (profile && profile.permissions) ? profile.permissions
+                         : (DEFAULT_PERMISSIONS[validRole] || DEFAULT_PERMISSIONS.user);
     }
-    // if username found but password wrong → fall through to invalid count
+    // if auth failed → fall through to invalid count
   } else {
     // Cloud not enabled at all → bootstrap mode (initial setup before
     // connecting Supabase). Plaintext bootstrap passwords are used here.
@@ -4622,8 +4707,8 @@ async function attemptLogin(username, password){
   try{ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session)); }catch(e){}
   STATE.currentUser = session;
 
-  // Update last_login in cloud (best-effort)
-  if(window.CLOUD && CLOUD.enabled && CLOUD.client && cloudUsers){
+  // Update last_login in cloud (best-effort; now authenticated)
+  if(window.CLOUD && CLOUD.enabled && CLOUD.client){
     try{
       CLOUD.client.from('proc_users').update({last_login: new Date().toISOString()}).eq('username', validUser).then(()=>{});
     }catch(e){}
@@ -4641,6 +4726,22 @@ async function attemptLogin(username, password){
     meta: { ts: new Date().toISOString(), user_agent: (typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 200) : '') }
   });
   return { ok: true };
+}
+
+// بعد اتصال السحابة: تحقّق أن جلسة Supabase (JWT) ما زالت سارية.
+// إن كانت واجهة المستخدم «مسجّلة الدخول» بينما انتهت جلسة Supabase،
+// نُجبر إعادة الدخول حتى لا تفشل طلبات قاعدة البيانات بصمت تحت RLS.
+async function verifyAuthSession(){
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  if(!STATE.currentUser) return;
+  try{
+    const { data } = await CLOUD.client.auth.getSession();
+    if(!data || !data.session){
+      try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+      STATE.currentUser = null;
+      if(typeof showLoginScreen === 'function') showLoginScreen();
+    }
+  }catch(e){ /* تجاهل — لا نطرد المستخدم بسبب خطأ شبكة عابر */ }
 }
 
 function getCurrentSession(){
@@ -4671,6 +4772,8 @@ function logout(){
     });
   }
   try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+  // إنهاء جلسة Supabase (إبطال الـ JWT) — أفضل جهد
+  try{ if(window.CLOUD && CLOUD.client) CLOUD.client.auth.signOut(); }catch(e){}
   STATE.currentUser = null;
   setTimeout(()=>window.location.reload(), 200);
 }
@@ -4683,7 +4786,11 @@ function hasPermission(permKey){
   if(!STATE.currentUser) return false;
   if(STATE.currentUser.role === 'admin') return true; // admin always has all permissions
   const perms = STATE.currentUser.permissions || {};
-  return perms[permKey] === true;
+  if(perms[permKey] === true) return true;
+  if(perms[permKey] === false) return false;
+  // مفتاح غير محفوظ (صلاحية أُضيفت لاحقاً) → استخدم افتراضي الدور بدل سحبها ضمنياً
+  const def = DEFAULT_PERMISSIONS[STATE.currentUser.role] || DEFAULT_PERMISSIONS.user;
+  return def[permKey] === true;
 }
 
 function requireAdmin(actionDescription){
@@ -4706,14 +4813,13 @@ function applyUserRoleToUI(){
   if(!STATE.currentUser) return;
   document.body.classList.remove('role-admin', 'role-user');
   document.body.classList.add('role-' + STATE.currentUser.role);
-  // Apply per-permission body classes for granular CSS hiding
-  const perms = STATE.currentUser.permissions || {};
-  ['can_delete','can_export','can_import','can_manage_suppliers','can_manage_cloud','can_manage_users'].forEach(p => {
-    if(STATE.currentUser.role === 'admin' || perms[p]){
-      document.body.classList.add('perm-'+p);
-    } else {
-      document.body.classList.remove('perm-'+p);
-    }
+  // Apply per-permission body classes (مشتقة من السجل) + إخفاء العناصر الموسومة
+  PERMISSION_KEYS.forEach(p => {
+    document.body.classList.toggle('perm-'+p, hasPermission(p));
+  });
+  // أي عنصر يحمل data-requires-perm="can_X" يُخفى تلقائياً لمن لا يملك الصلاحية
+  document.querySelectorAll('[data-requires-perm]').forEach(el => {
+    el.classList.toggle('perm-hidden', !hasPermission(el.getAttribute('data-requires-perm')));
   });
   const badge = document.getElementById('user-badge');
   const nameEl = document.getElementById('user-badge-name');
@@ -4866,6 +4972,37 @@ async function createUser(data){
   }
   const role = data.role==='admin' ? 'admin' : 'user';
   const permissions = data.permissions || DEFAULT_PERMISSIONS[role];
+
+  // المسار المفضّل: خدمة الإدارة على الخادم (service_role) — تنشئ حساب Auth + الملف التعريفي.
+  if(await adminApiAvailable()){
+    const res = await adminUsersCall('create', {
+      username: data.username, password: data.password, displayName: data.displayName,
+      role, permissions, active: data.active !== false
+    });
+    if(!res.ok) return {ok:false, error: res.error};
+    pushAuditToCloud({
+      username: STATE.currentUser.username, display_name: STATE.currentUser.displayName,
+      user_role: STATE.currentUser.role, action:'add', entity_type:'user', entity_id:data.username,
+      old_value:null, new_value:{username:data.username, display_name:data.displayName, role, permissions, active:data.active!==false}, meta:{}
+    });
+    CLOUD_USERS_CACHE = null; CLOUD_USERS_LAST_FETCH = 0;
+    return {ok:true};
+  }
+
+  // أنشئ حساب الدخول في Supabase Auth عبر عميل مؤقت (لئلا تُستبدل جلسة المدير الحالي).
+  try{
+    const cfg = CLOUD.config || {};
+    if(cfg.url && cfg.key){
+      const tmp = window.supabase.createClient(cfg.url, cfg.key, {auth:{persistSession:false, autoRefreshToken:false}});
+      const { error: suErr } = await tmp.auth.signUp({ email: usernameToEmail(data.username), password: data.password });
+      if(suErr && !/already\s*registered|already\s*exists|User already/i.test(suErr.message||'')){
+        return {ok:false, error:'تعذّر إنشاء حساب الدخول: ' + suErr.message};
+      }
+    }
+  }catch(e){ return {ok:false, error:'تعذّر إنشاء حساب الدخول: ' + (e.message||'')}; }
+
+  // ملف التعريف (الدور/الصلاحيات) في proc_users. password_hash لم يعد يُستخدم للدخول
+  // (المصادقة عبر Supabase Auth) لكنه يبقى لتوافق المخطط.
   const password_hash = await sha256Hex(data.password);
   const payload = {
     username: data.username,
@@ -4929,10 +5066,28 @@ async function updateUser(username, updates){
   if(updates.notes !== undefined) payload.notes = updates.notes;
   if(updates.password){
     if(updates.password.length < 6) return {ok:false, error:'كلمة السر يجب أن تكون 6 أحرف على الأقل'};
-    payload.password_hash = await sha256Hex(updates.password);
+    if(isSelf){
+      // تغيير كلمة المرور الذاتية عبر Supabase Auth
+      try{
+        const { error: pwErr } = await CLOUD.client.auth.updateUser({ password: updates.password });
+        if(pwErr) return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + pwErr.message};
+      }catch(e){ return {ok:false, error:'تعذّر تغيير كلمة المرور: ' + (e.message||'')}; }
+    } else if(await adminApiAvailable()){
+      // تغيير كلمة مرور مستخدم آخر عبر خدمة الإدارة (service_role).
+      const res = await adminUsersCall('setPassword', {username, password: updates.password});
+      if(!res.ok) return {ok:false, error: res.error};
+    } else {
+      // لا خدمة إدارة منشورة → يتم من لوحة Supabase.
+      return {ok:false, error:'تغيير كلمة مرور مستخدم آخر يتم من لوحة Supabase (Authentication → Users)، أو انشر خدمة الإدارة.'};
+    }
+    payload.password_hash = await sha256Hex(updates.password); // توافق المخطط فقط
   }
   const {error} = await CLOUD.client.from('proc_users').update(payload).eq('username', username);
   if(error) return {ok:false, error: error.message};
+  // عند تغيير حالة التفعيل: احظر/افكّ الحظر على مستوى Auth أيضاً (best-effort)
+  if(updates.active !== undefined && await adminApiAvailable()){
+    try{ await adminUsersCall('setActive', {username, active: !!updates.active}); }catch(e){}
+  }
   // Audit (don't include password_hash in old/new)
   const oldRecord = {role:target.role, permissions:target.permissions, active:target.active, display_name:target.displayName};
   const newRecord = {...oldRecord};
@@ -4982,8 +5137,14 @@ async function deleteUser(username){
       return {ok:false, error:'لا يمكن حذف آخر مدير في النظام'};
     }
   }
-  const {error} = await CLOUD.client.from('proc_users').delete().eq('username', username);
-  if(error) return {ok:false, error: error.message};
+  // المسار المفضّل: خدمة الإدارة (تحذف حساب Auth + الملف التعريفي معاً).
+  if(await adminApiAvailable()){
+    const res = await adminUsersCall('delete', {username});
+    if(!res.ok) return {ok:false, error: res.error};
+  } else {
+    const {error} = await CLOUD.client.from('proc_users').delete().eq('username', username);
+    if(error) return {ok:false, error: error.message};
+  }
   pushAuditToCloud({
     username: STATE.currentUser.username,
     display_name: STATE.currentUser.displayName,
@@ -5494,6 +5655,7 @@ function setupEntry(){
 
 function submitEntry(){
   if(STATE.entryMode==='new'){ submitNewItem(); return; }
+  if(!requirePermission('can_enter_prices', 'إدخال الأسعار')) return;
 
   const code = document.getElementById('f-code').value.trim();
   const name = document.getElementById('f-name').value.trim();
@@ -5511,6 +5673,21 @@ function submitEntry(){
   if(!supplier){toast('error','بيانات ناقصة','يرجى إدخال المورد');return}
   if(!date){toast('error','بيانات ناقصة','يرجى إدخال التاريخ');return}
   
+  // كشف الأسعار الشاذة — تكامل مع المتوسط/آخر سعر تاريخي (ضمن وحدات سير العمل المؤجّلة)
+  try{
+    if(FEATURES.workflows){
+    const _it = (STATE.items||[]).find(i=>i.code===code);
+    const _ref = _it ? (Number(_it.avg_price)||Number(_it.last_price)||0) : 0;
+    const _thr = WF.anomalyPct||20;
+    if(_ref>0 && price > _ref*(1+_thr/100)){
+      const _pct = ((price-_ref)/_ref*100).toFixed(0);
+      if(!confirm(`⚠ تنبيه سعر شاذ\nالسعر ${fmtPrice(price)} أعلى بـ ${_pct}% من المتوسط التاريخي (${fmtPrice(_ref)}).\nهل تريد المتابعة؟`)) return;
+      try{ if(typeof wfNotifyAdmins==='function') wfNotifyAdmins('anomaly','سعر شاذ مُدخَل', `${name||code}: ${fmtPrice(price)} (+${_pct}% عن المتوسط) — أدخله ${STATE.currentUser.displayName||STATE.currentUser.username}`); }catch(e){}
+      try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'anomaly', entity_type:'price', entity_id:code, old_value:{ref:_ref}, new_value:{price}, meta:{pct:_pct}}); }catch(e){}
+    }
+    }
+  }catch(e){}
+
   // Assign new num
   const maxNum = Math.max(0,...STATE.history.map(h=>Number(h.num)||0));
   const entry = {
@@ -5536,6 +5713,7 @@ function submitEntry(){
 }
 
 function submitNewItem(){
+  if(!requirePermission('can_manage_items', 'إضافة الأصناف')) return;
   const code = document.getElementById('f-code-new').value.trim();
   const category = document.getElementById('f-category-select').value;
   const name = document.getElementById('f-name').value.trim();
@@ -5691,7 +5869,7 @@ function renderHistory(){
 }
 
 function deleteEntry(num){
-  if(!requireAdmin('حذف السجلات')) return;
+  if(!requirePermission('can_delete', 'حذف السجلات')) return;
   if(!confirm('هل تريد حذف هذا السجل؟'))return;
   const entry = STATE.history.find(h=>h.num===num);
   deleteUserEntry(num);
@@ -5940,6 +6118,7 @@ function toast(type,title,msg){
 }
 
 function exportCSV(data, filename, cols){
+  if(!requirePermission('can_export', 'التصدير')) return;
   const headers = cols.map(c=>c.label);
   const rows = data.map(r=>cols.map(c=>{
     const v = r[c.key];
@@ -5956,6 +6135,7 @@ function exportCSV(data, filename, cols){
 }
 
 async function exportExcel(data, filename, cols, options = {}) {
+  if(!requirePermission('can_export', 'التصدير')) return;
   if (!data || !data.length) { toast('warn','لا توجد بيانات','لا يوجد شيء للتصدير'); return; }
   toast('info','جاري التصدير','جارٍ تحميل مكتبة Excel...');
   try {
@@ -6307,10 +6487,52 @@ async function loadAIConfig(force){
       }
     }catch(e){ /* ignore */ }
   }
-  cfg.enabled = !!(cfg.apiKey && cfg.apiKey.length > 10);
+  // إن لم يوجد مفتاح محلي، استخدم الوسيط الآمن على الخادم (سرّ Cloudflare) إن كان متاحاً.
+  cfg.useProxy = false;
+  if(!cfg.apiKey){
+    cfg.useProxy = await aiProbeProxy();
+  }
+  cfg.enabled = (!!cfg.apiKey && cfg.apiKey.length > 10) || cfg.useProxy === true;
   __AI_CONFIG_CACHE = cfg;
   __AI_CONFIG_FETCHED_AT = now;
   return cfg;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   نقل الذكاء الاصطناعي (AI transport)
+   - عند عدم وجود مفتاح محلي: تُوجَّه الطلبات إلى الوسيط /api/ai
+     الذي يحتفظ بالمفتاح على الخادم (لا يُكشف المفتاح للمتصفح إطلاقاً).
+   - عند وجود مفتاح محلي (وضع تجريبي/محلي): يُستدعى Gemini مباشرة
+     عبر ترويسة x-goog-api-key بدل وضعه في رابط الطلب (يمنع تسريبه في السجلات).
+   ════════════════════════════════════════════════════════════════ */
+const AI_PROXY_ENDPOINT = '/api/ai';
+let __AI_PROXY_OK = null;
+async function aiProbeProxy(){
+  if(__AI_PROXY_OK !== null) return __AI_PROXY_OK;
+  try{
+    const r = await fetch(AI_PROXY_ENDPOINT, { method:'GET' });
+    const ct = r.headers.get('content-type') || '';
+    // 200 + JSON = وسيط حقيقي. (يتجنّب الإيجابية الكاذبة عند إعادة توجيه SPA لـ HTML)
+    __AI_PROXY_OK = r.ok && ct.includes('application/json');
+  }catch(e){ __AI_PROXY_OK = false; }
+  return __AI_PROXY_OK;
+}
+function aiUseProxy(cfg){ return !(cfg && cfg.apiKey); }
+async function aiFetch(model, action, reqBody, cfg){
+  if(aiUseProxy(cfg)){
+    return fetch(AI_PROXY_ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ model, action, body: reqBody })
+    });
+  }
+  const qs = action === 'streamGenerateContent' ? '?alt=sse' : '';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}${qs}`;
+  return fetch(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-goog-api-key': cfg.apiKey },
+    body: JSON.stringify(reqBody)
+  });
 }
 
 async function saveAIConfig(apiKey, options){
@@ -6447,8 +6669,6 @@ async function aiComplete(opts){
   let data = null;
 
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
-
     // Retry this model up to 3 times with exponential backoff on transient overload
     const MAX_ATTEMPTS = 3;
     let modelSucceeded = false;
@@ -6456,11 +6676,7 @@ async function aiComplete(opts){
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       let response;
       try{
-        response = await fetch(url, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
+        response = await aiFetch(model, 'generateContent', body, cfg);
       }catch(e){
         // Network error — retry once after short delay, then bail
         if(attempt < MAX_ATTEMPTS){
@@ -6561,9 +6777,12 @@ async function aiComplete(opts){
   if(modelUsed !== cfg.model){
     console.info(`[AI] Auto-switched from ${cfg.model} to ${modelUsed} (original was unavailable)`);
     // Save the working model so future requests don't waste retries
-    try{
-      await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit});
-    }catch(e){}
+    // (يُتخطّى في وضع الوسيط حيث لا يوجد مفتاح محلي يُحفظ)
+    if(cfg.apiKey){
+      try{
+        await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit});
+      }catch(e){}
+    }
   }
 
   const tokens = data?.usageMetadata?.totalTokenCount || 0;
@@ -6636,18 +6855,13 @@ async function aiCompleteStream(opts){
   let finishReason = null;
 
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(cfg.apiKey)}`;
     let response;
     const MAX_ATTEMPTS = 3;
     let advanceModel = false;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try{
-        response = await fetch(url, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(body)
-        });
+        response = await aiFetch(model, 'streamGenerateContent', body, cfg);
       }catch(e){
         if(attempt < MAX_ATTEMPTS){ await _sleep(1500 * attempt); continue; }
         logAIUsage(feature, false, 0);
@@ -6742,7 +6956,7 @@ async function aiCompleteStream(opts){
 
     // Save working model
     if(modelUsed !== cfg.model){
-      try{ await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit}); }catch(e){}
+      if(cfg.apiKey){ try{ await saveAIConfig(cfg.apiKey, {model: modelUsed, dailyLimit: cfg.dailyLimit}); }catch(e){} }
     }
 
     // Auto-continue if response was cut off (MAX_TOKENS)
@@ -7061,6 +7275,7 @@ function removeUserSupplier(id){
 
 /* Save/load edits to original suppliers */
 function saveSupplierEdit(name, edits){
+  if(!requirePermission('can_manage_suppliers', 'تعديل الموردين')) return;
   try{
     const stored = localStorage.getItem('proc_supplier_edits');
     const obj = stored? JSON.parse(stored): {};
@@ -7125,6 +7340,7 @@ function openEditSupplier(supplier){
 }
 
 async function saveSupplierForm(){
+  if(!requirePermission('can_manage_suppliers', 'إدارة الموردين')) return;
   const name = document.getElementById('sf-name').value.trim();
   const specialty = document.getElementById('sf-specialty').value.trim();
   const contact = document.getElementById('sf-contact').value.trim();
@@ -7203,7 +7419,7 @@ async function saveSupplierForm(){
 
 async function deleteSupplier(supplier){
   if(!supplier) return;
-  if(!requireAdmin('حذف الموردين')) return;
+  if(!requirePermission('can_delete', 'حذف الموردين')) return;
   // Check if supplier has any history records
   const histCount = STATE.history.filter(h=>h.supplier===supplier.name).length;
   let msg = `هل أنت متأكد من حذف المورد "${supplier.name}"؟`;
@@ -7312,6 +7528,7 @@ function saveEditItem(){
 }
 
 function saveItemEdit(code, edits){
+  if(!requirePermission('can_manage_items', 'تعديل الأصناف')) return;
   try{
     const stored = localStorage.getItem('proc_item_edits');
     const obj = stored? JSON.parse(stored) : {};
@@ -7334,7 +7551,7 @@ function loadItemEdits(){
 }
 
 async function deleteItem(code){
-  if(!requireAdmin('حذف الأصناف')) return;
+  if(!requirePermission('can_delete', 'حذف الأصناف')) return;
   const item = STATE.items.find(i=>i.code===code); if(!item) return;
   const histCount = STATE.history.filter(h=>h.code===code).length;
   const userHistCount = STATE.history.filter(h=>h.code===code && h._user).length;
@@ -7803,7 +8020,7 @@ function parseCSV(text){
 }
 
 function importCSV(file){
-  if(!requireAdmin('استيراد CSV')) return;
+  if(!requirePermission('can_import', 'استيراد CSV')) return;
   const reader = new FileReader();
   reader.onload = e=>{
     try{
@@ -8043,19 +8260,22 @@ async function testAIConnection(){
       const cur = await loadAIConfig(true);
       testKey = cur.apiKey;
     }
-    if(!testKey){
+    // إن لم يوجد مفتاح محلي، نختبر الوسيط الآمن على الخادم بدلاً من ذلك.
+    const useProxyTest = !testKey;
+    if(useProxyTest && !(await aiProbeProxy())){
       resultEl.style.background = 'rgba(155,44,44,0.08)';
       resultEl.style.color = 'var(--danger)';
-      resultEl.innerHTML = '❌ لا يوجد مفتاح للاختبار. أدخل المفتاح أولاً.';
+      resultEl.innerHTML = '❌ لا يوجد مفتاح محلي، ولم يُضبط الوسيط على الخادم (GEMINI_API_KEY). راجع دليل النشر.';
       return;
     }
 
-    // Step 1: List available models for this API key
-    resultEl.innerHTML = '⏳ جاري فحص النماذج المتاحة لمفتاحك...';
+    // Step 1: List available models (via proxy or directly with the entered key)
+    resultEl.innerHTML = '⏳ جاري فحص النماذج المتاحة...';
     let availableModels = [];
     try{
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(testKey)}`;
-      const listResp = await fetch(listUrl);
+      const listResp = useProxyTest
+        ? await fetch(AI_PROXY_ENDPOINT, { method:'GET' })
+        : await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers:{ 'x-goog-api-key': testKey } });
       if(listResp.ok){
         const listData = await listResp.json();
         availableModels = (listData.models || [])
@@ -8095,15 +8315,21 @@ async function testAIConnection(){
       }
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${encodeURIComponent(testKey)}`;
-    const response = await fetch(url, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents:[{role:'user', parts:[{text:'قل "مرحبا" فقط'}]}],
-        generationConfig:{maxOutputTokens:20}
-      })
-    });
+    const testBody = {
+      contents:[{role:'user', parts:[{text:'قل "مرحبا" فقط'}]}],
+      generationConfig:{maxOutputTokens:20}
+    };
+    const response = useProxyTest
+      ? await fetch(AI_PROXY_ENDPOINT, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model: modelToUse, action:'generateContent', body: testBody })
+        })
+      : await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'x-goog-api-key': testKey},
+          body: JSON.stringify(testBody)
+        });
     if(!response.ok){
       const errData = await response.json().catch(()=>({}));
       throw new Error(errData?.error?.message || `HTTP ${response.status}`);
@@ -9476,12 +9702,7 @@ async function renderUsersList(){
     const permList = [];
     if(isAdminUser){ permList.push('كل الصلاحيات'); }
     else {
-      if(perms.can_delete) permList.push('حذف');
-      if(perms.can_export) permList.push('تصدير');
-      if(perms.can_import) permList.push('استيراد');
-      if(perms.can_manage_suppliers) permList.push('موردين');
-      if(perms.can_manage_cloud) permList.push('سحابة');
-      if(perms.can_manage_users) permList.push('مستخدمين');
+      PERMISSION_DEFS.forEach(d => { if(perms[d.key]) permList.push(d.short); });
       if(!permList.length) permList.push('قراءة فقط');
     }
     const statusBadge = u.active === false
@@ -9576,31 +9797,47 @@ async function openUserForm(mode, username){
     passHint.textContent = '(اتركها فارغة للإبقاء على الحالية)';
     roleSel.value = u.role;
     activeChk.checked = u.active !== false;
-    setUserFormPermissions(u.permissions || DEFAULT_PERMISSIONS[u.role]);
+    // دمج صلاحيات المستخدم فوق افتراضات دوره، حتى لا تظهر الصلاحيات المُضافة
+    // حديثاً (غير المحفوظة) كغير مُحدّدة فتُسحب عند الحفظ بالخطأ.
+    setUserFormPermissions(Object.assign({}, DEFAULT_PERMISSIONS[u.role] || DEFAULT_PERMISSIONS.user, u.permissions || {}));
   }
   closeModal('modal-users');
   setTimeout(()=>openModal('modal-user-form'), 150);
 }
 
+// يبني شبكة الصلاحيات في النموذج من السجل، مجمّعة حسب الفئة (مرة واحدة)
+function renderUserFormPermissions(){
+  const grid = document.getElementById('uf-perms-grid');
+  if(!grid || grid.dataset.built === '1') return;
+  const cats = [];
+  PERMISSION_DEFS.forEach(d => { if(!cats.includes(d.cat)) cats.push(d.cat); });
+  grid.innerHTML = cats.map(cat => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:6px">${escapeHtml(cat)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+        ${PERMISSION_DEFS.filter(d => d.cat === cat).map(d =>
+          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}</label>`
+        ).join('')}
+      </div>
+    </div>`).join('');
+  grid.dataset.built = '1';
+}
+
 function setUserFormPermissions(p){
+  renderUserFormPermissions();
   p = p || {};
-  document.getElementById('uf-perm-delete').checked = !!p.can_delete;
-  document.getElementById('uf-perm-export').checked = !!p.can_export;
-  document.getElementById('uf-perm-import').checked = !!p.can_import;
-  document.getElementById('uf-perm-suppliers').checked = !!p.can_manage_suppliers;
-  document.getElementById('uf-perm-cloud').checked = !!p.can_manage_cloud;
-  document.getElementById('uf-perm-users').checked = !!p.can_manage_users;
+  document.querySelectorAll('#uf-perms-grid input[data-perm]').forEach(cb => {
+    cb.checked = p[cb.getAttribute('data-perm')] === true;
+  });
 }
 
 function readUserFormPermissions(){
-  return {
-    can_delete: document.getElementById('uf-perm-delete').checked,
-    can_export: document.getElementById('uf-perm-export').checked,
-    can_import: document.getElementById('uf-perm-import').checked,
-    can_manage_suppliers: document.getElementById('uf-perm-suppliers').checked,
-    can_manage_cloud: document.getElementById('uf-perm-cloud').checked,
-    can_manage_users: document.getElementById('uf-perm-users').checked
-  };
+  renderUserFormPermissions();
+  const out = {};
+  document.querySelectorAll('#uf-perms-grid input[data-perm]').forEach(cb => {
+    out[cb.getAttribute('data-perm')] = cb.checked;
+  });
+  return out;
 }
 
 async function saveUserForm(){
@@ -9707,6 +9944,7 @@ async function confirmDeleteUser(username){
 let __auditCurrentTab = 'local';
 
 function openAuditModal(){
+  if(!requirePermission('can_view_audit', 'عرض سجل التدقيق')) return;
   __auditCurrentTab = 'local';
   // Wire up tab buttons (idempotent - innerHTML reset clears listeners but we re-attach)
   setTimeout(()=>{
@@ -10236,18 +10474,25 @@ window.CLOUD = {
     if(!window.supabase){
       throw new Error('مكتبة Supabase لم يتم تحميلها. تأكد من اتصالك بالإنترنت.');
     }
+    // idempotent: تجنّب إعادة التهيئة المزدوجة (bootstrap ثم tryAutoConnectCloud)
+    if(this.enabled && this.client && this.url === url){ try{ verifyAuthSession(); }catch(e){} return true; }
     this.client = window.supabase.createClient(url, key, {
-      auth: {persistSession: false},
+      // persistSession=true: يبقى رمز جلسة المستخدم (JWT) بعد إعادة التحميل،
+      // وهو ضروري لتعمل سياسات RLS المعتمِدة على authenticated.
+      auth: {persistSession: true, autoRefreshToken: true},
       realtime: {params: {eventsPerSecond: 5}}
     });
     this.url = url;
-    // Test connection
+    // Test connection. خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي قبل
+    // الدخول أو بعد تحصين RLS) → لا نعتبره فشلاً في الاتصال.
     const {error} = await this.client.from('proc_items').select('code').limit(1);
-    if(error){
+    if(error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message || '')){
       throw new Error(error.message + (error.hint? ' ('+error.hint+')':''));
     }
     this.enabled = true;
     this.config = {url, key};
+    // تحقّق من جلسة المستخدم (JWT) بعد الاتصال — يطرد الجلسات المنتهية
+    try { verifyAuthSession(); } catch(e) {}
     // Preload learned aliases for smart import (best-effort, non-blocking)
     try { siLoadLearnedAliases(true); } catch(e) {}
     return true;
@@ -10581,9 +10826,7 @@ async function refreshFromCloud(){
 
 async function tryAutoConnectCloud(){
   try{
-    const stored = localStorage.getItem('proc_cloud_config');
-    if(!stored) return false;
-    const {url, key} = JSON.parse(stored);
+    const {url, key} = getCloudConfig();   // مُضمَّن أو localStorage
     if(!url || !key) return false;
     // Lazy-load the library if not already present (fixes reload disconnect)
     if(!window.supabase){
@@ -10635,7 +10878,7 @@ async function tryAutoConnectCloud(){
 
 /* === Cloud Setup Wizard === */
 function openCloudSetup(){
-  if(!requireAdmin('إعداد الاتصال السحابي')) return;
+  if(!requirePermission('can_manage_cloud', 'إعداد الاتصال السحابي')) return;
   // Reset to step 1
   showCloudStep(1);
   document.getElementById('cloud-sql-script').textContent = CLOUD_SQL_SCRIPT;
@@ -10775,7 +11018,7 @@ async function finishCloudSetup(){
 }
 
 function disconnectCloud(){
-  if(!requireAdmin('قطع الاتصال السحابي')) return;
+  if(!requirePermission('can_manage_cloud', 'قطع الاتصال السحابي')) return;
   if(!confirm('هل تريد قطع الاتصال بالسحابة؟ ستعود البيانات إلى التخزين المحلي. لن يتم حذف أي بيانات من السحابة.')) return;
   CLOUD.disconnect();
   // Reload to refresh data
@@ -11200,11 +11443,9 @@ function init(){
   // === Try cloud auto-connect ===
   // Wait briefly so the supabase library finishes loading
   setTimeout(async ()=>{
-    if(localStorage.getItem('proc_cloud_config')){
-      const ok = await tryAutoConnectCloud();
-      if(ok){
-        toast('success','اتصال سحابي','تم الاتصال بالسحابة وتحديث البيانات');
-      }
+    const ok = await tryAutoConnectCloud();
+    if(ok){
+      toast('success','اتصال سحابي','تم الاتصال بالسحابة وتحديث البيانات');
     }
   }, 800);
   
@@ -11259,6 +11500,842 @@ function init(){
 /* ============================================================
    APP BOOTSTRAP (auth-aware)
    ============================================================ */
+/* ════════════════════════════════════════════════════════════════
+   وحدة سير العمل — الإشعارات داخل النظام + اعتمادات الشراء
+   مبنية بالكامل داخل Supabase/Cloudflare (بلا مورّد خارجي).
+   الجداول: proc_purchase_requests, proc_notifications (db/workflows.sql)
+   ════════════════════════════════════════════════════════════════ */
+// مفاتيح الميزات — وحدات سير العمل (اعتمادات/RFQ/إشعارات/أداء الموردين) تبقى مخفية
+// حتى نكمل صقلها. نظام الصلاحيات + Supabase Auth يعمل مستقلاً عنها.
+// عند الجاهزية: غيّر workflows إلى true.
+const FEATURES = { workflows: false };
+const WF = { threshold: 50000, anomalyPct: 20, pollTimer: null };
+
+// إعداد Supabase مُضمَّن للاتصال التلقائي (anon عام بالتصميم — الحماية عبر RLS).
+// لا حاجة لإعداد يدوي؛ يمكن لإعداد محفوظ في localStorage تجاوزه (لبيئة تجريبية).
+const PROC_SB_URL  = 'https://yofcaxvstjcrmbgciwym.supabase.co';
+const PROC_SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
+function getCloudConfig(){
+  try{ const s=localStorage.getItem('proc_cloud_config'); if(s){ const c=JSON.parse(s); if(c && c.url && c.key) return c; } }catch(e){}
+  return { url: PROC_SB_URL, key: PROC_SB_ANON };
+}
+
+function wfLevelName(lvl){ return lvl >= 2 ? 'المدير العام' : 'مدير المشتريات'; }
+
+async function wfLoadThreshold(){
+  try{
+    if(CLOUD && CLOUD.enabled){
+      const {data} = await CLOUD.client.from('proc_settings').select('value').eq('key','approval_threshold').maybeSingle();
+      if(data && data.value){ const v = typeof data.value==='string'?JSON.parse(data.value):data.value; if(v && v.amount) WF.threshold = Number(v.amount) || WF.threshold; }
+      const {data:a} = await CLOUD.client.from('proc_settings').select('value').eq('key','anomaly_pct').maybeSingle();
+      if(a && a.value){ const v = typeof a.value==='string'?JSON.parse(a.value):a.value; if(v && v.pct) WF.anomalyPct = Number(v.pct) || WF.anomalyPct; }
+    }
+  }catch(e){}
+}
+
+function wfCanApprove(req){
+  if(!req) return false;
+  if(req.required_level >= 2) return hasPermission('can_approve_l2');
+  return hasPermission('can_approve_l1') || hasPermission('can_approve_l2');
+}
+function wfIsApprover(){ return hasPermission('can_approve_l1') || hasPermission('can_approve_l2'); }
+
+async function wfNotify(recipient, type, title, body, link){
+  if(!recipient || !(CLOUD && CLOUD.enabled)) return;
+  try{ await CLOUD.client.from('proc_notifications').insert({
+    id:'ntf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+    recipient, type, title, body: body||'', link: link||null, read:false
+  }); }catch(e){}
+}
+
+async function wfNotifyAdmins(type, title, body, link){
+  try{ const users=(await fetchCloudUsers(true))||{}; for(const u of Object.values(users)){ if(u.active!==false && u.role==='admin' && u.username!==(STATE.currentUser&&STATE.currentUser.username)) await wfNotify(u.username, type, title, body, link||null); } }catch(e){}
+}
+async function wfApprovers(level){
+  const users = (await fetchCloudUsers(true)) || {};
+  const key = level >= 2 ? 'can_approve_l2' : 'can_approve_l1';
+  return Object.values(users).filter(u => u.active !== false && (
+    u.role === 'admin' || (u.permissions && (u.permissions[key] || (level < 2 && u.permissions['can_approve_l2'])))
+  ));
+}
+
+async function submitPurchaseRequest(data){
+  if(!(CLOUD && CLOUD.enabled)){ toast('error','غير متصل','يلزم الاتصال بالسحابة'); return {ok:false}; }
+  const amount = parseFloat(data.amount) || 0;
+  if(!data.title || amount <= 0){ toast('error','بيانات ناقصة','أدخل الوصف والمبلغ'); return {ok:false}; }
+  const level = amount > WF.threshold ? 2 : 1;
+  const id = 'pr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const payload = { id, title:data.title, supplier:data.supplier||null, amount, currency:'SAR',
+    details:data.details||{}, requested_by:STATE.currentUser.username, requested_by_name:STATE.currentUser.displayName||STATE.currentUser.username,
+    status:'pending', required_level:level };
+  const {error} = await CLOUD.client.from('proc_purchase_requests').insert(payload);
+  if(error){ toast('error','فشل الإرسال', error.message); return {ok:false}; }
+  const approvers = await wfApprovers(level);
+  for(const a of approvers){ if(a.username !== STATE.currentUser.username) await wfNotify(a.username,'approval','طلب اعتماد جديد', `${data.title} — ${fmtPrice(amount)} ر.س (${wfLevelName(level)})`, 'approvals'); }
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'add', entity_type:'purchase_request', entity_id:id, old_value:null, new_value:{title:data.title, amount, level}, meta:{}}); }catch(e){}
+  toast('success','تم الإرسال','الطلب بانتظار اعتماد '+wfLevelName(level));
+  return {ok:true};
+}
+
+async function decidePurchaseRequest(id, approve, note){
+  if(!(CLOUD && CLOUD.enabled)) return {ok:false};
+  const {data:req} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('id', id).maybeSingle();
+  if(!req || req.status !== 'pending'){ toast('warn','غير متاح','الطلب غير موجود أو سبق البتّ فيه'); return {ok:false}; }
+  if(!wfCanApprove(req)){ toast('error','صلاحية مرفوضة','لا تملك اعتماد هذا المستوى'); return {ok:false}; }
+  const {error} = await CLOUD.client.from('proc_purchase_requests').update({status: approve?'approved':'rejected', decided_by:STATE.currentUser.username, decided_at:new Date().toISOString(), decision_note:note||null}).eq('id', id).eq('status','pending');
+  if(error){ toast('error','فشل', error.message); return {ok:false}; }
+  await wfNotify(req.requested_by, 'decision', approve?'تم اعتماد طلبك ✓':'رُفض طلبك ✗', `${req.title} — ${fmtPrice(req.amount)} ر.س${note?(' · '+note):''}`, 'approvals');
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:approve?'approve':'reject', entity_type:'purchase_request', entity_id:id, old_value:{status:'pending'}, new_value:{status:approve?'approved':'rejected'}, meta:{note:note||''}}); }catch(e){}
+  toast('success', approve?'تم الاعتماد':'تم الرفض','');
+  return {ok:true};
+}
+
+/* ── الإشعارات (جرس) ── */
+async function wfFetchNotifications(){
+  if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return [];
+  try{ const {data} = await CLOUD.client.from('proc_notifications').select('*').eq('recipient', STATE.currentUser.username).order('created_at',{ascending:false}).limit(30); return data||[]; }catch(e){ return []; }
+}
+async function wfRefreshBell(){
+  if(!STATE.currentUser) return;
+  const list = await wfFetchNotifications();
+  const unread = list.filter(n=>!n.read).length;
+  const badge = document.getElementById('wf-bell-badge');
+  if(badge){ badge.textContent = unread; badge.style.display = unread?'flex':'none'; }
+  const panel = document.getElementById('wf-notif-list');
+  if(panel){
+    panel.innerHTML = list.length ? list.map(n=>`
+      <div class="wf-notif ${n.read?'':'unread'}" data-id="${escapeHtml(n.id)}" data-link="${escapeHtml(n.link||'')}">
+        <div class="wf-notif-title">${escapeHtml(n.title)}</div>
+        <div class="wf-notif-body">${escapeHtml(n.body||'')}</div>
+        <div class="wf-notif-time">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn',{dateStyle:'short',timeStyle:'short'})}</div>
+      </div>`).join('') : '<div class="wf-empty">لا توجد إشعارات</div>';
+    panel.querySelectorAll('.wf-notif').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        const nid = el.getAttribute('data-id'); const link = el.getAttribute('data-link');
+        try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('id', nid); }catch(e){}
+        const pop = document.getElementById('wf-notif-panel'); if(pop) pop.style.display='none';
+        if(link === 'approvals') openApprovalsModal(wfIsApprover() ? 'inbox' : 'mine');
+        wfRefreshBell();
+      });
+    });
+  }
+}
+async function wfMarkAllRead(){
+  if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return;
+  try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('recipient', STATE.currentUser.username).eq('read', false); }catch(e){}
+  wfRefreshBell();
+}
+
+/* ── نافذة الاعتمادات ── */
+function openApprovalsModal(tab){
+  const m = document.getElementById('modal-approvals'); if(!m) return;
+  m.style.display = 'flex';
+  const inboxTab = document.getElementById('wf-tab-inbox');
+  if(inboxTab) inboxTab.style.display = wfIsApprover() ? '' : 'none';
+  wfSwitchApprovalsTab(tab || (wfIsApprover() ? 'inbox' : 'new'));
+}
+function wfSwitchApprovalsTab(tab){
+  ['new','mine','inbox'].forEach(t=>{
+    const b = document.getElementById('wf-tab-'+t), p = document.getElementById('wf-pane-'+t);
+    if(b) b.classList.toggle('active', t===tab);
+    if(p) p.style.display = (t===tab) ? '' : 'none';
+  });
+  if(tab==='mine') wfRenderMyRequests();
+  if(tab==='inbox') wfRenderInbox();
+}
+function wfStatusBadge(s){ return s==='approved'?'<span class="wf-b ok">معتمد</span>': s==='rejected'?'<span class="wf-b no">مرفوض</span>':'<span class="wf-b pend">قيد الاعتماد</span>'; }
+function wfRequestCard(r, withActions){
+  return `<div class="wf-card">
+    <div class="wf-card-h"><span class="wf-card-title">${escapeHtml(r.title)}</span>${wfStatusBadge(r.status)}</div>
+    <div class="wf-card-meta">${fmtPrice(r.amount)} ر.س · ${escapeHtml(r.supplier||'—')} · يعتمده: ${wfLevelName(r.required_level)}</div>
+    <div class="wf-card-meta">مُقدّم الطلب: ${escapeHtml(r.requested_by_name||r.requested_by)} · ${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
+    ${r.decision_note?`<div class="wf-card-note">ملاحظة: ${escapeHtml(r.decision_note)}</div>`:''}
+    ${withActions?`<div class="wf-card-act"><input id="wfnote-${escapeHtml(r.id)}" class="wf-note" placeholder="ملاحظة (اختياري)"><button class="btn btn-accent btn-sm" data-approve data-id="${escapeHtml(r.id)}">اعتماد</button><button class="btn btn-ghost btn-sm" data-reject data-id="${escapeHtml(r.id)}">رفض</button></div>`:''}
+  </div>`;
+}
+async function wfRenderMyRequests(){
+  const el = document.getElementById('wf-pane-mine'); if(!el) return;
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  try{
+    const {data} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('requested_by', STATE.currentUser.username).order('created_at',{ascending:false}).limit(50);
+    el.innerHTML = (data && data.length) ? data.map(r=>wfRequestCard(r,false)).join('') : '<div class="wf-empty">لا توجد طلبات</div>';
+  }catch(e){ el.innerHTML = '<div class="wf-empty">تعذّر التحميل</div>'; }
+}
+async function wfRenderInbox(){
+  const el = document.getElementById('wf-pane-inbox'); if(!el) return;
+  if(!wfIsApprover()){ el.innerHTML = '<div class="wf-empty">لا تملك صلاحية الاعتماد</div>'; return; }
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  try{
+    const {data} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('status','pending').order('created_at',{ascending:true}).limit(100);
+    const mine = (data||[]).filter(wfCanApprove);
+    el.innerHTML = mine.length ? mine.map(r=>wfRequestCard(r,true)).join('') : '<div class="wf-empty">لا توجد طلبات بانتظار اعتمادك</div>';
+    el.querySelectorAll('[data-approve]').forEach(b=>b.addEventListener('click', async()=>{ const id=b.getAttribute('data-id'); const n=document.getElementById('wfnote-'+id); await decidePurchaseRequest(id,true,n?n.value:''); wfRenderInbox(); wfRefreshBell(); }));
+    el.querySelectorAll('[data-reject]').forEach(b=>b.addEventListener('click', async()=>{ const id=b.getAttribute('data-id'); const n=document.getElementById('wfnote-'+id); await decidePurchaseRequest(id,false,n?n.value:''); wfRenderInbox(); wfRefreshBell(); }));
+  }catch(e){ el.innerHTML = '<div class="wf-empty">تعذّر التحميل</div>'; }
+}
+
+/* ── حقن واجهة الوحدة (مرة واحدة) ── */
+let __WF_BUILT = false;
+function wfInjectUI(){
+  if(__WF_BUILT || !document.body) return;
+  __WF_BUILT = true;
+  const css = `
+    .wf-bell{position:fixed;bottom:20px;inset-inline-start:20px;z-index:900;width:48px;height:48px;border-radius:50%;background:#231F20;color:#C4A265;border:1px solid rgba(196,162,101,0.4);box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .wf-bell:hover{transform:translateY(-1px)}
+    .wf-bell-badge{position:absolute;top:-4px;inset-inline-end:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#b8434a;color:#fff;font-size:11px;font-weight:700;display:none;align-items:center;justify-content:center}
+    #wf-notif-panel{position:fixed;bottom:76px;inset-inline-start:20px;z-index:901;width:320px;max-height:60vh;overflow:auto;background:var(--surface,#fff);border:1px solid var(--border,#e5e0d5);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.18);display:none}
+    .wf-notif-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border,#eee);font-weight:700;font-size:13px;position:sticky;top:0;background:var(--surface,#fff)}
+    .wf-notif{padding:10px 14px;border-bottom:1px solid var(--border,#f0ece2);cursor:pointer}
+    .wf-notif:hover{background:var(--surface-2,#faf8f3)}
+    .wf-notif.unread{background:rgba(196,162,101,0.08)}
+    .wf-notif-title{font-size:13px;font-weight:600;color:var(--ink,#231F20)}
+    .wf-notif-body{font-size:12px;color:var(--ink-2,#555);margin-top:2px}
+    .wf-notif-time{font-size:10.5px;color:var(--muted,#999);margin-top:3px}
+    .wf-empty{padding:24px 14px;text-align:center;color:var(--muted,#999);font-size:13px}
+    #modal-approvals{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:20px}
+    .wf-modal{width:min(640px,96vw);max-height:88vh;overflow:auto;background:var(--surface,#fff);border-radius:14px;border:1px solid var(--border,#e5e0d5)}
+    .wf-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border,#eee)}
+    .wf-modal-head h3{margin:0;font-size:16px}
+    .wf-tabs{display:flex;gap:6px;padding:12px 20px 0}
+    .wf-tab{padding:8px 14px;border:none;background:transparent;border-bottom:2px solid transparent;cursor:pointer;font-family:inherit;font-size:13px;color:var(--muted,#999);font-weight:600}
+    .wf-tab.active{color:var(--ink,#231F20);border-bottom-color:var(--accent-2,#C4A265)}
+    .wf-pane{padding:16px 20px}
+    .wf-field{margin-bottom:12px}
+    .wf-field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+    .wf-field input,.wf-field textarea{width:100%;padding:9px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-family:inherit;font-size:13px}
+    .wf-card{border:1px solid var(--border,#eee);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--surface-2,#faf8f3)}
+    .wf-card-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .wf-card-title{font-weight:700;font-size:14px}
+    .wf-card-meta{font-size:12px;color:var(--ink-2,#555);margin-top:4px}
+    .wf-card-note{font-size:12px;color:var(--accent-2,#8a6a30);margin-top:6px}
+    .wf-card-act{display:flex;gap:8px;margin-top:10px;align-items:center}
+    .wf-note{flex:1;padding:7px 10px;border:1px solid var(--border,#ddd);border-radius:7px;font-family:inherit;font-size:12.5px}
+    .wf-b{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+    .wf-b.ok{background:rgba(45,157,111,0.15);color:#1f7a55}
+    .wf-b.no{background:rgba(184,67,74,0.15);color:#a23b41}
+    .wf-b.pend{background:rgba(196,162,101,0.18);color:#8a6a30}
+  `;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+
+  const bell = document.createElement('button');
+  bell.className = 'wf-bell'; bell.id = 'wf-bell'; bell.title = 'الإشعارات';
+  bell.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="wf-bell-badge" id="wf-bell-badge"></span>`;
+  document.body.appendChild(bell);
+
+  const panel = document.createElement('div');
+  panel.id = 'wf-notif-panel';
+  panel.innerHTML = `
+    <div class="wf-notif-head"><span>الإشعارات</span>
+      <span style="display:flex;gap:10px">
+        <a id="wf-open-approvals" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">الاعتمادات</a>
+        <a id="wf-open-rfq" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">عروض الأسعار</a>
+        <a id="wf-open-sc" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">أداء الموردين</a>
+        <a id="wf-mark-read" style="font-size:12px;color:var(--muted,#999);cursor:pointer">تحديد الكل مقروء</a>
+      </span>
+    </div>
+    <div id="wf-notif-list"></div>`;
+  document.body.appendChild(panel);
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-approvals';
+  modal.innerHTML = `
+    <div class="wf-modal">
+      <div class="wf-modal-head"><h3>اعتمادات الشراء</h3><button id="wf-modal-close" class="btn btn-ghost btn-sm">✕</button></div>
+      <div class="wf-tabs">
+        <button class="wf-tab" id="wf-tab-new">طلب اعتماد جديد</button>
+        <button class="wf-tab" id="wf-tab-mine">طلباتي</button>
+        <button class="wf-tab" id="wf-tab-inbox">بانتظار اعتمادي</button>
+      </div>
+      <div class="wf-pane" id="wf-pane-new">
+        <div class="wf-field"><label>وصف الطلب *</label><input id="wf-new-title" placeholder="مثال: توريد حديد تسليح لمشروع كذا"></div>
+        <div class="wf-field"><label>المورد</label><input id="wf-new-supplier" placeholder="اسم المورد (اختياري)"></div>
+        <div class="wf-field"><label>المبلغ (ر.س) *</label><input id="wf-new-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="wf-field"><label>ملاحظات</label><textarea id="wf-new-note" rows="2" placeholder="تفاصيل إضافية (اختياري)"></textarea></div>
+        <div style="font-size:12px;color:var(--muted,#999);margin-bottom:10px">يُوجَّه الطلب تلقائياً حسب المبلغ: حتى ${fmtPrice(WF.threshold)} ر.س → مدير المشتريات، وأكثر → المدير العام.</div>
+        <button class="btn btn-accent" id="wf-new-submit">إرسال للاعتماد</button>
+      </div>
+      <div class="wf-pane" id="wf-pane-mine" style="display:none"></div>
+      <div class="wf-pane" id="wf-pane-inbox" style="display:none"></div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // الأحداث
+  bell.addEventListener('click', ()=>{ const p=document.getElementById('wf-notif-panel'); const open = p.style.display!=='none'; p.style.display = open?'none':'block'; if(!open) wfRefreshBell(); });
+  document.getElementById('wf-mark-read').addEventListener('click', wfMarkAllRead);
+  document.getElementById('wf-open-approvals').addEventListener('click', ()=>{ document.getElementById('wf-notif-panel').style.display='none'; openApprovalsModal(); });
+  document.getElementById('wf-open-rfq').addEventListener('click', ()=>{ document.getElementById('wf-notif-panel').style.display='none'; openRfqModal(); });
+  document.getElementById('wf-open-sc').addEventListener('click', ()=>{ document.getElementById('wf-notif-panel').style.display='none'; openScorecards(); });
+  document.getElementById('wf-modal-close').addEventListener('click', ()=>{ modal.style.display='none'; });
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+  document.getElementById('wf-tab-new').addEventListener('click', ()=>wfSwitchApprovalsTab('new'));
+  document.getElementById('wf-tab-mine').addEventListener('click', ()=>wfSwitchApprovalsTab('mine'));
+  document.getElementById('wf-tab-inbox').addEventListener('click', ()=>wfSwitchApprovalsTab('inbox'));
+  document.getElementById('wf-new-submit').addEventListener('click', async ()=>{
+    const res = await submitPurchaseRequest({
+      title: document.getElementById('wf-new-title').value.trim(),
+      supplier: document.getElementById('wf-new-supplier').value.trim(),
+      amount: document.getElementById('wf-new-amount').value,
+      details: { note: document.getElementById('wf-new-note').value.trim() }
+    });
+    if(res && res.ok){ document.getElementById('wf-new-title').value=''; document.getElementById('wf-new-supplier').value=''; document.getElementById('wf-new-amount').value=''; document.getElementById('wf-new-note').value=''; wfSwitchApprovalsTab('mine'); wfRefreshBell(); }
+  });
+  // إغلاق لوحة الإشعارات عند النقر خارجها
+  document.addEventListener('click', e=>{ const p=document.getElementById('wf-notif-panel'); if(p && p.style.display!=='none' && !p.contains(e.target) && !bell.contains(e.target)) p.style.display='none'; });
+}
+
+async function initWorkflows(){
+  if(!FEATURES.workflows) return;   // الوحدات مخفية حتى اكتمال الصقل
+  if(!STATE.currentUser) return;
+  wfInjectUI();
+  await wfLoadThreshold();
+  wfRefreshBell();
+  if(WF.pollTimer) clearInterval(WF.pollTimer);
+  WF.pollTimer = setInterval(()=>{ if(STATE.currentUser) wfRefreshBell(); }, 45000);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   وحدة طلب عروض الأسعار (RFQ) ومقارنتها — داخل النظام
+   الجداول: proc_rfqs, proc_rfq_quotes (db/rfq.sql)
+   ════════════════════════════════════════════════════════════════ */
+function rfqSlug(s){ return String(s||'').trim().replace(/\s+/g,'_').replace(/[^\w؀-ۿ]/g,''); }
+function rfqLineTotal(line, price){ const q = Number(line.qty)||1; return (Number(price)||0) * q; }
+function rfqNum(v){ const n = Number(v); return isFinite(n) ? n : 0; }
+
+// ── الذكاء التكاملي: خط الأساس من بيانات النظام التاريخية ──
+function rfqItemBaseline(nameOrCode){
+  if(!nameOrCode) return {price:0, code:null, unit:''};
+  const k = String(nameOrCode).trim();
+  const it = (STATE.items||[]).find(i => i.code===k || i.name===k);
+  if(!it) return {price:0, code:null, unit:''};
+  return { price: rfqNum(it.last_price) || rfqNum(it.avg_price) || 0, code: it.code, unit: it.unit||'' };
+}
+// اقتراح موردين من السجل التاريخي حسب أكواد/فئات بنود الطلب
+function rfqSuggestSuppliers(lines){
+  const codes = new Set((lines||[]).map(l=>l.code).filter(Boolean));
+  const cats = new Set();
+  (STATE.items||[]).forEach(i=>{ if(codes.has(i.code) && i.category) cats.add(i.category); });
+  const freq = {};
+  (STATE.history||[]).forEach(h=>{ if(!h.supplier) return; if(codes.has(h.code) || (h.category && cats.has(h.category))) freq[h.supplier] = (freq[h.supplier]||0)+1; });
+  return Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,8).map(e=>e[0]);
+}
+const RFQ_DEFAULT_WEIGHTS = { price:100, delivery:0, quality:0, payment:0 };
+// تقييم القيمة الأفضل (best-value) متعدد المعايير بأوزان — نهج Oracle/Ariba
+function rfqEvaluate(rfq, qmap, amap, totals, completeSuppliers){
+  const w = Object.assign({}, RFQ_DEFAULT_WEIGHTS, rfq.weights||{});
+  const wsum = (w.price+w.delivery+w.quality+w.payment) || 1;
+  const useScore = (w.delivery+w.quality+w.payment) > 0;
+  if(!useScore || !completeSuppliers.length) return { useScore:false, scores:{}, ranked:[] };
+  const minTotal = Math.min(...completeSuppliers.map(s=>totals[s]));
+  const minDelivery = Math.min(...completeSuppliers.map(s=>rfqNum((amap[s]||{}).delivery_days)||9999));
+  const maxPay = Math.max(...completeSuppliers.map(s=>rfqNum((amap[s]||{}).payment_days)||0), 1);
+  const scores = {};
+  completeSuppliers.forEach(s=>{
+    const a = amap[s]||{};
+    const sp = totals[s]>0 ? (minTotal/totals[s])*100 : 0;                       // أقل سعر أفضل
+    const sd = rfqNum(a.delivery_days)>0 ? (minDelivery/rfqNum(a.delivery_days))*100 : (w.delivery? 0:0); // أسرع تسليم أفضل
+    const sq = (rfqNum(a.quality)/5)*100;                                          // جودة 1-5
+    const spy = (rfqNum(a.payment_days)/maxPay)*100;                              // مدة سداد أطول أفضل
+    scores[s] = Math.round(((w.price*sp + w.delivery*sd + w.quality*sq + w.payment*spy)/wsum)*10)/10;
+  });
+  const ranked = completeSuppliers.slice().sort((a,b)=>scores[b]-scores[a]);
+  return { useScore:true, scores, ranked, w };
+}
+
+async function rfqCreate(data){
+  if(!(CLOUD && CLOUD.enabled)){ toast('error','غير متصل','يلزم الاتصال بالسحابة'); return {ok:false}; }
+  if(!data.title || !(data.lines||[]).length){ toast('error','بيانات ناقصة','أدخل العنوان وبنداً واحداً على الأقل'); return {ok:false}; }
+  const id = 'rfq_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const budget = (data.lines||[]).reduce((sum,l)=> sum + rfqNum(l.baseline)*(Number(l.qty)||1), 0);
+  const payload = { id, title:data.title, status:'open', deadline:data.deadline||null,
+    lines:data.lines, suppliers:data.suppliers||[], notes:data.notes||null,
+    weights: data.weights||RFQ_DEFAULT_WEIGHTS, awards:{}, budget,
+    created_by:STATE.currentUser.username, created_by_name:STATE.currentUser.displayName||STATE.currentUser.username };
+  const {error} = await CLOUD.client.from('proc_rfqs').insert(payload);
+  if(error){ toast('error','فشل', error.message); return {ok:false}; }
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'add', entity_type:'rfq', entity_id:id, old_value:null, new_value:{title:data.title}, meta:{}}); }catch(e){}
+  toast('success','تم الإنشاء','طلب عروض الأسعار جاهز لتسجيل الأسعار');
+  return {ok:true, id};
+}
+async function rfqList(){
+  if(!(CLOUD && CLOUD.enabled)) return [];
+  try{ const {data} = await CLOUD.client.from('proc_rfqs').select('*').order('created_at',{ascending:false}).limit(60); return data||[]; }catch(e){ return []; }
+}
+async function rfqLoadOne(id){
+  const {data:rfq} = await CLOUD.client.from('proc_rfqs').select('*').eq('id',id).maybeSingle();
+  const {data:quotes} = await CLOUD.client.from('proc_rfq_quotes').select('*').eq('rfq_id',id);
+  return { rfq, quotes: quotes||[] };
+}
+async function rfqSaveSupplierQuote(rfqId, supplier, prices, attrs, note){
+  const id = rfqId+'__'+rfqSlug(supplier);
+  const {error} = await CLOUD.client.from('proc_rfq_quotes').upsert({ id, rfq_id:rfqId, supplier, prices, attrs:attrs||{}, note:note||null, updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
+  return !error;
+}
+// تغذية السجل التاريخي بالأسعار المعتمدة عند الترسية (تعلّم النظام)
+async function rfqFeedHistory(rfq, quotes, awardsMap){
+  try{
+    const qmap={}; (quotes||[]).forEach(q=>qmap[q.supplier]=q.prices||{});
+    let base = Math.max(0, ...STATE.history.map(h=>Number(h.num)||0));
+    const today = new Date().toISOString().slice(0,10);
+    let fed = 0;
+    for(const line of (rfq.lines||[])){
+      const sup = awardsMap[line.id]; if(!sup) continue;
+      const price = rfqNum((qmap[sup]||{})[line.id]); if(!(price>0)) continue;
+      if(!line.code) continue; // نغذّي فقط البنود المرتبطة بالكتالوج للحفاظ على نظافة السجل
+      const cat = ((STATE.items||[]).find(i=>i.code===line.code)||{}).category || '';
+      const entry = { num: ++base, code:line.code, name:line.desc, category:cat, price, unit:line.unit||'', supplier:sup, date:today, reference:'RFQ '+rfq.id, note:'سعر معتمد من ترسية', _user:true };
+      STATE.history.unshift(entry);
+      if(window.CLOUD && CLOUD.enabled) CLOUD.history.insert(entry).catch(()=>{});
+      fed++;
+    }
+    if(fed){ try{ recomputeItemStats(); }catch(e){} toast('info','تحديث السجل', fed+' سعر معتمد أُضيف إلى السجل التاريخي'); }
+  }catch(e){}
+}
+// طباعة/تصدير مقارنة العروض
+function rfqPrint(rfq, lines, sups, qmap, totals){
+  if(!requirePermission('can_export','طباعة المقارنة')) return;
+  const w = window.open('', '_blank'); if(!w){ toast('error','منع','اسمح بالنوافذ المنبثقة'); return; }
+  let h = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>مقارنة عروض — ${escapeHtml(rfq.title)}</title>
+    <style>body{font-family:Arial,Tahoma;padding:24px;color:#222}h2{margin:0 0 4px}table{border-collapse:collapse;width:100%;margin-top:12px}
+    th,td{border:1px solid #999;padding:6px 8px;text-align:center;font-size:12px}th{background:#f0ece2}tfoot td{font-weight:bold;background:#faf7f0}</style></head><body>`;
+  h += `<h2>مقارنة عروض الأسعار</h2><div>${escapeHtml(rfq.title)} · رقم ${escapeHtml(rfq.id)} · ${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</div>`;
+  h += `<table><thead><tr><th>البند</th><th>الكمية</th><th>مرجعي</th>${sups.map(s=>`<th>${escapeHtml(s)}</th>`).join('')}</tr></thead><tbody>`;
+  lines.forEach(line=>{ h += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>${sups.map(s=>{ const v=(qmap[s]||{})[line.id]; return `<td>${v!=null?fmtPrice(v):'—'}</td>`; }).join('')}</tr>`; });
+  h += `</tbody><tfoot><tr><td colspan="3">الإجمالي</td>${sups.map(s=>`<td>${totals[s]?fmtPrice(totals[s]):'—'}</td>`).join('')}</tr></tfoot></table>`;
+  h += `<p style="margin-top:18px;font-size:11px;color:#777">AL-DEYABI GROUP · نظام المشتريات</p></body></html>`;
+  w.document.write(h); w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
+}
+
+// استيراد عرض مورد من صورة عبر الذكاء الاصطناعي (Gemini) — يملأ عمود المورد
+async function rfqAIImport(si, sups, lines){
+  if(!hasPermission('can_use_ai')){ toast('error','صلاحية مرفوضة','الذكاء الاصطناعي غير متاح لك'); return; }
+  const cfg = await loadAIConfig();
+  if(!cfg.enabled){ toast('error','غير مُتاح','لم يُضبط الذكاء الاصطناعي (مفتاح/وسيط)'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange = async ()=>{
+    const f=inp.files[0]; if(!f) return;
+    toast('info','جارٍ التحليل','يقرأ الذكاء الاصطناعي صورة العرض…');
+    try{
+      const b64 = await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(',')[1]); rd.onerror=rej; rd.readAsDataURL(f); });
+      const prompt = 'هذه صورة عرض سعر من مورد. طابق كل بند بسعر الوحدة وأعد JSON فقط بالشكل {"L1":السعر,...} حسب البنود التالية:\n'
+        + lines.map(l=>`${l.id}: ${l.desc} (${l.qty||1} ${l.unit||''})`).join('\n')
+        + '\nأعد JSON صحيحاً فقط بأرقام لسعر الوحدة، واترك البند الذي لا يظهر سعره.';
+      const body = { contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg', data:b64}}]}], generationConfig:{temperature:0.1, maxOutputTokens:1024} };
+      const resp = await aiFetch(cfg.model||AI_DEFAULT_MODEL, 'generateContent', body, cfg);
+      const data = await resp.json();
+      let txt = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+      txt = txt.replace(/```(?:json)?/gi,'').trim();
+      const a=txt.indexOf('{'), z=txt.lastIndexOf('}'); if(a<0||z<0) throw new Error('لم يُفهم الرد');
+      const obj = JSON.parse(txt.slice(a,z+1));
+      let n=0; lines.forEach((l,li)=>{ const v=Number(obj[l.id]); if(v>0){ const cell=document.getElementById(`rq-${si}-${li}`); if(cell){ cell.value=v; n++; } } });
+      toast(n?'success':'warn', n?'تم الاستخراج':'لا أسعار', n?(n+' سعر استُخرج — راجعها ثم اضغط حفظ'):'لم يُستخرج سعر واضح');
+    }catch(e){ toast('error','فشل التحليل', e.message||'حاول بصورة أوضح'); }
+  };
+  inp.click();
+}
+
+// ── بوابة المورّد: توليد روابط الدعوة ومتابعة الاستجابة ──
+function rfqGenToken(){
+  // عشوائية مشفّرة — التوكن يحمي عروض المورّدين من التخمين
+  try{
+    if(window.crypto && crypto.randomUUID) return 'tk_'+crypto.randomUUID().replace(/-/g,'')+crypto.randomUUID().replace(/-/g,'').slice(0,8);
+    const a=new Uint8Array(24); crypto.getRandomValues(a);
+    return 'tk_'+Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return 'tk_'+Date.now().toString(36)+Math.random().toString(36).slice(2,12); }
+}
+async function rfqEnsureToken(rfqId, supplier){
+  const qid = rfqId+'__'+rfqSlug(supplier);
+  const {data:ex} = await CLOUD.client.from('proc_rfq_quotes').select('token,prices,attrs,note,status').eq('id',qid).maybeSingle();
+  let token = ex && ex.token;
+  if(!token){
+    token = rfqGenToken();
+    await CLOUD.client.from('proc_rfq_quotes').upsert({ id:qid, rfq_id:rfqId, supplier, token,
+      status:(ex&&ex.status)||'invited', prices:(ex&&ex.prices)||{}, attrs:(ex&&ex.attrs)||{}, note:(ex&&ex.note)||null,
+      updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
+  }
+  return location.origin + '/rfq.html?r=' + encodeURIComponent(rfqId) + '&t=' + encodeURIComponent(token);
+}
+async function rfqCopyInvite(rfqId, supplier){
+  let link;
+  try{ link = await rfqEnsureToken(rfqId, supplier); }catch(e){ toast('error','تعذّر','فشل توليد الرابط'); return; }
+  try{ await navigator.clipboard.writeText(link); toast('success','نُسخ رابط المورد','أرسله عبر واتساب/إيميل لـ '+supplier); }
+  catch(e){ prompt('انسخ رابط المورد ('+supplier+'):', link); }
+}
+function rfqRespBadge(st){ return st==='submitted'?'<span class="wf-b ok">قدّم العرض</span>': st==='opened'?'<span class="wf-b pend">فتح الرابط</span>':'<span class="wf-b" style="background:#eee;color:#777;padding:3px 9px;border-radius:20px">مدعو</span>'; }
+
+async function rfqSetStatus(rfqId, status){
+  await CLOUD.client.from('proc_rfqs').update({status}).eq('id',rfqId);
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'edit', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{status}, meta:{}}); }catch(e){}
+  rfqOpenDetail(rfqId);
+}
+async function rfqSaveWeights(rfqId, weights){
+  await CLOUD.client.from('proc_rfqs').update({weights}).eq('id',rfqId);
+  toast('success','حُفظت المعايير','أُعيد احتساب التقييم'); rfqOpenDetail(rfqId);
+}
+// ترسية شاملة على مورد واحد (تُنشئ طلب اعتماد)
+async function rfqAward(rfqId, supplier, total){
+  if(!confirm(`ترسية كامل الطلب على «${supplier}» بإجمالي ${fmtPrice(total)} ر.س؟ سيُنشأ طلب اعتماد.`)) return;
+  const {rfq, quotes} = await rfqLoadOne(rfqId);
+  const awards = {}; (rfq.lines||[]).forEach(l=>awards[l.id]=supplier);
+  await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:supplier, awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  await rfqFeedHistory(rfq, quotes, awards);
+  await submitPurchaseRequest({ title:'ترسية RFQ: '+(rfq?rfq.title:rfqId), supplier, amount: total, details:{ rfq_id: rfqId, type:'full' } });
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'award', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{awarded_to:supplier}, meta:{total}}); }catch(e){}
+  toast('success','تمت الترسية','أُنشئ طلب اعتماد للترسية');
+  rfqOpenDetail(rfqId);
+}
+// ترسية مجزّأة: كل بند لأقل مورد (تُنشئ طلب اعتماد لكل مورد)
+async function rfqAwardSplit(rfqId, awards, perSupplierTotal, splitTotal){
+  if(!confirm(`اعتماد الترسية المجزّأة (كل بند لأوفر مورد) بإجمالي ${fmtPrice(splitTotal)} ر.س؟ سيُنشأ طلب اعتماد لكل مورد.`)) return;
+  const {rfq, quotes} = await rfqLoadOne(rfqId);
+  await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:'مجزّأة', awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  await rfqFeedHistory(rfq, quotes, awards);
+  for(const [sup, amt] of Object.entries(perSupplierTotal)){
+    if(amt>0) await submitPurchaseRequest({ title:'ترسية مجزّأة RFQ: '+(rfq?rfq.title:rfqId)+' — '+sup, supplier:sup, amount:amt, details:{ rfq_id:rfqId, type:'split' } });
+  }
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'award', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{type:'split'}, meta:{splitTotal}}); }catch(e){}
+  toast('success','تمت الترسية المجزّأة','أُنشئت طلبات اعتماد للموردين');
+  rfqOpenDetail(rfqId);
+}
+
+/* ── واجهة RFQ ── */
+let __RFQ_BUILT = false;
+function rfqInjectUI(){
+  if(__RFQ_BUILT || !document.body) return; __RFQ_BUILT = true;
+  const css = `
+    #modal-rfq{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:20px}
+    .rfq-modal{width:min(920px,97vw);max-height:90vh;overflow:auto;background:var(--surface,#fff);border-radius:14px;border:1px solid var(--border,#e5e0d5)}
+    .rfq-line-row{display:grid;grid-template-columns:1fr 90px 90px 32px;gap:8px;margin-bottom:6px}
+    .rfq-line-row input{padding:7px 9px;border:1px solid var(--border,#ddd);border-radius:7px;font-family:inherit;font-size:12.5px}
+    .rfq-sup-pick{max-height:140px;overflow:auto;border:1px solid var(--border,#eee);border-radius:8px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    .rfq-sup-pick label{font-size:12.5px;display:flex;gap:6px;align-items:center}
+    .rfq-cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+    .rfq-cmp th,.rfq-cmp td{border:1px solid var(--border,#eee);padding:6px 8px;text-align:center}
+    .rfq-cmp th{background:var(--surface-2,#faf8f3);font-weight:700}
+    .rfq-cmp input{width:84px;padding:5px 6px;border:1px solid var(--border,#ddd);border-radius:6px;font-family:inherit;text-align:center}
+    .rfq-low{background:rgba(45,157,111,0.16);font-weight:700}
+    .rfq-win{background:rgba(196,162,101,0.22)}
+    .rfq-below{color:#1f7a55}
+    .rfq-above{color:#a23b41}
+    .rfq-attr th{background:#fbf6ec}
+    .rfq-score td{font-weight:700}
+    .rfq-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px}
+    .rfq-kpi{background:var(--surface-2,#faf8f3);border:1px solid var(--border,#eee);border-radius:9px;padding:8px 12px;font-size:12px;min-width:96px}
+    .rfq-kpi b{display:block;font-size:15px;color:var(--ink,#231F20);margin-top:2px}
+    .rfq-rec{background:rgba(45,157,111,0.08);border:1px solid rgba(45,157,111,0.3);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;line-height:1.8}
+    .rfq-weights{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+    .rfq-weights label{font-size:11.5px;font-weight:600}
+    .rfq-weights input{width:100%;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px;text-align:center}
+    .rfq-status-bar{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+  `;
+  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+  const modal = document.createElement('div');
+  modal.id = 'modal-rfq';
+  modal.innerHTML = `
+    <div class="rfq-modal">
+      <div class="wf-modal-head"><h3>طلبات عروض الأسعار (RFQ)</h3><button id="rfq-close" class="btn btn-ghost btn-sm">✕</button></div>
+      <div class="wf-tabs">
+        <button class="wf-tab active" id="rfq-tab-list">القائمة</button>
+        <button class="wf-tab" id="rfq-tab-new">طلب جديد</button>
+      </div>
+      <div class="wf-pane" id="rfq-pane-list"></div>
+      <div class="wf-pane" id="rfq-pane-new" style="display:none"></div>
+      <div class="wf-pane" id="rfq-pane-detail" style="display:none"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('rfq-close').addEventListener('click', ()=>modal.style.display='none');
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; });
+  document.getElementById('rfq-tab-list').addEventListener('click', ()=>rfqShowPane('list'));
+  document.getElementById('rfq-tab-new').addEventListener('click', ()=>rfqShowPane('new'));
+}
+function rfqShowPane(which){
+  ['list','new','detail'].forEach(p=>{ const el=document.getElementById('rfq-pane-'+p); if(el) el.style.display = p===which?'':'none'; });
+  const tl=document.getElementById('rfq-tab-list'), tn=document.getElementById('rfq-tab-new');
+  if(tl) tl.classList.toggle('active', which==='list');
+  if(tn) tn.classList.toggle('active', which==='new');
+  if(which==='list') rfqRenderList();
+  if(which==='new') rfqRenderNewForm();
+}
+function openRfqModal(){
+  if(!hasPermission('can_manage_rfq')){ toast('error','صلاحية مرفوضة','طلبات عروض الأسعار غير متاحة لك'); return; }
+  rfqInjectUI();
+  document.getElementById('modal-rfq').style.display='flex';
+  rfqShowPane('list');
+}
+async function rfqRenderList(){
+  const el = document.getElementById('rfq-pane-list'); if(!el) return;
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  const list = await rfqList();
+  if(!list.length){ el.innerHTML = '<div class="wf-empty">لا توجد طلبات. ابدأ بـ«طلب جديد».</div>'; return; }
+  el.innerHTML = list.map(r=>{
+    const badge = r.status==='awarded'?`<span class="wf-b" style="background:rgba(196,162,101,0.2);color:#8a6a30;padding:3px 9px;border-radius:20px">تمت الترسية: ${escapeHtml(r.awarded_to||'')}</span>`: r.status==='cancelled'?'<span class="wf-b no">ملغى</span>': r.status==='closed'?'<span class="wf-b no">مغلق</span>':'<span class="wf-b pend">مفتوح</span>';
+    return `<div class="wf-card" data-rfq="${escapeHtml(r.id)}" style="cursor:pointer">
+      <div class="wf-card-h"><span class="wf-card-title">${escapeHtml(r.title)}</span>${badge}</div>
+      <div class="wf-card-meta">${(r.lines||[]).length} بند · ${(r.suppliers||[]).length} مورد · ${r.deadline?('آخر موعد: '+escapeHtml(r.deadline)):'بلا موعد'}</div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-rfq]').forEach(c=>c.addEventListener('click', ()=>rfqOpenDetail(c.getAttribute('data-rfq'))));
+}
+function rfqRenderNewForm(){
+  const el = document.getElementById('rfq-pane-new'); if(!el) return;
+  const sups = (STATE.suppliers||[]).map(s=>s.name).filter(Boolean);
+  const itemOpts = (STATE.items||[]).slice(0,1000).map(i=>`<option value="${escapeHtml(i.name||i.code)}">`).join('');
+  el.innerHTML = `
+    <datalist id="rfq-items-dl">${itemOpts}</datalist>
+    <div class="wf-field"><label>عنوان الطلب *</label><input id="rfq-n-title" placeholder="مثال: توريد مواد كهربائية لمشروع كذا"></div>
+    <div class="wf-field"><label>آخر موعد للعروض</label><input id="rfq-n-deadline" type="date"></div>
+    <div class="wf-field"><label>البنود * <span style="color:var(--muted);font-weight:400">— اختر من الكتالوج ليُجلب السعر المرجعي تلقائياً</span></label>
+      <div class="rfq-line-row" style="font-size:11px;color:var(--muted);font-weight:700"><span>البند</span><span>كمية</span><span>وحدة</span><span>سعر مرجعي</span><span></span></div>
+      <div id="rfq-n-lines"></div>
+      <button class="btn btn-ghost btn-sm" id="rfq-add-line" type="button">+ إضافة بند</button></div>
+    <div class="wf-field"><label>معايير التقييم (best-value) — اترك السعر 100 لاختيار الأقل سعراً فقط</label>
+      <div class="rfq-weights">
+        <div><label>السعر %</label><input id="rfq-w-price" type="number" min="0" value="100"></div>
+        <div><label>التسليم %</label><input id="rfq-w-delivery" type="number" min="0" value="0"></div>
+        <div><label>الجودة %</label><input id="rfq-w-quality" type="number" min="0" value="0"></div>
+        <div><label>السداد %</label><input id="rfq-w-payment" type="number" min="0" value="0"></div>
+      </div></div>
+    <div class="wf-field"><label>الموردون المدعوّون <a id="rfq-suggest" style="font-size:11.5px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">⟲ اقتراح من السجل</a></label>
+      <div class="rfq-sup-pick" id="rfq-n-sups">${sups.length?sups.map(s=>`<label><input type="checkbox" value="${escapeHtml(s)}"> ${escapeHtml(s)}</label>`).join(''):'<span style="color:var(--muted)">لا يوجد موردون — أضِفهم من صفحة الموردين</span>'}</div>
+      <input id="rfq-n-sups-extra" style="margin-top:6px" placeholder="موردون إضافيون (افصل بفاصلة)"></div>
+    <div class="wf-field"><label>ملاحظات</label><textarea id="rfq-n-notes" rows="2"></textarea></div>
+    <button class="btn btn-accent" id="rfq-n-submit">إنشاء الطلب</button>`;
+  const linesBox = document.getElementById('rfq-n-lines');
+  const addLine = ()=>{ const row=document.createElement('div'); row.className='rfq-line-row';
+    row.innerHTML = `<input placeholder="اسم البند" class="rfq-l-desc" list="rfq-items-dl"><input placeholder="كمية" type="number" min="0" value="1" class="rfq-l-qty"><input placeholder="وحدة" class="rfq-l-unit"><input placeholder="—" type="number" min="0" class="rfq-l-base" title="سعر مرجعي"><button class="btn btn-ghost btn-sm" type="button">✕</button>`;
+    const desc=row.querySelector('.rfq-l-desc');
+    desc.addEventListener('change', ()=>{ const b=rfqItemBaseline(desc.value); if(b.code){ if(b.unit) row.querySelector('.rfq-l-unit').value=b.unit; if(b.price) row.querySelector('.rfq-l-base').value=b.price; row.dataset.code=b.code; } });
+    row.querySelector('button').addEventListener('click',()=>row.remove()); linesBox.appendChild(row); };
+  addLine(); addLine();
+  document.getElementById('rfq-add-line').addEventListener('click', addLine);
+  document.getElementById('rfq-suggest').addEventListener('click', ()=>{
+    const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map(r=>({code:r.dataset.code, desc:r.querySelector('.rfq-l-desc').value}));
+    lines.forEach(l=>{ if(!l.code){ const b=rfqItemBaseline(l.desc); if(b.code) l.code=b.code; } });
+    const sug = rfqSuggestSuppliers(lines);
+    if(!sug.length){ toast('info','لا اقتراح','لا يوجد سجل كافٍ لاقتراح موردين'); return; }
+    document.querySelectorAll('#rfq-n-sups input').forEach(c=>{ if(sug.includes(c.value)) c.checked=true; });
+    toast('success','تم الاقتراح', sug.length+' مورد من السجل');
+  });
+  document.getElementById('rfq-n-submit').addEventListener('click', async ()=>{
+    const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map((row,i)=>({
+      id:'L'+(i+1), code:row.dataset.code||null, desc:row.querySelector('.rfq-l-desc').value.trim(),
+      qty:parseFloat(row.querySelector('.rfq-l-qty').value)||1, unit:row.querySelector('.rfq-l-unit').value.trim(),
+      baseline: parseFloat(row.querySelector('.rfq-l-base').value)||0
+    })).filter(l=>l.desc);
+    const picked = [...document.querySelectorAll('#rfq-n-sups input:checked')].map(c=>c.value);
+    const extra = document.getElementById('rfq-n-sups-extra').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const weights = { price:rfqNum(document.getElementById('rfq-w-price').value), delivery:rfqNum(document.getElementById('rfq-w-delivery').value), quality:rfqNum(document.getElementById('rfq-w-quality').value), payment:rfqNum(document.getElementById('rfq-w-payment').value) };
+    const res = await rfqCreate({ title:document.getElementById('rfq-n-title').value.trim(),
+      deadline:document.getElementById('rfq-n-deadline').value||null, lines, weights,
+      suppliers:[...new Set([...picked,...extra])], notes:document.getElementById('rfq-n-notes').value.trim() });
+    if(res && res.ok) rfqOpenDetail(res.id);
+  });
+}
+async function rfqOpenDetail(id){
+  rfqInjectUI();
+  document.getElementById('modal-rfq').style.display='flex';
+  rfqShowPane('detail');
+  const el = document.getElementById('rfq-pane-detail'); el.style.display='';
+  document.getElementById('rfq-pane-list').style.display='none'; document.getElementById('rfq-pane-new').style.display='none';
+  el.innerHTML = '<div class="wf-empty">جارٍ التحميل…</div>';
+  const {rfq, quotes} = await rfqLoadOne(id);
+  if(!rfq){ el.innerHTML = '<div class="wf-empty">الطلب غير موجود</div>'; return; }
+  const lines = rfq.lines||[], sups = rfq.suppliers||[];
+  const qmap={}, amap={}, smap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; smap[q.supplier]=q.status||'invited'; });
+  const awarded = rfq.status==='awarded', cancelled = rfq.status==='cancelled';
+  const back = ()=>rfqShowPane('list');
+
+  // ── الحسابات الذكية ──
+  const totals={}; sups.forEach(s=>totals[s]=0);
+  const lowPerLine={}, lowSupPerLine={}; let baselineTotal=0;
+  lines.forEach(line=>{
+    baselineTotal += rfqNum(line.baseline)*(Number(line.qty)||1);
+    let low=Infinity, lowSup=null;
+    sups.forEach(s=>{ const p=rfqNum((qmap[s]||{})[line.id]); if(p>0){ totals[s]+=rfqLineTotal(line,p); if(p<low){low=p; lowSup=s;} } });
+    lowPerLine[line.id]=(low===Infinity?0:low); lowSupPerLine[line.id]=lowSup;
+  });
+  const responded = sups.filter(s=> Object.keys(qmap[s]||{}).length>0);
+  const complete = sups.filter(s=> lines.length && lines.every(l=> rfqNum((qmap[s]||{})[l.id])>0 ));
+  let single=null, singleTotal=Infinity; complete.forEach(s=>{ if(totals[s]<singleTotal){ singleTotal=totals[s]; single=s; } });
+  let splitTotal=0; const splitAwards={}, splitPerSup={};
+  lines.forEach(line=>{ const s=lowSupPerLine[line.id]; if(s){ splitAwards[line.id]=s; const amt=rfqLineTotal(line,lowPerLine[line.id]); splitTotal+=amt; splitPerSup[s]=(splitPerSup[s]||0)+amt; } });
+  const ev = rfqEvaluate(rfq, qmap, amap, totals, complete);
+  const isLate = rfq.deadline && rfq.status==='open' && (new Date(rfq.deadline) < new Date(new Date().toDateString()));
+  const statusTxt = awarded ? ('تمت الترسية: '+escapeHtml(rfq.awarded_to||'')) : cancelled ? 'ملغى' : rfq.status==='closed' ? 'مغلق التقديم' : 'مفتوح';
+
+  let html = `<button class="btn btn-ghost btn-sm" id="rfq-back">→ القائمة</button>
+    <h3 style="margin:10px 0 2px">${escapeHtml(rfq.title)}</h3>
+    <div class="wf-card-meta">${statusTxt}${rfq.deadline?(' · آخر موعد: '+escapeHtml(rfq.deadline)+(isLate?' <b style="color:#a23b41">(متأخر)</b>':'')):''}</div>
+    <div class="rfq-kpis">
+      <div class="rfq-kpi">البنود<b>${lines.length}</b></div>
+      <div class="rfq-kpi">الموردون<b>${responded.length}/${sups.length}</b></div>
+      <div class="rfq-kpi">الميزانية المرجعية<b>${baselineTotal?fmtPrice(baselineTotal):'—'}</b></div>
+      <div class="rfq-kpi">أقل إجمالي<b>${single?fmtPrice(singleTotal):'—'}</b></div>
+    </div>`;
+  // شريط دورة الحياة
+  if(!awarded && !cancelled){
+    html += `<div class="rfq-status-bar">`;
+    if(rfq.status==='open') html += `<button class="btn btn-ghost btn-sm" data-st="closed">إغلاق التقديم</button><button class="btn btn-ghost btn-sm" data-st="cancelled">إلغاء</button>`;
+    if(rfq.status==='closed') html += `<button class="btn btn-ghost btn-sm" data-st="open">إعادة فتح</button>`;
+    html += `</div>`;
+  }
+  if(!sups.length){ html += '<div class="wf-empty">لم يُدعَ موردون لهذا الطلب.</div>'; el.innerHTML=html; document.getElementById('rfq-back').addEventListener('click',back); return; }
+
+  // روابط دعوة الموردين (بوابة المورّد العامة)
+  html += `<details style="margin:6px 0" ${responded.length?'':'open'}><summary style="cursor:pointer;font-size:12.5px;font-weight:600">روابط دعوة الموردين (تقديم ذاتي)</summary>
+    <div class="muted" style="font-size:11.5px;margin:6px 0">انسخ رابط كل مورد وأرسله له عبر واتساب/إيميل ليُدخل عرضه بنفسه — تظهر أسعاره هنا تلقائياً.</div>
+    ${sups.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#f0ece2)">
+      <span style="font-size:13px">${escapeHtml(s)} ${rfqRespBadge(smap[s]||'invited')}</span>
+      <button class="btn btn-ghost btn-sm" data-invite="${escapeHtml(s)}">📋 نسخ الرابط</button></div>`).join('')}
+  </details>`;
+
+  // معايير التقييم
+  const w = Object.assign({}, RFQ_DEFAULT_WEIGHTS, rfq.weights||{});
+  html += `<details style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px;font-weight:600">معايير التقييم (best-value)</summary>
+    <div class="rfq-weights">
+      <div><label>السعر %</label><input id="rfq-ew-price" type="number" min="0" value="${w.price}"></div>
+      <div><label>التسليم %</label><input id="rfq-ew-delivery" type="number" min="0" value="${w.delivery}"></div>
+      <div><label>الجودة %</label><input id="rfq-ew-quality" type="number" min="0" value="${w.quality}"></div>
+      <div><label>السداد %</label><input id="rfq-ew-payment" type="number" min="0" value="${w.payment}"></div>
+    </div><button class="btn btn-ghost btn-sm" id="rfq-save-w">حفظ المعايير وإعادة الاحتساب</button></details>`;
+
+  // الجدول
+  html += `<div style="overflow:auto"><table class="rfq-cmp"><thead><tr><th>البند</th><th>كمية</th><th>مرجعي</th>${sups.map((s,si)=>`<th>${escapeHtml(s)}${ev.useScore&&ev.ranked[0]===s?' 🏆':''}${(!awarded&&!cancelled)?` <button data-aiimport="${si}" title="استيراد عرض بصورة (ذكاء اصطناعي)" style="border:none;background:transparent;cursor:pointer;font-size:13px">📎</button>`:''}</th>`).join('')}</tr></thead><tbody>`;
+  lines.forEach((line,li)=>{
+    html += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>`;
+    sups.forEach((s,si)=>{
+      const val=(qmap[s]||{})[line.id]; const p=rfqNum(val);
+      const isLow = p>0 && p===lowPerLine[line.id];
+      let vcls=''; if(p>0 && rfqNum(line.baseline)>0) vcls = p<rfqNum(line.baseline)?'rfq-below':(p>rfqNum(line.baseline)?'rfq-above':'');
+      html += `<td class="${isLow?'rfq-low':''}"><input id="rq-${si}-${li}" class="${vcls}" type="number" min="0" step="0.01" value="${val!=null?escapeHtml(String(val)):''}" ${awarded||cancelled?'disabled':''}></td>`;
+    });
+    html += `</tr>`;
+  });
+  // صفوف المعايير غير السعرية
+  const attrRow = (label, field, ph) => `<tr class="rfq-attr"><th colspan="3" style="text-align:right">${label}</th>${sups.map((s,si)=>`<td><input id="ra-${field}-${si}" type="number" min="0" value="${(amap[s]||{})[field]!=null?escapeHtml(String((amap[s]||{})[field])):''}" placeholder="${ph}" ${awarded||cancelled?'disabled':''}></td>`).join('')}</tr>`;
+  html += attrRow('مدة التسليم (أيام)','delivery_days','أيام');
+  html += attrRow('الجودة (1-5)','quality','1-5');
+  html += attrRow('مدة السداد (أيام)','payment_days','يوم');
+  // الإجمالي + الوفورات
+  html += `<tr><th colspan="3">الإجمالي</th>${sups.map(s=>{
+    const t=totals[s]; const sav = (complete.includes(s)&&baselineTotal)?((baselineTotal-t)/baselineTotal*100):null;
+    return `<th class="${s===single?'rfq-win':''}">${t?fmtPrice(t):'—'}${sav!=null?`<div style="font-size:10px;font-weight:400;color:${sav>=0?'#1f7a55':'#a23b41'}">${sav>=0?'وفر':'زيادة'} ${Math.abs(sav).toFixed(1)}%</div>`:''}</th>`;
+  }).join('')}</tr>`;
+  if(ev.useScore){
+    html += `<tr class="rfq-score"><th colspan="3">التقييم الموزون</th>${sups.map(s=>{
+      const sc=ev.scores[s]; const rank=ev.ranked.indexOf(s); return `<td class="${rank===0?'rfq-win':''}">${sc!=null?sc:'—'}${rank>=0?`<div style="font-size:10px;font-weight:400">#${rank+1}</div>`:''}</td>`;
+    }).join('')}</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // التوصيات الذكية
+  if(responded.length){
+    html += `<div class="rfq-rec"><b>التوصيات الذكية</b><br>`;
+    if(single) html += `• <b>أقل سعر (مورد واحد):</b> ${escapeHtml(single)} — ${fmtPrice(singleTotal)} ر.س${baselineTotal?` (وفر ${(((baselineTotal-singleTotal)/baselineTotal)*100).toFixed(1)}% عن المرجعي)`:''}<br>`;
+    if(splitTotal>0) html += `• <b>ترسية مجزّأة (كل بند لأوفر مورد):</b> ${fmtPrice(splitTotal)} ر.س${single&&splitTotal<singleTotal?` — توفير إضافي ${fmtPrice(singleTotal-splitTotal)} عن المورد الواحد`:''}<br>`;
+    if(ev.useScore && ev.ranked[0]) html += `• <b>أفضل قيمة (تقييم موزون):</b> ${escapeHtml(ev.ranked[0])} — ${ev.scores[ev.ranked[0]]} نقطة<br>`;
+    if(complete.length < responded.length) html += `<span style="color:#a23b41;font-size:11.5px">⚠ ${responded.length-complete.length} مورد لم يسعّر كل البنود</span>`;
+    html += `</div>`;
+  }
+
+  // الإجراءات
+  html += `<div class="wf-card-act" style="margin-top:12px;flex-wrap:wrap">`;
+  if(!awarded && !cancelled) html += `<button class="btn btn-accent btn-sm" id="rfq-save">💾 حفظ ومقارنة</button>`;
+  if(responded.length) html += `<button class="btn btn-ghost btn-sm" id="rfq-print">🖨 طباعة المقارنة</button>`;
+  if(!awarded && !cancelled && single) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-single">ترسية على ${escapeHtml(single)} (${fmtPrice(singleTotal)})</button>`;
+  if(!awarded && !cancelled && splitTotal>0 && Object.keys(splitPerSup).length>1) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-split">ترسية مجزّأة (${fmtPrice(splitTotal)})</button>`;
+  html += `</div>`;
+
+  el.innerHTML = html;
+  document.getElementById('rfq-back').addEventListener('click', back);
+  el.querySelectorAll('[data-st]').forEach(b=>b.addEventListener('click', ()=>rfqSetStatus(id, b.getAttribute('data-st'))));
+  el.querySelectorAll('[data-invite]').forEach(b=>b.addEventListener('click', ()=>rfqCopyInvite(id, b.getAttribute('data-invite'))));
+  const swBtn=document.getElementById('rfq-save-w'); if(swBtn) swBtn.addEventListener('click', ()=>rfqSaveWeights(id, { price:rfqNum(document.getElementById('rfq-ew-price').value), delivery:rfqNum(document.getElementById('rfq-ew-delivery').value), quality:rfqNum(document.getElementById('rfq-ew-quality').value), payment:rfqNum(document.getElementById('rfq-ew-payment').value) }));
+  const saveBtn=document.getElementById('rfq-save');
+  if(saveBtn) saveBtn.addEventListener('click', async ()=>{
+    for(let si=0; si<sups.length; si++){
+      const prices={}; lines.forEach((line,li)=>{ const v=parseFloat(document.getElementById(`rq-${si}-${li}`).value); if(v>0) prices[line.id]=v; });
+      const attrs={}; ['delivery_days','quality','payment_days'].forEach(f=>{ const v=parseFloat(document.getElementById(`ra-${f}-${si}`).value); if(v>0) attrs[f]=v; });
+      if(Object.keys(prices).length || Object.keys(attrs).length) await rfqSaveSupplierQuote(id, sups[si], prices, attrs, null);
+    }
+    toast('success','تم الحفظ','حُدّثت المقارنة'); rfqOpenDetail(id);
+  });
+  const asingle=document.getElementById('rfq-award-single'); if(asingle) asingle.addEventListener('click', ()=>rfqAward(id, single, singleTotal));
+  const asplit=document.getElementById('rfq-award-split'); if(asplit) asplit.addEventListener('click', ()=>rfqAwardSplit(id, splitAwards, splitPerSup, splitTotal));
+  const aprint=document.getElementById('rfq-print'); if(aprint) aprint.addEventListener('click', ()=>rfqPrint(rfq, lines, sups, qmap, totals));
+  el.querySelectorAll('[data-aiimport]').forEach(b=>b.addEventListener('click', ()=>rfqAIImport(Number(b.getAttribute('data-aiimport')), sups, lines)));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   بطاقات أداء الموردين (Supplier Scorecards) — محسوبة من بيانات النظام
+   ════════════════════════════════════════════════════════════════ */
+async function scComputeData(){
+  const sup = {}; // name -> metrics
+  const touch = n => { if(!n) return null; if(!sup[n]) sup[n]={name:n, deals:0, varSum:0, varN:0, last:null, invited:0, submitted:0}; return sup[n]; };
+  (STATE.suppliers||[]).forEach(s=> touch(s.name));
+  // من السجل التاريخي: عدد التعاملات + التنافسية + آخر تعامل
+  (STATE.history||[]).forEach(h=>{
+    const m = touch(h.supplier); if(!m) return;
+    m.deals++;
+    if(h.date && (!m.last || h.date>m.last)) m.last = h.date;
+    const it = (STATE.items||[]).find(i=>i.code===h.code);
+    const ref = it ? (Number(it.avg_price)||0) : 0;
+    if(ref>0 && Number(h.price)>0){ m.varSum += ((Number(h.price)-ref)/ref)*100; m.varN++; }
+  });
+  // من عروض RFQ: نسبة الاستجابة
+  try{
+    if(CLOUD && CLOUD.enabled){
+      const {data} = await CLOUD.client.from('proc_rfq_quotes').select('supplier,status').limit(3000);
+      (data||[]).forEach(q=>{ const m=touch(q.supplier); if(!m) return; m.invited++; if(q.status==='submitted') m.submitted++; });
+    }
+  }catch(e){}
+  // حساب الدرجات
+  return Object.values(sup).map(m=>{
+    const avgVar = m.varN ? (m.varSum/m.varN) : null;                    // % عن السوق
+    const comp = avgVar==null ? 60 : Math.max(0, Math.min(100, 70 - avgVar));
+    const resp = m.invited ? (m.submitted/m.invited*100) : 0;
+    const act  = Math.min(100, m.deals*4);
+    const score = Math.round(comp*0.5 + resp*0.3 + act*0.2);
+    return { ...m, avgVar, comp:Math.round(comp), resp:Math.round(resp), act:Math.round(act), score, stars: Math.max(1, Math.round(score/20)) };
+  }).sort((a,b)=>b.score-a.score);
+}
+let __SC_BUILT=false;
+function openScorecards(){
+  if(!hasPermission('can_manage_suppliers')){ toast('error','صلاحية مرفوضة','أداء الموردين غير متاح لك'); return; }
+  if(!__SC_BUILT){
+    __SC_BUILT=true;
+    const css=`#modal-sc{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}
+      .sc-modal{width:min(860px,97vw);max-height:90vh;overflow:auto;background:var(--surface,#fff);border-radius:14px;border:1px solid var(--border,#e5e0d5)}
+      .sc-t{width:100%;border-collapse:collapse;font-size:12.5px}.sc-t th,.sc-t td{border-bottom:1px solid var(--border,#eee);padding:8px;text-align:center}
+      .sc-t th{background:var(--surface-2,#faf8f3);position:sticky;top:0}.sc-bar{height:6px;border-radius:3px;background:#eee;overflow:hidden}.sc-bar>i{display:block;height:100%;background:var(--accent,#C4A265)}`;
+    const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
+    const m=document.createElement('div');m.id='modal-sc';
+    m.innerHTML=`<div class="sc-modal"><div class="wf-modal-head"><h3>بطاقات أداء الموردين</h3><button id="sc-close" class="btn btn-ghost btn-sm">✕</button></div><div class="wf-pane" id="sc-body"></div></div>`;
+    document.body.appendChild(m);
+    document.getElementById('sc-close').addEventListener('click',()=>m.style.display='none');
+    m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; });
+  }
+  document.getElementById('modal-sc').style.display='flex';
+  scRender();
+}
+async function scRender(){
+  const el=document.getElementById('sc-body'); el.innerHTML='<div class="wf-empty">جارٍ حساب الأداء…</div>';
+  const rows = await scComputeData();
+  if(!rows.length){ el.innerHTML='<div class="wf-empty">لا توجد بيانات كافية</div>'; return; }
+  el.innerHTML = `<div class="muted" style="font-size:11.5px;margin-bottom:10px">الدرجة = تنافسية سعرية (50%) + سرعة الاستجابة لعروض الأسعار (30%) + نشاط التعامل (20%).</div>
+  <div style="overflow:auto"><table class="sc-t"><thead><tr><th>المورّد</th><th>الدرجة</th><th>التقييم</th><th>التنافسية</th><th>الاستجابة</th><th>تعاملات</th><th>مقابل السوق</th><th>آخر تعامل</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr>
+    <td style="text-align:right;font-weight:600">${escapeHtml(r.name)}</td>
+    <td><b>${r.score}</b><div class="sc-bar"><i style="width:${r.score}%"></i></div></td>
+    <td>${'★'.repeat(r.stars)}${'☆'.repeat(5-r.stars)}</td>
+    <td>${r.comp}</td>
+    <td>${r.invited?(r.resp+'%'):'—'}</td>
+    <td>${r.deals}</td>
+    <td style="color:${r.avgVar==null?'#999':(r.avgVar<=0?'#1f7a55':'#a23b41')}">${r.avgVar==null?'—':((r.avgVar>0?'+':'')+r.avgVar.toFixed(1)+'%')}</td>
+    <td class="muted">${r.last||'—'}</td>
+  </tr>`).join('')}
+  </tbody></table></div>`;
+}
+
 let __APP_STARTED = false;
 function startApp(){
   // Idempotent — safe to call from login form after login
@@ -11267,9 +12344,10 @@ function startApp(){
   applyUserRoleToUI();
   init();
   startCloudAutoReconnect();
+  try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
 }
 
-function bootstrap(){
+async function bootstrap(){
   // STRICT WESTERN DIGITS: block/auto-convert Eastern numerals on every field
   installGlobalDigitGuard();
   // Wire up login form (always)
@@ -11282,12 +12360,33 @@ function bootstrap(){
   // Wire up reconnect button (always)
   const reconnectBtn = document.getElementById('btn-cloud-reconnect');
   if(reconnectBtn) reconnectBtn.addEventListener('click', manualReconnectCloud);
+
+  // اتصال مبكر بالسحابة (العميل فقط، بلا تحميل بيانات) كي تعمل مصادقة Supabase
+  // على شاشة الدخول من أول محاولة. تحميل البيانات يتم بعد الدخول عبر startApp.
+  try{
+    const {url, key} = getCloudConfig();   // مُضمَّن — اتصال تلقائي بلا إعداد يدوي
+    if(url && key){
+      if(!window.supabase){ try{ await loadSupabaseLib(); }catch(e){} }
+      if(window.supabase){ await CLOUD.init(url, key); }
+    }
+  }catch(e){ /* تُعرض رسالة مناسبة عند محاولة الدخول */ }
+
   // Check for existing session
   const session = getCurrentSession();
   if(session){
-    STATE.currentUser = session;
-    hideLoginScreen();
-    startApp();
+    // تأكّد أن جلسة Supabase (JWT) ما زالت سارية قبل فتح النظام
+    let jwtOk = true;
+    if(window.CLOUD && CLOUD.enabled && CLOUD.client){
+      try{ const {data} = await CLOUD.client.auth.getSession(); jwtOk = !!(data && data.session); }catch(e){}
+    }
+    if(jwtOk){
+      STATE.currentUser = session;
+      hideLoginScreen();
+      startApp();
+    } else {
+      try{ sessionStorage.removeItem(AUTH_SESSION_KEY); }catch(e){}
+      showLoginScreen();
+    }
   } else {
     showLoginScreen();
   }
@@ -13051,16 +14150,11 @@ async function siAIExtractFromImage(base64, mimeType){
 
   let lastError = null;
   for(const model of modelsToTry){
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     const MAX_ATTEMPTS = 3;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
+        const resp = await aiFetch(model, 'generateContent', body, cfg);
         if(!resp.ok){
           let emsg = `HTTP ${resp.status}`;
           try { const e = await resp.json(); emsg = e?.error?.message || emsg; } catch(_){}
@@ -14444,6 +15538,7 @@ function saveAIKey() {
 }
 
 async function triggerAIInsights() {
+  if(!requirePermission('can_use_ai', 'استخدام الذكاء الاصطناعي')) return;
   const geminiKey = localStorage.getItem('proc_ai_key') || '';
   const noKey = document.getElementById('ai-no-key');
   const loading = document.getElementById('ai-loading');
@@ -15086,7 +16181,7 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
   const functionDeclarations = tools.map(t => ({
     name: t.name, description: t.description, parameters: t.input_schema
   }));
-  const body = JSON.stringify({
+  const bodyObj = {
     systemInstruction: {parts:[{text: systemPrompt}]},
     contents: geminiContents,
     tools: [{function_declarations: functionDeclarations}],
@@ -15098,15 +16193,14 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
       {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_NONE'},
       {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
     ]
-  });
+  };
   // Fallback model list — try next on 503/429/overload
-  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash']
+  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-001','gemini-2.5-flash-lite']
     .filter((m,i,a)=>m&&a.indexOf(m)===i);
   let lastErr;
   for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     try {
-      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body});
+      const res = await aiFetch(model, 'generateContent', bodyObj, cfg);
       if(res.status===503||res.status===429){
         const e=await res.text(); lastErr=new Error(`Gemini ${res.status} (${model}): ${e.slice(0,150)}`); continue;
       }
@@ -15122,6 +16216,7 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
 
 async function sendAgentMessage(){
   if(AGENT_BUSY)return;
+  if(!requirePermission('can_use_ai', 'استخدام الذكاء الاصطناعي')) return;
   const input=document.getElementById('agent-input');
   const sendBtn=document.getElementById('agent-send-btn');
   const q=(input?.value||'').trim();
@@ -15476,6 +16571,11 @@ async function openRegDetail(jsonStr) {
     </div>`;
   }
 
+  // التحقق الحكومي (يظهر إن توفّر رقم سجل/ضريبي)
+  body.innerHTML += govVerifyBar(r);
+  const _gvb = document.getElementById('gov-verify-btn');
+  if(_gvb) _gvb.addEventListener('click', ()=>govVerifyRun(r.commercial_reg||'', r.vat_number||''));
+
   // Actions footer
   acts.innerHTML = '';
   if (r.status === 'pending' || r.status === 'needs_revision') {
@@ -15546,11 +16646,33 @@ async function openRegDetail(jsonStr) {
   }
 }
 
+// ── إطار التحقق الحكومي (وثق/ZATCA) — يُفعّل عند ضبط مفتاح الخادم ──
+function govVerifyBar(r){
+  const cr = (r&&r.commercial_reg)||''; const vat=(r&&r.vat_number)||'';
+  if(!cr && !vat) return '';
+  // لا نضمّن بيانات المورّد داخل onclick (تمنع XSS المخزّن)؛ تُمرَّر القيم لاحقاً عبر مستمع حدث.
+  return `<div style="margin-bottom:20px;padding:12px 14px;border:1px dashed var(--border,#ccd2da);border-radius:8px">
+    <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--navy,#1a3a5c)">التحقق الحكومي</div>
+    <button class="btn btn-ghost btn-sm" id="gov-verify-btn">تحقّق من السجل التجاري</button>
+    <span id="gov-verify-out" style="font-size:12px;margin-inline-start:8px;color:var(--muted,#888)"></span>
+  </div>`;
+}
+async function govVerifyRun(cr, vat){
+  const out=document.getElementById('gov-verify-out'); if(out) out.textContent='جارٍ التحقق…';
+  try{
+    const resp = await fetch('/api/verify', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cr, vat})});
+    const j = await resp.json().catch(()=>({}));
+    if(resp.status===503){ if(out) out.innerHTML='<span style="color:#a23b41">غير مُفعّل (يحتاج مفتاح WATHQ_API_KEY على الخادم)</span>'; return; }
+    if(!resp.ok){ if(out) out.innerHTML='<span style="color:#a23b41">'+escapeHtml(j.error||'فشل التحقق')+'</span>'; return; }
+    if(out) out.innerHTML='<span style="color:#1f7a55">✓ '+escapeHtml(j.summary||'تم التحقق')+'</span>';
+  }catch(e){ if(out) out.textContent='تعذّر الاتصال'; }
+}
 function closeRegDetail() {
   document.getElementById('modal-reg-detail').style.display = 'none';
 }
 
 async function approveRegistration(reg) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   try {
     // Create supplier in proc_suppliers
@@ -15597,6 +16719,7 @@ async function approveRegistration(reg) {
 }
 
 async function rejectRegistration(regId) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   const note = document.getElementById('reg-reject-note')?.value?.trim() || '';
   if (!note && !confirm('هل تريد الرفض النهائي بدون سبب؟')) return;
@@ -15649,6 +16772,7 @@ function generateRevisionToken() {
 }
 
 async function returnForRevision(regId) {
+  if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   const panel = document.getElementById('revision-panel');
   if (panel?.dataset?.regId && panel.dataset.regId !== String(regId)) {

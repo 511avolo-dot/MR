@@ -2724,7 +2724,25 @@ const PDFJS_WORKER  = '/lib/pdf.worker.min.js';
 const PDFJS_CDNS    = [PDFJS_CDN, 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'];
 
 let SB = null;
-let AI_KEY = null, AI_MODEL = AI_MODELS[0];
+let AI_MODEL = AI_MODELS[0];
+let AI_AVAILABLE = false;            // هل الوسيط الآمن /api/ai مضبوط على الخادم؟
+const AI_PROXY_ENDPOINT = '/api/ai';
+let __AI_PROXY_OK = null;
+async function aiProbeProxy(){
+  if (__AI_PROXY_OK !== null) return __AI_PROXY_OK;
+  try {
+    const r = await fetch(AI_PROXY_ENDPOINT, {method:'GET'});
+    const ct = r.headers.get('content-type') || '';
+    __AI_PROXY_OK = r.ok && ct.includes('application/json');
+  } catch(e){ __AI_PROXY_OK = false; }
+  return __AI_PROXY_OK;
+}
+// تهريب HTML — يمنع حقن نصوص المستخدم عند الإدراج عبر innerHTML
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 let currentStep = 1;
 const _urlParams = new URLSearchParams(location.search);
 const _resumeId = _urlParams.get('resume') || null;
@@ -2795,15 +2813,16 @@ async function connectSupabase(url, key) {
     showProc('جارٍ الاتصال...', 'الاتصال بقاعدة البيانات');
     await loadSupabaseLib();
     SB = window.supabase.createClient(url, key, {auth:{persistSession:false}});
-    // Fetch AI key from proc_settings
+    // اسم النموذج فقط من الإعدادات — المفتاح لا يُجلب للمتصفح إطلاقاً.
+    // استخراج الوثائق بالذكاء الاصطناعي يمرّ عبر الوسيط الآمن /api/ai (سرّ الخادم).
     try {
       const {data} = await SB.from('proc_settings').select('value').eq('key','ai_config').maybeSingle();
       if (data && data.value) {
         const v = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
-        AI_KEY   = v.api_key  || null;
-        AI_MODEL = v.model    || AI_MODELS[0];
+        AI_MODEL = v.model || AI_MODELS[0];
       }
     } catch(e) {}
+    AI_AVAILABLE = await aiProbeProxy();
     // Try to create the storage bucket if it doesn't exist yet
     // (anon key may not have permission — that's OK, we'll catch it)
     try {
@@ -2832,15 +2851,16 @@ async function loadResumeData() {
   }
   showProc('جارٍ تحميل بيانات طلبك...', '');
   try {
-    const {data, error} = await SB.from(REG_TABLE).select('*').eq('id', _resumeId).maybeSingle();
+    // قراءة آمنة عبر RPC محقّقة بالـ token (تعمل حتى بعد إغلاق RLS).
+    const {data, error} = await SB.rpc('get_registration_for_resume', {p_id: _resumeId, p_token: _resumeToken});
     if (error) throw error;
     if (!data) {
       hideProc();
-      toast('error', 'لم يُعثر على الطلب — تحقق من الرابط');
+      toast('error', 'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد');
       showMainForm();
       return;
     }
-    // Verify revision token to prevent unauthorized access
+    // Defense-in-depth: تأكيد مطابقة الـ token (الدالة تفرضه أصلاً)
     if (!_resumeToken || data.revision_token !== _resumeToken) {
       hideProc();
       toast('error', 'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد');
@@ -3053,7 +3073,8 @@ async function setupSave() {
     await loadSupabaseLib();
     const client = window.supabase.createClient(url, key, {auth:{persistSession:false}});
     const {error} = await client.from('proc_items').select('code').limit(1);
-    if (error) throw error;
+    // خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي بعد التحصين) → لا نعتبره فشلاً.
+    if (error && !/permission|rls|row-level|denied|policy|JWT/i.test(error.message || '')) throw error;
     localStorage.setItem('proc_cloud_config', JSON.stringify({url, key}));
     document.getElementById('setup-screen').classList.add('hidden');
     SB = client;
@@ -3169,7 +3190,7 @@ function removeDoc(docId) {
    AI EXTRACTION
    ════════════════════════════════════ */
 async function extractAllDocs() {
-  if (!AI_KEY) { return {}; }
+  if (!AI_AVAILABLE) { return {}; }
   const merged = {};
   const docsToExtract = Object.entries(uploadedDocs).filter(([,v]) => v.file);
   if (!docsToExtract.length) return {};
@@ -3267,16 +3288,20 @@ function buildExtractionPrompt(docType) {
 }
 
 async function geminiCall(parts) {
+  // يمرّ عبر الوسيط الآمن /api/ai — المفتاح لا يغادر الخادم.
   const body = {
     contents: [{role: 'user', parts}],
     generationConfig: {temperature: 0.1, maxOutputTokens: 2048}
   };
   let lastErr = null;
   for (const model of AI_MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(AI_KEY)}`;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const resp = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        const resp = await fetch(AI_PROXY_ENDPOINT, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model, action:'generateContent', body })
+        });
         if (!resp.ok) { const t = await resp.text(); lastErr = new Error(t); break; }
         const data = await resp.json();
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -3495,7 +3520,7 @@ function renderSummary() {
     ).join('، ') || '—'],
   ];
   document.getElementById('summary-body').innerHTML = rows.map(([label, val]) =>
-    `<div class="summary-row"><span class="summary-label">${label}</span><span class="summary-val">${val}</span></div>`
+    `<div class="summary-row"><span class="summary-label">${escapeHtml(label)}</span><span class="summary-val">${escapeHtml(val)}</span></div>`
   ).join('');
 }
 
@@ -3654,18 +3679,12 @@ async function submitForm() {
     showProc('جارٍ حفظ البيانات...', '');
     let dbErr;
     if (_resumeId) {
-      // Resume mode: update existing record, reset status to pending
-      const updatePayload = {...payload};
-      delete updatePayload.id;
-      delete updatePayload.submitted_at;
-      updatePayload.status = 'pending';
-      updatePayload.review_notes = null;
-      updatePayload.reviewed_by = null;
-      updatePayload.reviewed_at = null;
-      updatePayload.revision_token = null;
-      updatePayload.resubmitted_at = new Date().toISOString();
-      updatePayload.submitted_at = new Date().toISOString();
-      const {error} = await SB.from(REG_TABLE).update(updatePayload).eq('id', regId);
+      // Resume mode: تحديث آمن عبر RPC محقّقة بالـ token (الدالة تفرض status/token).
+      const {error} = await SB.rpc('resubmit_registration', {
+        p_id: regId,
+        p_token: _resumeToken,
+        p_data: payload
+      });
       dbErr = error;
     } else {
       const {error} = await SB.from(REG_TABLE).insert(payload);
@@ -3716,7 +3735,7 @@ function toast(type, msg, duration = 4000) {
   const wrap = document.getElementById('toast');
   const el   = document.createElement('div');
   el.className = 'toast-msg ' + type;
-  el.innerHTML = `${icons[type] || ''}<span>${msg}</span>`;
+  el.innerHTML = `${icons[type] || ''}<span>${escapeHtml(msg)}</span>`;
   wrap.appendChild(el);
   // Max 3 toasts
   while (wrap.children.length > 3) wrap.removeChild(wrap.firstChild);

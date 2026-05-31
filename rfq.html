@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex">
+<title>تقديم عرض سعر · AL-DEYABI GROUP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{ --bg:#f4f1ea; --surface:#fff; --ink:#231F20; --ink2:#5a5650; --muted:#9a948a;
+         --accent:#C4A265; --line:#e5e0d5; --ok:#1f7a55; --no:#a23b41; --radius:14px; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; font-family:-apple-system,"Segoe UI",Tahoma,Arial,sans-serif; background:var(--bg); color:var(--ink); line-height:1.6; }
+  .wrap{ max-width:680px; margin:0 auto; padding:16px; }
+  .topbar{ background:#231F20; color:#fff; padding:18px 16px; text-align:center; }
+  .topbar .brand{ color:var(--accent); font-weight:800; letter-spacing:1px; font-size:14px; }
+  .topbar h1{ margin:6px 0 0; font-size:17px; font-weight:700; }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin:12px 0; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .muted{ color:var(--muted); font-size:13px; }
+  .meta{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .chip{ background:#faf7f0; border:1px solid var(--line); border-radius:20px; padding:4px 12px; font-size:12.5px; }
+  .chip.late{ background:#fbe9ea; border-color:#f1c4c7; color:var(--no); }
+  .line{ border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; }
+  .line-h{ font-weight:700; font-size:15px; }
+  .line-sub{ color:var(--ink2); font-size:13px; margin-top:2px; }
+  .price-row{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .price-row input[type=number]{ flex:1; font-size:17px; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; text-align:center; font-family:inherit; }
+  .price-row .cur{ font-weight:700; color:var(--accent); }
+  .nobid{ display:flex; align-items:center; gap:8px; margin-top:8px; font-size:13px; color:var(--ink2); }
+  .nobid input{ width:18px; height:18px; }
+  .line.skipped{ opacity:.55; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+  .field input,.field textarea{ width:100%; font-size:15px; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; font-family:inherit; }
+  .terms-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .btn{ display:block; width:100%; padding:15px; border:none; border-radius:12px; font-size:16px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:10px; }
+  .btn-primary{ background:var(--accent); color:#231F20; }
+  .btn-ghost{ background:#fff; color:var(--ink); border:1.5px solid var(--line); }
+  .btn:active{ transform:translateY(1px); }
+  .total-bar{ position:sticky; bottom:0; background:var(--surface); border-top:1px solid var(--line); padding:12px 16px; margin:0 -16px -16px; display:flex; justify-content:space-between; align-items:center; font-weight:700; }
+  .state{ text-align:center; padding:60px 20px; }
+  .state .ic{ width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; font-size:30px; }
+  .ic.ok{ background:#e7f4ee; color:var(--ok); } .ic.err{ background:#fbe9ea; color:var(--no); }
+  .hidden{ display:none; }
+  @media(max-width:420px){ .terms-grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">AL-DEYABI GROUP · مجموعة الذيابي</div>
+  <h1>تقديم عرض سعر</h1>
+</div>
+
+<div class="wrap">
+  <div id="loading" class="state"><div class="muted">جارٍ تحميل طلب عرض الأسعار…</div></div>
+
+  <div id="error" class="state hidden">
+    <div class="ic err">!</div>
+    <h2 id="error-title" style="font-size:18px">تعذّر فتح الطلب</h2>
+    <p class="muted" id="error-msg">الرابط غير صالح أو منتهي الصلاحية. تواصل مع إدارة المشتريات للحصول على رابط جديد.</p>
+  </div>
+
+  <div id="form" class="hidden">
+    <div class="card">
+      <div style="font-weight:700;font-size:16px" id="rfq-title"></div>
+      <div class="muted" id="rfq-supplier"></div>
+      <div class="meta" id="rfq-meta"></div>
+      <div class="muted" id="rfq-notes" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px">البنود المطلوبة</div>
+      <div class="muted" style="margin-bottom:12px">أدخل سعر الوحدة لكل بند. إن كنت لا تورّد بنداً، فعّل «لا أعرض هذا البند».</div>
+      <div id="lines"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:12px">شروط العرض</div>
+      <div class="terms-grid">
+        <div class="field"><label>مدة التسليم (أيام)</label><input id="t-delivery" type="number" min="0" inputmode="numeric" placeholder="مثال: 7"></div>
+        <div class="field"><label>مدة السداد (أيام)</label><input id="t-payment" type="number" min="0" inputmode="numeric" placeholder="مثال: 30"></div>
+        <div class="field"><label>صلاحية العرض (أيام)</label><input id="t-validity" type="number" min="0" inputmode="numeric" placeholder="مثال: 30"></div>
+        <div class="field"><label>الجودة الذاتية (1-5)</label><input id="t-quality" type="number" min="1" max="5" inputmode="numeric" placeholder="اختياري"></div>
+      </div>
+      <div class="field"><label>ملاحظات</label><textarea id="t-note" rows="2" placeholder="أي ملاحظات على العرض (اختياري)"></textarea></div>
+    </div>
+
+    <button class="btn btn-ghost" id="btn-draft">حفظ كمسودة</button>
+    <button class="btn btn-primary" id="btn-submit">إرسال العرض النهائي</button>
+    <div class="muted" style="text-align:center;margin-top:10px">يمكنك إعادة فتح الرابط لتعديل عرضك قبل انتهاء الموعد.</div>
+
+    <div class="total-bar"><span>الإجمالي التقديري</span><span id="grand-total">0 ر.س</span></div>
+  </div>
+
+  <div id="success" class="state hidden">
+    <div class="ic ok">✓</div>
+    <h2 style="font-size:18px">تم استلام عرضك بنجاح</h2>
+    <p class="muted">شكراً لك. سيقوم فريق المشتريات بمراجعة العرض والتواصل معك. يمكنك إغلاق الصفحة.</p>
+    <div class="muted" id="success-ref" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL      = 'https://yofcaxvstjcrmbgciwym.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
+
+const _p = new URLSearchParams(location.search);
+const RFQ_ID = _p.get('r');
+const TOKEN  = _p.get('t');
+let SB, RFQ, LINES = [], MYQ = {};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2});
+function show(which){ ['loading','error','form','success'].forEach(s=>$(s).classList.toggle('hidden', s!==which)); }
+function fail(msg){ if(msg) $('error-msg').textContent = msg; show('error'); }
+
+async function init(){
+  if(!RFQ_ID || !TOKEN){ return fail('الرابط ناقص. تأكد من نسخه كاملاً.'); }
+  try{
+    SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{persistSession:false}});
+    const { data, error } = await SB.rpc('get_rfq_for_supplier', { p_rfq: RFQ_ID, p_token: TOKEN });
+    if(error) throw error;
+    if(!data || !data.rfq){ return fail(); }
+    RFQ = data.rfq; LINES = RFQ.lines || []; MYQ = data.my_quote || {};
+    if(RFQ.status === 'awarded' || RFQ.status === 'cancelled'){ return fail('انتهى استقبال العروض لهذا الطلب.'); }
+    if(RFQ.deadline && new Date(RFQ.deadline) < new Date(new Date().toDateString())){ return fail('انتهى موعد تقديم العروض لهذا الطلب.'); }
+    renderForm(data.supplier);
+  }catch(e){ fail('تعذّر الاتصال. حاول مرة أخرى لاحقاً.'); }
+}
+
+function renderForm(supplier){
+  $('rfq-title').textContent = RFQ.title || 'طلب عرض أسعار';
+  $('rfq-supplier').textContent = 'المورّد: ' + (supplier || '—');
+  const meta = $('rfq-meta'); meta.innerHTML = '';
+  meta.insertAdjacentHTML('beforeend', `<span class="chip">رقم الطلب: ${esc(RFQ.id)}</span>`);
+  meta.insertAdjacentHTML('beforeend', `<span class="chip">${LINES.length} بند</span>`);
+  if(RFQ.deadline) meta.insertAdjacentHTML('beforeend', `<span class="chip">آخر موعد: ${esc(RFQ.deadline)}</span>`);
+  $('rfq-notes').textContent = RFQ.notes || '';
+
+  const prices = MYQ.prices || {}, noBid = MYQ.no_bid || {}, attrs = MYQ.attrs || {};
+  $('lines').innerHTML = LINES.map((l,i)=>`
+    <div class="line" id="line-${i}">
+      <div class="line-h">${esc(l.desc)}</div>
+      <div class="line-sub">الكمية: ${esc(l.qty||1)} ${esc(l.unit||'')}</div>
+      <div class="price-row">
+        <input type="number" min="0" step="0.01" inputmode="decimal" id="p-${i}" placeholder="سعر الوحدة" value="${prices[l.id]!=null?esc(String(prices[l.id])):''}">
+        <span class="cur">ر.س</span>
+      </div>
+      <label class="nobid"><input type="checkbox" id="nb-${i}" ${noBid[l.id]?'checked':''}> لا أعرض هذا البند</label>
+    </div>`).join('');
+
+  if(attrs.delivery_days!=null) $('t-delivery').value = attrs.delivery_days;
+  if(attrs.payment_days!=null)  $('t-payment').value  = attrs.payment_days;
+  if(attrs.validity_days!=null) $('t-validity').value = attrs.validity_days;
+  if(attrs.quality!=null)       $('t-quality').value  = attrs.quality;
+  $('t-note').value = MYQ.note || '';
+
+  LINES.forEach((l,i)=>{
+    const upd = ()=>{ const skip=$(`nb-${i}`).checked; $(`line-${i}`).classList.toggle('skipped',skip); $(`p-${i}`).disabled=skip; recalc(); };
+    $(`p-${i}`).addEventListener('input', recalc);
+    $(`nb-${i}`).addEventListener('change', upd);
+    upd();
+  });
+  recalc();
+  show('form');
+}
+
+function recalc(){
+  let total = 0;
+  LINES.forEach((l,i)=>{ if($(`nb-${i}`).checked) return; const p=parseFloat($(`p-${i}`).value)||0; total += p*(Number(l.qty)||1); });
+  $('grand-total').textContent = fmt(total) + ' ر.س';
+}
+
+function collect(){
+  const prices={}, no_bid={};
+  LINES.forEach((l,i)=>{ if($(`nb-${i}`).checked){ no_bid[l.id]=true; return; } const v=parseFloat($(`p-${i}`).value); if(v>0) prices[l.id]=v; });
+  const attrs={};
+  ['delivery:t-delivery:delivery_days','payment:t-payment:payment_days','validity:t-validity:validity_days','quality:t-quality:quality']
+    .forEach(m=>{ const [,id,key]=m.split(':'); const v=parseFloat($(id).value); if(v>0) attrs[key]=v; });
+  return { prices, no_bid, attrs, note: $('t-note').value.trim() };
+}
+
+async function send(isFinal){
+  const c = collect();
+  const quoted = Object.keys(c.prices).length, skipped = Object.keys(c.no_bid).length;
+  if(isFinal && quoted===0){ alert('الرجاء إدخال سعر بند واحد على الأقل أو تحديد البنود التي لا تعرضها.'); return; }
+  if(isFinal && (quoted+skipped) < LINES.length){ if(!confirm('بعض البنود بلا سعر ولم تُحدَّد كـ«لا أعرض». هل تريد الإرسال على أي حال؟')) return; }
+  const btn = isFinal ? $('btn-submit') : $('btn-draft');
+  const old = btn.textContent; btn.disabled=true; btn.textContent='جارٍ الإرسال…';
+  try{
+    const { data, error } = await SB.rpc('submit_supplier_quote', { p_rfq:RFQ_ID, p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null, p_final:isFinal });
+    if(error) throw error;
+    if(isFinal){ $('success-ref').textContent = 'رقم الطلب: ' + RFQ_ID; show('success'); }
+    else { btn.textContent='تم الحفظ ✓'; setTimeout(()=>{ btn.disabled=false; btn.textContent=old; }, 1500); }
+  }catch(e){
+    btn.disabled=false; btn.textContent=old;
+    alert('تعذّر الإرسال: ' + (e.message||'حاول مجدداً'));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  $('btn-draft').addEventListener('click', ()=>send(false));
+  $('btn-submit').addEventListener('click', ()=>send(true));
+  init();
+});
+</script>
+</body>
+</html>
