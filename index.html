@@ -11822,6 +11822,28 @@ async function rfqSaveSupplierQuote(rfqId, supplier, prices, attrs, note){
   const {error} = await CLOUD.client.from('proc_rfq_quotes').upsert({ id, rfq_id:rfqId, supplier, prices, attrs:attrs||{}, note:note||null, updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
   return !error;
 }
+// ── بوابة المورّد: توليد روابط الدعوة ومتابعة الاستجابة ──
+function rfqGenToken(){ return 'tk_'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); }
+async function rfqEnsureToken(rfqId, supplier){
+  const qid = rfqId+'__'+rfqSlug(supplier);
+  const {data:ex} = await CLOUD.client.from('proc_rfq_quotes').select('token,prices,attrs,note,status').eq('id',qid).maybeSingle();
+  let token = ex && ex.token;
+  if(!token){
+    token = rfqGenToken();
+    await CLOUD.client.from('proc_rfq_quotes').upsert({ id:qid, rfq_id:rfqId, supplier, token,
+      status:(ex&&ex.status)||'invited', prices:(ex&&ex.prices)||{}, attrs:(ex&&ex.attrs)||{}, note:(ex&&ex.note)||null,
+      updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
+  }
+  return location.origin + '/rfq.html?r=' + encodeURIComponent(rfqId) + '&t=' + encodeURIComponent(token);
+}
+async function rfqCopyInvite(rfqId, supplier){
+  let link;
+  try{ link = await rfqEnsureToken(rfqId, supplier); }catch(e){ toast('error','تعذّر','فشل توليد الرابط'); return; }
+  try{ await navigator.clipboard.writeText(link); toast('success','نُسخ رابط المورد','أرسله عبر واتساب/إيميل لـ '+supplier); }
+  catch(e){ prompt('انسخ رابط المورد ('+supplier+'):', link); }
+}
+function rfqRespBadge(st){ return st==='submitted'?'<span class="wf-b ok">قدّم العرض</span>': st==='opened'?'<span class="wf-b pend">فتح الرابط</span>':'<span class="wf-b" style="background:#eee;color:#777;padding:3px 9px;border-radius:20px">مدعو</span>'; }
+
 async function rfqSetStatus(rfqId, status){
   await CLOUD.client.from('proc_rfqs').update({status}).eq('id',rfqId);
   try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'edit', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{status}, meta:{}}); }catch(e){}
@@ -11998,7 +12020,7 @@ async function rfqOpenDetail(id){
   const {rfq, quotes} = await rfqLoadOne(id);
   if(!rfq){ el.innerHTML = '<div class="wf-empty">الطلب غير موجود</div>'; return; }
   const lines = rfq.lines||[], sups = rfq.suppliers||[];
-  const qmap={}, amap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; });
+  const qmap={}, amap={}, smap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; smap[q.supplier]=q.status||'invited'; });
   const awarded = rfq.status==='awarded', cancelled = rfq.status==='cancelled';
   const back = ()=>rfqShowPane('list');
 
@@ -12037,6 +12059,14 @@ async function rfqOpenDetail(id){
     html += `</div>`;
   }
   if(!sups.length){ html += '<div class="wf-empty">لم يُدعَ موردون لهذا الطلب.</div>'; el.innerHTML=html; document.getElementById('rfq-back').addEventListener('click',back); return; }
+
+  // روابط دعوة الموردين (بوابة المورّد العامة)
+  html += `<details style="margin:6px 0" ${responded.length?'':'open'}><summary style="cursor:pointer;font-size:12.5px;font-weight:600">روابط دعوة الموردين (تقديم ذاتي)</summary>
+    <div class="muted" style="font-size:11.5px;margin:6px 0">انسخ رابط كل مورد وأرسله له عبر واتساب/إيميل ليُدخل عرضه بنفسه — تظهر أسعاره هنا تلقائياً.</div>
+    ${sups.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#f0ece2)">
+      <span style="font-size:13px">${escapeHtml(s)} ${rfqRespBadge(smap[s]||'invited')}</span>
+      <button class="btn btn-ghost btn-sm" data-invite="${escapeHtml(s)}">📋 نسخ الرابط</button></div>`).join('')}
+  </details>`;
 
   // معايير التقييم
   const w = Object.assign({}, RFQ_DEFAULT_WEIGHTS, rfq.weights||{});
@@ -12097,6 +12127,7 @@ async function rfqOpenDetail(id){
   el.innerHTML = html;
   document.getElementById('rfq-back').addEventListener('click', back);
   el.querySelectorAll('[data-st]').forEach(b=>b.addEventListener('click', ()=>rfqSetStatus(id, b.getAttribute('data-st'))));
+  el.querySelectorAll('[data-invite]').forEach(b=>b.addEventListener('click', ()=>rfqCopyInvite(id, b.getAttribute('data-invite'))));
   const swBtn=document.getElementById('rfq-save-w'); if(swBtn) swBtn.addEventListener('click', ()=>rfqSaveWeights(id, { price:rfqNum(document.getElementById('rfq-ew-price').value), delivery:rfqNum(document.getElementById('rfq-ew-delivery').value), quality:rfqNum(document.getElementById('rfq-ew-quality').value), payment:rfqNum(document.getElementById('rfq-ew-payment').value) }));
   const saveBtn=document.getElementById('rfq-save');
   if(saveBtn) saveBtn.addEventListener('click', async ()=>{
