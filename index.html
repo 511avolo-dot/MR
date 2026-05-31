@@ -11877,6 +11877,34 @@ function rfqPrint(rfq, lines, sups, qmap, totals){
   w.document.write(h); w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
 }
 
+// استيراد عرض مورد من صورة عبر الذكاء الاصطناعي (Gemini) — يملأ عمود المورد
+async function rfqAIImport(si, sups, lines){
+  if(!hasPermission('can_use_ai')){ toast('error','صلاحية مرفوضة','الذكاء الاصطناعي غير متاح لك'); return; }
+  const cfg = await loadAIConfig();
+  if(!cfg.enabled){ toast('error','غير مُتاح','لم يُضبط الذكاء الاصطناعي (مفتاح/وسيط)'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange = async ()=>{
+    const f=inp.files[0]; if(!f) return;
+    toast('info','جارٍ التحليل','يقرأ الذكاء الاصطناعي صورة العرض…');
+    try{
+      const b64 = await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(',')[1]); rd.onerror=rej; rd.readAsDataURL(f); });
+      const prompt = 'هذه صورة عرض سعر من مورد. طابق كل بند بسعر الوحدة وأعد JSON فقط بالشكل {"L1":السعر,...} حسب البنود التالية:\n'
+        + lines.map(l=>`${l.id}: ${l.desc} (${l.qty||1} ${l.unit||''})`).join('\n')
+        + '\nأعد JSON صحيحاً فقط بأرقام لسعر الوحدة، واترك البند الذي لا يظهر سعره.';
+      const body = { contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg', data:b64}}]}], generationConfig:{temperature:0.1, maxOutputTokens:1024} };
+      const resp = await aiFetch(cfg.model||AI_DEFAULT_MODEL, 'generateContent', body, cfg);
+      const data = await resp.json();
+      let txt = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+      txt = txt.replace(/```(?:json)?/gi,'').trim();
+      const a=txt.indexOf('{'), z=txt.lastIndexOf('}'); if(a<0||z<0) throw new Error('لم يُفهم الرد');
+      const obj = JSON.parse(txt.slice(a,z+1));
+      let n=0; lines.forEach((l,li)=>{ const v=Number(obj[l.id]); if(v>0){ const cell=document.getElementById(`rq-${si}-${li}`); if(cell){ cell.value=v; n++; } } });
+      toast(n?'success':'warn', n?'تم الاستخراج':'لا أسعار', n?(n+' سعر استُخرج — راجعها ثم اضغط حفظ'):'لم يُستخرج سعر واضح');
+    }catch(e){ toast('error','فشل التحليل', e.message||'حاول بصورة أوضح'); }
+  };
+  inp.click();
+}
+
 // ── بوابة المورّد: توليد روابط الدعوة ومتابعة الاستجابة ──
 function rfqGenToken(){ return 'tk_'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); }
 async function rfqEnsureToken(rfqId, supplier){
@@ -12136,7 +12164,7 @@ async function rfqOpenDetail(id){
     </div><button class="btn btn-ghost btn-sm" id="rfq-save-w">حفظ المعايير وإعادة الاحتساب</button></details>`;
 
   // الجدول
-  html += `<div style="overflow:auto"><table class="rfq-cmp"><thead><tr><th>البند</th><th>كمية</th><th>مرجعي</th>${sups.map(s=>`<th>${escapeHtml(s)}${ev.useScore&&ev.ranked[0]===s?' 🏆':''}</th>`).join('')}</tr></thead><tbody>`;
+  html += `<div style="overflow:auto"><table class="rfq-cmp"><thead><tr><th>البند</th><th>كمية</th><th>مرجعي</th>${sups.map((s,si)=>`<th>${escapeHtml(s)}${ev.useScore&&ev.ranked[0]===s?' 🏆':''}${(!awarded&&!cancelled)?` <button data-aiimport="${si}" title="استيراد عرض بصورة (ذكاء اصطناعي)" style="border:none;background:transparent;cursor:pointer;font-size:13px">📎</button>`:''}</th>`).join('')}</tr></thead><tbody>`;
   lines.forEach((line,li)=>{
     html += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>`;
     sups.forEach((s,si)=>{
@@ -12199,6 +12227,7 @@ async function rfqOpenDetail(id){
   const asingle=document.getElementById('rfq-award-single'); if(asingle) asingle.addEventListener('click', ()=>rfqAward(id, single, singleTotal));
   const asplit=document.getElementById('rfq-award-split'); if(asplit) asplit.addEventListener('click', ()=>rfqAwardSplit(id, splitAwards, splitPerSup, splitTotal));
   const aprint=document.getElementById('rfq-print'); if(aprint) aprint.addEventListener('click', ()=>rfqPrint(rfq, lines, sups, qmap, totals));
+  el.querySelectorAll('[data-aiimport]').forEach(b=>b.addEventListener('click', ()=>rfqAIImport(Number(b.getAttribute('data-aiimport')), sups, lines)));
 }
 
 /* ════════════════════════════════════════════════════════════════
