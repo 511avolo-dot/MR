@@ -11822,6 +11822,41 @@ async function rfqSaveSupplierQuote(rfqId, supplier, prices, attrs, note){
   const {error} = await CLOUD.client.from('proc_rfq_quotes').upsert({ id, rfq_id:rfqId, supplier, prices, attrs:attrs||{}, note:note||null, updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
   return !error;
 }
+// تغذية السجل التاريخي بالأسعار المعتمدة عند الترسية (تعلّم النظام)
+async function rfqFeedHistory(rfq, quotes, awardsMap){
+  try{
+    const qmap={}; (quotes||[]).forEach(q=>qmap[q.supplier]=q.prices||{});
+    let base = Math.max(0, ...STATE.history.map(h=>Number(h.num)||0));
+    const today = new Date().toISOString().slice(0,10);
+    let fed = 0;
+    for(const line of (rfq.lines||[])){
+      const sup = awardsMap[line.id]; if(!sup) continue;
+      const price = rfqNum((qmap[sup]||{})[line.id]); if(!(price>0)) continue;
+      if(!line.code) continue; // نغذّي فقط البنود المرتبطة بالكتالوج للحفاظ على نظافة السجل
+      const cat = ((STATE.items||[]).find(i=>i.code===line.code)||{}).category || '';
+      const entry = { num: ++base, code:line.code, name:line.desc, category:cat, price, unit:line.unit||'', supplier:sup, date:today, reference:'RFQ '+rfq.id, note:'سعر معتمد من ترسية', _user:true };
+      STATE.history.unshift(entry);
+      if(window.CLOUD && CLOUD.enabled) CLOUD.history.insert(entry).catch(()=>{});
+      fed++;
+    }
+    if(fed){ try{ recomputeItemStats(); }catch(e){} toast('info','تحديث السجل', fed+' سعر معتمد أُضيف إلى السجل التاريخي'); }
+  }catch(e){}
+}
+// طباعة/تصدير مقارنة العروض
+function rfqPrint(rfq, lines, sups, qmap, totals){
+  if(!requirePermission('can_export','طباعة المقارنة')) return;
+  const w = window.open('', '_blank'); if(!w){ toast('error','منع','اسمح بالنوافذ المنبثقة'); return; }
+  let h = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>مقارنة عروض — ${escapeHtml(rfq.title)}</title>
+    <style>body{font-family:Arial,Tahoma;padding:24px;color:#222}h2{margin:0 0 4px}table{border-collapse:collapse;width:100%;margin-top:12px}
+    th,td{border:1px solid #999;padding:6px 8px;text-align:center;font-size:12px}th{background:#f0ece2}tfoot td{font-weight:bold;background:#faf7f0}</style></head><body>`;
+  h += `<h2>مقارنة عروض الأسعار</h2><div>${escapeHtml(rfq.title)} · رقم ${escapeHtml(rfq.id)} · ${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</div>`;
+  h += `<table><thead><tr><th>البند</th><th>الكمية</th><th>مرجعي</th>${sups.map(s=>`<th>${escapeHtml(s)}</th>`).join('')}</tr></thead><tbody>`;
+  lines.forEach(line=>{ h += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>${sups.map(s=>{ const v=(qmap[s]||{})[line.id]; return `<td>${v!=null?fmtPrice(v):'—'}</td>`; }).join('')}</tr>`; });
+  h += `</tbody><tfoot><tr><td colspan="3">الإجمالي</td>${sups.map(s=>`<td>${totals[s]?fmtPrice(totals[s]):'—'}</td>`).join('')}</tr></tfoot></table>`;
+  h += `<p style="margin-top:18px;font-size:11px;color:#777">AL-DEYABI GROUP · نظام المشتريات</p></body></html>`;
+  w.document.write(h); w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
+}
+
 // ── بوابة المورّد: توليد روابط الدعوة ومتابعة الاستجابة ──
 function rfqGenToken(){ return 'tk_'+Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10); }
 async function rfqEnsureToken(rfqId, supplier){
@@ -11856,9 +11891,10 @@ async function rfqSaveWeights(rfqId, weights){
 // ترسية شاملة على مورد واحد (تُنشئ طلب اعتماد)
 async function rfqAward(rfqId, supplier, total){
   if(!confirm(`ترسية كامل الطلب على «${supplier}» بإجمالي ${fmtPrice(total)} ر.س؟ سيُنشأ طلب اعتماد.`)) return;
-  const {rfq} = await rfqLoadOne(rfqId);
+  const {rfq, quotes} = await rfqLoadOne(rfqId);
   const awards = {}; (rfq.lines||[]).forEach(l=>awards[l.id]=supplier);
   await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:supplier, awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  await rfqFeedHistory(rfq, quotes, awards);
   await submitPurchaseRequest({ title:'ترسية RFQ: '+(rfq?rfq.title:rfqId), supplier, amount: total, details:{ rfq_id: rfqId, type:'full' } });
   try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'award', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{awarded_to:supplier}, meta:{total}}); }catch(e){}
   toast('success','تمت الترسية','أُنشئ طلب اعتماد للترسية');
@@ -11867,8 +11903,9 @@ async function rfqAward(rfqId, supplier, total){
 // ترسية مجزّأة: كل بند لأقل مورد (تُنشئ طلب اعتماد لكل مورد)
 async function rfqAwardSplit(rfqId, awards, perSupplierTotal, splitTotal){
   if(!confirm(`اعتماد الترسية المجزّأة (كل بند لأوفر مورد) بإجمالي ${fmtPrice(splitTotal)} ر.س؟ سيُنشأ طلب اعتماد لكل مورد.`)) return;
-  const {rfq} = await rfqLoadOne(rfqId);
+  const {rfq, quotes} = await rfqLoadOne(rfqId);
   await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:'مجزّأة', awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  await rfqFeedHistory(rfq, quotes, awards);
   for(const [sup, amt] of Object.entries(perSupplierTotal)){
     if(amt>0) await submitPurchaseRequest({ title:'ترسية مجزّأة RFQ: '+(rfq?rfq.title:rfqId)+' — '+sup, supplier:sup, amount:amt, details:{ rfq_id:rfqId, type:'split' } });
   }
@@ -12120,6 +12157,7 @@ async function rfqOpenDetail(id){
   // الإجراءات
   html += `<div class="wf-card-act" style="margin-top:12px;flex-wrap:wrap">`;
   if(!awarded && !cancelled) html += `<button class="btn btn-accent btn-sm" id="rfq-save">💾 حفظ ومقارنة</button>`;
+  if(responded.length) html += `<button class="btn btn-ghost btn-sm" id="rfq-print">🖨 طباعة المقارنة</button>`;
   if(!awarded && !cancelled && single) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-single">ترسية على ${escapeHtml(single)} (${fmtPrice(singleTotal)})</button>`;
   if(!awarded && !cancelled && splitTotal>0 && Object.keys(splitPerSup).length>1) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-split">ترسية مجزّأة (${fmtPrice(splitTotal)})</button>`;
   html += `</div>`;
@@ -12140,6 +12178,7 @@ async function rfqOpenDetail(id){
   });
   const asingle=document.getElementById('rfq-award-single'); if(asingle) asingle.addEventListener('click', ()=>rfqAward(id, single, singleTotal));
   const asplit=document.getElementById('rfq-award-split'); if(asplit) asplit.addEventListener('click', ()=>rfqAwardSplit(id, splitAwards, splitPerSup, splitTotal));
+  const aprint=document.getElementById('rfq-print'); if(aprint) aprint.addEventListener('click', ()=>rfqPrint(rfq, lines, sups, qmap, totals));
 }
 
 let __APP_STARTED = false;
