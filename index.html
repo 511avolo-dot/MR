@@ -2041,6 +2041,10 @@ body.dark .form-card { background:linear-gradient(145deg,var(--surface) 0%,rgba(
 body.role-user .admin-only{ display:none !important; }
 /* إخفاء العناصر التي تتطلب صلاحية لا يملكها المستخدم (data-requires-perm) */
 .perm-hidden{ display:none !important; }
+/* إيقاف وحدة «وكلاء الذكاء الاصطناعي» — يُكتفى بتحليلات الذكاء (analytics).
+   نُبقي الكود لإعادة تفعيله مستقبلاً عند الحاجة. */
+[data-page="agents"]{ display:none !important; }
+#page-agents{ display:none !important; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
