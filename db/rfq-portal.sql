@@ -38,7 +38,7 @@ BEGIN
 END; $$;
 
 -- 2) تقديم/تحديث عرض المورّد (يتحقق من الرمز والحالة والموعد)
-CREATE OR REPLACE FUNCTION submit_supplier_quote(p_rfq text, p_token text, p_prices jsonb, p_attrs jsonb, p_no_bid jsonb, p_note text)
+CREATE OR REPLACE FUNCTION submit_supplier_quote(p_rfq text, p_token text, p_prices jsonb, p_attrs jsonb, p_no_bid jsonb, p_note text, p_final boolean DEFAULT true)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_rfq proc_rfqs; v_q proc_rfq_quotes;
 BEGIN
@@ -52,12 +52,16 @@ BEGIN
      attrs  = COALESCE(p_attrs,'{}'::jsonb),
      no_bid = COALESCE(p_no_bid,'{}'::jsonb),
      note   = p_note,
-     status = 'submitted', submitted_at = now(), updated_at = now()
+     -- المسودة لا تُعلَّم «مُقدَّم» (تبقى opened) — فقط الإرسال النهائي
+     status = CASE WHEN p_final THEN 'submitted'
+                   WHEN status = 'submitted' THEN 'submitted' ELSE 'opened' END,
+     submitted_at = CASE WHEN p_final THEN now() ELSE submitted_at END,
+     updated_at = now()
    WHERE id = v_q.id;
   RETURN jsonb_build_object('ok', true);
 END; $$;
 
 REVOKE ALL ON FUNCTION get_rfq_for_supplier(text,text) FROM public;
-REVOKE ALL ON FUNCTION submit_supplier_quote(text,text,jsonb,jsonb,jsonb,text) FROM public;
+REVOKE ALL ON FUNCTION submit_supplier_quote(text,text,jsonb,jsonb,jsonb,text,boolean) FROM public;
 GRANT EXECUTE ON FUNCTION get_rfq_for_supplier(text,text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION submit_supplier_quote(text,text,jsonb,jsonb,jsonb,text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION submit_supplier_quote(text,text,jsonb,jsonb,jsonb,text,boolean) TO anon, authenticated;

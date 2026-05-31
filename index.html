@@ -10458,6 +10458,8 @@ window.CLOUD = {
     if(!window.supabase){
       throw new Error('مكتبة Supabase لم يتم تحميلها. تأكد من اتصالك بالإنترنت.');
     }
+    // idempotent: تجنّب إعادة التهيئة المزدوجة (bootstrap ثم tryAutoConnectCloud)
+    if(this.enabled && this.client && this.url === url){ try{ verifyAuthSession(); }catch(e){} return true; }
     this.client = window.supabase.createClient(url, key, {
       // persistSession=true: يبقى رمز جلسة المستخدم (JWT) بعد إعادة التحميل،
       // وهو ضروري لتعمل سياسات RLS المعتمِدة على authenticated.

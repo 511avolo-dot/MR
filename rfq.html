@@ -189,7 +189,7 @@ async function send(isFinal){
   const btn = isFinal ? $('btn-submit') : $('btn-draft');
   const old = btn.textContent; btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
-    const { data, error } = await SB.rpc('submit_supplier_quote', { p_rfq:RFQ_ID, p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null });
+    const { data, error } = await SB.rpc('submit_supplier_quote', { p_rfq:RFQ_ID, p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null, p_final:isFinal });
     if(error) throw error;
     if(isFinal){ $('success-ref').textContent = 'رقم الطلب: ' + RFQ_ID; show('success'); }
     else { btn.textContent='تم الحفظ ✓'; setTimeout(()=>{ btn.disabled=false; btn.textContent=old; }, 1500); }

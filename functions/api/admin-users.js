@@ -50,7 +50,9 @@ function sb(env) {
       return u && u.email ? u : null;
     },
     async getProfile(username) {
-      const r = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=username,role,active`, { headers });
+      // ilike (بلا حروف بدل) = مطابقة غير حسّاسة لحالة الأحرف — لأن البريد يُشتق
+      // بحروف صغيرة بينما username في proc_users قد يكون بأحرف كبيرة (Abdullah).
+      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(username)}&select=username,role,active`, { headers });
       if (!r.ok) return null;
       const rows = await r.json();
       return rows && rows[0] ? rows[0] : null;
