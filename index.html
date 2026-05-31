@@ -11493,6 +11493,10 @@ function init(){
    مبنية بالكامل داخل Supabase/Cloudflare (بلا مورّد خارجي).
    الجداول: proc_purchase_requests, proc_notifications (db/workflows.sql)
    ════════════════════════════════════════════════════════════════ */
+// مفاتيح الميزات — وحدات سير العمل (اعتمادات/RFQ/إشعارات/أداء الموردين) تبقى مخفية
+// حتى نكمل صقلها. نظام الصلاحيات + Supabase Auth يعمل مستقلاً عنها.
+// عند الجاهزية: غيّر workflows إلى true.
+const FEATURES = { workflows: false };
 const WF = { threshold: 50000, anomalyPct: 20, pollTimer: null };
 
 function wfLevelName(lvl){ return lvl >= 2 ? 'المدير العام' : 'مدير المشتريات'; }
@@ -11759,6 +11763,7 @@ function wfInjectUI(){
 }
 
 async function initWorkflows(){
+  if(!FEATURES.workflows) return;   // الوحدات مخفية حتى اكتمال الصقل
   if(!STATE.currentUser) return;
   wfInjectUI();
   await wfLoadThreshold();
