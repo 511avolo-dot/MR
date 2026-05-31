@@ -11508,7 +11508,7 @@ function init(){
 // مفاتيح الميزات — وحدات سير العمل (اعتمادات/RFQ/إشعارات/أداء الموردين) تبقى مخفية
 // حتى نكمل صقلها. نظام الصلاحيات + Supabase Auth يعمل مستقلاً عنها.
 // عند الجاهزية: غيّر workflows إلى true.
-const FEATURES = { workflows: false };
+const FEATURES = { workflows: true };  // معروضة كـ«تحت التطوير» (قد تتطلب تشغيل سكربتات db/)
 const WF = { threshold: 50000, anomalyPct: 20, pollTimer: null };
 
 // إعداد Supabase مُضمَّن للاتصال التلقائي (anon عام بالتصميم — الحماية عبر RLS).
@@ -11725,6 +11725,7 @@ function wfInjectUI(){
   const panel = document.createElement('div');
   panel.id = 'wf-notif-panel';
   panel.innerHTML = `
+    <div style="padding:8px 14px;background:#fff7e6;border-bottom:1px solid #f0d9a0;font-size:11px;color:#8a6a30;text-align:center">🚧 وحدات سير العمل تحت التطوير — قد تحتاج تشغيل سكربتات قاعدة البيانات</div>
     <div class="wf-notif-head"><span>الإشعارات</span>
       <span style="display:flex;gap:10px">
         <a id="wf-open-approvals" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">الاعتمادات</a>
@@ -11740,7 +11741,7 @@ function wfInjectUI(){
   modal.id = 'modal-approvals';
   modal.innerHTML = `
     <div class="wf-modal">
-      <div class="wf-modal-head"><h3>اعتمادات الشراء</h3><button id="wf-modal-close" class="btn btn-ghost btn-sm">✕</button></div>
+      <div class="wf-modal-head"><h3>اعتمادات الشراء <span style="font-size:10px;background:#fff7e6;color:#8a6a30;border:1px solid #f0d9a0;padding:2px 7px;border-radius:10px;vertical-align:middle">🚧 تحت التطوير</span></h3><button id="wf-modal-close" class="btn btn-ghost btn-sm">✕</button></div>
       <div class="wf-tabs">
         <button class="wf-tab" id="wf-tab-new">طلب اعتماد جديد</button>
         <button class="wf-tab" id="wf-tab-mine">طلباتي</button>
@@ -12032,7 +12033,7 @@ function rfqInjectUI(){
   modal.id = 'modal-rfq';
   modal.innerHTML = `
     <div class="rfq-modal">
-      <div class="wf-modal-head"><h3>طلبات عروض الأسعار (RFQ)</h3><button id="rfq-close" class="btn btn-ghost btn-sm">✕</button></div>
+      <div class="wf-modal-head"><h3>طلبات عروض الأسعار (RFQ) <span style="font-size:10px;background:#fff7e6;color:#8a6a30;border:1px solid #f0d9a0;padding:2px 7px;border-radius:10px;vertical-align:middle">🚧 تحت التطوير</span></h3><button id="rfq-close" class="btn btn-ghost btn-sm">✕</button></div>
       <div class="wf-tabs">
         <button class="wf-tab active" id="rfq-tab-list">القائمة</button>
         <button class="wf-tab" id="rfq-tab-new">طلب جديد</button>
@@ -12309,7 +12310,7 @@ function openScorecards(){
       .sc-t th{background:var(--surface-2,#faf8f3);position:sticky;top:0}.sc-bar{height:6px;border-radius:3px;background:#eee;overflow:hidden}.sc-bar>i{display:block;height:100%;background:var(--accent,#C4A265)}`;
     const st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
     const m=document.createElement('div');m.id='modal-sc';
-    m.innerHTML=`<div class="sc-modal"><div class="wf-modal-head"><h3>بطاقات أداء الموردين</h3><button id="sc-close" class="btn btn-ghost btn-sm">✕</button></div><div class="wf-pane" id="sc-body"></div></div>`;
+    m.innerHTML=`<div class="sc-modal"><div class="wf-modal-head"><h3>بطاقات أداء الموردين <span style="font-size:10px;background:#fff7e6;color:#8a6a30;border:1px solid #f0d9a0;padding:2px 7px;border-radius:10px;vertical-align:middle">🚧 تحت التطوير</span></h3><button id="sc-close" class="btn btn-ghost btn-sm">✕</button></div><div class="wf-pane" id="sc-body"></div></div>`;
     document.body.appendChild(m);
     document.getElementById('sc-close').addEventListener('click',()=>m.style.display='none');
     m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; });
