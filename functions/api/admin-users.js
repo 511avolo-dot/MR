@@ -19,8 +19,23 @@
  *     action: "create" | "setPassword" | "setActive" | "delete"
  */
 
-const AUTH_EMAIL_DOMAIN = 'aldeyabi.local';
-const usernameToEmail = (u) => String(u || '').trim().toLowerCase() + '@' + AUTH_EMAIL_DOMAIN;
+const AUTH_EMAIL_DOMAIN = 'aldeyabi.com';
+// خريطة صريحة اسم→بريد (تطابق نظيرتها في index.html)
+const AUTH_EMAIL_MAP = {
+  abdullah: 'abdullah@aldeyabi.com',
+  mostafa:  'supply@aldeyabi.com',
+  mahmoud:  'mahmoud@aldeyabi.com',
+};
+const usernameToEmail = (u) => {
+  const k = String(u || '').trim().toLowerCase();
+  return AUTH_EMAIL_MAP[k] || (k + '@' + AUTH_EMAIL_DOMAIN);
+};
+// عكسي: بريد المستدعي → اسم المستخدم (لمطابقة proc_users)
+const emailToUsername = (email) => {
+  const e = String(email || '').toLowerCase();
+  for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
+  return e.split('@')[0];
+};
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -116,7 +131,7 @@ export async function onRequestPost({ request, env }) {
   if (!caller) return json({ error: 'جلسة غير صالحة' }, 401);
 
   // 2) تأكّد أنه مدير نشط
-  const callerUsername = (caller.email || '').split('@')[0];
+  const callerUsername = emailToUsername(caller.email || '');
   const callerProfile = await api.getProfile(callerUsername);
   if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.active === false) {
     return json({ error: 'هذه العملية متاحة للمدير فقط' }, 403);

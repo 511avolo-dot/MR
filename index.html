@@ -4444,8 +4444,18 @@ const DEFAULT_PERMISSIONS = {
 // ── Supabase Auth ──
 // المصادقة الحقيقية تتم عبر Supabase Auth (JWT) لتُفعّل سياسات RLS على الخادم.
 // المستخدم يكتب اسمه فقط (Abdullah)، ونحوّله داخلياً إلى بريد اصطلاحي ثابت.
-const AUTH_EMAIL_DOMAIN = 'aldeyabi.local';
-function usernameToEmail(u){ return String(u || '').trim().toLowerCase() + '@' + AUTH_EMAIL_DOMAIN; }
+const AUTH_EMAIL_DOMAIN = 'aldeyabi.com';
+// خريطة صريحة: اسم المستخدم → بريده الفعلي (لأن بعض البُرُد لا تطابق الاسم، مثل supply@).
+// المفاتيح بحروف صغيرة. المستخدمون الجدد (بلا إدخال هنا) يأخذون username@aldeyabi.com.
+const AUTH_EMAIL_MAP = {
+  abdullah: 'abdullah@aldeyabi.com',
+  mostafa:  'supply@aldeyabi.com',
+  mahmoud:  'mahmoud@aldeyabi.com'
+};
+function usernameToEmail(u){
+  const k = String(u || '').trim().toLowerCase();
+  return AUTH_EMAIL_MAP[k] || (k + '@' + AUTH_EMAIL_DOMAIN);
+}
 
 // ── إدارة المستخدمين عبر الخادم (service_role) ──
 // دالة /api/admin-users تتولّى إنشاء/حذف حسابات Auth وإعادة تعيين كلمات المرور.
