@@ -24,9 +24,13 @@ Supabase Dashboard → **Authentication → Providers → Email**:
 
 | الاسم في الشاشة | البريد المُدخَل | الدور |
 |-----------------|------------------|-------|
-| Abdullah | `abdullah@aldeyabi.local` | admin |
-| Mostafa  | `mostafa@aldeyabi.local`  | user  |
-| Mahmoud  | `mahmoud@aldeyabi.local`  | user  |
+| Abdullah | `abdullah@aldeyabi.com` | admin |
+| Mostafa  | `supply@aldeyabi.com`   | user  |
+| Mahmoud  | `mahmoud@aldeyabi.com` (اصطلاحي) | user  |
+
+> البُرُد مطابقة لخريطة `AUTH_EMAIL_MAP` في الكود. مصطفى يستخدم `supply@`، ومحمود
+> بريد اصطلاحي للدخول فقط. أي تعديل على بريد يستلزم تحديث الخريطة في `index.html`
+> و`functions/api/admin-users.js`.
 
 > اختر كلمات مرور قوية (لم تعُد هاشات SHA-256 القديمة مستخدمة).
 
