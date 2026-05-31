@@ -5659,6 +5659,19 @@ function submitEntry(){
   if(!supplier){toast('error','بيانات ناقصة','يرجى إدخال المورد');return}
   if(!date){toast('error','بيانات ناقصة','يرجى إدخال التاريخ');return}
   
+  // كشف الأسعار الشاذة — تكامل مع المتوسط/آخر سعر تاريخي
+  try{
+    const _it = (STATE.items||[]).find(i=>i.code===code);
+    const _ref = _it ? (Number(_it.avg_price)||Number(_it.last_price)||0) : 0;
+    const _thr = WF.anomalyPct||20;
+    if(_ref>0 && price > _ref*(1+_thr/100)){
+      const _pct = ((price-_ref)/_ref*100).toFixed(0);
+      if(!confirm(`⚠ تنبيه سعر شاذ\nالسعر ${fmtPrice(price)} أعلى بـ ${_pct}% من المتوسط التاريخي (${fmtPrice(_ref)}).\nهل تريد المتابعة؟`)) return;
+      try{ if(typeof wfNotifyAdmins==='function') wfNotifyAdmins('anomaly','سعر شاذ مُدخَل', `${name||code}: ${fmtPrice(price)} (+${_pct}% عن المتوسط) — أدخله ${STATE.currentUser.displayName||STATE.currentUser.username}`); }catch(e){}
+      try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'anomaly', entity_type:'price', entity_id:code, old_value:{ref:_ref}, new_value:{price}, meta:{pct:_pct}}); }catch(e){}
+    }
+  }catch(e){}
+
   // Assign new num
   const maxNum = Math.max(0,...STATE.history.map(h=>Number(h.num)||0));
   const entry = {
@@ -11478,7 +11491,7 @@ function init(){
    مبنية بالكامل داخل Supabase/Cloudflare (بلا مورّد خارجي).
    الجداول: proc_purchase_requests, proc_notifications (db/workflows.sql)
    ════════════════════════════════════════════════════════════════ */
-const WF = { threshold: 50000, pollTimer: null };
+const WF = { threshold: 50000, anomalyPct: 20, pollTimer: null };
 
 function wfLevelName(lvl){ return lvl >= 2 ? 'المدير العام' : 'مدير المشتريات'; }
 
@@ -11487,6 +11500,8 @@ async function wfLoadThreshold(){
     if(CLOUD && CLOUD.enabled){
       const {data} = await CLOUD.client.from('proc_settings').select('value').eq('key','approval_threshold').maybeSingle();
       if(data && data.value){ const v = typeof data.value==='string'?JSON.parse(data.value):data.value; if(v && v.amount) WF.threshold = Number(v.amount) || WF.threshold; }
+      const {data:a} = await CLOUD.client.from('proc_settings').select('value').eq('key','anomaly_pct').maybeSingle();
+      if(a && a.value){ const v = typeof a.value==='string'?JSON.parse(a.value):a.value; if(v && v.pct) WF.anomalyPct = Number(v.pct) || WF.anomalyPct; }
     }
   }catch(e){}
 }
@@ -11506,6 +11521,9 @@ async function wfNotify(recipient, type, title, body, link){
   }); }catch(e){}
 }
 
+async function wfNotifyAdmins(type, title, body, link){
+  try{ const users=(await fetchCloudUsers(true))||{}; for(const u of Object.values(users)){ if(u.active!==false && u.role==='admin' && u.username!==(STATE.currentUser&&STATE.currentUser.username)) await wfNotify(u.username, type, title, body, link||null); } }catch(e){}
+}
 async function wfApprovers(level){
   const users = (await fetchCloudUsers(true)) || {};
   const key = level >= 2 ? 'can_approve_l2' : 'can_approve_l1';
