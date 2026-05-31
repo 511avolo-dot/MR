@@ -11751,13 +11751,56 @@ async function initWorkflows(){
    ════════════════════════════════════════════════════════════════ */
 function rfqSlug(s){ return String(s||'').trim().replace(/\s+/g,'_').replace(/[^\w؀-ۿ]/g,''); }
 function rfqLineTotal(line, price){ const q = Number(line.qty)||1; return (Number(price)||0) * q; }
+function rfqNum(v){ const n = Number(v); return isFinite(n) ? n : 0; }
+
+// ── الذكاء التكاملي: خط الأساس من بيانات النظام التاريخية ──
+function rfqItemBaseline(nameOrCode){
+  if(!nameOrCode) return {price:0, code:null, unit:''};
+  const k = String(nameOrCode).trim();
+  const it = (STATE.items||[]).find(i => i.code===k || i.name===k);
+  if(!it) return {price:0, code:null, unit:''};
+  return { price: rfqNum(it.last_price) || rfqNum(it.avg_price) || 0, code: it.code, unit: it.unit||'' };
+}
+// اقتراح موردين من السجل التاريخي حسب أكواد/فئات بنود الطلب
+function rfqSuggestSuppliers(lines){
+  const codes = new Set((lines||[]).map(l=>l.code).filter(Boolean));
+  const cats = new Set();
+  (STATE.items||[]).forEach(i=>{ if(codes.has(i.code) && i.category) cats.add(i.category); });
+  const freq = {};
+  (STATE.history||[]).forEach(h=>{ if(!h.supplier) return; if(codes.has(h.code) || (h.category && cats.has(h.category))) freq[h.supplier] = (freq[h.supplier]||0)+1; });
+  return Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,8).map(e=>e[0]);
+}
+const RFQ_DEFAULT_WEIGHTS = { price:100, delivery:0, quality:0, payment:0 };
+// تقييم القيمة الأفضل (best-value) متعدد المعايير بأوزان — نهج Oracle/Ariba
+function rfqEvaluate(rfq, qmap, amap, totals, completeSuppliers){
+  const w = Object.assign({}, RFQ_DEFAULT_WEIGHTS, rfq.weights||{});
+  const wsum = (w.price+w.delivery+w.quality+w.payment) || 1;
+  const useScore = (w.delivery+w.quality+w.payment) > 0;
+  if(!useScore || !completeSuppliers.length) return { useScore:false, scores:{}, ranked:[] };
+  const minTotal = Math.min(...completeSuppliers.map(s=>totals[s]));
+  const minDelivery = Math.min(...completeSuppliers.map(s=>rfqNum((amap[s]||{}).delivery_days)||9999));
+  const maxPay = Math.max(...completeSuppliers.map(s=>rfqNum((amap[s]||{}).payment_days)||0), 1);
+  const scores = {};
+  completeSuppliers.forEach(s=>{
+    const a = amap[s]||{};
+    const sp = totals[s]>0 ? (minTotal/totals[s])*100 : 0;                       // أقل سعر أفضل
+    const sd = rfqNum(a.delivery_days)>0 ? (minDelivery/rfqNum(a.delivery_days))*100 : (w.delivery? 0:0); // أسرع تسليم أفضل
+    const sq = (rfqNum(a.quality)/5)*100;                                          // جودة 1-5
+    const spy = (rfqNum(a.payment_days)/maxPay)*100;                              // مدة سداد أطول أفضل
+    scores[s] = Math.round(((w.price*sp + w.delivery*sd + w.quality*sq + w.payment*spy)/wsum)*10)/10;
+  });
+  const ranked = completeSuppliers.slice().sort((a,b)=>scores[b]-scores[a]);
+  return { useScore:true, scores, ranked, w };
+}
 
 async function rfqCreate(data){
   if(!(CLOUD && CLOUD.enabled)){ toast('error','غير متصل','يلزم الاتصال بالسحابة'); return {ok:false}; }
   if(!data.title || !(data.lines||[]).length){ toast('error','بيانات ناقصة','أدخل العنوان وبنداً واحداً على الأقل'); return {ok:false}; }
   const id = 'rfq_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const budget = (data.lines||[]).reduce((sum,l)=> sum + rfqNum(l.baseline)*(Number(l.qty)||1), 0);
   const payload = { id, title:data.title, status:'open', deadline:data.deadline||null,
     lines:data.lines, suppliers:data.suppliers||[], notes:data.notes||null,
+    weights: data.weights||RFQ_DEFAULT_WEIGHTS, awards:{}, budget,
     created_by:STATE.currentUser.username, created_by_name:STATE.currentUser.displayName||STATE.currentUser.username };
   const {error} = await CLOUD.client.from('proc_rfqs').insert(payload);
   if(error){ toast('error','فشل', error.message); return {ok:false}; }
@@ -11774,19 +11817,41 @@ async function rfqLoadOne(id){
   const {data:quotes} = await CLOUD.client.from('proc_rfq_quotes').select('*').eq('rfq_id',id);
   return { rfq, quotes: quotes||[] };
 }
-async function rfqSaveSupplierQuote(rfqId, supplier, prices, note){
+async function rfqSaveSupplierQuote(rfqId, supplier, prices, attrs, note){
   const id = rfqId+'__'+rfqSlug(supplier);
-  const {error} = await CLOUD.client.from('proc_rfq_quotes').upsert({ id, rfq_id:rfqId, supplier, prices, note:note||null, updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
+  const {error} = await CLOUD.client.from('proc_rfq_quotes').upsert({ id, rfq_id:rfqId, supplier, prices, attrs:attrs||{}, note:note||null, updated_by:STATE.currentUser.username, updated_at:new Date().toISOString() });
   return !error;
 }
+async function rfqSetStatus(rfqId, status){
+  await CLOUD.client.from('proc_rfqs').update({status}).eq('id',rfqId);
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'edit', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{status}, meta:{}}); }catch(e){}
+  rfqOpenDetail(rfqId);
+}
+async function rfqSaveWeights(rfqId, weights){
+  await CLOUD.client.from('proc_rfqs').update({weights}).eq('id',rfqId);
+  toast('success','حُفظت المعايير','أُعيد احتساب التقييم'); rfqOpenDetail(rfqId);
+}
+// ترسية شاملة على مورد واحد (تُنشئ طلب اعتماد)
 async function rfqAward(rfqId, supplier, total){
-  if(!confirm(`ترسية الطلب على «${supplier}» بإجمالي ${fmtPrice(total)} ر.س؟ سيُنشأ طلب اعتماد.`)) return;
-  await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:supplier, awarded_at:new Date().toISOString()}).eq('id',rfqId);
-  // تكامل مع الاعتمادات: إنشاء طلب اعتماد للترسية
+  if(!confirm(`ترسية كامل الطلب على «${supplier}» بإجمالي ${fmtPrice(total)} ر.س؟ سيُنشأ طلب اعتماد.`)) return;
   const {rfq} = await rfqLoadOne(rfqId);
-  await submitPurchaseRequest({ title:'ترسية RFQ: '+(rfq?rfq.title:rfqId), supplier, amount: total, details:{ rfq_id: rfqId } });
-  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'edit', entity_type:'rfq', entity_id:rfqId, old_value:{status:'open'}, new_value:{status:'awarded', awarded_to:supplier}, meta:{total}}); }catch(e){}
+  const awards = {}; (rfq.lines||[]).forEach(l=>awards[l.id]=supplier);
+  await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:supplier, awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  await submitPurchaseRequest({ title:'ترسية RFQ: '+(rfq?rfq.title:rfqId), supplier, amount: total, details:{ rfq_id: rfqId, type:'full' } });
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'award', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{awarded_to:supplier}, meta:{total}}); }catch(e){}
   toast('success','تمت الترسية','أُنشئ طلب اعتماد للترسية');
+  rfqOpenDetail(rfqId);
+}
+// ترسية مجزّأة: كل بند لأقل مورد (تُنشئ طلب اعتماد لكل مورد)
+async function rfqAwardSplit(rfqId, awards, perSupplierTotal, splitTotal){
+  if(!confirm(`اعتماد الترسية المجزّأة (كل بند لأوفر مورد) بإجمالي ${fmtPrice(splitTotal)} ر.س؟ سيُنشأ طلب اعتماد لكل مورد.`)) return;
+  const {rfq} = await rfqLoadOne(rfqId);
+  await CLOUD.client.from('proc_rfqs').update({status:'awarded', awarded_to:'مجزّأة', awards, awarded_at:new Date().toISOString()}).eq('id',rfqId);
+  for(const [sup, amt] of Object.entries(perSupplierTotal)){
+    if(amt>0) await submitPurchaseRequest({ title:'ترسية مجزّأة RFQ: '+(rfq?rfq.title:rfqId)+' — '+sup, supplier:sup, amount:amt, details:{ rfq_id:rfqId, type:'split' } });
+  }
+  try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'award', entity_type:'rfq', entity_id:rfqId, old_value:null, new_value:{type:'split'}, meta:{splitTotal}}); }catch(e){}
+  toast('success','تمت الترسية المجزّأة','أُنشئت طلبات اعتماد للموردين');
   rfqOpenDetail(rfqId);
 }
 
@@ -11804,9 +11869,21 @@ function rfqInjectUI(){
     .rfq-cmp{width:100%;border-collapse:collapse;font-size:12.5px}
     .rfq-cmp th,.rfq-cmp td{border:1px solid var(--border,#eee);padding:6px 8px;text-align:center}
     .rfq-cmp th{background:var(--surface-2,#faf8f3);font-weight:700}
-    .rfq-cmp input{width:90px;padding:5px 6px;border:1px solid var(--border,#ddd);border-radius:6px;font-family:inherit;text-align:center}
+    .rfq-cmp input{width:84px;padding:5px 6px;border:1px solid var(--border,#ddd);border-radius:6px;font-family:inherit;text-align:center}
     .rfq-low{background:rgba(45,157,111,0.16);font-weight:700}
-    .rfq-win{background:rgba(196,162,101,0.18)}
+    .rfq-win{background:rgba(196,162,101,0.22)}
+    .rfq-below{color:#1f7a55}
+    .rfq-above{color:#a23b41}
+    .rfq-attr th{background:#fbf6ec}
+    .rfq-score td{font-weight:700}
+    .rfq-kpis{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px}
+    .rfq-kpi{background:var(--surface-2,#faf8f3);border:1px solid var(--border,#eee);border-radius:9px;padding:8px 12px;font-size:12px;min-width:96px}
+    .rfq-kpi b{display:block;font-size:15px;color:var(--ink,#231F20);margin-top:2px}
+    .rfq-rec{background:rgba(45,157,111,0.08);border:1px solid rgba(45,157,111,0.3);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:13px;line-height:1.8}
+    .rfq-weights{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+    .rfq-weights label{font-size:11.5px;font-weight:600}
+    .rfq-weights input{width:100%;padding:6px;border:1px solid var(--border,#ddd);border-radius:6px;text-align:center}
+    .rfq-status-bar{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   const modal = document.createElement('div');
@@ -11848,7 +11925,7 @@ async function rfqRenderList(){
   const list = await rfqList();
   if(!list.length){ el.innerHTML = '<div class="wf-empty">لا توجد طلبات. ابدأ بـ«طلب جديد».</div>'; return; }
   el.innerHTML = list.map(r=>{
-    const badge = r.status==='awarded'?`<span class="wf-b win" style="background:rgba(196,162,101,0.2);color:#8a6a30;padding:3px 9px;border-radius:20px">تمت الترسية: ${escapeHtml(r.awarded_to||'')}</span>`: r.status==='closed'?'<span class="wf-b no">مغلق</span>':'<span class="wf-b pend">مفتوح</span>';
+    const badge = r.status==='awarded'?`<span class="wf-b" style="background:rgba(196,162,101,0.2);color:#8a6a30;padding:3px 9px;border-radius:20px">تمت الترسية: ${escapeHtml(r.awarded_to||'')}</span>`: r.status==='cancelled'?'<span class="wf-b no">ملغى</span>': r.status==='closed'?'<span class="wf-b no">مغلق</span>':'<span class="wf-b pend">مفتوح</span>';
     return `<div class="wf-card" data-rfq="${escapeHtml(r.id)}" style="cursor:pointer">
       <div class="wf-card-h"><span class="wf-card-title">${escapeHtml(r.title)}</span>${badge}</div>
       <div class="wf-card-meta">${(r.lines||[]).length} بند · ${(r.suppliers||[]).length} مورد · ${r.deadline?('آخر موعد: '+escapeHtml(r.deadline)):'بلا موعد'}</div>
@@ -11859,31 +11936,54 @@ async function rfqRenderList(){
 function rfqRenderNewForm(){
   const el = document.getElementById('rfq-pane-new'); if(!el) return;
   const sups = (STATE.suppliers||[]).map(s=>s.name).filter(Boolean);
+  const itemOpts = (STATE.items||[]).slice(0,1000).map(i=>`<option value="${escapeHtml(i.name||i.code)}">`).join('');
   el.innerHTML = `
+    <datalist id="rfq-items-dl">${itemOpts}</datalist>
     <div class="wf-field"><label>عنوان الطلب *</label><input id="rfq-n-title" placeholder="مثال: توريد مواد كهربائية لمشروع كذا"></div>
     <div class="wf-field"><label>آخر موعد للعروض</label><input id="rfq-n-deadline" type="date"></div>
-    <div class="wf-field"><label>البنود *</label><div id="rfq-n-lines"></div>
+    <div class="wf-field"><label>البنود * <span style="color:var(--muted);font-weight:400">— اختر من الكتالوج ليُجلب السعر المرجعي تلقائياً</span></label>
+      <div class="rfq-line-row" style="font-size:11px;color:var(--muted);font-weight:700"><span>البند</span><span>كمية</span><span>وحدة</span><span>سعر مرجعي</span><span></span></div>
+      <div id="rfq-n-lines"></div>
       <button class="btn btn-ghost btn-sm" id="rfq-add-line" type="button">+ إضافة بند</button></div>
-    <div class="wf-field"><label>الموردون المدعوّون</label>
-      <div class="rfq-sup-pick" id="rfq-n-sups">${sups.length?sups.map((s,i)=>`<label><input type="checkbox" value="${escapeHtml(s)}"> ${escapeHtml(s)}</label>`).join(''):'<span style="color:var(--muted)">لا يوجد موردون — أضِفهم من صفحة الموردين</span>'}</div>
+    <div class="wf-field"><label>معايير التقييم (best-value) — اترك السعر 100 لاختيار الأقل سعراً فقط</label>
+      <div class="rfq-weights">
+        <div><label>السعر %</label><input id="rfq-w-price" type="number" min="0" value="100"></div>
+        <div><label>التسليم %</label><input id="rfq-w-delivery" type="number" min="0" value="0"></div>
+        <div><label>الجودة %</label><input id="rfq-w-quality" type="number" min="0" value="0"></div>
+        <div><label>السداد %</label><input id="rfq-w-payment" type="number" min="0" value="0"></div>
+      </div></div>
+    <div class="wf-field"><label>الموردون المدعوّون <a id="rfq-suggest" style="font-size:11.5px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">⟲ اقتراح من السجل</a></label>
+      <div class="rfq-sup-pick" id="rfq-n-sups">${sups.length?sups.map(s=>`<label><input type="checkbox" value="${escapeHtml(s)}"> ${escapeHtml(s)}</label>`).join(''):'<span style="color:var(--muted)">لا يوجد موردون — أضِفهم من صفحة الموردين</span>'}</div>
       <input id="rfq-n-sups-extra" style="margin-top:6px" placeholder="موردون إضافيون (افصل بفاصلة)"></div>
     <div class="wf-field"><label>ملاحظات</label><textarea id="rfq-n-notes" rows="2"></textarea></div>
     <button class="btn btn-accent" id="rfq-n-submit">إنشاء الطلب</button>`;
   const linesBox = document.getElementById('rfq-n-lines');
   const addLine = ()=>{ const row=document.createElement('div'); row.className='rfq-line-row';
-    row.innerHTML = `<input placeholder="وصف البند" class="rfq-l-desc"><input placeholder="كمية" type="number" min="0" class="rfq-l-qty"><input placeholder="وحدة" class="rfq-l-unit"><button class="btn btn-ghost btn-sm" type="button">✕</button>`;
+    row.innerHTML = `<input placeholder="اسم البند" class="rfq-l-desc" list="rfq-items-dl"><input placeholder="كمية" type="number" min="0" value="1" class="rfq-l-qty"><input placeholder="وحدة" class="rfq-l-unit"><input placeholder="—" type="number" min="0" class="rfq-l-base" title="سعر مرجعي"><button class="btn btn-ghost btn-sm" type="button">✕</button>`;
+    const desc=row.querySelector('.rfq-l-desc');
+    desc.addEventListener('change', ()=>{ const b=rfqItemBaseline(desc.value); if(b.code){ if(b.unit) row.querySelector('.rfq-l-unit').value=b.unit; if(b.price) row.querySelector('.rfq-l-base').value=b.price; row.dataset.code=b.code; } });
     row.querySelector('button').addEventListener('click',()=>row.remove()); linesBox.appendChild(row); };
   addLine(); addLine();
   document.getElementById('rfq-add-line').addEventListener('click', addLine);
+  document.getElementById('rfq-suggest').addEventListener('click', ()=>{
+    const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map(r=>({code:r.dataset.code, desc:r.querySelector('.rfq-l-desc').value}));
+    lines.forEach(l=>{ if(!l.code){ const b=rfqItemBaseline(l.desc); if(b.code) l.code=b.code; } });
+    const sug = rfqSuggestSuppliers(lines);
+    if(!sug.length){ toast('info','لا اقتراح','لا يوجد سجل كافٍ لاقتراح موردين'); return; }
+    document.querySelectorAll('#rfq-n-sups input').forEach(c=>{ if(sug.includes(c.value)) c.checked=true; });
+    toast('success','تم الاقتراح', sug.length+' مورد من السجل');
+  });
   document.getElementById('rfq-n-submit').addEventListener('click', async ()=>{
     const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map((row,i)=>({
-      id:'L'+(i+1), desc:row.querySelector('.rfq-l-desc').value.trim(),
-      qty:parseFloat(row.querySelector('.rfq-l-qty').value)||1, unit:row.querySelector('.rfq-l-unit').value.trim()
+      id:'L'+(i+1), code:row.dataset.code||null, desc:row.querySelector('.rfq-l-desc').value.trim(),
+      qty:parseFloat(row.querySelector('.rfq-l-qty').value)||1, unit:row.querySelector('.rfq-l-unit').value.trim(),
+      baseline: parseFloat(row.querySelector('.rfq-l-base').value)||0
     })).filter(l=>l.desc);
     const picked = [...document.querySelectorAll('#rfq-n-sups input:checked')].map(c=>c.value);
     const extra = document.getElementById('rfq-n-sups-extra').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const weights = { price:rfqNum(document.getElementById('rfq-w-price').value), delivery:rfqNum(document.getElementById('rfq-w-delivery').value), quality:rfqNum(document.getElementById('rfq-w-quality').value), payment:rfqNum(document.getElementById('rfq-w-payment').value) };
     const res = await rfqCreate({ title:document.getElementById('rfq-n-title').value.trim(),
-      deadline:document.getElementById('rfq-n-deadline').value||null, lines,
+      deadline:document.getElementById('rfq-n-deadline').value||null, lines, weights,
       suppliers:[...new Set([...picked,...extra])], notes:document.getElementById('rfq-n-notes').value.trim() });
     if(res && res.ok) rfqOpenDetail(res.id);
   });
@@ -11898,47 +11998,117 @@ async function rfqOpenDetail(id){
   const {rfq, quotes} = await rfqLoadOne(id);
   if(!rfq){ el.innerHTML = '<div class="wf-empty">الطلب غير موجود</div>'; return; }
   const lines = rfq.lines||[], sups = rfq.suppliers||[];
-  const qmap = {}; quotes.forEach(q=>qmap[q.supplier]=q.prices||{});
-  // حساب أدنى سعر لكل بند والإجماليات
-  const totals = {}; sups.forEach(s=>totals[s]=0);
-  const lowPerLine = {};
+  const qmap={}, amap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; });
+  const awarded = rfq.status==='awarded', cancelled = rfq.status==='cancelled';
+  const back = ()=>rfqShowPane('list');
+
+  // ── الحسابات الذكية ──
+  const totals={}; sups.forEach(s=>totals[s]=0);
+  const lowPerLine={}, lowSupPerLine={}; let baselineTotal=0;
   lines.forEach(line=>{
-    let low = Infinity;
-    sups.forEach(s=>{ const p = Number((qmap[s]||{})[line.id]); if(p>0){ totals[s]+=rfqLineTotal(line,p); if(p<low) low=p; } });
-    lowPerLine[line.id] = low;
+    baselineTotal += rfqNum(line.baseline)*(Number(line.qty)||1);
+    let low=Infinity, lowSup=null;
+    sups.forEach(s=>{ const p=rfqNum((qmap[s]||{})[line.id]); if(p>0){ totals[s]+=rfqLineTotal(line,p); if(p<low){low=p; lowSup=s;} } });
+    lowPerLine[line.id]=(low===Infinity?0:low); lowSupPerLine[line.id]=lowSup;
   });
-  const quotedAll = sups.filter(s=> lines.every(l=> Number((qmap[s]||{})[l.id])>0 ));
-  let winner=null, winLow=Infinity; quotedAll.forEach(s=>{ if(totals[s]<winLow){ winLow=totals[s]; winner=s; } });
+  const responded = sups.filter(s=> Object.keys(qmap[s]||{}).length>0);
+  const complete = sups.filter(s=> lines.length && lines.every(l=> rfqNum((qmap[s]||{})[l.id])>0 ));
+  let single=null, singleTotal=Infinity; complete.forEach(s=>{ if(totals[s]<singleTotal){ singleTotal=totals[s]; single=s; } });
+  let splitTotal=0; const splitAwards={}, splitPerSup={};
+  lines.forEach(line=>{ const s=lowSupPerLine[line.id]; if(s){ splitAwards[line.id]=s; const amt=rfqLineTotal(line,lowPerLine[line.id]); splitTotal+=amt; splitPerSup[s]=(splitPerSup[s]||0)+amt; } });
+  const ev = rfqEvaluate(rfq, qmap, amap, totals, complete);
+  const isLate = rfq.deadline && rfq.status==='open' && (new Date(rfq.deadline) < new Date(new Date().toDateString()));
+  const statusTxt = awarded ? ('تمت الترسية: '+escapeHtml(rfq.awarded_to||'')) : cancelled ? 'ملغى' : rfq.status==='closed' ? 'مغلق التقديم' : 'مفتوح';
 
   let html = `<button class="btn btn-ghost btn-sm" id="rfq-back">→ القائمة</button>
-    <h3 style="margin:10px 0 4px">${escapeHtml(rfq.title)}</h3>
-    <div class="wf-card-meta" style="margin-bottom:10px">${rfq.status==='awarded'?('تمت الترسية على: '+escapeHtml(rfq.awarded_to||'')):'مفتوح'} · ${lines.length} بند · ${sups.length} مورد</div>`;
-  if(!sups.length){ html += '<div class="wf-empty">لم يُدعَ موردون لهذا الطلب.</div>'; el.innerHTML=html; document.getElementById('rfq-back').addEventListener('click',()=>rfqShowPane('list')); return; }
-  html += `<div style="overflow:auto"><table class="rfq-cmp"><thead><tr><th>البند</th><th>الكمية</th>${sups.map(s=>`<th>${escapeHtml(s)}</th>`).join('')}</tr></thead><tbody>`;
+    <h3 style="margin:10px 0 2px">${escapeHtml(rfq.title)}</h3>
+    <div class="wf-card-meta">${statusTxt}${rfq.deadline?(' · آخر موعد: '+escapeHtml(rfq.deadline)+(isLate?' <b style="color:#a23b41">(متأخر)</b>':'')):''}</div>
+    <div class="rfq-kpis">
+      <div class="rfq-kpi">البنود<b>${lines.length}</b></div>
+      <div class="rfq-kpi">الموردون<b>${responded.length}/${sups.length}</b></div>
+      <div class="rfq-kpi">الميزانية المرجعية<b>${baselineTotal?fmtPrice(baselineTotal):'—'}</b></div>
+      <div class="rfq-kpi">أقل إجمالي<b>${single?fmtPrice(singleTotal):'—'}</b></div>
+    </div>`;
+  // شريط دورة الحياة
+  if(!awarded && !cancelled){
+    html += `<div class="rfq-status-bar">`;
+    if(rfq.status==='open') html += `<button class="btn btn-ghost btn-sm" data-st="closed">إغلاق التقديم</button><button class="btn btn-ghost btn-sm" data-st="cancelled">إلغاء</button>`;
+    if(rfq.status==='closed') html += `<button class="btn btn-ghost btn-sm" data-st="open">إعادة فتح</button>`;
+    html += `</div>`;
+  }
+  if(!sups.length){ html += '<div class="wf-empty">لم يُدعَ موردون لهذا الطلب.</div>'; el.innerHTML=html; document.getElementById('rfq-back').addEventListener('click',back); return; }
+
+  // معايير التقييم
+  const w = Object.assign({}, RFQ_DEFAULT_WEIGHTS, rfq.weights||{});
+  html += `<details style="margin:6px 0"><summary style="cursor:pointer;font-size:12.5px;font-weight:600">معايير التقييم (best-value)</summary>
+    <div class="rfq-weights">
+      <div><label>السعر %</label><input id="rfq-ew-price" type="number" min="0" value="${w.price}"></div>
+      <div><label>التسليم %</label><input id="rfq-ew-delivery" type="number" min="0" value="${w.delivery}"></div>
+      <div><label>الجودة %</label><input id="rfq-ew-quality" type="number" min="0" value="${w.quality}"></div>
+      <div><label>السداد %</label><input id="rfq-ew-payment" type="number" min="0" value="${w.payment}"></div>
+    </div><button class="btn btn-ghost btn-sm" id="rfq-save-w">حفظ المعايير وإعادة الاحتساب</button></details>`;
+
+  // الجدول
+  html += `<div style="overflow:auto"><table class="rfq-cmp"><thead><tr><th>البند</th><th>كمية</th><th>مرجعي</th>${sups.map(s=>`<th>${escapeHtml(s)}${ev.useScore&&ev.ranked[0]===s?' 🏆':''}</th>`).join('')}</tr></thead><tbody>`;
   lines.forEach((line,li)=>{
-    html += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td>`;
+    html += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>`;
     sups.forEach((s,si)=>{
-      const val = (qmap[s]||{})[line.id]; const isLow = Number(val)>0 && Number(val)===lowPerLine[line.id];
-      html += `<td class="${isLow?'rfq-low':''}"><input id="rq-${si}-${li}" type="number" min="0" step="0.01" value="${val!=null?escapeHtml(String(val)):''}"></td>`;
+      const val=(qmap[s]||{})[line.id]; const p=rfqNum(val);
+      const isLow = p>0 && p===lowPerLine[line.id];
+      let vcls=''; if(p>0 && rfqNum(line.baseline)>0) vcls = p<rfqNum(line.baseline)?'rfq-below':(p>rfqNum(line.baseline)?'rfq-above':'');
+      html += `<td class="${isLow?'rfq-low':''}"><input id="rq-${si}-${li}" class="${vcls}" type="number" min="0" step="0.01" value="${val!=null?escapeHtml(String(val)):''}" ${awarded||cancelled?'disabled':''}></td>`;
     });
     html += `</tr>`;
   });
-  html += `<tr><th colspan="2">الإجمالي</th>${sups.map(s=>`<th class="${s===winner?'rfq-win':''}">${totals[s]?fmtPrice(totals[s]):'—'}</th>`).join('')}</tr></tbody></table></div>`;
-  if(winner) html += `<div class="wf-card-note" style="margin-top:8px">💡 الأوفر (لكل البنود): <b>${escapeHtml(winner)}</b> بإجمالي ${fmtPrice(winLow)} ر.س</div>`;
-  html += `<div class="wf-card-act" style="margin-top:12px"><button class="btn btn-accent btn-sm" id="rfq-save">حفظ ومقارنة</button>`;
-  if(rfq.status!=='awarded') sups.forEach((s,si)=>{ if(totals[s]>0) html += `<button class="btn btn-ghost btn-sm" data-award="${si}">ترسية على ${escapeHtml(s)}</button>`; });
+  // صفوف المعايير غير السعرية
+  const attrRow = (label, field, ph) => `<tr class="rfq-attr"><th colspan="3" style="text-align:right">${label}</th>${sups.map((s,si)=>`<td><input id="ra-${field}-${si}" type="number" min="0" value="${(amap[s]||{})[field]!=null?escapeHtml(String((amap[s]||{})[field])):''}" placeholder="${ph}" ${awarded||cancelled?'disabled':''}></td>`).join('')}</tr>`;
+  html += attrRow('مدة التسليم (أيام)','delivery_days','أيام');
+  html += attrRow('الجودة (1-5)','quality','1-5');
+  html += attrRow('مدة السداد (أيام)','payment_days','يوم');
+  // الإجمالي + الوفورات
+  html += `<tr><th colspan="3">الإجمالي</th>${sups.map(s=>{
+    const t=totals[s]; const sav = (complete.includes(s)&&baselineTotal)?((baselineTotal-t)/baselineTotal*100):null;
+    return `<th class="${s===single?'rfq-win':''}">${t?fmtPrice(t):'—'}${sav!=null?`<div style="font-size:10px;font-weight:400;color:${sav>=0?'#1f7a55':'#a23b41'}">${sav>=0?'وفر':'زيادة'} ${Math.abs(sav).toFixed(1)}%</div>`:''}</th>`;
+  }).join('')}</tr>`;
+  if(ev.useScore){
+    html += `<tr class="rfq-score"><th colspan="3">التقييم الموزون</th>${sups.map(s=>{
+      const sc=ev.scores[s]; const rank=ev.ranked.indexOf(s); return `<td class="${rank===0?'rfq-win':''}">${sc!=null?sc:'—'}${rank>=0?`<div style="font-size:10px;font-weight:400">#${rank+1}</div>`:''}</td>`;
+    }).join('')}</tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // التوصيات الذكية
+  if(responded.length){
+    html += `<div class="rfq-rec"><b>التوصيات الذكية</b><br>`;
+    if(single) html += `• <b>أقل سعر (مورد واحد):</b> ${escapeHtml(single)} — ${fmtPrice(singleTotal)} ر.س${baselineTotal?` (وفر ${(((baselineTotal-singleTotal)/baselineTotal)*100).toFixed(1)}% عن المرجعي)`:''}<br>`;
+    if(splitTotal>0) html += `• <b>ترسية مجزّأة (كل بند لأوفر مورد):</b> ${fmtPrice(splitTotal)} ر.س${single&&splitTotal<singleTotal?` — توفير إضافي ${fmtPrice(singleTotal-splitTotal)} عن المورد الواحد`:''}<br>`;
+    if(ev.useScore && ev.ranked[0]) html += `• <b>أفضل قيمة (تقييم موزون):</b> ${escapeHtml(ev.ranked[0])} — ${ev.scores[ev.ranked[0]]} نقطة<br>`;
+    if(complete.length < responded.length) html += `<span style="color:#a23b41;font-size:11.5px">⚠ ${responded.length-complete.length} مورد لم يسعّر كل البنود</span>`;
+    html += `</div>`;
+  }
+
+  // الإجراءات
+  html += `<div class="wf-card-act" style="margin-top:12px;flex-wrap:wrap">`;
+  if(!awarded && !cancelled) html += `<button class="btn btn-accent btn-sm" id="rfq-save">💾 حفظ ومقارنة</button>`;
+  if(!awarded && !cancelled && single) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-single">ترسية على ${escapeHtml(single)} (${fmtPrice(singleTotal)})</button>`;
+  if(!awarded && !cancelled && splitTotal>0 && Object.keys(splitPerSup).length>1) html += `<button class="btn btn-ghost btn-sm" id="rfq-award-split">ترسية مجزّأة (${fmtPrice(splitTotal)})</button>`;
   html += `</div>`;
+
   el.innerHTML = html;
-  document.getElementById('rfq-back').addEventListener('click',()=>rfqShowPane('list'));
-  document.getElementById('rfq-save').addEventListener('click', async ()=>{
+  document.getElementById('rfq-back').addEventListener('click', back);
+  el.querySelectorAll('[data-st]').forEach(b=>b.addEventListener('click', ()=>rfqSetStatus(id, b.getAttribute('data-st'))));
+  const swBtn=document.getElementById('rfq-save-w'); if(swBtn) swBtn.addEventListener('click', ()=>rfqSaveWeights(id, { price:rfqNum(document.getElementById('rfq-ew-price').value), delivery:rfqNum(document.getElementById('rfq-ew-delivery').value), quality:rfqNum(document.getElementById('rfq-ew-quality').value), payment:rfqNum(document.getElementById('rfq-ew-payment').value) }));
+  const saveBtn=document.getElementById('rfq-save');
+  if(saveBtn) saveBtn.addEventListener('click', async ()=>{
     for(let si=0; si<sups.length; si++){
-      const prices = {};
-      lines.forEach((line,li)=>{ const inp=document.getElementById(`rq-${si}-${li}`); const v=parseFloat(inp.value); if(v>0) prices[line.id]=v; });
-      if(Object.keys(prices).length) await rfqSaveSupplierQuote(id, sups[si], prices, null);
+      const prices={}; lines.forEach((line,li)=>{ const v=parseFloat(document.getElementById(`rq-${si}-${li}`).value); if(v>0) prices[line.id]=v; });
+      const attrs={}; ['delivery_days','quality','payment_days'].forEach(f=>{ const v=parseFloat(document.getElementById(`ra-${f}-${si}`).value); if(v>0) attrs[f]=v; });
+      if(Object.keys(prices).length || Object.keys(attrs).length) await rfqSaveSupplierQuote(id, sups[si], prices, attrs, null);
     }
     toast('success','تم الحفظ','حُدّثت المقارنة'); rfqOpenDetail(id);
   });
-  el.querySelectorAll('[data-award]').forEach(b=>b.addEventListener('click', ()=>{ const si=Number(b.getAttribute('data-award')); rfqAward(id, sups[si], totals[sups[si]]); }));
+  const asingle=document.getElementById('rfq-award-single'); if(asingle) asingle.addEventListener('click', ()=>rfqAward(id, single, singleTotal));
+  const asplit=document.getElementById('rfq-award-split'); if(asplit) asplit.addEventListener('click', ()=>rfqAwardSplit(id, splitAwards, splitPerSup, splitTotal));
 }
 
 let __APP_STARTED = false;

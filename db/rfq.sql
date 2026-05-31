@@ -8,10 +8,13 @@
 CREATE TABLE IF NOT EXISTS proc_rfqs (
   id              TEXT PRIMARY KEY,
   title           TEXT NOT NULL,
-  status          TEXT NOT NULL DEFAULT 'open',   -- open | awarded | closed
+  status          TEXT NOT NULL DEFAULT 'open',   -- open | closed | awarded | cancelled
   deadline        DATE,
-  lines           JSONB DEFAULT '[]'::jsonb,       -- [{id, desc, qty, unit}]
+  lines           JSONB DEFAULT '[]'::jsonb,       -- [{id, code, desc, qty, unit, baseline}]
   suppliers       JSONB DEFAULT '[]'::jsonb,       -- أسماء الموردين المدعوّين
+  weights         JSONB DEFAULT '{"price":100,"delivery":0,"quality":0,"payment":0}'::jsonb, -- أوزان التقييم
+  awards          JSONB DEFAULT '{}'::jsonb,       -- ترسية على مستوى البند {lineId: supplier}
+  budget          NUMERIC DEFAULT 0,               -- إجمالي الأسعار المرجعية
   notes           TEXT,
   created_by      TEXT,
   created_by_name TEXT,
@@ -32,6 +35,7 @@ CREATE TABLE IF NOT EXISTS proc_rfq_quotes (
   rfq_id      TEXT NOT NULL,
   supplier    TEXT NOT NULL,
   prices      JSONB DEFAULT '{}'::jsonb, -- { lineId: unitPrice }
+  attrs       JSONB DEFAULT '{}'::jsonb, -- { delivery_days, quality(1-5), payment_days }
   note        TEXT,
   updated_by  TEXT,
   updated_at  TIMESTAMPTZ DEFAULT now()
