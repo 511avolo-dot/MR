@@ -16510,6 +16510,9 @@ async function openRegDetail(jsonStr) {
     </div>`;
   }
 
+  // التحقق الحكومي (يظهر إن توفّر رقم سجل/ضريبي)
+  body.innerHTML += govVerifyBar(r);
+
   // Actions footer
   acts.innerHTML = '';
   if (r.status === 'pending' || r.status === 'needs_revision') {
@@ -16580,6 +16583,26 @@ async function openRegDetail(jsonStr) {
   }
 }
 
+// ── إطار التحقق الحكومي (وثق/ZATCA) — يُفعّل عند ضبط مفتاح الخادم ──
+function govVerifyBar(r){
+  const cr = (r&&r.commercial_reg)||''; const vat=(r&&r.vat_number)||'';
+  if(!cr && !vat) return '';
+  return `<div style="margin-bottom:20px;padding:12px 14px;border:1px dashed var(--border,#ccd2da);border-radius:8px">
+    <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--navy,#1a3a5c)">التحقق الحكومي</div>
+    <button class="btn btn-ghost btn-sm" onclick="govVerifyRun('${escapeHtml(String(cr))}','${escapeHtml(String(vat))}')">تحقّق من السجل التجاري</button>
+    <span id="gov-verify-out" style="font-size:12px;margin-inline-start:8px;color:var(--muted,#888)"></span>
+  </div>`;
+}
+async function govVerifyRun(cr, vat){
+  const out=document.getElementById('gov-verify-out'); if(out) out.textContent='جارٍ التحقق…';
+  try{
+    const resp = await fetch('/api/verify', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cr, vat})});
+    const j = await resp.json().catch(()=>({}));
+    if(resp.status===503){ if(out) out.innerHTML='<span style="color:#a23b41">غير مُفعّل (يحتاج مفتاح WATHQ_API_KEY على الخادم)</span>'; return; }
+    if(!resp.ok){ if(out) out.innerHTML='<span style="color:#a23b41">'+escapeHtml(j.error||'فشل التحقق')+'</span>'; return; }
+    if(out) out.innerHTML='<span style="color:#1f7a55">✓ '+escapeHtml(j.summary||'تم التحقق')+'</span>';
+  }catch(e){ if(out) out.textContent='تعذّر الاتصال'; }
+}
 function closeRegDetail() {
   document.getElementById('modal-reg-detail').style.display = 'none';
 }
