@@ -24,7 +24,7 @@ const AUTH_EMAIL_DOMAIN = 'aldeyabi.com';
 const AUTH_EMAIL_MAP = {
   abdullah: 'abdullah@aldeyabi.com',
   mostafa:  'supply@aldeyabi.com',
-  mahmoud:  'supply@aldeyabi.com',  // حساب بريد مشترك مع مصطفى
+  mahmoud:  'mahmoud@aldeyabi.com',  // معرّف دخول مستقل
 };
 const usernameToEmail = (u) => {
   const k = String(u || '').trim().toLowerCase();
