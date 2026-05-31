@@ -10810,9 +10810,7 @@ async function refreshFromCloud(){
 
 async function tryAutoConnectCloud(){
   try{
-    const stored = localStorage.getItem('proc_cloud_config');
-    if(!stored) return false;
-    const {url, key} = JSON.parse(stored);
+    const {url, key} = getCloudConfig();   // مُضمَّن أو localStorage
     if(!url || !key) return false;
     // Lazy-load the library if not already present (fixes reload disconnect)
     if(!window.supabase){
@@ -11429,11 +11427,9 @@ function init(){
   // === Try cloud auto-connect ===
   // Wait briefly so the supabase library finishes loading
   setTimeout(async ()=>{
-    if(localStorage.getItem('proc_cloud_config')){
-      const ok = await tryAutoConnectCloud();
-      if(ok){
-        toast('success','اتصال سحابي','تم الاتصال بالسحابة وتحديث البيانات');
-      }
+    const ok = await tryAutoConnectCloud();
+    if(ok){
+      toast('success','اتصال سحابي','تم الاتصال بالسحابة وتحديث البيانات');
     }
   }, 800);
   
@@ -11498,6 +11494,15 @@ function init(){
 // عند الجاهزية: غيّر workflows إلى true.
 const FEATURES = { workflows: false };
 const WF = { threshold: 50000, anomalyPct: 20, pollTimer: null };
+
+// إعداد Supabase مُضمَّن للاتصال التلقائي (anon عام بالتصميم — الحماية عبر RLS).
+// لا حاجة لإعداد يدوي؛ يمكن لإعداد محفوظ في localStorage تجاوزه (لبيئة تجريبية).
+const PROC_SB_URL  = 'https://yofcaxvstjcrmbgciwym.supabase.co';
+const PROC_SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
+function getCloudConfig(){
+  try{ const s=localStorage.getItem('proc_cloud_config'); if(s){ const c=JSON.parse(s); if(c && c.url && c.key) return c; } }catch(e){}
+  return { url: PROC_SB_URL, key: PROC_SB_ANON };
+}
 
 function wfLevelName(lvl){ return lvl >= 2 ? 'المدير العام' : 'مدير المشتريات'; }
 
@@ -12343,13 +12348,10 @@ async function bootstrap(){
   // اتصال مبكر بالسحابة (العميل فقط، بلا تحميل بيانات) كي تعمل مصادقة Supabase
   // على شاشة الدخول من أول محاولة. تحميل البيانات يتم بعد الدخول عبر startApp.
   try{
-    const stored = localStorage.getItem('proc_cloud_config');
-    if(stored){
-      const {url, key} = JSON.parse(stored);
-      if(url && key){
-        if(!window.supabase){ try{ await loadSupabaseLib(); }catch(e){} }
-        if(window.supabase){ await CLOUD.init(url, key); }
-      }
+    const {url, key} = getCloudConfig();   // مُضمَّن — اتصال تلقائي بلا إعداد يدوي
+    if(url && key){
+      if(!window.supabase){ try{ await loadSupabaseLib(); }catch(e){} }
+      if(window.supabase){ await CLOUD.init(url, key); }
     }
   }catch(e){ /* تُعرض رسالة مناسبة عند محاولة الدخول */ }
 
