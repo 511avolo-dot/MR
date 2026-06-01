@@ -2812,7 +2812,7 @@ async function connectSupabase(url, key) {
   try {
     showProc('جارٍ الاتصال...', 'الاتصال بقاعدة البيانات');
     await loadSupabaseLib();
-    SB = window.supabase.createClient(url, key, {auth:{persistSession:false}});
+    SB = await sbCreateClient(url, key);
     // اسم النموذج فقط من الإعدادات — المفتاح لا يُجلب للمتصفح إطلاقاً.
     // استخراج الوثائق بالذكاء الاصطناعي يمرّ عبر الوسيط الآمن /api/ai (سرّ الخادم).
     try {
@@ -3021,6 +3021,7 @@ function loadSupabaseLib() {
   return new Promise((resolve, reject) => {
     if (window.supabase) { resolve(); return; }
     const cdns = [
+      'lib/supabase.min.js',
       'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
       'https://unpkg.com/@supabase/supabase-js@2',
     ];
@@ -3036,6 +3037,31 @@ function loadSupabaseLib() {
     };
     tryNext();
   });
+}
+
+function sbProxyBase(url) {
+  try {
+    if (!/^https?:$/.test(location.protocol)) return null;       // file:// → لا وكيل
+    if (!/\.supabase\.co/i.test(url || '')) return null;          // الوكيل مخصّص لـ Supabase
+    return location.origin + '/db';
+  } catch (e) { return null; }
+}
+// ينشئ عميل Supabase ويتحقق من الوصول؛ يتحوّل لوكيل نطاق التطبيق (/db) تلقائياً
+// عندما تحجب شبكة العميل الاتصال المباشر بـ *.supabase.co.
+async function sbCreateClient(url, key, opts) {
+  const bases = [url];
+  const pb = sbProxyBase(url); if (pb) bases.push(pb);
+  let lastErr = null;
+  for (const base of bases) {
+    try {
+      const client = window.supabase.createClient(base, key, opts || {auth:{persistSession:false}});
+      const { error } = await client.from('proc_items').select('code').limit(1);
+      // خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي) → اتصال سليم.
+      if (error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message || '')) throw new Error(error.message);
+      return client;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('تعذّر الاتصال');
 }
 
 function loadScriptOnce(src, check) {
@@ -3071,10 +3097,8 @@ async function setupSave() {
   try {
     showProc('اختبار الاتصال...', '');
     await loadSupabaseLib();
-    const client = window.supabase.createClient(url, key, {auth:{persistSession:false}});
-    const {error} = await client.from('proc_items').select('code').limit(1);
-    // خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي بعد التحصين) → لا نعتبره فشلاً.
-    if (error && !/permission|rls|row-level|denied|policy|JWT/i.test(error.message || '')) throw error;
+    // ينشئ العميل ويختبر الوصول داخلياً (مباشر ثم وكيل /db عند الحجب).
+    const client = await sbCreateClient(url, key);
     localStorage.setItem('proc_cloud_config', JSON.stringify({url, key}));
     document.getElementById('setup-screen').classList.add('hidden');
     SB = client;

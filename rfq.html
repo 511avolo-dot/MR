@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="robots" content="noindex">
 <title>تقديم عرض سعر · AL-DEYABI GROUP</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{ --bg:#f4f1ea; --surface:#fff; --ink:#231F20; --ink2:#5a5650; --muted:#9a948a;
          --accent:#C4A265; --line:#e5e0d5; --ok:#1f7a55; --no:#a23b41; --radius:14px; }
@@ -115,10 +114,54 @@ const fmt = n => (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}
 function show(which){ ['loading','error','form','success'].forEach(s=>$(s).classList.toggle('hidden', s!==which)); }
 function fail(msg){ if(msg) $('error-msg').textContent = msg; show('error'); }
 
+// تحميل مكتبة Supabase: نسخة محلية أولاً (تنجو من حجب الشركات للـ CDNs)، ثم CDN احتياطاً.
+function loadSupabaseLib(){
+  return new Promise((resolve,reject)=>{
+    if(window.supabase){ resolve(); return; }
+    const cdns = [
+      'lib/supabase.min.js',
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+      'https://unpkg.com/@supabase/supabase-js@2'
+    ];
+    let i=0;
+    const tryNext=()=>{
+      if(window.supabase){ resolve(); return; }
+      if(i>=cdns.length){ reject(new Error('تعذر تحميل مكتبة Supabase')); return; }
+      const s=document.createElement('script');
+      s.src=cdns[i++]; s.async=true;
+      s.onload=()=>{ if(window.supabase) resolve(); else tryNext(); };
+      s.onerror=()=>{ s.remove(); tryNext(); };
+      document.head.appendChild(s);
+    };
+    tryNext();
+  });
+}
+function sbProxyBase(){
+  try{ return /^https?:$/.test(location.protocol) ? (location.origin + '/db') : null; }catch(e){ return null; }
+}
+// ينشئ عميل Supabase ويتحقق من الوصول؛ يتحوّل لوكيل نطاق التطبيق (/db) تلقائياً
+// عندما تحجب شبكة العميل الاتصال المباشر بـ *.supabase.co.
+async function sbCreateClient(){
+  const bases = [SUPABASE_URL];
+  const pb = sbProxyBase(); if(pb) bases.push(pb);
+  let lastErr=null;
+  for(const base of bases){
+    try{
+      const client = window.supabase.createClient(base, SUPABASE_ANON_KEY, {auth:{persistSession:false}});
+      const { error } = await client.from('proc_items').select('code').limit(1);
+      // خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي) → اتصال سليم.
+      if(error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message||'')) throw new Error(error.message);
+      return client;
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr || new Error('تعذّر الاتصال');
+}
+
 async function init(){
   if(!RFQ_ID || !TOKEN){ return fail('الرابط ناقص. تأكد من نسخه كاملاً.'); }
   try{
-    SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {auth:{persistSession:false}});
+    await loadSupabaseLib();
+    SB = await sbCreateClient();
     const { data, error } = await SB.rpc('get_rfq_for_supplier', { p_rfq: RFQ_ID, p_token: TOKEN });
     if(error) throw error;
     if(!data || !data.rfq){ return fail(); }
