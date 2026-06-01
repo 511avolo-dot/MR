@@ -12088,6 +12088,19 @@ function rfqRenderNewForm(){
       <div class="rfq-line-row" style="font-size:11px;color:var(--muted);font-weight:700"><span>البند</span><span>كمية</span><span>وحدة</span><span>سعر مرجعي</span><span></span></div>
       <div id="rfq-n-lines"></div>
       <button class="btn btn-ghost btn-sm" id="rfq-add-line" type="button">+ إضافة بند</button></div>
+    <div class="wf-field"><label>📋 لصق دفعة واحدة — سطر لكل بند (يدعم النسخ من Excel)</label>
+      <textarea id="rfq-bulk" rows="4" placeholder="الصق البنود، سطرًا لكل بند. مثال:
+أسمنت مقاوم | 100 | كيس
+حديد تسليح 16مم | 5 | طن
+أو الصق نصًا حرًا ثم اضغط «صياغة بالذكاء»"></textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="rfq-bulk-parse" type="button">➕ تحليل وإضافة</button>
+        <button class="btn btn-ghost btn-sm" id="rfq-bulk-ai" type="button">✨ صياغة بالذكاء</button>
+        <button class="btn btn-ghost btn-sm" id="rfq-file-btn" type="button">📎 رفع ملف (Excel/PDF/صورة)</button>
+        <input type="file" id="rfq-file" accept=".xlsx,.xls,.csv,.pdf,image/*" style="display:none">
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">الفصل بـ Tab أو | أو فاصلة. الترتيب: الوصف ← الكمية ← الوحدة. الكمية الافتراضية 1.</div>
+    </div>
     <div class="wf-field"><label>معايير التقييم (best-value) — اترك السعر 100 لاختيار الأقل سعراً فقط</label>
       <div class="rfq-weights">
         <div><label>السعر %</label><input id="rfq-w-price" type="number" min="0" value="100"></div>
@@ -12101,13 +12114,98 @@ function rfqRenderNewForm(){
     <div class="wf-field"><label>ملاحظات</label><textarea id="rfq-n-notes" rows="2"></textarea></div>
     <button class="btn btn-accent" id="rfq-n-submit">إنشاء الطلب</button>`;
   const linesBox = document.getElementById('rfq-n-lines');
-  const addLine = ()=>{ const row=document.createElement('div'); row.className='rfq-line-row';
+  const addLine = (pf)=>{ pf=pf||{}; const row=document.createElement('div'); row.className='rfq-line-row';
     row.innerHTML = `<input placeholder="اسم البند" class="rfq-l-desc" list="rfq-items-dl"><input placeholder="كمية" type="number" min="0" value="1" class="rfq-l-qty"><input placeholder="وحدة" class="rfq-l-unit"><input placeholder="—" type="number" min="0" class="rfq-l-base" title="سعر مرجعي"><button class="btn btn-ghost btn-sm" type="button">✕</button>`;
-    const desc=row.querySelector('.rfq-l-desc');
-    desc.addEventListener('change', ()=>{ const b=rfqItemBaseline(desc.value); if(b.code){ if(b.unit) row.querySelector('.rfq-l-unit').value=b.unit; if(b.price) row.querySelector('.rfq-l-base').value=b.price; row.dataset.code=b.code; } });
-    row.querySelector('button').addEventListener('click',()=>row.remove()); linesBox.appendChild(row); };
+    const desc=row.querySelector('.rfq-l-desc'), qi=row.querySelector('.rfq-l-qty'), ui=row.querySelector('.rfq-l-unit'), bi=row.querySelector('.rfq-l-base');
+    const applyCatalog=()=>{ const b=rfqItemBaseline(desc.value); if(b.code){ if(b.unit&&!ui.value) ui.value=b.unit; if(b.price&&!bi.value) bi.value=b.price; row.dataset.code=b.code; } };
+    desc.addEventListener('change', applyCatalog);
+    if(pf.desc!=null) desc.value=pf.desc;
+    if(pf.qty!=null && Number(pf.qty)>0) qi.value=pf.qty;
+    if(pf.unit!=null && pf.unit!=='') ui.value=pf.unit;
+    if(pf.baseline!=null && Number(pf.baseline)>0) bi.value=pf.baseline;
+    row.querySelector('button').addEventListener('click',()=>row.remove());
+    linesBox.appendChild(row);
+    if(pf.desc) applyCatalog();   // اجلب الكتالوج للبنود الملصقة/المرفوعة
+    return row; };
   addLine(); addLine();
-  document.getElementById('rfq-add-line').addEventListener('click', addLine);
+  document.getElementById('rfq-add-line').addEventListener('click', ()=>addLine());
+
+  // ── إضافة بنود دفعة واحدة: لصق نصّي + ملف (Excel/PDF/صورة) + صياغة بالذكاء ──
+  function rfqAddParsed(arr){
+    const clean = (arr||[]).filter(x=>x && x.desc && String(x.desc).trim());
+    clean.forEach(x=>addLine({desc:String(x.desc).trim(), qty:Number(x.qty)||1, unit:(x.unit!=null?String(x.unit).trim():'')}));
+    return clean.length;
+  }
+  function rfqParseText(text){
+    return String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(line=>{
+      const p = line.split(/\t|\||،|;|, ?/).map(s=>s.trim()).filter(s=>s.length);
+      if(!p.length) return null;
+      let qty=1, unit='';
+      if(p[1]){ const q=parseFloat(String(p[1]).replace(/[^\d.]/g,'')); if(q>0) qty=q; }
+      if(p[2]) unit=p[2];
+      return { desc:p[0], qty, unit };
+    }).filter(Boolean);
+  }
+  async function rfqStructureAI(payloadParts){
+    if(!hasPermission('can_use_ai')) { toast('error','صلاحية','الذكاء الاصطناعي غير متاح لك'); return null; }
+    const cfg=await loadAIConfig(); if(!cfg.enabled){ toast('error','غير متاح','لم يُضبط الذكاء الاصطناعي'); return null; }
+    const body={contents:[{role:'user',parts:payloadParts}],generationConfig:{temperature:0.1,maxOutputTokens:4096}};
+    const resp=await aiFetch(cfg.model||AI_DEFAULT_MODEL,'generateContent',body,cfg);
+    const data=await resp.json();
+    let t=(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||'';
+    t=t.replace(/```(?:json)?/gi,'').trim(); const a=t.indexOf('['),z=t.lastIndexOf(']');
+    if(a<0||z<0) throw new Error('لم يُفهم الرد');
+    return JSON.parse(t.slice(a,z+1));
+  }
+  const AI_PARSE_PROMPT='حوّل المحتوى التالي إلى قائمة بنود مشتريات. أعد JSON فقط بالشكل [{"desc":"الوصف","qty":رقم,"unit":"الوحدة"}]. إن غابت الكمية اجعلها 1، وإن غابت الوحدة اتركها "". تجاهل الترويسات والصفوف الفارغة.';
+
+  document.getElementById('rfq-bulk-parse').addEventListener('click', ()=>{
+    const n=rfqAddParsed(rfqParseText(document.getElementById('rfq-bulk').value));
+    if(n){ document.getElementById('rfq-bulk').value=''; toast('success','أُضيفت', n+' بند — راجعها'); }
+    else toast('warn','لا بنود','الصق بنودًا أولاً');
+  });
+  document.getElementById('rfq-bulk-ai').addEventListener('click', async ()=>{
+    const txt=document.getElementById('rfq-bulk').value.trim();
+    if(!txt){ toast('warn','فارغ','الصق نصًا أولاً'); return; }
+    toast('info','جارٍ الصياغة','يحلّل الذكاء الاصطناعي البنود…');
+    try{ const arr=await rfqStructureAI([{text:AI_PARSE_PROMPT+'\n\nالنص:\n'+txt}]); if(arr){ const n=rfqAddParsed(arr); document.getElementById('rfq-bulk').value=''; toast(n?'success':'warn', n?'تمت الصياغة':'لا بنود', n?(n+' بند أُضيف'):'لم يُفهم النص'); } }
+    catch(e){ toast('error','فشل الصياغة', e.message||''); }
+  });
+  document.getElementById('rfq-file-btn').addEventListener('click', ()=>document.getElementById('rfq-file').click());
+  document.getElementById('rfq-file').addEventListener('change', async (ev)=>{
+    const f=ev.target.files[0]; if(!f) return; ev.target.value='';
+    const name=(f.name||'').toLowerCase();
+    try{
+      if(/\.(xlsx|xls|csv)$/.test(name)){
+        toast('info','جارٍ القراءة','تحليل ملف Excel…');
+        await loadLib(SHEETJS_CDNS, ()=>typeof XLSX!=='undefined');
+        const buf=await f.arrayBuffer();
+        const wb=XLSX.read(buf,{type:'array'});
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, blankrows:false});
+        // تخطّى صف الترويسة إن بدا نصيًا، وخُذ: العمود1=الوصف، أول عمود رقمي=الكمية، التالي=الوحدة
+        const parsed=[];
+        rows.forEach((r,idx)=>{ if(!r||!r.length) return; const desc=(r[0]!=null?String(r[0]):'').trim(); if(!desc) return;
+          if(idx===0 && isNaN(parseFloat(r[1]))) return; // ترويسة محتملة
+          let qty=1, unit=''; for(let c=1;c<r.length;c++){ const num=parseFloat(r[c]); if(qty===1 && num>0){ qty=num; } else if(r[c]!=null && String(r[c]).trim() && isNaN(parseFloat(r[c])) && !unit){ unit=String(r[c]).trim(); } }
+          parsed.push({desc,qty,unit}); });
+        const n=rfqAddParsed(parsed); toast(n?'success':'warn', n?'تم الاستيراد':'لا بنود', n?(n+' بند من Excel — راجعها'):'لم تُقرأ بنود واضحة');
+      } else if(/\.pdf$/.test(name)){
+        toast('info','جارٍ القراءة','استخراج نص PDF…');
+        await loadLib(PDFJS_CDNS, ()=>typeof pdfjsLib!=='undefined');
+        pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_LOCAL;
+        const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+        let text=''; for(let p=1;p<=Math.min(pdf.numPages,10);p++){ const pg=await pdf.getPage(p); const c=await pg.getTextContent(); text+=c.items.map(i=>i.str).join(' ')+'\n'; }
+        if(text.trim().length<40){ toast('warn','PDF ممسوح','لا نص قابل للقراءة — جرّب رفعه كصورة'); return; }
+        document.getElementById('rfq-bulk').value=text.trim();
+        toast('info','جاهز','النص في الصندوق — اضغط «صياغة بالذكاء» أو «تحليل وإضافة»');
+      } else if(/^image\//.test(f.type) || /\.(png|jpe?g|webp)$/.test(name)){
+        toast('info','جارٍ التحليل','الذكاء الاصطناعي يقرأ الصورة…');
+        const b64=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(',')[1]);rd.onerror=rej;rd.readAsDataURL(f);});
+        const arr=await rfqStructureAI([{text:AI_PARSE_PROMPT},{inline_data:{mime_type:f.type||'image/jpeg',data:b64}}]);
+        if(arr){ const n=rfqAddParsed(arr); toast(n?'success':'warn', n?'تم الاستخراج':'لا بنود', n?(n+' بند من الصورة — راجعها'):'لم تُفهم الصورة'); }
+      } else { toast('warn','صيغة غير مدعومة','المدعوم: Excel / CSV / PDF / صورة'); }
+    }catch(e){ toast('error','فشل المعالجة', e.message||'حاول مجدداً'); }
+  });
   document.getElementById('rfq-suggest').addEventListener('click', ()=>{
     const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map(r=>({code:r.dataset.code, desc:r.querySelector('.rfq-l-desc').value}));
     lines.forEach(l=>{ if(!l.code){ const b=rfqItemBaseline(l.desc); if(b.code) l.code=b.code; } });
