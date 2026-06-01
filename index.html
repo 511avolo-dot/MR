@@ -4433,7 +4433,7 @@ let CLOUD_USERS_CACHE = null;
 let CLOUD_USERS_LAST_FETCH = 0;
 const CLOUD_USERS_TTL_MS = 30000; // refetch every 30s max
 
-const AUTH_MAX_ATTEMPTS = 5;
+const AUTH_MAX_ATTEMPTS = 10;
 const AUTH_LOCKOUT_MS = 10 * 60 * 1000; // 10 minutes
 const AUTH_SESSION_KEY = 'proc_auth_session';
 const AUTH_LOCKOUT_KEY = 'proc_auth_lockout';
@@ -4651,14 +4651,26 @@ async function attemptLogin(username, password){
       // إن كان السبب أن مصادقة Supabase غير مفعّلة بعد → رسالة إرشادية واضحة
       // (بدل احتسابها كلمة مرور خاطئة، تفاديًا للالتباس أثناء الترحيل).
       const _m = (authErr && authErr.message ? authErr.message : '').toLowerCase();
-      if(_m.includes('disabled') || _m.includes('not enabled') || _m.includes('email logins') || _m.includes('provider')){
-        // مصادقة Supabase غير مفعّلة بعد → سماح انتقالي للمسؤولين عبر المسار القديم
-        // (يختفي تلقائياً فور تفعيل Auth، فلا يحدث قفل خارج النظام عند النشر).
+      // (أ) مصادقة Supabase غير مفعّلة بعد، أو
+      // (ب) تعذّر الوصول لقاعدة البيانات (شبكة الشركة تحجب نطاق Supabase / انقطاع / مهلة).
+      //     في الحالتين نسمح بالدخول المحلي عبر كلمات المرور المخزّنة في النظام،
+      //     لأن «الباسوورد مربوط بالقاعدة» وهي غير متاحة من جهاز الشبكة.
+      const _isSetupIssue = _m.includes('disabled') || _m.includes('not enabled') || _m.includes('email logins') || _m.includes('provider');
+      const _isNetworkIssue = !authData && (
+        _m.includes('failed to fetch') || _m.includes('networkerror') || _m.includes('network request failed') ||
+        _m.includes('load failed') || _m.includes('timeout') || _m.includes('timed out') ||
+        _m.includes('connection') || _m.includes('unable to connect') || _m.includes('fetch') ||
+        (authErr && (authErr.name === 'TypeError' || authErr.name === 'AuthRetryableFetchError'))
+      );
+      if(_isSetupIssue || _isNetworkIssue){
         const _bu = AUTH_BOOTSTRAP_USERS[username];
         const _bh = await sha256Hex(password);
         if(_bu && _bu.password_hash === _bh){
           validUser = username; validRole = _bu.role;
           validDisplayName = _bu.displayName; validPermissions = _bu.permissions;
+        } else if(_isNetworkIssue){
+          // الباسوورد محليًا غير مطابق ولا يمكن التحقق من القاعدة → لا نقفل الحساب بسبب الشبكة.
+          return { ok:false, error:'تعذّر الوصول لقاعدة البيانات (قد تكون شبكة الشركة تحجب الاتصال). تأكد من كلمة المرور أو جرّب من شبكة أخرى.', lockedOut:false };
         } else {
           return { ok:false, error:'لم تُفعّل مصادقة Supabase بعد. أكمل خطوات db/auth-migration.md (تفعيل Email وإنشاء الحسابات).', lockedOut:false };
         }
