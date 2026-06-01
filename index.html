@@ -11701,6 +11701,8 @@ function poNextNumber(){
   const next=(max>0?max+1:1001);
   return `P.O-DG${year}-${next}`;
 }
+// تحقّق أمني: يمنع رموزاً قد تُحقَن في معالِجات inline (يسمح بالحروف/الأرقام و . _ - / ومسافة)
+function poValidNumber(num){ return /^[\p{L}\p{N}._\-\/ ]+$/u.test(String(num||'')); }
 
 function poSupplierRating(name){
   if(!name||!STATE.suppliers) return null;
@@ -11788,6 +11790,7 @@ function renderPurchaseOrders(){
   else if(STATE.poView==='board') renderPOBoard();
   else if(STATE.poView==='analytics') renderPODashboard();
   else if(STATE.poView==='alerts') renderPOAlerts();
+  try{ applyUserRoleToUI(); }catch(e){} // إخفاء الأزرار المُولّدة ديناميكياً حسب الصلاحية
 }
 
 function renderPOKPIs(){
@@ -12126,6 +12129,7 @@ function poCollectForm(){
   const g=id=>document.getElementById(id).value.trim();
   const num=g('po-f-number');
   if(!num){ toast('error','مطلوب','أدخل رقم الأمر'); return null; }
+  if(!poValidNumber(num)){ toast('error','رقم غير صالح','رقم الأمر يحتوي رموزاً غير مسموحة (مسموح: حروف/أرقام و . _ - /)'); return null; }
   if(!_poEditingNum && poFind(num)){ toast('error','مكرر','رقم الأمر موجود مسبقاً'); return null; }
   const subtotal=Number(document.getElementById('po-f-subtotal').value)||0;
   const existing=_poEditingNum?poFind(_poEditingNum):null;
@@ -12187,10 +12191,10 @@ function renderPODashboard(){
       <div class="po-card-box"><h3>تقارير</h3>
         <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px">مذكرة الطلبات العاجلة بانتظار السداد + تقرير إداري.</p>
         <button class="btn btn-ghost btn-sm" onclick="printUrgentMemo()">طباعة مذكرة الطلبات العاجلة</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poLoadAISummary()" data-requires-perm="can_use_ai">توليد ملخص ذكي</button>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poGenerateAIReport()" data-requires-perm="can_use_ai">توليد تقرير إداري ذكي</button>
       </div>
     </div>`;
-  poLoadAISummary();
 }
 
 /* ============================================================
@@ -12329,7 +12333,7 @@ async function poHandleImportFile(file){
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     const sheet=wb.Sheets['سجل أوامر الشراء']||wb.Sheets[wb.SheetNames.find(n=>/أوامر|سجل/.test(n))||wb.SheetNames[0]];
-    let raw=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+    let raw=XLSX.utils.sheet_to_json(sheet,{defval:''}); // raw=true (افتراضي) مع cellDates → خلايا التاريخ ككائنات Date
     // العثور على صف العناوين الحقيقي إن كانت هناك أسطر عنوان علوية
     if(raw.length && !('رقم الأمر' in raw[0])){
       const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
@@ -12351,6 +12355,7 @@ async function poHandleImportFile(file){
         if(key==='po_number'&&val) hasNum=true;
       }
       if(!hasNum) return;
+      if(!poValidNumber(po.po_number)){ warnings.push(`صف ${idx+2}: رقم أمر يحتوي رموزاً غير مسموحة — تم تخطّيه: ${po.po_number}`); return; }
       if(seen.has(po.po_number)){ warnings.push(`صف ${idx+2}: رقم مكرر ${po.po_number} (سيُحدَّث)`); }
       seen.add(po.po_number);
       // validate enums
@@ -12380,9 +12385,13 @@ function poConfirmImport(){
   let added=0,updated=0;
   _poImportRows.forEach(po=>{
     const i=STATE.purchaseOrders.findIndex(x=>x.po_number===po.po_number);
-    if(i>=0){ STATE.purchaseOrders[i]={...STATE.purchaseOrders[i],...po}; updated++; }
-    else { STATE.purchaseOrders.unshift(po); added++; }
-    poUpsertLocal(po); poCloudUpsert(po);
+    if(i>=0){
+      const ex=STATE.purchaseOrders[i];
+      const merged={...ex, ...po,
+        status_history:(ex.status_history&&ex.status_history.length)?ex.status_history:(po.status_history||[]),
+        created_at: ex.created_at||po.created_at, created_by: ex.created_by||po.created_by};
+      STATE.purchaseOrders[i]=merged; poUpsertLocal(merged); poCloudUpsert(merged); updated++;
+    } else { STATE.purchaseOrders.unshift(po); poUpsertLocal(po); poCloudUpsert(po); added++; }
   });
   logAudit('import','po','bulk',{count:_poImportRows.length,added,updated});
   _poImportRows=null;
