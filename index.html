@@ -2602,6 +2602,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                   استيراد ذكي ✨
                 </button>
+                <button type="button" class="mode-btn smart-import-btn" id="mode-lookup" title="رفع طلب تسعير من قسم داخلي/مناقصة (PDF/Excel/صورة) ومطابقة بنوده بما هو مسعّر في النظام">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  تسعير طلب 🔎
+                </button>
               </div>
 
               <div class="new-item-banner" id="new-item-banner" style="display:none">
@@ -4160,9 +4164,9 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
       </div>
       <div class="modal-title-block">
-        <div class="modal-eyebrow">استيراد ذكي بالذكاء الاصطناعي</div>
-        <div class="modal-title">رفع عرض سعر</div>
-        <div class="modal-subtitle">ارفع ملف عرض سعر من المورد، وسيقوم النظام باستخراج البنود تلقائياً.</div>
+        <div class="modal-eyebrow" id="si-modal-eyebrow">استيراد ذكي بالذكاء الاصطناعي</div>
+        <div class="modal-title" id="si-modal-title">رفع عرض سعر</div>
+        <div class="modal-subtitle" id="si-modal-subtitle">ارفع ملف عرض سعر من المورد، وسيقوم النظام باستخراج البنود تلقائياً.</div>
       </div>
       <button class="modal-close" id="si-close-x" data-close-modal aria-label="إغلاق">✕</button>
     </div>
@@ -13675,9 +13679,12 @@ function formatMarkdownReport(text){
    ============================================================ */
 const SI_STATE = {
   file: null,
+  mode: 'import',  // 'import' = رفع عرض مورد لإضافة أسعار | 'lookup' = مطابقة طلب تسعير داخلي
   extracted: null, // {supplier, date, reference, items: [{name, code?, unit?, price, quantity?}]}
   matched: null    // {supplier:{name, existing}, rows:[{...extracted, matchedItem, action}]}
 };
+// نتائج آخر مطابقة طلب تسعير (للتصدير)
+const PL_STATE = { rows: [] };
 
 // Local-first: libs are bundled with the app — no CDN dependency
 const SHEETJS_LOCAL     = '/lib/xlsx.full.min.js';
@@ -13713,13 +13720,27 @@ function resetSmartImportState(){
   if(rc) rc.innerHTML = '';
 }
 
-function openSmartImport(){
-  // الاستيراد الذكي متاح لكل مستخدم يستطيع إدخال الأسعار (مفعّلة افتراضياً للجميع).
+function openSmartImport(mode){
+  // الاستيراد/المطابقة الذكية متاحة لكل مستخدم يستطيع إدخال الأسعار (مفعّلة افتراضياً للجميع).
   if(!hasPermission('can_enter_prices')){
-    toast('error','غير مصرح','الاستيراد الذكي يتطلب صلاحية إدخال الأسعار');
+    toast('error','غير مصرح','هذه الميزة تتطلب صلاحية إدخال الأسعار');
     return;
   }
+  SI_STATE.mode = (mode === 'lookup') ? 'lookup' : 'import';
   resetSmartImportState();
+  // ضبط نصوص النموذج حسب الوضع
+  const eb = document.getElementById('si-modal-eyebrow');
+  const tt = document.getElementById('si-modal-title');
+  const sb = document.getElementById('si-modal-subtitle');
+  if(SI_STATE.mode === 'lookup'){
+    if(eb) eb.textContent = 'مطابقة طلب تسعير بالذكاء الاصطناعي';
+    if(tt) tt.textContent = 'رفع طلب تسعير داخلي / مناقصة';
+    if(sb) sb.textContent = 'ارفع ملف الطلب (Excel/PDF/صورة)؛ يتعرّف النظام على البنود ويطابقها بما هو مسعّر لديك مهما اختلف الاسم، ويبيّن ما ليس له تاريخ سعري.';
+  } else {
+    if(eb) eb.textContent = 'استيراد ذكي بالذكاء الاصطناعي';
+    if(tt) tt.textContent = 'رفع عرض سعر';
+    if(sb) sb.textContent = 'ارفع ملف عرض سعر من المورد، وسيقوم النظام باستخراج البنود تلقائياً.';
+  }
   openModal('modal-smart-import');
 }
 
@@ -13809,6 +13830,14 @@ async function siHandleFile(file){
     // Refresh learned aliases (best-effort) so the latest user confirmations
     // from other sessions are reflected in this match
     try { await siLoadLearnedAliases(false); } catch(e) {}
+
+    // وضع مطابقة طلب التسعير: لا نضيف أسعاراً، بل نطابق ونعرض التاريخ السعري
+    if(SI_STATE.mode === 'lookup'){
+      siShowProcessing('مطابقة بنود الطلب...', `تم استخراج ${extracted.items.length} بند، جاري المطابقة بالنظام`);
+      await plShowReport(extracted);
+      return;
+    }
+
     // Now match against existing data (async — may invoke AI for Tier 4)
     siShowProcessing('مطابقة البيانات...', `تم استخراج ${extracted.items.length} بند، جاري المطابقة`);
     SI_STATE.matched = await siMatchExtractedData(extracted);
@@ -13817,6 +13846,186 @@ async function siHandleFile(file){
     console.error('Smart Import error:', e);
     siShowError(e.message || 'خطأ غير متوقع', true);
   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   مطابقة طلب التسعير الداخلي (lookup) — يعيد استخدام محرّك المطابقة
+   متعدّد الطبقات (كود/رقم موديل/ربط معتمد/تشابه نصّي/تطابق دلالي بالذكاء)
+   لكن بالاسم فقط (دون أسعار)، ويعرض التاريخ السعري لكل بند.
+   ════════════════════════════════════════════════════════════ */
+async function plMatchOne(name, unit){
+  const aliases = SI_LEARNED_ALIASES || {};
+  let bestItem = null, bestScore = 0, reason = '', candidates = [];
+
+  // طبقة 1: رقم الموديل (محايد اللغة)
+  const modelNums = siExtractModelNumbers(name || '');
+  if(modelNums.length){
+    outerPL: for(const mn of modelNums){
+      for(const i of STATE.items){
+        if((i.code && siExtractModelNumbers(i.code).includes(mn)) || siExtractModelNumbers(i.name||'').includes(mn)){
+          bestItem = i; bestScore = 0.95; reason = `رقم موديل: ${mn}`; break outerPL;
+        }
+      }
+    }
+  }
+  // طبقة 2: ربط معتمد مسبقاً
+  if(!bestItem){
+    const code = aliases[siNormalize(name||'')];
+    if(code){ const a = STATE.items.find(i => i.code === code); if(a){ bestItem = a; bestScore = 0.99; reason = 'ربط معتمد مسبقاً'; } }
+  }
+  // طبقة 3: تشابه الاسم (+ مطابقة الوحدة)
+  if(!bestItem){
+    const scored = STATE.items.map(i => {
+      let s = siSimilarity(i.name, name);
+      if(unit && i.unit){
+        const ua = siNormalize(unit), ub = siNormalize(i.unit);
+        if(ua === ub) s *= 1.0; else if(siSimilarity(ua, ub) > 0.7) s *= 0.95; else s *= 0.85;
+      }
+      return { item: i, score: s };
+    }).filter(c => c.score > 0.3).sort((a, b) => b.score - a.score);
+    candidates = scored.slice(0, 3);
+    if(candidates.length){ bestItem = candidates[0].item; bestScore = candidates[0].score; reason = `تشابه ${(bestScore*100).toFixed(0)}%`; }
+  }
+  // طبقة 4: تطابق دلالي بالذكاء (عربي↔إنجليزي، تعبير قصير↔طويل)
+  if(bestScore < SI_MATCH_SUGGEST && candidates.length){
+    try{
+      const cfg = await loadAIConfig();
+      if(cfg && cfg.enabled){
+        const m = await siAISemanticMatch(name, candidates);
+        if(m){ bestItem = m.item; bestScore = 0.72; reason = 'تطابق دلالي (ذكاء اصطناعي)'; }
+      }
+    }catch(e){ /* تجاهل — نكمل بالتشابه النصّي */ }
+  }
+  return { item: bestItem, score: bestScore, reason, candidates };
+}
+
+function plFmt(n){ return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); }
+
+async function plShowReport(extracted){
+  const items = (extracted.items || []).filter(it => it && it.name);
+  PL_STATE.rows = [];
+
+  // المطابقة قد تستدعي الذكاء (طبقة 4) — نعرض تقدّماً
+  let done = 0;
+  for(const it of items){
+    done++;
+    siShowProcessing('مطابقة البنود...', `(${done}/${items.length}) ${String(it.name).slice(0,50)}`);
+    const m = await plMatchOne(it.name, it.unit);
+    let status; // matched | suggest | none
+    if(m.item && m.score >= SI_MATCH_AUTO) status = 'matched';
+    else if(m.item && m.score >= SI_MATCH_SUGGEST) status = 'suggest';
+    else status = 'none';
+    const it2 = m.item || {};
+    const hasHistory = !!(m.item && ((Number(it2.offers)||0) > 0 || it2.last_price != null));
+    PL_STATE.rows.push({
+      req: it.name,
+      qty: it.quantity || it.qty || '',
+      unit: it.unit || '',
+      status,
+      reason: m.reason,
+      code: it2.code || '',
+      matchName: it2.name || '',
+      lastPrice: hasHistory ? it2.last_price : null,
+      avgPrice:  hasHistory ? it2.avg_price  : null,
+      offers:    hasHistory ? (it2.offers||0) : 0,
+      lastDate:  hasHistory ? (it2.last_date||'') : '',
+      lastSupplier: hasHistory ? (it2.last_supplier||'') : '',
+      hasHistory
+    });
+  }
+
+  // إحصاءات
+  const nMatched = PL_STATE.rows.filter(r => r.status === 'matched' && r.hasHistory).length;
+  const nSuggest = PL_STATE.rows.filter(r => r.status === 'suggest' && r.hasHistory).length;
+  const nNoHist  = PL_STATE.rows.filter(r => r.status !== 'none' && !r.hasHistory).length;
+  const nNone    = PL_STATE.rows.filter(r => r.status === 'none').length;
+
+  const badge = (st, hasHist) => {
+    if(st === 'none') return '<span class="si-badge skip">غير موجود</span>';
+    if(!hasHist)      return '<span class="si-badge warn">بلا تاريخ سعري</span>';
+    if(st === 'matched') return '<span class="si-badge match">مطابق ✓</span>';
+    return '<span class="si-badge new">مطابقة محتملة</span>';
+  };
+
+  const rowsHtml = PL_STATE.rows.map((r, idx) => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px;font-size:12px;color:var(--muted);text-align:center">${idx+1}</td>
+      <td style="padding:8px;font-size:13px">${escapeHtml(r.req)}${r.qty?`<div style="font-size:11px;color:var(--muted)">الكمية: ${escapeHtml(String(r.qty))} ${escapeHtml(r.unit||'')}</div>`:''}</td>
+      <td style="padding:8px">${badge(r.status, r.hasHistory)}${r.status!=='none'?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.reason||'')}</div>`:''}</td>
+      <td style="padding:8px;font-size:12px">${r.status!=='none'?`${r.code?`<span style="font-family:monospace;color:var(--gold)">${escapeHtml(r.code)}</span> `:''}${escapeHtml(r.matchName||'')}`:'—'}</td>
+      <td style="padding:8px;text-align:center;font-size:13px;font-weight:600">${r.hasHistory && r.lastPrice!=null?plFmt(r.lastPrice):'—'}</td>
+      <td style="padding:8px;text-align:center;font-size:12px">${r.hasHistory && r.avgPrice!=null?plFmt(r.avgPrice):'—'}</td>
+      <td style="padding:8px;text-align:center;font-size:12px;color:var(--muted)">${r.hasHistory?r.offers:'—'}</td>
+      <td style="padding:8px;text-align:center;font-size:11px;color:var(--muted)" dir="ltr">${r.hasHistory && r.lastDate?escapeHtml(r.lastDate):'—'}</td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:1;min-width:110px;padding:10px;background:rgba(45,106,79,0.08);border-radius:8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#1f4e3a">${nMatched}</div><div style="font-size:11px;color:var(--muted)">مطابق بتاريخ سعري</div></div>
+      <div style="flex:1;min-width:110px;padding:10px;background:rgba(196,162,101,0.10);border-radius:8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#8a6a30">${nSuggest}</div><div style="font-size:11px;color:var(--muted)">مطابقة محتملة</div></div>
+      <div style="flex:1;min-width:110px;padding:10px;background:rgba(193,134,29,0.10);border-radius:8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:#7a5510">${nNoHist}</div><div style="font-size:11px;color:var(--muted)">موجود بلا تاريخ</div></div>
+      <div style="flex:1;min-width:110px;padding:10px;background:rgba(155,44,44,0.08);border-radius:8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:var(--danger)">${nNone}</div><div style="font-size:11px;color:var(--muted)">غير موجود</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:600">نتيجة مطابقة ${PL_STATE.rows.length} بند</div>
+      <button class="btn btn-ghost btn-sm" id="pl-export-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        تصدير CSV
+      </button>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;min-width:760px">
+        <thead><tr style="background:var(--surface-2,#f5f3ee);position:sticky;top:0">
+          <th style="padding:8px;font-size:11px;font-weight:700">#</th>
+          <th style="padding:8px;font-size:11px;font-weight:700;text-align:right">البند المطلوب</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">الحالة</th>
+          <th style="padding:8px;font-size:11px;font-weight:700;text-align:right">المطابق في النظام</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">آخر سعر</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">المتوسط</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">عروض</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">آخر تاريخ</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6">
+      💡 «مطابقة محتملة» تعني أن النظام وجد بنداً قريباً — راجِعه يدوياً. «غير موجود» يعني عدم وجود بند مشابه (لا تاريخ سعري).
+    </div>`;
+
+  const up = document.getElementById('si-step-upload');
+  const pr = document.getElementById('si-step-processing');
+  const rv = document.getElementById('si-step-review');
+  if(up) up.style.display = 'none';
+  if(pr) pr.style.display = 'none';
+  if(rv) rv.style.display = '';
+  document.getElementById('si-review-content').innerHTML = html;
+  const cf = document.getElementById('si-confirm-btn'); if(cf) cf.style.display = 'none';
+  const bk = document.getElementById('si-back-btn'); if(bk) bk.style.display = '';
+  const ex = document.getElementById('pl-export-btn'); if(ex) ex.addEventListener('click', plExportCsv);
+}
+
+function plExportCsv(){
+  if(!PL_STATE.rows.length){ toast('warn','لا توجد بيانات','لم تتم أي مطابقة بعد'); return; }
+  const statusLabel = r => r.status === 'none' ? 'غير موجود' : (!r.hasHistory ? 'موجود بلا تاريخ سعري' : (r.status === 'matched' ? 'مطابق' : 'مطابقة محتملة'));
+  const head = ['البند المطلوب','الكمية','الوحدة','الحالة','كود النظام','المطابق في النظام','آخر سعر','متوسط السعر','عدد العروض','آخر تاريخ','آخر مورد'];
+  const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const lines = [head.map(esc).join(',')];
+  for(const r of PL_STATE.rows){
+    lines.push([r.req, r.qty, r.unit, statusLabel(r), r.code, r.matchName,
+      r.lastPrice==null?'':r.lastPrice, r.avgPrice==null?'':r.avgPrice, r.offers||'',
+      r.lastDate||'', r.lastSupplier||''].map(esc).join(','));
+  }
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `تسعير-طلب-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('success','تم التصدير','حُفظ ملف CSV بنتائج المطابقة');
 }
 
 /* === EXTRACTION: SPREADSHEET === */
@@ -15237,7 +15446,14 @@ function saveUserEntry(entry){
   if(modeImport){
     modeImport.addEventListener('click', e => {
       e.preventDefault();
-      openSmartImport();
+      openSmartImport('import');
+    });
+  }
+  const modeLookup = document.getElementById('mode-lookup');
+  if(modeLookup){
+    modeLookup.addEventListener('click', e => {
+      e.preventDefault();
+      openSmartImport('lookup');
     });
   }
 
