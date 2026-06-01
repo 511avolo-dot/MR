@@ -2376,7 +2376,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <button class="icon-btn" id="btn-dark-toggle" title="تبديل الوضع الليلي">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
-        <button class="icon-btn admin-only" id="btn-settings" title="الإعدادات">
+        <button class="icon-btn" id="btn-settings" title="الإعدادات">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         </button>
         <div class="user-badge" id="user-badge" title="المستخدم الحالي" style="display:none">
@@ -3680,7 +3680,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
             </div>
             <div class="settings-desc">اربط النظام بقاعدة بيانات Supabase لمزامنة البيانات بين الأجهزة وعدة مستخدمين، مع حفظ تلقائي وتحديث فوري.</div>
             <div class="settings-actions">
-              <button class="btn btn-accent btn-sm admin-only" id="btn-cloud-setup">
+              <button class="btn btn-accent btn-sm" data-requires-perm="can_manage_cloud" id="btn-cloud-setup">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>
                 <span id="btn-cloud-setup-text">إعداد الاتصال السحابي</span>
               </button>
@@ -3688,7 +3688,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                 مزامنة الآن
               </button>
-              <button class="btn btn-danger btn-sm admin-only" id="btn-cloud-disconnect" style="display:none">قطع الاتصال</button>
+              <button class="btn btn-danger btn-sm" data-requires-perm="can_manage_cloud" id="btn-cloud-disconnect" style="display:none">قطع الاتصال</button>
             </div>
           </div>
         </div>
@@ -3702,7 +3702,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <div class="toggle-switch" id="dark-toggle"></div>
         </div>
       </div>
-      <div class="settings-section admin-only">
+      <div class="settings-section" data-requires-perm="can_manage_users">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
           <div style="flex:1">
             <div class="settings-title">
@@ -3719,7 +3719,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
         </div>
       </div>
-      <div class="settings-section admin-only">
+      <div class="settings-section" data-requires-perm="can_manage_company">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
           <div style="flex:1">
             <div class="settings-title">
@@ -3736,7 +3736,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
         </div>
       </div>
-      <div class="settings-section admin-only">
+      <div class="settings-section" data-requires-perm="can_manage_ai_settings">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
           <div style="flex:1">
             <div class="settings-title">
@@ -3754,7 +3754,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
         </div>
       </div>
-      <div class="settings-section">
+      <div class="settings-section" data-requires-perm="can_export">
         <div class="settings-title">النسخ الاحتياطي</div>
         <div class="settings-desc">تنزيل نسخة احتياطية شاملة لجميع البيانات (الأصناف، السجل، الإعدادات) كملف JSON.</div>
         <div class="settings-actions">
@@ -3764,7 +3764,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </button>
         </div>
       </div>
-      <div class="settings-section">
+      <div class="settings-section" data-requires-perm="can_import">
         <div class="settings-title">الاستعادة من نسخة احتياطية</div>
         <div class="settings-desc">استعادة بيانات سابقة من ملف JSON. سيُدمج المحتوى مع البيانات الحالية.</div>
         <label class="import-zone" for="restore-file">
@@ -3776,7 +3776,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <input type="file" id="restore-file" accept=".json" hidden>
         </label>
       </div>
-      <div class="settings-section admin-only">
+      <div class="settings-section" data-requires-perm="can_import">
         <div class="settings-title">استيراد جماعي للسجلات (CSV)</div>
         <div class="settings-desc">استيراد سجل أسعار جماعي. الأعمدة المطلوبة: code, name, category, price, unit, supplier, date</div>
         <div class="settings-actions">
@@ -3788,7 +3788,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <button class="btn btn-ghost btn-sm" id="btn-csv-template">تنزيل قالب فارغ</button>
         </div>
       </div>
-      <div class="settings-section admin-only">
+      <div class="settings-section" data-requires-perm="can_export">
         <div class="settings-title">تصدير CSV متوافق مع Supabase</div>
         <div class="settings-desc">ملفات CSV برؤوس أعمدة إنجليزية تطابق مخطط قاعدة بيانات Supabase تماماً. <strong>إذا كنت متصلاً بالسحابة</strong>، سيتم استبعاد الصفوف الموجودة مسبقاً تلقائياً (لمنع خطأ <code>duplicate key</code> في Table Editor الذي يستخدم INSERT فقط). الأفضل استخدام "ربط Supabase" للمزامنة التلقائية بدلاً عن الرفع اليدوي.</div>
         <div class="settings-actions">
@@ -3797,7 +3797,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <button class="btn btn-ghost btn-sm" id="btn-sb-export-history">تصدير proc_history.csv</button>
         </div>
       </div>
-      <div class="settings-section">
+      <div class="settings-section" data-requires-perm="can_view_audit">
         <div class="settings-title">سجل التدقيق</div>
         <div class="settings-desc">تتبع جميع التعديلات والإضافات والحذف.</div>
         <div class="settings-actions">
@@ -4457,6 +4457,8 @@ const PERMISSION_DEFS = [
   { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
   { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
   { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
+  { key:'can_manage_company',       label:'تعديل بيانات الشركة (الترويسة)', short:'بيانات الشركة', cat:'النظام',     userDefault:false },
+  { key:'can_manage_ai_settings',   label:'إعدادات الذكاء الاصطناعي',       short:'إعداد الذكاء',  cat:'النظام',     userDefault:false },
   { key:'can_manage_users',         label:'إدارة المستخدمين',              short:'مستخدمين',      cat:'النظام',     userDefault:false },
 ];
 const PERMISSION_KEYS = PERMISSION_DEFS.map(d => d.key);
@@ -4859,6 +4861,13 @@ function applyUserRoleToUI(){
   document.querySelectorAll('[data-requires-perm]').forEach(el => {
     el.classList.toggle('perm-hidden', !hasPermission(el.getAttribute('data-requires-perm')));
   });
+  // زر الإعدادات يظهر لأي مستخدم يملك صلاحية إعدادات واحدة على الأقل (لا يلزم أن يكون مديراً)
+  const settingsBtn = document.getElementById('btn-settings');
+  if(settingsBtn){
+    const SETTINGS_PERMS = ['can_manage_users','can_manage_company','can_manage_ai_settings','can_manage_cloud','can_view_audit','can_export','can_import'];
+    const canOpenSettings = isAdmin() || SETTINGS_PERMS.some(p => hasPermission(p));
+    settingsBtn.classList.toggle('perm-hidden', !canOpenSettings);
+  }
   const badge = document.getElementById('user-badge');
   const nameEl = document.getElementById('user-badge-name');
   const roleEl = document.getElementById('user-badge-role');
@@ -6592,8 +6601,8 @@ async function aiFetch(model, action, reqBody, cfg){
 
 async function saveAIConfig(apiKey, options){
   options = options || {};
-  if(!isAdmin()){
-    return {ok:false, error:'فقط الإدمن يمكنه تعديل إعدادات الذكاء الاصطناعي'};
+  if(!hasPermission('can_manage_ai_settings')){
+    return {ok:false, error:'لا تملك صلاحية تعديل إعدادات الذكاء الاصطناعي'};
   }
   const cfg = {
     api_key: apiKey || '',
@@ -7238,9 +7247,9 @@ function openItemDetail(code){
       <td>${h._user?'<span class="user-badge">جديد</span>':''}</td>
     </tr>
   `).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">لا يوجد سجل أسعار لهذا الصنف</td></tr>`;
-  // Always show delete for admins (with extra confirmation for original items)
+  // إظهار زر الحذف لمن يملك صلاحية الحذف (مع تأكيد إضافي للأصناف الأصلية)
   const deleteBtn = document.getElementById('md-delete-item');
-  if(isAdmin()){
+  if(hasPermission('can_delete')){
     deleteBtn.style.display = '';
     // Different styling for original (non-user) items as visual warning
     if(!item._user){
@@ -8199,8 +8208,8 @@ function downloadCsvTemplate(){
 /* ============================================================ */
 
 async function openAISettings(){
-  if(!isAdmin()){
-    toast('error','صلاحية مرفوضة','إعدادات الذكاء الاصطناعي للإدمن فقط');
+  if(!hasPermission('can_manage_ai_settings')){
+    toast('error','صلاحية مرفوضة','لا تملك صلاحية إعدادات الذكاء الاصطناعي');
     return;
   }
   const cfg = await loadAIConfig(true);
@@ -8525,8 +8534,8 @@ async function loadCompanyInfo(force){
 }
 
 async function saveCompanyInfo(info){
-  if(!isAdmin()){
-    return {ok:false, error:'فقط الإدمن يمكنه تعديل بيانات الشركة'};
+  if(!hasPermission('can_manage_company')){
+    return {ok:false, error:'لا تملك صلاحية تعديل بيانات الشركة'};
   }
   // Save locally first
   try{ localStorage.setItem('proc_company', JSON.stringify(info)); }catch(e){}
@@ -8552,8 +8561,8 @@ async function saveCompanyInfo(info){
 }
 
 async function openCompanyInfoModal(){
-  if(!isAdmin()){
-    toast('error','صلاحية مرفوضة','إعدادات الشركة للإدمن فقط');
+  if(!hasPermission('can_manage_company')){
+    toast('error','صلاحية مرفوضة','لا تملك صلاحية تعديل بيانات الشركة');
     return;
   }
   const info = await loadCompanyInfo(true);
