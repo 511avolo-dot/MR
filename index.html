@@ -3500,8 +3500,8 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       </div>
       <div class="detail-meta-grid">
         <div class="detail-meta-row"><span class="detail-meta-label">جهة الاتصال</span><span class="detail-meta-value" id="sd-contact">—</span></div>
-        <div class="detail-meta-row"><span class="detail-meta-label">الهاتف</span><span class="detail-meta-value" id="sd-phone">—</span></div>
-        <div class="detail-meta-row"><span class="detail-meta-label">الجوال</span><span class="detail-meta-value" id="sd-mobile">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">الهاتف</span><span class="detail-meta-value" id="sd-phone" dir="ltr" style="unicode-bidi:isolate;text-align:right">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">الجوال</span><span class="detail-meta-value" id="sd-mobile" dir="ltr" style="unicode-bidi:isolate;text-align:right">—</span></div>
         <div class="detail-meta-row"><span class="detail-meta-label">البريد</span><span class="detail-meta-value" id="sd-email">—</span></div>
         <div class="detail-meta-row"><span class="detail-meta-label">السجل التجاري</span><span class="detail-meta-value" id="sd-cr">—</span></div>
         <div class="detail-meta-row"><span class="detail-meta-label">الرقم الضريبي</span><span class="detail-meta-value" id="sd-tax">—</span></div>
@@ -5992,8 +5992,8 @@ function supplierCard(s){
       <div class="supplier-name">${escapeHtml(s.name||'—')}${s._user?'<span class="user-badge">مضاف</span>':''}</div>
       ${s.contact?`<div class="supplier-contact-name">جهة الاتصال: ${escapeHtml(s.contact)}</div>`:''}
       <div class="supplier-details">
-        ${s.phone && s.phone!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:${s.phone}">${s.phone}</a></div>`:''}
-        ${s.mobile && s.mobile!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><a href="tel:${s.mobile}">${s.mobile}</a></div>`:''}
+        ${s.phone && s.phone!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:${normalizeSaudiPhone(s.phone)}" dir="ltr" style="unicode-bidi:isolate">${escapeHtml(normalizeSaudiPhone(s.phone))}</a></div>`:''}
+        ${s.mobile && s.mobile!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><a href="tel:${normalizeSaudiPhone(s.mobile)}" dir="ltr" style="unicode-bidi:isolate">${escapeHtml(normalizeSaudiPhone(s.mobile))}</a></div>`:''}
         ${s.email && s.email!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><a href="mailto:${s.email}">${s.email}</a></div>`:''}
         ${s.specialty? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>${escapeHtml(s.specialty)}</span></div>`:''}
         ${s.commercial_reg && s.commercial_reg!=='—'? `<div class="supplier-detail" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">س.ت: ${s.commercial_reg}</div>`:''}
@@ -7272,8 +7272,8 @@ function openSupplierDetail(name){
   document.getElementById('sd-name').textContent = name;
   document.getElementById('sd-specialty').textContent = sup?.specialty||'';
   document.getElementById('sd-contact').textContent = sup?.contact||'—';
-  document.getElementById('sd-phone').textContent = sup?.phone||'—';
-  document.getElementById('sd-mobile').textContent = sup?.mobile||'—';
+  document.getElementById('sd-phone').textContent = normalizeSaudiPhone(sup?.phone)||'—';
+  document.getElementById('sd-mobile').textContent = normalizeSaudiPhone(sup?.mobile)||'—';
   document.getElementById('sd-email').textContent = sup?.email||'—';
   document.getElementById('sd-cr').textContent = sup?.commercial_reg||'—';
   document.getElementById('sd-tax').textContent = sup?.tax_id||'—';
@@ -7403,13 +7403,33 @@ function openEditSupplier(supplier){
   setTimeout(()=>openModal('modal-supplier-form'), 150);
 }
 
+// تطبيع أرقام الهواتف السعودية: إزالة بادئة الدولة (+966/966/00966) والمسافات
+// والرموز، وتوحيدها محلياً (جوال 05XXXXXXXX، هاتف 01XXXXXXXX). يزيل أيضاً
+// انعكاس العرض في RTL لأن الرقم يصبح أرقاماً متصلة بلا مسافات/شرطات.
+function normalizeSaudiPhone(raw){
+  if(raw == null) return raw;
+  let s = String(raw).trim();
+  if(!s) return s;
+  // أرقام عربية/فارسية → لاتينية
+  s = s.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+       .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  // أبقِ الأرقام و + فقط (أزل المسافات والشرطات والأقواس)
+  let d = s.replace(/[^\d+]/g, '');
+  if(!d) return '';
+  // أزل بادئة الدولة السعودية بأشكالها المختلفة → 0
+  d = d.replace(/^\+?00966/, '0').replace(/^\+?966/, '0');
+  // جوال بصيغة 5XXXXXXXX (بلا صفر) → أضف 0
+  if(/^5\d{8}$/.test(d)) d = '0' + d;
+  return d;
+}
+
 async function saveSupplierForm(){
   if(!requirePermission('can_manage_suppliers', 'إدارة الموردين')) return;
   const name = document.getElementById('sf-name').value.trim();
   const specialty = document.getElementById('sf-specialty').value.trim();
   const contact = document.getElementById('sf-contact').value.trim();
-  const phone = document.getElementById('sf-phone').value.trim();
-  const mobile = document.getElementById('sf-mobile').value.trim();
+  const phone = normalizeSaudiPhone(document.getElementById('sf-phone').value.trim());
+  const mobile = normalizeSaudiPhone(document.getElementById('sf-mobile').value.trim());
   const email = document.getElementById('sf-email').value.trim();
   const address = document.getElementById('sf-address').value.trim();
   const commercial_reg = document.getElementById('sf-cr').value.trim();
@@ -14647,7 +14667,7 @@ async function siMatchExtractedData(extracted){
   const result = {
     supplier: {
       name: extracted.supplier?.name || 'مورد غير معروف',
-      phone: extracted.supplier?.phone,
+      phone: normalizeSaudiPhone(extracted.supplier?.phone),
       email: extracted.supplier?.email,
       address: extracted.supplier?.address,
       vat_number: extracted.supplier?.vat_number,
