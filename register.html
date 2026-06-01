@@ -3460,7 +3460,9 @@ async function _step1NextImpl() {
       bannerMsg.textContent = `تم تعبئة ${filled} حقلاً تلقائياً من وثائقك — يرجى المراجعة والتأكيد`;
     } else {
       banner.className = 'autofill-banner autofill-manual';
-      bannerMsg.textContent = 'يرجى تعبئة بيانات المنشأة يدوياً';
+      bannerMsg.textContent = !AI_AVAILABLE
+        ? 'القراءة الذكية للوثائق غير مفعّلة حالياً (لم يُضبط مفتاح الذكاء على الخادم GEMINI_API_KEY). يرجى تعبئة البيانات يدوياً.'
+        : 'تعذّر استخراج البيانات من الوثائق تلقائياً — يرجى تعبئة بيانات المنشأة يدوياً.';
     }
     banner.style.display = 'flex';
   }
