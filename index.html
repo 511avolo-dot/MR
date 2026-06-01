@@ -13694,8 +13694,9 @@ function resetSmartImportState(){
 }
 
 function openSmartImport(){
-  if(!isAdmin() && !hasPermission('can_import')){
-    toast('error','غير مصرح','هذه الميزة متاحة للمدير فقط');
+  // الاستيراد الذكي متاح لكل مستخدم يستطيع إدخال الأسعار (مفعّلة افتراضياً للجميع).
+  if(!hasPermission('can_enter_prices')){
+    toast('error','غير مصرح','الاستيراد الذكي يتطلب صلاحية إدخال الأسعار');
     return;
   }
   resetSmartImportState();
@@ -14849,7 +14850,7 @@ function siShowReview(){
       <div style="font-size:11px;color:var(--muted);margin-bottom:4px">معلومات إضافية</div>
       ${m.date? `<div style="font-size:12px">📅 ${escapeHtml(m.date)}</div>`:''}
       ${m.reference? `<div style="font-size:12px">🔖 ${escapeHtml(m.reference)}</div>`:''}
-      ${m.supplier.phone? `<div style="font-size:12px">📞 ${escapeHtml(m.supplier.phone)}</div>`:''}
+      ${m.supplier.phone? `<div style="font-size:12px">📞 <bdi dir="ltr" style="unicode-bidi:isolate">${escapeHtml(m.supplier.phone)}</bdi></div>`:''}
     </div>
   </div>`;
 
