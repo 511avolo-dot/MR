@@ -1984,6 +1984,23 @@ body.dark .form-card { background:linear-gradient(145deg,var(--surface) 0%,rgba(
   border-color:#C4A265;
   box-shadow:0 0 0 4px rgba(196,162,101,0.12);
 }
+.login-pass-wrap{ position:relative; display:flex; }
+.login-pass-wrap input{ flex:1; padding-left:44px; }
+.login-pass-toggle{
+  position:absolute; left:6px; top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; justify-content:center;
+  width:34px; height:34px; padding:0; border:0; border-radius:8px;
+  background:transparent; color:var(--muted,#8a8a82); cursor:pointer;
+  transition:color .15s, background .15s;
+}
+.login-pass-toggle:hover{ color:#C4A265; background:rgba(196,162,101,0.10); }
+.login-pass-toggle:focus-visible{ outline:2px solid #C4A265; outline-offset:1px; }
+.login-pass-toggle svg{ width:20px; height:20px; }
+.login-pass-toggle.is-on{ color:#C4A265; }
+.login-pass-toggle.is-on::after{
+  content:""; position:absolute; left:7px; right:7px; top:50%; height:1.8px;
+  background:currentColor; transform:rotate(-45deg); border-radius:2px;
+}
 .login-error{
   padding:10px 14px;
   background:rgba(220,68,68,0.08);
@@ -2240,7 +2257,15 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       </label>
       <label class="login-field">
         <span class="login-label">كلمة المرور</span>
-        <input type="password" id="login-password" autocomplete="current-password" required>
+        <div class="login-pass-wrap">
+          <input type="password" id="login-password" autocomplete="current-password" required>
+          <button type="button" class="login-pass-toggle" id="login-pass-toggle" aria-label="إظهار كلمة المرور" aria-pressed="false" title="إظهار كلمة المرور">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
       </label>
       <div class="login-error" id="login-error" style="display:none"></div>
       <button type="submit" class="btn btn-primary login-btn" id="login-submit">دخول</button>
@@ -4909,6 +4934,21 @@ function clearLoginError(){
 function setupLoginForm(){
   const form = document.getElementById('login-form');
   if(!form) return;
+  // زر إظهار/إخفاء كلمة المرور
+  const passToggle = document.getElementById('login-pass-toggle');
+  const passInput = document.getElementById('login-password');
+  if(passToggle && passInput){
+    passToggle.addEventListener('click', ()=>{
+      const show = passInput.type === 'password';
+      passInput.type = show ? 'text' : 'password';
+      passToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+      const lbl = show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور';
+      passToggle.setAttribute('aria-label', lbl);
+      passToggle.setAttribute('title', lbl);
+      passToggle.classList.toggle('is-on', show);
+      passInput.focus();
+    });
+  }
   form.addEventListener('submit', async e=>{
     e.preventDefault();
     clearLoginError();
