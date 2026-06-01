@@ -4355,9 +4355,10 @@ function loadSupabaseLib(){
       reject(new Error('فتحت الملف بالنقر المزدوج (file://) — المتصفحات تمنع الاتصال بـ Supabase والـ CDNs في هذا الوضع. الحل: استخدم خادم محلي بسيط، مثل: 1) في VS Code ثبّت إضافة "Live Server" واضغط بالزر الأيمن على الملف ثم "Open with Live Server"، أو 2) في Terminal من مجلد الملف نفّذ: python -m http.server 8000 ثم افتح http://localhost:8000/procurement_v3.html'));
       return;
     }
-    // Use the officially recommended CDN URLs (no specific version path,
-    // jsdelivr/unpkg pick the latest patch of v2 automatically)
+    // Local-first: نسخة مستضافة على نطاق التطبيق نفسه (تنجو من حجب الشركات للـ CDNs).
+    // ثم مصادر CDN كاحتياط (تحديث تلقائي لأحدث تصحيح من v2).
     const cdns = [
+      'lib/supabase.min.js',
       'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
       'https://unpkg.com/@supabase/supabase-js@2',
       'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js',
@@ -5045,7 +5046,9 @@ async function createUser(data){
   try{
     const cfg = CLOUD.config || {};
     if(cfg.url && cfg.key){
-      const tmp = window.supabase.createClient(cfg.url, cfg.key, {auth:{persistSession:false, autoRefreshToken:false}});
+      // نستخدم المسار الفعّال (وكيل/مباشر) لئلا يفشل عند حجب الشبكة للاتصال المباشر.
+      const tmpBase = CLOUD.activeBase || cfg.url;
+      const tmp = window.supabase.createClient(tmpBase, cfg.key, {auth:{persistSession:false, autoRefreshToken:false}});
       const { error: suErr } = await tmp.auth.signUp({ email: usernameToEmail(data.username), password: data.password });
       if(suErr && !/already\s*registered|already\s*exists|User already/i.test(suErr.message||'')){
         return {ok:false, error:'تعذّر إنشاء حساب الدخول: ' + suErr.message};
@@ -10521,6 +10524,19 @@ window.CLOUD = {
   config: null,
   syncing: false,
   channel: null,
+  viaProxy: false,     // هل الاتصال الحالي يمر عبر وكيل نطاق التطبيق؟
+  activeBase: null,    // الرابط الفعلي المستخدم لإنشاء العميل (مباشر أو وكيل)
+
+  // يبني رابط الوكيل (نطاق التطبيق + /db) عندما يكون التطبيق منشوراً عبر http(s).
+  // يُستخدم كاحتياط عندما تحجب شبكة العميل الوصول المباشر إلى *.supabase.co.
+  _proxyBaseFor(url){
+    try{
+      if(typeof location === 'undefined') return null;
+      if(!/^https?:$/.test(location.protocol)) return null;   // file:// → لا وكيل
+      if(!/\.supabase\.co/i.test(url || '')) return null;      // الوكيل مخصّص لـ Supabase
+      return location.origin + '/db';
+    }catch(e){ return null; }
+  },
 
   async init(url, key){
     if(!window.supabase){
@@ -10528,26 +10544,46 @@ window.CLOUD = {
     }
     // idempotent: تجنّب إعادة التهيئة المزدوجة (bootstrap ثم tryAutoConnectCloud)
     if(this.enabled && this.client && this.url === url){ try{ verifyAuthSession(); }catch(e){} return true; }
-    this.client = window.supabase.createClient(url, key, {
-      // persistSession=true: يبقى رمز جلسة المستخدم (JWT) بعد إعادة التحميل،
-      // وهو ضروري لتعمل سياسات RLS المعتمِدة على authenticated.
-      auth: {persistSession: true, autoRefreshToken: true},
-      realtime: {params: {eventsPerSecond: 5}}
-    });
-    this.url = url;
-    // Test connection. خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي قبل
-    // الدخول أو بعد تحصين RLS) → لا نعتبره فشلاً في الاتصال.
-    const {error} = await this.client.from('proc_items').select('code').limit(1);
-    if(error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message || '')){
-      throw new Error(error.message + (error.hint? ' ('+error.hint+')':''));
+
+    // مرشّحات الاتصال: المباشر أولاً، ثم الوكيل عبر نطاق التطبيق عند فشل الشبكة
+    // (شبكات الشركات قد تحجب *.supabase.co مباشرةً من المتصفح).
+    const candidates = [{ base: url, viaProxy: false }];
+    const proxyBase = this._proxyBaseFor(url);
+    if(proxyBase) candidates.push({ base: proxyBase, viaProxy: true });
+
+    let lastErr = null;
+    for(const cand of candidates){
+      try{
+        const client = window.supabase.createClient(cand.base, key, {
+          // persistSession=true: يبقى رمز جلسة المستخدم (JWT) بعد إعادة التحميل،
+          // وهو ضروري لتعمل سياسات RLS المعتمِدة على authenticated.
+          auth: {persistSession: true, autoRefreshToken: true},
+          realtime: {params: {eventsPerSecond: 5}}
+        });
+        // Test connection. خطأ صلاحية/RLS = الاتصال نجح لكن القراءة محجوبة (طبيعي قبل
+        // الدخول أو بعد تحصين RLS) → لا نعتبره فشلاً في الاتصال.
+        const {error} = await client.from('proc_items').select('code').limit(1);
+        if(error && !/permission|rls|row-level|denied|policy|JWT|not authorized/i.test(error.message || '')){
+          throw new Error(error.message + (error.hint? ' ('+error.hint+')':''));
+        }
+        // نجح الاتصال عبر هذا المرشّح
+        this.client = client;
+        this.url = url;                 // الرابط المنطقي (للمقارنة idempotent)
+        this.activeBase = cand.base;    // الرابط الفعلي (مباشر/وكيل)
+        this.viaProxy = cand.viaProxy;
+        this.enabled = true;
+        this.config = {url, key};
+        // تحقّق من جلسة المستخدم (JWT) بعد الاتصال — يطرد الجلسات المنتهية
+        try { verifyAuthSession(); } catch(e) {}
+        // Preload learned aliases for smart import (best-effort, non-blocking)
+        try { siLoadLearnedAliases(true); } catch(e) {}
+        return true;
+      }catch(e){
+        lastErr = e;
+        // فشل هذا المرشّح → نجرّب التالي (الوكيل) إن وُجد.
+      }
     }
-    this.enabled = true;
-    this.config = {url, key};
-    // تحقّق من جلسة المستخدم (JWT) بعد الاتصال — يطرد الجلسات المنتهية
-    try { verifyAuthSession(); } catch(e) {}
-    // Preload learned aliases for smart import (best-effort, non-blocking)
-    try { siLoadLearnedAliases(true); } catch(e) {}
-    return true;
+    throw lastErr || new Error('تعذّر الاتصال بقاعدة البيانات.');
   },
 
   disconnect(){
@@ -10556,6 +10592,8 @@ window.CLOUD = {
     this.enabled = false;
     this.config = null;
     this.channel = null;
+    this.viaProxy = false;
+    this.activeBase = null;
     localStorage.removeItem('proc_cloud_config');
     updateCloudStatus('disconnected');
   },
@@ -10776,6 +10814,8 @@ window.CLOUD = {
 
   setupRealtime(){
     if(!this.enabled || this.channel) return;
+    // الوكيل لا يمرّر WebSocket؛ نتجاوز التحديث اللحظي (تبقى القراءة/الكتابة تعمل عبر REST).
+    if(this.viaProxy) return;
     this.channel = this.client.channel('proc_changes')
       .on('postgres_changes', {event:'*', schema:'public', table:'proc_items'}, payload=>{
         handleRealtimeChange('items', payload);

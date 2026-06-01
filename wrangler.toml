@@ -3,4 +3,4 @@ compatibility_date = "2024-01-01"
 
 [site]
 bucket = "."
-include = ["index.html", "register.html", "rfq.html", "_headers", "_redirects", "lib/xlsx.full.min.js", "lib/pdf.min.js", "lib/pdf.worker.min.js"]
+include = ["index.html", "register.html", "rfq.html", "_headers", "_redirects", "lib/xlsx.full.min.js", "lib/pdf.min.js", "lib/pdf.worker.min.js", "lib/supabase.min.js"]
