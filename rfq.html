@@ -67,6 +67,14 @@
       <div class="muted" id="rfq-notes" style="margin-top:10px"></div>
     </div>
 
+    <div class="card" id="upload-card">
+      <div style="font-weight:700;margin-bottom:6px">عرض السعر الرسمي <span style="color:var(--no)">*</span></div>
+      <div class="muted" style="margin-bottom:10px">ارفع نسخة من عرض السعر (PDF أو صورة). يقرأها النظام تلقائياً ويعبّئ الأسعار لك — راجِعها وعدّل إن لزم. الإرفاق إلزامي للإرسال.</div>
+      <input type="file" id="quote-file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*" class="hidden">
+      <button class="btn btn-ghost" id="btn-upload" type="button">📎 اختر ملف عرض السعر</button>
+      <div class="muted" id="upload-status" style="margin-top:10px"></div>
+    </div>
+
     <div class="card">
       <div style="font-weight:700;margin-bottom:8px">البنود المطلوبة</div>
       <div class="muted" style="margin-bottom:12px">أدخل سعر الوحدة لكل بند. إن كنت لا تورّد بنداً، فعّل «لا أعرض هذا البند».</div>
@@ -104,9 +112,13 @@ const SUPABASE_URL      = 'https://yofcaxvstjcrmbgciwym.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
 
 const _p = new URLSearchParams(location.search);
-const RFQ_ID = _p.get('r');
-const TOKEN  = _p.get('t');
-let SB, RFQ, LINES = [], MYQ = {};
+// رابط قصير /q/<token> — أو روابط قديمة ?t=<token> أو ?r=&t=
+const _pathTok = (location.pathname.match(/\/q\/([A-Za-z0-9_]+)/) || [])[1] || null;
+const TOKEN  = _pathTok || _p.get('t');
+let RFQ_ID   = _p.get('r') || null;
+let SB, RFQ, LINES = [], MYQ = {}, QUOTE_FILE = null;
+const QFILE_BUCKET = 'supplier-docs';
+const QFILE_TYPES  = ['application/pdf','image/jpeg','image/jpg','image/png'];
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -157,15 +169,23 @@ async function sbCreateClient(){
   throw lastErr || new Error('تعذّر الاتصال');
 }
 
+async function loadRfq(){
+  // أساسي: البحث بالرمز وحده (الرابط القصير). تراجُع للدالة القديمة إن لم تُنشر v2 بعد.
+  let r = await SB.rpc('get_rfq_by_token', { p_token: TOKEN });
+  if(r.error && RFQ_ID && /function|does not exist|schema cache|PGRST|not found/i.test(r.error.message||'')){
+    r = await SB.rpc('get_rfq_for_supplier', { p_rfq: RFQ_ID, p_token: TOKEN });
+  }
+  return r;
+}
 async function init(){
-  if(!RFQ_ID || !TOKEN){ return fail('الرابط ناقص. تأكد من نسخه كاملاً.'); }
+  if(!TOKEN){ return fail('الرابط ناقص. تأكد من نسخه كاملاً.'); }
   try{
     await loadSupabaseLib();
     SB = await sbCreateClient();
-    const { data, error } = await SB.rpc('get_rfq_for_supplier', { p_rfq: RFQ_ID, p_token: TOKEN });
+    const { data, error } = await loadRfq();
     if(error) throw error;
     if(!data || !data.rfq){ return fail(); }
-    RFQ = data.rfq; LINES = RFQ.lines || []; MYQ = data.my_quote || {};
+    RFQ = data.rfq; RFQ_ID = RFQ.id; LINES = RFQ.lines || []; MYQ = data.my_quote || {}; QUOTE_FILE = MYQ.quote_file || null;
     if(RFQ.status === 'awarded' || RFQ.status === 'cancelled'){ return fail('انتهى استقبال العروض لهذا الطلب.'); }
     if(RFQ.deadline && new Date(RFQ.deadline) < new Date(new Date().toDateString())){ return fail('انتهى موعد تقديم العروض لهذا الطلب.'); }
     renderForm(data.supplier);
@@ -206,7 +226,49 @@ function renderForm(supplier){
     upd();
   });
   recalc();
+  refreshUploadStatus();
   show('form');
+}
+function uStatus(msg, kind){ const el=$('upload-status'); if(!el) return; el.textContent=msg||''; el.style.color = kind==='no'?'var(--no)':kind==='ok'?'var(--ok)':'var(--muted)'; }
+function refreshUploadStatus(){
+  if(QUOTE_FILE){ uStatus('✓ تم إرفاق عرض السعر مسبقاً (يمكنك استبداله)','ok'); const b=$('btn-upload'); if(b) b.textContent='📎 استبدال ملف عرض السعر'; }
+  else uStatus('لم يُرفق بعد — الإرفاق مطلوب للإرسال','no');
+}
+async function sniffSig(file){ try{ const b=new Uint8Array(await file.slice(0,12).arrayBuffer()); const h=Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); if(h.startsWith('25504446'))return 'application/pdf'; if(h.startsWith('ffd8ff'))return 'image/jpeg'; if(h.startsWith('89504e470d0a1a0a'))return 'image/png'; }catch(e){} return null; }
+function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=()=>rej(new Error('فشل قراءة الملف')); r.readAsDataURL(file); }); }
+async function onQuoteFile(file){
+  if(!file) return;
+  const sig = await sniffSig(file);
+  if(!sig || !QFILE_TYPES.includes(sig)){ uStatus('الملف غير مقبول — يُسمح PDF أو صورة (JPG/PNG) فقط','no'); return; }
+  if(file.size > 10*1024*1024){ uStatus('حجم الملف يتجاوز 10 ميجابايت','no'); return; }
+  uStatus('جارٍ رفع الملف…');
+  try{
+    const ext = sig==='application/pdf'?'pdf':sig==='image/png'?'png':'jpg';
+    const path = 'rfq/'+(RFQ_ID||'x')+'/'+Date.now()+'.'+ext;
+    const { error } = await SB.storage.from(QFILE_BUCKET).upload(path, file, { contentType: sig, upsert: true });
+    if(error) throw error;
+    QUOTE_FILE = path;
+    const b=$('btn-upload'); if(b) b.textContent='📎 استبدال ملف عرض السعر';
+    uStatus('✓ تم إرفاق العرض · جارٍ قراءة الأسعار بالذكاء…','ok');
+    aiExtractPrices(file, sig);
+  }catch(e){ uStatus('تعذّر الرفع: '+(e.message||'حاول مجدداً'),'no'); }
+}
+async function aiExtractPrices(file, mime){
+  try{
+    const b64 = await fileToB64(file);
+    const lineList = LINES.map((l,i)=>`${i+1}. ${l.desc} (الكمية ${l.qty||1} ${l.unit||''})`).join('\n');
+    const prompt = 'هذا ملف عرض سعر من مورّد. استخرج «سعر الوحدة» لكل بند مطابق من القائمة التالية إن وُجد سعره في العرض:\n'+lineList+'\n\nأعد JSON فقط دون أي نص آخر بالشكل: {"prices":[{"i":رقم_البند,"unit_price":سعر_الوحدة_رقمياً}]}. تجاهل أي بند لا يظهر سعره. المطلوب سعر الوحدة لا الإجمالي.';
+    const body = { contents:[{ parts:[ {text:prompt}, {inline_data:{mime_type:mime,data:b64}} ] }], generationConfig:{ temperature:0, maxOutputTokens:1024 } };
+    const r = await fetch('/api/ai', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model:'gemini-2.5-flash', action:'generateContent', body }) });
+    if(!r.ok) throw new Error('ai');
+    const j = await r.json();
+    const txt = (((j.candidates||[])[0]||{}).content||{}).parts?.map(p=>p.text||'').join('') || '';
+    const m = txt.match(/\{[\s\S]*\}/); if(!m) throw new Error('parse');
+    const out = JSON.parse(m[0]); let filled=0;
+    (out.prices||[]).forEach(p=>{ const idx=(+p.i)-1, v=+p.unit_price; if(idx>=0 && idx<LINES.length && v>0){ const el=$('p-'+idx), nb=$('nb-'+idx); if(el && !(nb&&nb.checked)){ el.value=v; filled++; } } });
+    recalc();
+    uStatus(filled ? ('✓ تم الإرفاق · عبّأ الذكاء '+filled+' بند تلقائياً — راجِعها وعدّل إن لزم') : '✓ تم الإرفاق · تعذّر استخراج الأسعار آلياً، أدخلها يدوياً','ok');
+  }catch(e){ uStatus('✓ تم الإرفاق · تعذّرت القراءة الذكية، أدخل الأسعار يدوياً','ok'); }
 }
 
 function recalc(){
@@ -227,13 +289,18 @@ function collect(){
 async function send(isFinal){
   const c = collect();
   const quoted = Object.keys(c.prices).length, skipped = Object.keys(c.no_bid).length;
+  if(isFinal && !QUOTE_FILE){ alert('يجب إرفاق نسخة من عرض السعر قبل الإرسال النهائي.'); try{ $('upload-card').scrollIntoView({behavior:'smooth'}); }catch(_){ } return; }
   if(isFinal && quoted===0){ alert('الرجاء إدخال سعر بند واحد على الأقل أو تحديد البنود التي لا تعرضها.'); return; }
   if(isFinal && (quoted+skipped) < LINES.length){ if(!confirm('بعض البنود بلا سعر ولم تُحدَّد كـ«لا أعرض». هل تريد الإرسال على أي حال؟')) return; }
   const btn = isFinal ? $('btn-submit') : $('btn-draft');
   const old = btn.textContent; btn.disabled=true; btn.textContent='جارٍ الإرسال…';
   try{
-    const { data, error } = await SB.rpc('submit_supplier_quote', { p_rfq:RFQ_ID, p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null, p_final:isFinal });
-    if(error) throw error;
+    // أساسي: الدالة الجديدة (بالرمز + المرفق). تراجُع للقديمة إن لم تُنشر v2 بعد.
+    let res = await SB.rpc('submit_supplier_quote_v2', { p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null, p_quote_file:QUOTE_FILE, p_final:isFinal });
+    if(res.error && RFQ_ID && /function|does not exist|schema cache|PGRST|not found/i.test(res.error.message||'')){
+      res = await SB.rpc('submit_supplier_quote', { p_rfq:RFQ_ID, p_token:TOKEN, p_prices:c.prices, p_attrs:c.attrs, p_no_bid:c.no_bid, p_note:c.note||null, p_final:isFinal });
+    }
+    if(res.error) throw res.error;
     if(isFinal){ $('success-ref').textContent = 'رقم الطلب: ' + RFQ_ID; show('success'); }
     else { btn.textContent='تم الحفظ ✓'; setTimeout(()=>{ btn.disabled=false; btn.textContent=old; }, 1500); }
   }catch(e){
@@ -245,6 +312,8 @@ async function send(isFinal){
 document.addEventListener('DOMContentLoaded', ()=>{
   $('btn-draft').addEventListener('click', ()=>send(false));
   $('btn-submit').addEventListener('click', ()=>send(true));
+  $('btn-upload').addEventListener('click', ()=>$('quote-file').click());
+  $('quote-file').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; onQuoteFile(f); });
   init();
 });
 </script>

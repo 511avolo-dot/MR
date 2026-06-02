@@ -1,3 +1,5 @@
 /register.html /register.html 200
 /rfq.html /rfq.html 200
+/q/* /rfq.html 200
+/q /rfq.html 200
 /* /index.html 200
