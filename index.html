@@ -9751,16 +9751,18 @@ const FILESAVER_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2
 const _scriptLoadPromises = {};
 
 // Try multiple CDN fallbacks — reduces 25 s hard failure to fast failover
-async function loadLib(urls, globalCheck) {
+async function loadLib(urls, globalCheck, libName) {
   const list = Array.isArray(urls) ? urls : [urls];
   const chk  = typeof globalCheck === 'function' ? globalCheck : () => !!window[globalCheck];
   if (chk()) return;
-  let lastErr;
+  let lastErr; const tried = [];
   for (const url of list) {
     delete _scriptLoadPromises[url]; // clear any stale failed promise
-    try { await loadScriptOnce(url, globalCheck); return; } catch(e) { lastErr = e; }
+    tried.push(url.startsWith('/') ? 'المحلي (نفس الموقع)' : url.replace(/^https?:\/\//,'').split('/')[0]);
+    try { await loadScriptOnce(url, globalCheck); return; } catch(e) { lastErr = e; console.warn('[loadLib] فشل المصدر:', url, e && e.message); }
   }
-  throw lastErr || new Error('فشل تحميل المكتبة من جميع المصادر — تحقق من الاتصال وأعد تحميل الصفحة');
+  const nm = libName ? `«${libName}» ` : '';
+  throw new Error(`تعذّر تحميل مكتبة ${nm}من جميع المصادر (${tried.join('، ')}). الحل غالباً: أعد تحميل الصفحة بالضغط Ctrl+Shift+R لتجاوز الكاش القديم. وإن استمرّت فقد تكون شبكتكم تحجب الوصول.${lastErr ? ' — تفاصيل: '+lastErr.message : ''}`);
 }
 
 function loadScriptOnce(url, globalCheck){
@@ -15412,7 +15414,7 @@ function plExportCsv(){
 /* === EXTRACTION: SPREADSHEET === */
 async function siExtractFromSpreadsheet(file){
   siShowProcessing('تحميل مكتبة Excel...', 'يستغرق ثوانٍ معدودة في المرة الأولى');
-  await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined');
+  await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined', 'Excel');
   if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel');
 
   siShowProcessing('قراءة جداول Excel...', file.name);
@@ -15470,7 +15472,7 @@ async function siExtractFromSpreadsheet(file){
 /* === EXTRACTION: PDF === */
 async function siExtractFromPDF(file){
   siShowProcessing('تحميل قارئ PDF...', 'يستغرق ثوانٍ معدودة في المرة الأولى');
-  await loadLib(PDFJS_CDNS, ()=>typeof pdfjsLib !== 'undefined');
+  await loadLib(PDFJS_CDNS, ()=>typeof pdfjsLib !== 'undefined', 'PDF');
   if(typeof pdfjsLib === 'undefined') throw new Error('فشل تحميل مكتبة PDF');
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
 
