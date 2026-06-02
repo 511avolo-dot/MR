@@ -12047,9 +12047,8 @@ function changePOStatus(num,newStatus){
   const po=poFind(num); if(!po) return;
   newStatus=poNormalizeStatus(newStatus);
   if(po.status===newStatus){ renderPurchaseOrders(); return; }
-  const elevated=(newStatus==='اعتماد مدير الشراء'||newStatus==='ملغى');
-  if(elevated){ if(!requirePermission('can_approve_po','اعتماد/إلغاء الأمر')){ renderPurchaseOrders(); return; } }
-  else if(!requirePermission('can_edit_po','تعديل الأمر')){ renderPurchaseOrders(); return; }
+  // الجميع قادرون على التحديث (بصلاحية التعديل القياسية) — ويُسجَّل المسؤول عن كل خطوة
+  if(!requirePermission('can_edit_po','تحديث الأمر')){ renderPurchaseOrders(); return; }
   const from=po.status;
   po.status_history=po.status_history||[];
   po.status_history.push({from,to:newStatus,by:(STATE.currentUser?STATE.currentUser.displayName:'—'),at:new Date().toISOString()});
