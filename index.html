@@ -11910,19 +11910,19 @@ function renderPOKPIs(){
   const el=document.getElementById('po-kpi-strip'); if(!el) return;
   const all=STATE.purchaseOrders, active=all.filter(o=>o.status!=='ملغى');
   const totalVal=active.reduce((s,o)=>s+(Number(o.total)||0),0);
-  const delivered=all.filter(o=>o.status==='مُسلَّم').length;
-  const late=all.filter(o=>(o.days_delayed||0)>0 && o.status!=='ملغى').length;
-  const awaitPay=all.filter(o=>o.status==='معتمد').length;
+  const delivered=all.filter(o=>o.status==='تسليم كامل').length;
+  const late=active.filter(o=>!PO_TERMINAL.includes(o.status) && (o.days_delayed||0)>0).length;
+  const finance=all.filter(o=>o.status==='تسليم للإدارة المالية'||o.status==='تم التحويل').length;
   const supplying=all.filter(o=>o.status==='قيد التوريد').length;
   const delRate=active.length?Math.round(delivered/active.length*100):0;
   const health=Math.round(poHealthScore()*100);
   const kpis=[
-    {label:'إجمالي الأوامر',value:all.length.toLocaleString('en-US'),meta:`${active.length} نشط`,seg:'all'},
-    {label:'القيمة الإجمالية',value:fmtPrice(totalVal),meta:'ر.س شامل الضريبة',seg:'all',gold:true},
-    {label:'متأخرة',value:late,meta:'بحاجة متابعة',seg:'late',danger:late>0},
-    {label:'بانتظار السداد',value:awaitPay,meta:'معتمدة',seg:'await_pay',gold:awaitPay>0},
+    {label:'إجمالي الأوامر',value:all.length.toLocaleString('en-US'),meta:`${active.length} نشط · ${all.length-active.length} ملغى`,seg:'all'},
+    {label:'قيمة المشتريات',value:fmtPrice(totalVal),meta:'ر.س شامل الضريبة (دون الملغاة)',seg:'all',gold:true},
+    {label:'متأخرة',value:late,meta:'نشطة بحاجة متابعة',seg:'late',danger:late>0},
+    {label:'لدى المالية',value:finance,meta:'بانتظار/تم التحويل',seg:'finance',gold:finance>0},
     {label:'قيد التوريد',value:supplying,meta:'جارية',statusFilter:'قيد التوريد'},
-    {label:'نسبة التسليم',value:delRate+'%',meta:`${delivered} مُسلَّم`},
+    {label:'نسبة التسليم',value:delRate+'%',meta:`${delivered} مُسلَّم من ${active.length}`},
     {label:'مؤشر صحة النظام',value:health+'%',meta:health>=70?'ممتاز':health>=50?'يحتاج تحسين':'حرج',view:'alerts',gold:true},
   ];
   el.innerHTML=kpis.map((k,i)=>`
@@ -12312,11 +12312,11 @@ function renderPODashboard(){
   const all=STATE.purchaseOrders;
   const n=all.length;
   const num=v=>Number(v)||0;
-  const totalAll=all.reduce((a,o)=>a+num(o.total),0);
   const active=all.filter(o=>o.status!=='ملغى');
-  const delivered=all.filter(o=>o.status==='مُسلَّم');
+  const totalAll=active.reduce((a,o)=>a+num(o.total),0);   // القيمة الفعلية للمشتريات (دون الملغاة)
+  const delivered=all.filter(o=>o.status==='تسليم كامل');
   const review=all.filter(o=>o.status==='قيد المراجعة');
-  const avgPO=n?totalAll/n:0;
+  const avgPO=active.length?totalAll/active.length:0;
   // 1) حالات
   const statusRows=PO_ENUMS.status.map(s=>{const c=all.filter(o=>o.status===s).length;return [s,c,poPct(c,n).toFixed(1)+'%'];}).filter(r=>r[1]>0);
   statusRows.push(['<strong>الإجمالي الكلي</strong>','<strong>'+n+'</strong>','<strong>100%</strong>']);
@@ -12324,7 +12324,7 @@ function renderPODashboard(){
   const sectorRows=PO_ENUMS.sector.map(s=>{const l=active.filter(o=>o.sector===s);return [s,l.length,l.reduce((a,o)=>a+num(o.total),0)];}).filter(r=>r[1]>0).sort((a,b)=>b[2]-a[2]);
   const sectorTotal=sectorRows.reduce((a,r)=>a+r[2],0)||1;
   // 3) تأخير ومخاطر
-  const lateNow=active.filter(o=>o.status!=='مُسلَّم'&&num(o.days_delayed)>0);
+  const lateNow=active.filter(o=>!PO_TERMINAL.includes(o.status)&&num(o.days_delayed)>0);
   const delays=all.filter(o=>num(o.days_delayed)>0).map(o=>num(o.days_delayed));
   const avgDelay=delays.length?delays.reduce((a,b)=>a+b,0)/delays.length:0;
   const maxDelay=delays.length?Math.max(...delays):0, minDelay=delays.length?Math.min(...delays):0;
@@ -12353,11 +12353,11 @@ function renderPODashboard(){
     <div class="po-dash">
       <div class="po-hero-row">
         <div class="po-hero"><span class="t">إجمالي أوامر الشراء</span><span class="v">${n}</span><span class="u">أمر</span></div>
-        <div class="po-hero accent"><span class="t">إجمالي قيمة المشتريات</span><span class="v">${fmtPrice(totalAll)}</span><span class="u">ريال · شامل الضريبة</span></div>
+        <div class="po-hero accent"><span class="t">قيمة المشتريات الفعلية</span><span class="v">${fmtPrice(totalAll)}</span><span class="u">ريال · شامل الضريبة (دون الملغاة)</span></div>
         <div class="po-hero ok"><span class="t">مُسلَّم ✓</span><span class="v">${delivered.length}</span><span class="u">من ${n} أمر</span></div>
       </div>
       <div class="po-kpi-row">
-        <div class="po-kpi"><span class="t">نسبة الأوامر المُسلَّمة</span><span class="v">${poPct(delivered.length,n).toFixed(1)}%</span></div>
+        <div class="po-kpi"><span class="t">نسبة الأوامر المُسلَّمة</span><span class="v">${poPct(delivered.length,active.length).toFixed(1)}%</span></div>
         <div class="po-kpi"><span class="t">متوسط قيمة أمر الشراء</span><span class="v">${fmtPrice(avgPO)}</span></div>
         <div class="po-kpi"><span class="t">أوامر قيد المراجعة</span><span class="v">${review.length}</span></div>
         <div class="po-kpi"><span class="t">التسليم بدون تأخير</span><span class="v">${poPct(onTimeDelivered,delivered.length).toFixed(1)}%</span></div>
@@ -12407,7 +12407,7 @@ function poPrintDashboard(){
 function poHealthScore(){
   const list=STATE.purchaseOrders.filter(o=>o.status!=='ملغى');
   if(!list.length) return 1;
-  const delivered=list.filter(o=>o.status==='مُسلَّم');
+  const delivered=list.filter(o=>o.status==='تسليم كامل');
   const onTime=delivered.filter(o=>(o.days_delayed||0)===0).length;
   const onTimeRate=delivered.length?onTime/delivered.length:1;
   const overdue=list.filter(o=>(o.days_delayed||0)>0).length;
@@ -12421,9 +12421,9 @@ function poHealthScore(){
 function renderPOAlerts(){
   const el=document.getElementById('po-alerts'); if(!el) return;
   const all=STATE.purchaseOrders;
-  const esc=all.filter(o=>(o.days_delayed||0)>30 && o.status!=='ملغى');
-  const near=all.filter(o=>{ if(o.status==='مُسلَّم'||o.status==='ملغى') return false; const d=poParseDate(o.expected_delivery); if(!d) return false; const diff=Math.round((d-poParseDate(new Date()))/86400000); return diff>=0&&diff<=3; });
-  const noReason=all.filter(o=>(o.days_delayed||0)>0 && !o.delay_reason && o.status!=='ملغى');
+  const esc=all.filter(o=>(o.days_delayed||0)>30 && !PO_TERMINAL.includes(o.status));
+  const near=all.filter(o=>{ if(PO_TERMINAL.includes(o.status)) return false; const d=poParseDate(o.expected_delivery); if(!d) return false; const diff=Math.round((d-poParseDate(new Date()))/86400000); return diff>=0&&diff<=3; });
+  const noReason=all.filter(o=>(o.days_delayed||0)>0 && !o.delay_reason && !PO_TERMINAL.includes(o.status));
   const weak=all.filter(o=>{ const r=poSupplierRating(o.supplier); return r!=null && r<=2; });
   const health=Math.round(poHealthScore()*100);
   const card=(cls,count,label,seg,statusFilter)=>`<div class="po-alert-card ${cls}" onclick="poAlertJump('${seg||''}','${statusFilter||''}')"><div class="ac-count" style="color:${cls==='red'?'#c0392b':cls==='amber'?'#9A7A45':'var(--ink)'}">${count}</div><div class="ac-label">${escapeHtml(label)}</div></div>`;
@@ -12471,10 +12471,10 @@ function printPO(num){
   poPrintWindow('أمر شراء '+po.po_number,body);
 }
 function printUrgentMemo(){
-  const list=STATE.purchaseOrders.filter(o=>o.status==='معتمد'&&o.priority==='عاجل');
-  if(!list.length){ toast('warn','لا يوجد','لا توجد أوامر معتمدة عاجلة بانتظار السداد'); return; }
+  const list=STATE.purchaseOrders.filter(o=>o.status==='تسليم للإدارة المالية');
+  if(!list.length){ toast('warn','لا يوجد','لا توجد أوامر لدى الإدارة المالية بانتظار التحويل'); return; }
   const totSub=list.reduce((s,o)=>s+(Number(o.subtotal)||0),0), totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
-  const body=`<h1>طلب استعجال سداد أوامر شراء معتمدة</h1><h2>مرفوع إلى الإدارة المالية — للتنفيذ العاجل · ${new Date().toLocaleDateString('en-CA')}</h2>
+  const body=`<h1>طلب استعجال تحويل أوامر شراء لدى الإدارة المالية</h1><h2>مرفوع إلى الإدارة المالية — للتنفيذ العاجل · ${new Date().toLocaleDateString('en-CA')}</h2>
     <table><thead><tr><th>#</th><th>رقم الأمر</th><th>المورد</th><th>قبل الضريبة</th><th>الإجمالي (شامل)</th><th>التسليم المتوقع</th></tr></thead>
     <tbody>${list.map((o,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(o.po_number)}</td><td>${escapeHtml(o.supplier||'—')}</td><td>${fmtPrice(o.subtotal)}</td><td>${fmtPrice(o.total)}</td><td>${poFmtDate(o.expected_delivery)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="3">الإجمالي</td><td>${fmtPrice(totSub)}</td><td>${fmtPrice(totTot)}</td><td></td></tr></tfoot></table>
@@ -12489,10 +12489,10 @@ function poStateSnapshot(){
   const all=STATE.purchaseOrders, active=all.filter(o=>o.status!=='ملغى');
   return {
     total:all.length, value:active.reduce((s,o)=>s+(Number(o.total)||0),0),
-    delivered:all.filter(o=>o.status==='مُسلَّم').length,
-    late:all.filter(o=>(o.days_delayed||0)>0&&o.status!=='ملغى').length,
-    awaiting_payment:all.filter(o=>o.status==='معتمد').length,
-    near_due:all.filter(o=>{const d=poParseDate(o.expected_delivery);if(!d||o.status==='مُسلَّم'||o.status==='ملغى')return false;const diff=Math.round((d-poParseDate(new Date()))/86400000);return diff>=0&&diff<=3;}).length,
+    delivered:all.filter(o=>o.status==='تسليم كامل').length,
+    late:active.filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0).length,
+    awaiting_finance:all.filter(o=>o.status==='تسليم للإدارة المالية'||o.status==='تم التحويل').length,
+    near_due:all.filter(o=>{const d=poParseDate(o.expected_delivery);if(!d||PO_TERMINAL.includes(o.status))return false;const diff=Math.round((d-poParseDate(new Date()))/86400000);return diff>=0&&diff<=3;}).length,
     health:Math.round(poHealthScore()*100),
   };
 }
