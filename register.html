@@ -2743,6 +2743,19 @@ function escapeHtml(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+/* فحص توقيع الملف (Magic bytes) — دفاع عميق ضد انتحال الامتداد/نوع MIME.
+   يتحقق من أن المحتوى الفعلي للملف هو PDF أو JPEG أو PNG، بغض النظر عن الاسم
+   أو الـcontent-type المُعلَن (وكلاهما يمكن تزييفه من جانب العميل). */
+async function sniffFileSignature(file){
+  try {
+    const buf = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const hex = Array.from(buf).map(b => b.toString(16).padStart(2,'0')).join('');
+    if (hex.startsWith('25504446')) return 'application/pdf';        // %PDF
+    if (hex.startsWith('ffd8ff'))   return 'image/jpeg';             // JPEG (FF D8 FF)
+    if (hex.startsWith('89504e470d0a1a0a')) return 'image/png';      // PNG
+  } catch(e) { /* تعذّرت القراءة → نرفض احتياطاً */ }
+  return null;
+}
 let currentStep = 1;
 const _urlParams = new URLSearchParams(location.search);
 const _resumeId = _urlParams.get('resume') || null;
@@ -3591,6 +3604,12 @@ async function submitForm() {
         toast('warn', `"${docData.name}" — حجم الملف يتجاوز 10 ميجابايت`);
         continue;
       }
+      // فحص التوقيع الفعلي للملف (Magic bytes) — يمنع تمرير ملف خطير بامتداد/نوع مزيّف
+      const realType = await sniffFileSignature(docData.file);
+      if (!realType || !ALLOWED_TYPES.includes(realType)) {
+        toast('warn', `"${docData.name}" — محتوى الملف لا يطابق نوعًا مسموحًا (PDF/JPG/PNG). رُفض لأسباب أمنية.`);
+        continue;
+      }
       try {
         // In resume mode: delete old file if it exists
         if (_resumeId && _existingDocPaths[docId]) {
@@ -3598,7 +3617,7 @@ async function submitForm() {
         }
         const path = `${regId}/${docId}/${Date.now()}.${ext}`;
         const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
-          contentType: docData.file.type,
+          contentType: realType,   // النوع المُتحقَّق من التوقيع الفعلي، لا المُعلَن
           upsert: true
         });
         if (error) throw error;
