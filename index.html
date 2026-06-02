@@ -2202,6 +2202,8 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-st-supplying{background:rgba(43,81,115,0.12);color:#2b5173}
 .po-st-delivered{background:rgba(45,106,79,0.13);color:#1f4e3a}
 .po-st-partial{background:rgba(45,106,79,0.08);color:#4a7a5f}
+.po-st-finance{background:rgba(138,106,48,0.12);color:#7a5a20}
+.po-st-transferred{background:rgba(43,81,115,0.16);color:#234a66}
 .po-st-late{background:rgba(192,57,43,0.13);color:#a93226}
 .po-st-cancelled{background:rgba(122,113,104,0.10);color:#9a9088;text-decoration:line-through}
 .po-delay-pill{display:inline-block;padding:2px 9px;border-radius:8px;font-size:11.5px;font-weight:700;font-family:'IBM Plex Mono',monospace}
@@ -2245,6 +2247,9 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-step .dot{width:18px;height:18px;border-radius:50%;background:var(--surface-2);border:2px solid var(--border);margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:10px}
 .po-step.done .dot{background:var(--accent);border-color:var(--accent);color:#fff}
 .po-step.current .dot{border-color:var(--accent);color:var(--accent)}
+.po-step-dur{font-size:8.5px;color:var(--accent);font-family:'IBM Plex Mono',monospace;margin-top:2px}
+.po-stage-age{margin-top:10px;font-size:12px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:7px 11px}
+.po-stage-age.warn{background:rgba(192,57,43,0.08);border-color:rgba(192,57,43,0.3);color:#a93226}
 .po-timeline{position:relative;padding-inline-start:18px}
 .po-timeline-item{position:relative;padding:0 0 14px 0}
 .po-timeline-item::before{content:'';position:absolute;inset-inline-start:-14px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -11611,28 +11616,36 @@ const PO_ENUMS = {
   officer:       ['مصطفى خليل','محمود العمودي'],
   payment_method:['تحويل بنكي','نقدي','سداد بالبطاقة','آجل 30 يوم','آجل 60 يوم'],
   priority:      ['عاجل','عالي','متوسط','منخفض'],
-  status:        ['قيد المراجعة','معتمد','قيد التوريد','مُسلَّم','مُسلَّم جزئياً','متأخر','ملغى'],
+  status:        ['قيد المراجعة','اعتماد مدير الشراء','تسليم للإدارة المالية','تم التحويل','قيد التوريد','تسليم جزئي','تسليم كامل','ملغى'],
   delay_reason:  ['','المورد','الإدارة المالية','الإدارة الطالبة','المخازن','الشحن والنقل','أخرى'],
   category:      ['مواد بناء','أجهزة إلكترونية','أدوات صحية','مواد كيميائية','قرطاسية ومكتبية','أثاث','خدمات','أخرى'],
 };
 const PO_STATUS_META = {
-  'قيد المراجعة':   {cls:'po-st-review',    step:0},
-  'معتمد':          {cls:'po-st-approved',  step:1},
-  'قيد التوريد':    {cls:'po-st-supplying', step:2},
-  'مُسلَّم جزئياً':  {cls:'po-st-partial',   step:3},
-  'مُسلَّم':         {cls:'po-st-delivered', step:4},
-  'متأخر':          {cls:'po-st-late',      step:-1},
-  'ملغى':           {cls:'po-st-cancelled', step:-1},
+  'قيد المراجعة':          {cls:'po-st-review',     step:0},
+  'اعتماد مدير الشراء':    {cls:'po-st-approved',   step:1},
+  'تسليم للإدارة المالية': {cls:'po-st-finance',    step:2},
+  'تم التحويل':            {cls:'po-st-transferred',step:3},
+  'قيد التوريد':           {cls:'po-st-supplying',  step:4},
+  'تسليم جزئي':            {cls:'po-st-partial',    step:5},
+  'تسليم كامل':            {cls:'po-st-delivered',  step:6},
+  'ملغى':                  {cls:'po-st-cancelled',  step:-1},
 };
-const PO_BOARD_ORDER = ['قيد المراجعة','معتمد','قيد التوريد','مُسلَّم جزئياً','مُسلَّم','متأخر','ملغى'];
-const PO_STEPPER     = ['قيد المراجعة','معتمد','قيد التوريد','مُسلَّم'];
+const PO_BOARD_ORDER = ['قيد المراجعة','اعتماد مدير الشراء','تسليم للإدارة المالية','تم التحويل','قيد التوريد','تسليم جزئي','تسليم كامل','ملغى'];
+const PO_STEPPER     = ['قيد المراجعة','اعتماد مدير الشراء','تسليم للإدارة المالية','تم التحويل','قيد التوريد','تسليم جزئي','تسليم كامل'];
+const PO_TERMINAL    = ['تسليم كامل','ملغى'];
+// توحيد الحالات القديمة → الجديدة (توافق خلفي مع البذور والسحابة)
+const PO_STATUS_ALIAS = { 'معتمد':'اعتماد مدير الشراء', 'مُسلَّم':'تسليم كامل', 'مُسلَّم جزئياً':'تسليم جزئي', 'متأخر':'قيد التوريد' };
+function poNormalizeStatus(s){ return PO_STATUS_ALIAS[s] || s || 'قيد المراجعة'; }
+function poStatusStep(s){ const m=PO_STATUS_META[poNormalizeStatus(s)]; return m?m.step:-1; }
 const PO_SEGMENTS = [
-  {key:'all',         label:'الكل',           fn:()=>true},
-  {key:'late',        label:'متأخرة',         fn:o=>(o.days_delayed||0)>0 && o.status!=='ملغى'},
-  {key:'urgent',      label:'عاجلة',          fn:o=>o.priority==='عاجل'},
-  {key:'await_pay',   label:'بانتظار السداد', fn:o=>o.status==='معتمد'},
-  {key:'undelivered', label:'غير مُسلَّمة',    fn:o=>o.status!=='مُسلَّم' && o.status!=='ملغى'},
-  {key:'month',       label:'هذا الشهر',      fn:o=>{const d=poParseDate(o.issue_date);const n=new Date();return d&&d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth();}},
+  {key:'all',         label:'الكل',            fn:()=>true},
+  {key:'mine',        label:'طلباتي',          fn:o=>{const u=STATE.currentUser&&STATE.currentUser.displayName;return !!u && o.officer===u;}},
+  {key:'late',        label:'متأخرة',          fn:o=>(o.days_delayed||0)>0 && !PO_TERMINAL.includes(o.status)},
+  {key:'stuck',       label:'متعثّرة',          fn:o=>!PO_TERMINAL.includes(o.status) && poCurrentStageAge(o)>7},
+  {key:'urgent',      label:'عاجلة',           fn:o=>o.priority==='عاجل' && !PO_TERMINAL.includes(o.status)},
+  {key:'review',      label:'بانتظار الاعتماد', fn:o=>o.status==='قيد المراجعة'},
+  {key:'finance',     label:'لدى المالية',      fn:o=>o.status==='تسليم للإدارة المالية'||o.status==='تم التحويل'},
+  {key:'undelivered', label:'غير مُسلَّمة',     fn:o=>!PO_TERMINAL.includes(o.status)},
 ];
 
 /* ---------- date helpers ---------- */
@@ -11651,6 +11664,7 @@ function poFmtDate(v){ const iso=poToISO(v); return iso||'—'; }
 
 /* ---------- derived computation (single source of truth) ---------- */
 function recomputePOderived(po){
+  po.status = poNormalizeStatus(po.status);   // توافق خلفي مع الحالات القديمة
   if(Array.isArray(po.items) && po.items.length){
     const sum=po.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.price)||0),0);
     if(sum>0) po.subtotal=+sum.toFixed(2);
@@ -11662,10 +11676,61 @@ function recomputePOderived(po){
   const DAY=86400000;
   const exp=poParseDate(po.expected_delivery), act=poParseDate(po.actual_delivery), iss=poParseDate(po.issue_date);
   if(act&&exp) po.days_delayed=Math.max(0,Math.round((act-exp)/DAY));
-  else if(exp && po.status!=='مُسلَّم' && po.status!=='ملغى') po.days_delayed=Math.max(0,Math.round((today-exp)/DAY));
+  else if(exp && !PO_TERMINAL.includes(po.status)) po.days_delayed=Math.max(0,Math.round((today-exp)/DAY));
   else po.days_delayed=0;
   po.lead_time_days=(act&&iss)?Math.max(0,Math.round((act-iss)/DAY)):null;
   return po;
+}
+
+/* ============================================================
+   STAGE-TIMING ENGINE — حساب زمن كل مرحلة لاكتشاف التأخر والاختناق
+   ============================================================ */
+function poFmtDuration(ms){
+  if(ms==null||isNaN(ms)||ms<0) return '—';
+  const d=Math.floor(ms/86400000), h=Math.floor((ms%86400000)/3600000);
+  if(d>=1) return d+' يوم'+(h?(' و'+h+' س'):'');
+  if(h>=1) return h+' ساعة';
+  const m=Math.floor(ms/60000); return m>=1?m+' دقيقة':'الآن';
+}
+// مقاطع زمنية: [{stage, ms, ongoing}] اعتماداً على سجل الحالات + تاريخ الإصدار
+function poStageTimeline(po){
+  const segs=[];
+  const iss=poParseDate(po.issue_date);
+  let prevTime = po.created_at ? new Date(po.created_at).getTime() : (iss?iss.getTime():null);
+  let prevStage = 'قيد المراجعة';
+  const hist=(po.status_history||[]).filter(h=>h&&h.at).slice()
+    .sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+  for(const h of hist){
+    const t=new Date(h.at).getTime();
+    if(prevTime!=null && !isNaN(t) && t>=prevTime) segs.push({stage:poNormalizeStatus(prevStage),ms:t-prevTime,ongoing:false});
+    prevTime=isNaN(t)?prevTime:t; prevStage=poNormalizeStatus(h.to);
+  }
+  if(prevTime!=null && !PO_TERMINAL.includes(poNormalizeStatus(po.status)))
+    segs.push({stage:poNormalizeStatus(po.status),ms:Date.now()-prevTime,ongoing:true});
+  return segs;
+}
+// عدد الأيام في المرحلة الحالية (0 للحالات النهائية)
+function poCurrentStageAge(po){
+  if(PO_TERMINAL.includes(poNormalizeStatus(po.status))) return 0;
+  const hist=(po.status_history||[]).filter(h=>h&&h.at);
+  let t;
+  if(hist.length) t=new Date(hist[hist.length-1].at).getTime();
+  else { const d=poParseDate(po.issue_date); t=d?d.getTime():Date.now(); }
+  if(isNaN(t)) return 0;
+  return Math.max(0,Math.round((Date.now()-t)/86400000));
+}
+// إحصاءات المراحل عبر قائمة أوامر — للوحة التحكم (متوسط كل مرحلة + الاختناق + زمن الدورة)
+function poStageStats(list){
+  const agg={}; let cycleSum=0, cycleN=0;
+  list.forEach(po=>{
+    poStageTimeline(po).forEach(s=>{ (agg[s.stage]=agg[s.stage]||{total:0,count:0}); agg[s.stage].total+=s.ms; agg[s.stage].count++; });
+    if(poNormalizeStatus(po.status)==='تسليم كامل'){
+      const start=poParseDate(po.issue_date), hist=(po.status_history||[]).filter(h=>h&&h.at);
+      if(start&&hist.length){ const end=new Date(hist[hist.length-1].at).getTime(); if(end>start.getTime()){ cycleSum+=end-start.getTime(); cycleN++; } }
+    }
+  });
+  const avgByStage=Object.entries(agg).map(([stage,v])=>({stage,avg:v.total/v.count,count:v.count})).sort((a,b)=>b.avg-a.avg);
+  return { avgByStage, bottleneck:avgByStage[0]||null, avgCycle:cycleN?cycleSum/cycleN:null, cycleN };
 }
 
 /* ---------- localStorage + cloud persistence ---------- */
@@ -11979,25 +12044,36 @@ function poBoardDrop(e){ e.preventDefault(); e.currentTarget.classList.remove('d
    STATUS WORKFLOW + QUICK ACTIONS
    ============================================================ */
 function changePOStatus(num,newStatus){
-  const po=poFind(num); if(!po||po.status===newStatus){ renderPurchaseOrders(); return; }
-  const elevated=(newStatus==='معتمد'||newStatus==='ملغى');
+  const po=poFind(num); if(!po) return;
+  newStatus=poNormalizeStatus(newStatus);
+  if(po.status===newStatus){ renderPurchaseOrders(); return; }
+  const elevated=(newStatus==='اعتماد مدير الشراء'||newStatus==='ملغى');
   if(elevated){ if(!requirePermission('can_approve_po','اعتماد/إلغاء الأمر')){ renderPurchaseOrders(); return; } }
   else if(!requirePermission('can_edit_po','تعديل الأمر')){ renderPurchaseOrders(); return; }
   const from=po.status;
   po.status_history=po.status_history||[];
   po.status_history.push({from,to:newStatus,by:(STATE.currentUser?STATE.currentUser.displayName:'—'),at:new Date().toISOString()});
   po.status=newStatus;
-  if(newStatus==='مُسلَّم' && !po.actual_delivery){ po.actual_delivery=poToISO(new Date()); }
+  if(newStatus==='تسليم كامل' && !po.actual_delivery){ po.actual_delivery=poToISO(new Date()); }
   poSave(po,false,'update');
   toast('success','تم التحديث',`${po.po_number} → ${newStatus}`);
   if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
 }
-function approvePO(num){ changePOStatus(num,'معتمد'); }
+// الانتقال للمرحلة التالية بنقرة واحدة (مع حساب زمن المرحلة الحالية تلقائياً)
+function poNextStage(num){
+  const po=poFind(num); if(!po) return;
+  const step=poStatusStep(po.status);
+  if(step<0){ toast('info','—','الأمر في حالة نهائية'); return; }
+  const next=PO_STEPPER[step+1];
+  if(!next){ toast('info','—','الأمر بلغ المرحلة الأخيرة'); return; }
+  changePOStatus(num,next);
+}
+function approvePO(num){ changePOStatus(num,'اعتماد مدير الشراء'); }
 function markPODelivered(num){
   const po=poFind(num); if(!po) return;
   if(!requirePermission('can_edit_po','تعديل الأمر')) return;
   po.actual_delivery=poToISO(new Date());
-  changePOStatus(num,'مُسلَّم');
+  changePOStatus(num,'تسليم كامل');
 }
 function deletePO(num){
   if(!requirePermission('can_delete_po','حذف الأمر')) return;
@@ -12015,11 +12091,19 @@ function deletePO(num){
    ============================================================ */
 function openPODrawer(num){
   const po=poFind(num); if(!po) return;
+  const n=escapeAttr(po.po_number);
   const meta=PO_STATUS_META[po.status]||{step:-1};
+  const _tl=poStageTimeline(po);
+  const _durMap={}; _tl.forEach(s=>{ _durMap[s.stage]=(_durMap[s.stage]||0)+s.ms; });
   const stepper=PO_STEPPER.map((s,i)=>{
-    const done=meta.step>=0 && i<meta.step, cur=PO_STEPPER[meta.step]===s;
-    return `<div class="po-step ${done?'done':''} ${cur?'current':''}"><div class="dot">${done?'✓':i+1}</div>${escapeHtml(s)}</div>`;
+    const done=meta.step>=0 && i<meta.step, cur=meta.step===i;
+    const dur=(_durMap[s]!=null)?`<div class="po-step-dur">${poFmtDuration(_durMap[s])}</div>`:'';
+    return `<div class="po-step ${done?'done':''} ${cur?'current':''}"><div class="dot">${done?'✓':i+1}</div>${escapeHtml(s)}${dur}</div>`;
   }).join('');
+  const _stageAge=poCurrentStageAge(po);
+  const _ageBanner = !PO_TERMINAL.includes(po.status)
+    ? `<div class="po-stage-age ${_stageAge>7?'warn':''}">⏱ في مرحلة «${escapeHtml(po.status)}» منذ <b>${_stageAge}</b> يوم${_stageAge>7?' — تتطلب متابعة':''}</div>` : '';
+  const _nextStage = (poStatusStep(po.status)>=0) ? PO_STEPPER[poStatusStep(po.status)+1] : null;
   const kv=(k,v)=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
   const itemsHtml=(Array.isArray(po.items)&&po.items.length)?`
     <div class="po-drawer-sec"><h4>البنود</h4>
@@ -12040,6 +12124,7 @@ function openPODrawer(num){
         <button class="modal-close" onclick="closePODrawer()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="po-stepper">${stepper}</div>
+      ${_ageBanner}
     </div>
     <div class="po-drawer-sec"><h4>مالية</h4><div class="po-kv">
       ${kv('قبل الضريبة',fmtPrice(po.subtotal)+' ر.س')}
@@ -12067,11 +12152,12 @@ function openPODrawer(num){
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>
     <div class="po-drawer-actions">
-      ${(canApprove&&po.status==='قيد المراجعة')?`<button class="btn btn-accent btn-sm" onclick="approvePO('${escapeAttr(po.po_number)}')">اعتماد</button>`:''}
-      ${(canEdit&&po.status!=='مُسلَّم'&&po.status!=='ملغى')?`<button class="btn btn-ghost btn-sm" onclick="markPODelivered('${escapeAttr(po.po_number)}')">تعليم كمُسلَّم</button>`:''}
-      ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openPOModal('${escapeAttr(po.po_number)}')">تعديل</button>`:''}
-      <button class="btn btn-ghost btn-sm" onclick="printPO('${escapeAttr(po.po_number)}')">طباعة</button>
-      ${canDel?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="deletePO('${escapeAttr(po.po_number)}')">حذف</button>`:''}
+      ${(_nextStage)?`<button class="btn btn-accent btn-sm" onclick="poNextStage('${n}')" title="نقل لِـ ${escapeAttr(_nextStage)}">▶ ${escapeHtml(_nextStage)}</button>`:''}
+      ${(canEdit && !PO_TERMINAL.includes(po.status) && po.status!=='تسليم كامل')?`<button class="btn btn-ghost btn-sm" onclick="markPODelivered('${n}')">تسليم كامل ✓</button>`:''}
+      ${(!PO_TERMINAL.includes(po.status))?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="changePOStatus('${n}','ملغى')">إلغاء</button>`:''}
+      ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openPOModal('${n}')">تعديل</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="printPO('${n}')">طباعة</button>
+      ${canDel?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="deletePO('${n}')">حذف</button>`:''}
     </div>`;
   document.getElementById('po-drawer').classList.add('active');
   document.getElementById('po-drawer').setAttribute('aria-hidden','false');
@@ -12261,6 +12347,8 @@ function renderPODashboard(){
   const monMap={};
   active.forEach(o=>{const iso=poToISO(o.issue_date); if(iso){const k=iso.slice(0,7); (monMap[k]=monMap[k]||{c:0,v:0}); monMap[k].c++; monMap[k].v+=num(o.total);}});
   const monRows=Object.entries(monMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,x])=>[k,x.c,fmtPrice(x.v)]);
+  // إحصاءات زمن المراحل (اكتشاف الاختناق + زمن الدورة)
+  const ss=poStageStats(active);
 
   el.innerHTML=`
     <div class="po-dash">
@@ -12288,6 +12376,14 @@ function renderPODashboard(){
         <div class="po-card-box"><h3>🏆 أعلى الموردين حسب القيمة</h3>${topSup.length?poDashTable(['#','المورد','عدد','القيمة (ر.س)'],topSup.map((s,i)=>[medals[i],escapeHtml(s[0]),s[1].c,fmtPrice(s[1].v)])):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>👤 أداء مسؤولي المشتريات</h3>${offRows.length?poDashTable(['المسؤول','عدد','القيمة (ر.س)'],offRows.map(r=>[escapeHtml(r[0]),r[1],r[2]])):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>📅 التحليل الشهري — حركة المشتريات</h3>${monRows.length?poDashTable(['الشهر','عدد','القيمة (ر.س)'],monRows):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>⏱ زمن المراحل ومرحلة الاختناق</h3>${
+          ss.avgByStage.length
+          ? `<div class="po-kpi-row" style="margin:0 0 12px">
+               <div class="po-kpi"><span class="t">مرحلة الاختناق (الأبطأ)</span><span class="v" style="font-size:14px">${escapeHtml(ss.bottleneck.stage)}</span><span class="t">متوسط ${poFmtDuration(ss.bottleneck.avg)}</span></div>
+               <div class="po-kpi"><span class="t">متوسط زمن الدورة (إصدار→تسليم)</span><span class="v" style="font-size:15px">${ss.avgCycle!=null?poFmtDuration(ss.avgCycle):'—'}</span><span class="t">${ss.cycleN} أمر مكتمل</span></div>
+             </div>`+poDashTable(['المرحلة','متوسط المدة','عدد'],ss.avgByStage.map(r=>[escapeHtml(r.stage),poFmtDuration(r.avg),r.count]))
+          : '<div class="muted">يُحتسب زمن المراحل من تحديثات الحالة. ابدأ بتحديث الأوامر عبر مراحلها لتظهر هنا.</div>'
+        }</div>
         <div class="po-card-box"><h3>🖨 تقارير مباشرة</h3>
           <p class="po-rep-note">تقارير جاهزة للطباعة والمشاركة مع الإدارة، تُحدَّث فور إدخال أي أمر.</p>
           <button class="btn btn-ghost btn-sm" onclick="printUrgentMemo()">مذكرة الطلبات العاجلة</button>
