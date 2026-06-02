@@ -13561,6 +13561,26 @@ async function rfqCopyInvite(rfqId, supplier){
   try{ await navigator.clipboard.writeText(link); toast('success','نُسخ رابط المورد','أرسله عبر واتساب/إيميل لـ '+supplier); }
   catch(e){ prompt('انسخ رابط المورد ('+supplier+'):', link); }
 }
+// تنزيل ملف عرض سعر المورّد ثم حذفه من المخزن لتوفير المساحة (تبقى الأسعار المستخرَجة محفوظة)
+async function rfqDownloadQuoteFile(rfqId, supplier, path){
+  if(!path){ toast('info','لا يوجد','لم يُرفق هذا المورد ملفاً'); return; }
+  if(!confirm('سيُنزَّل ملف عرض السعر إلى جهازك ثم يُحذف من المخزن لتوفير المساحة (تبقى الأسعار محفوظة في المقارنة). متابعة؟')) return;
+  try{
+    const { data, error } = await CLOUD.client.storage.from('supplier-docs').createSignedUrl(path, 120);
+    if(error || !data || !data.signedUrl) throw new Error('تعذّر إنشاء رابط التنزيل');
+    const resp = await fetch(data.signedUrl); if(!resp.ok) throw new Error('تعذّر جلب الملف');
+    const blob = await resp.blob();
+    const ext = (path.split('.').pop()||'pdf').toLowerCase();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download = 'عرض-سعر-'+supplier+'.'+ext;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+    // حذف من المخزن + تفريغ المرجع في قاعدة البيانات
+    await CLOUD.client.storage.from('supplier-docs').remove([path]).catch(()=>{});
+    await CLOUD.client.from('proc_rfq_quotes').update({quote_file:null}).eq('id', rfqId+'__'+rfqSlug(supplier));
+    toast('success','تم التنزيل والحذف','نُزّل الملف وحُذف من المخزن لتوفير المساحة');
+    rfqOpenDetail(rfqId);
+  }catch(e){ toast('error','تعذّر', e.message||'فشل التنزيل'); }
+}
 function rfqRespBadge(st){ return st==='submitted'?'<span class="wf-b ok">قدّم العرض</span>': st==='opened'?'<span class="wf-b pend">فتح الرابط</span>':'<span class="wf-b" style="background:#eee;color:#777;padding:3px 9px;border-radius:20px">مدعو</span>'; }
 
 async function rfqSetStatus(rfqId, status){
@@ -13687,7 +13707,11 @@ function rfqRenderNewForm(){
     <div class="wf-field"><label>البنود * <span style="color:var(--muted);font-weight:400">— اختر من الكتالوج ليُجلب السعر المرجعي تلقائياً</span></label>
       <div class="rfq-line-row" style="font-size:11px;color:var(--muted);font-weight:700"><span>البند</span><span>كمية</span><span>وحدة</span><span>سعر مرجعي</span><span></span></div>
       <div id="rfq-n-lines"></div>
-      <button class="btn btn-ghost btn-sm" id="rfq-add-line" type="button">+ إضافة بند</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn btn-ghost btn-sm" id="rfq-add-line" type="button">+ إضافة بند</button>
+        <button class="btn btn-ghost btn-sm" id="rfq-import-lines" type="button" title="استخرج البنود والكميات والوحدات تلقائياً">📎 استيراد البنود من ملف (PDF/Excel/صورة)</button>
+        <input type="file" id="rfq-lines-file" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,image/*" style="display:none">
+      </div></div>
     <div class="wf-field"><label>معايير التقييم (best-value) — اترك السعر 100 لاختيار الأقل سعراً فقط</label>
       <div class="rfq-weights">
         <div><label>السعر %</label><input id="rfq-w-price" type="number" min="0" value="100"></div>
@@ -13708,6 +13732,35 @@ function rfqRenderNewForm(){
     row.querySelector('button').addEventListener('click',()=>row.remove()); linesBox.appendChild(row); };
   addLine(); addLine();
   document.getElementById('rfq-add-line').addEventListener('click', addLine);
+  // استيراد ذكي للبنود من ملف (PDF/Excel/صورة) — يعبّئ البند والكمية والوحدة تلقائياً
+  const importLines = async (file)=>{
+    if(!file) return;
+    const ext=(file.name.split('.').pop()||'').toLowerCase();
+    toast('info','جارٍ القراءة','يستخرج النظام البنود من الملف…');
+    try{
+      let extracted;
+      if(['xlsx','xls','csv'].includes(ext)) extracted=await siExtractFromSpreadsheet(file);
+      else if(ext==='pdf') extracted=await siExtractFromPDF(file);
+      else if(['png','jpg','jpeg','webp'].includes(ext)) extracted=await siExtractFromImage(file);
+      else throw new Error('نوع غير مدعوم — استخدم PDF أو Excel أو صورة');
+      const items=(extracted&&extracted.items)||[];
+      if(!items.length) throw new Error('لم يتم العثور على بنود في الملف');
+      [...linesBox.querySelectorAll('.rfq-line-row')].forEach(r=>{ if(!r.querySelector('.rfq-l-desc').value.trim()) r.remove(); });
+      items.forEach(it=>{
+        addLine(); const row=linesBox.lastElementChild;
+        const desc=(it.name||it.desc||'').toString().trim();
+        row.querySelector('.rfq-l-desc').value=desc;
+        row.querySelector('.rfq-l-qty').value=Number(it.quantity||it.qty)||1;
+        if(it.unit) row.querySelector('.rfq-l-unit').value=String(it.unit);
+        const b=rfqItemBaseline(desc);
+        if(b.code){ if(b.unit && !row.querySelector('.rfq-l-unit').value) row.querySelector('.rfq-l-unit').value=b.unit; if(b.price) row.querySelector('.rfq-l-base').value=b.price; row.dataset.code=b.code; }
+      });
+      try{ closeModal('modal-smart-import'); }catch(_){ }
+      toast('success','تم الاستخراج', items.length+' بند — راجِعها وعدّل إن لزم قبل الإنشاء');
+    }catch(e){ toast('error','تعذّر الاستخراج', e.message||'فشل قراءة الملف'); }
+  };
+  document.getElementById('rfq-import-lines').addEventListener('click', ()=>document.getElementById('rfq-lines-file').click());
+  document.getElementById('rfq-lines-file').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) importLines(f); e.target.value=''; });
   document.getElementById('rfq-suggest').addEventListener('click', ()=>{
     const lines = [...linesBox.querySelectorAll('.rfq-line-row')].map(r=>({code:r.dataset.code, desc:r.querySelector('.rfq-l-desc').value}));
     lines.forEach(l=>{ if(!l.code){ const b=rfqItemBaseline(l.desc); if(b.code) l.code=b.code; } });
@@ -13741,7 +13794,7 @@ async function rfqOpenDetail(id){
   const {rfq, quotes} = await rfqLoadOne(id);
   if(!rfq){ el.innerHTML = '<div class="wf-empty">الطلب غير موجود</div>'; return; }
   const lines = rfq.lines||[], sups = rfq.suppliers||[];
-  const qmap={}, amap={}, smap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; smap[q.supplier]=q.status||'invited'; });
+  const qmap={}, amap={}, smap={}, fmap={}; quotes.forEach(q=>{ qmap[q.supplier]=q.prices||{}; amap[q.supplier]=q.attrs||{}; smap[q.supplier]=q.status||'invited'; fmap[q.supplier]=q.quote_file||null; });
   const awarded = rfq.status==='awarded', cancelled = rfq.status==='cancelled';
   const back = ()=>rfqShowPane('list');
 
@@ -13786,7 +13839,10 @@ async function rfqOpenDetail(id){
     <div class="muted" style="font-size:11.5px;margin:6px 0">انسخ رابط كل مورد وأرسله له عبر واتساب/إيميل ليُدخل عرضه بنفسه — تظهر أسعاره هنا تلقائياً.</div>
     ${sups.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border,#f0ece2)">
       <span style="font-size:13px">${escapeHtml(s)} ${rfqRespBadge(smap[s]||'invited')}</span>
-      <button class="btn btn-ghost btn-sm" data-invite="${escapeHtml(s)}">📋 نسخ الرابط</button></div>`).join('')}
+      <span style="display:flex;gap:6px">
+        ${fmap[s]?`<button class="btn btn-ghost btn-sm" data-qfile="${escapeHtml(s)}" title="تنزيل ملف عرض السعر ثم حذفه من المخزن لتوفير المساحة">📥 ملف العرض</button>`:''}
+        <button class="btn btn-ghost btn-sm" data-invite="${escapeHtml(s)}">📋 نسخ الرابط</button>
+      </span></div>`).join('')}
   </details>`;
 
   // معايير التقييم
@@ -13850,6 +13906,7 @@ async function rfqOpenDetail(id){
   document.getElementById('rfq-back').addEventListener('click', back);
   el.querySelectorAll('[data-st]').forEach(b=>b.addEventListener('click', ()=>rfqSetStatus(id, b.getAttribute('data-st'))));
   el.querySelectorAll('[data-invite]').forEach(b=>b.addEventListener('click', ()=>rfqCopyInvite(id, b.getAttribute('data-invite'))));
+  el.querySelectorAll('[data-qfile]').forEach(b=>b.addEventListener('click', ()=>rfqDownloadQuoteFile(id, b.getAttribute('data-qfile'), fmap[b.getAttribute('data-qfile')])));
   const swBtn=document.getElementById('rfq-save-w'); if(swBtn) swBtn.addEventListener('click', ()=>rfqSaveWeights(id, { price:rfqNum(document.getElementById('rfq-ew-price').value), delivery:rfqNum(document.getElementById('rfq-ew-delivery').value), quality:rfqNum(document.getElementById('rfq-ew-quality').value), payment:rfqNum(document.getElementById('rfq-ew-payment').value) }));
   const saveBtn=document.getElementById('rfq-save');
   if(saveBtn) saveBtn.addEventListener('click', async ()=>{
