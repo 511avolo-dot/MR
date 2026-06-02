@@ -2270,6 +2270,31 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-warn-row{font-size:11.5px;color:#a93226;padding:3px 0}
 /* Charts/analytics within PO */
 .po-analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:6px}
+/* لوحة تحكم احترافية */
+.po-hero-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:14px}
+.po-hero{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;display:flex;flex-direction:column;gap:4px;position:relative;overflow:hidden}
+.po-hero::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:var(--border)}
+.po-hero.accent::before{background:linear-gradient(180deg,#C4A265,#9A7A45)}
+.po-hero.ok::before{background:#2e9e6b}
+.po-hero .t{font-size:12.5px;color:var(--muted);font-weight:600}
+.po-hero .v{font-size:30px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--ink);line-height:1.1}
+.po-hero .u{font-size:11.5px;color:var(--muted)}
+.po-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+.po-kpi{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:13px 16px;display:flex;flex-direction:column;gap:3px}
+.po-kpi .t{font-size:11.5px;color:var(--muted);font-weight:600}
+.po-kpi .v{font-size:19px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
+.po-dash-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.po-dash-table th,.po-dash-table td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:right}
+.po-dash-table th{color:var(--muted);font-weight:700;font-size:11.5px}
+.po-dash-table td.lead{color:var(--ink);font-weight:600}
+.po-dash-table th.num,.po-dash-table td.num{text-align:center;font-family:'IBM Plex Mono',monospace}
+.po-dash-table tbody tr:last-child td{border-bottom:none}
+.po-rep-note{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+/* قسم متابعة الأمر داخل النموذج */
+#po-lifecycle-section{margin-top:8px;padding-top:6px;border-top:1px dashed var(--border)}
+.po-lifecycle-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:14px 0 12px}
+.po-lifecycle-head>span:first-child{font-size:13px;font-weight:700;color:var(--ink)}
+.po-lifecycle-hint{font-size:11.5px;color:var(--muted);font-weight:500}
 .po-card-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
 .po-card-box h3{font-size:13px;font-weight:700;color:var(--ink);margin:0 0 14px}
 .po-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px}
@@ -3029,9 +3054,9 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 
         <div class="po-viewbar">
           <div class="po-views" id="po-views">
-            <button class="po-view-btn active" data-poview="list" type="button">القائمة</button>
+            <button class="po-view-btn active" data-poview="analytics" type="button">لوحة التحكم</button>
+            <button class="po-view-btn" data-poview="list" type="button">القائمة</button>
             <button class="po-view-btn" data-poview="board" type="button">اللوحة</button>
-            <button class="po-view-btn" data-poview="analytics" type="button">التحليلات</button>
             <button class="po-view-btn" data-poview="alerts" type="button">الإنذارات</button>
           </div>
           <div class="po-actions">
@@ -3597,34 +3622,41 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <input type="date" class="form-input" id="po-f-expected">
         </div>
         <div class="form-field">
-          <label class="form-label">تاريخ التسليم الفعلي</label>
-          <input type="date" class="form-input" id="po-f-actual">
-        </div>
-        <div class="form-field">
-          <label class="form-label">الحالة</label>
-          <select class="form-input" id="po-f-status"></select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-field">
-          <label class="form-label po-auto-label">أيام التأخير <span class="auto">تلقائي</span></label>
-          <input type="text" class="form-input auto-filled" id="po-f-delay" readonly dir="ltr">
-        </div>
-        <div class="form-field">
-          <label class="form-label po-auto-label">زمن التوريد (يوم) <span class="auto">تلقائي</span></label>
-          <input type="text" class="form-input auto-filled" id="po-f-lead" readonly dir="ltr">
-        </div>
-        <div class="form-field">
-          <label class="form-label">سبب التأخير</label>
-          <select class="form-input" id="po-f-delayreason"></select>
-        </div>
-      </div>
-
-      <div class="form-row full">
-        <div class="form-field">
           <label class="form-label">ملاحظات</label>
           <input type="text" class="form-input" id="po-f-notes" placeholder="ملاحظات اختيارية">
+        </div>
+      </div>
+
+      <!-- متابعة وتحديث الأمر — تظهر بعد إنشاء الأمر فقط -->
+      <div id="po-lifecycle-section">
+        <div class="po-lifecycle-head">
+          <span>متابعة وتحديث الأمر</span>
+          <span class="po-lifecycle-hint">تُحدَّث بعد إنشاء الأمر (الحالة، التسليم الفعلي، التأخير)</span>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label">الحالة</label>
+            <select class="form-input" id="po-f-status"></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">تاريخ التسليم الفعلي</label>
+            <input type="date" class="form-input" id="po-f-actual">
+          </div>
+          <div class="form-field">
+            <label class="form-label">سبب التأخير</label>
+            <select class="form-input" id="po-f-delayreason"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label class="form-label po-auto-label">أيام التأخير <span class="auto">تلقائي</span></label>
+            <input type="text" class="form-input auto-filled" id="po-f-delay" readonly dir="ltr">
+          </div>
+          <div class="form-field">
+            <label class="form-label po-auto-label">زمن التوريد (يوم) <span class="auto">تلقائي</span></label>
+            <input type="text" class="form-input auto-filled" id="po-f-lead" readonly dir="ltr">
+          </div>
+          <div class="form-field"></div>
         </div>
       </div>
     </div>
@@ -4786,7 +4818,7 @@ const STATE = {
   currentUser: null, // {username, role: 'admin'|'user', loginTime}
   // ── أوامر الشراء ──
   purchaseOrders: [],
-  poView: 'list',
+  poView: 'analytics',
   poSegment: 'all',
   poFilter: {q:'', sector:'', status:'', priority:''},
   poSort: {col:'issue_date', dir:'desc'},
@@ -12095,6 +12127,11 @@ function openPOModal(num){
   def.items.forEach(it=>addPOItemRow(it));
   poItemsRecalc();
   poFormRecompute();
+  // الإدخال المبدئي: حقول أساسية فقط — قسم المتابعة (الحالة/التسليم الفعلي/التأخير) يظهر عند تحديث أمر قائم
+  const lc=document.getElementById('po-lifecycle-section');
+  if(lc) lc.style.display = num ? '' : 'none';
+  const sub=document.querySelector('#modal-po .modal-subtitle');
+  if(sub) sub.textContent = num ? 'حدّث الحالة وبيانات التسليم والتأخير' : 'أدخل البيانات الأساسية — تُضاف الحالة والتسليم لاحقاً كتحديث';
   openModal('modal-po');
 }
 function addPOItemRow(it){
@@ -12178,37 +12215,93 @@ function poBarRows(pairs,fmt){
   const max=Math.max(1,...pairs.map(p=>p[1]));
   return pairs.map(([l,v])=>`<div class="po-bar-row"><span class="lbl" title="${escapeAttr(l)}">${escapeHtml(l)}</span><span class="barwrap"><span class="bar" style="width:${(v/max*100).toFixed(0)}%"></span></span><span class="val">${fmt?fmt(v):v}</span></div>`).join('');
 }
+function poPct(n,d){ return d>0 ? (n/d*100) : 0; }
+function poDashTable(headers,rows){
+  return `<table class="po-dash-table"><thead><tr>${headers.map((h,i)=>`<th${i?' class="num"':''}>${escapeHtml(String(h))}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r=>`<tr>${r.map((c,i)=>`<td${i?' class="num"':' class="lead"'}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
 function renderPODashboard(){
   const el=document.getElementById('po-dashboard'); if(!el) return;
-  const all=STATE.purchaseOrders, active=all.filter(o=>o.status!=='ملغى');
-  // status breakdown
-  const statusPairs=PO_ENUMS.status.map(s=>[s,all.filter(o=>o.status===s).length]).filter(p=>p[1]>0);
-  // sector value
-  const sectorPairs=PO_ENUMS.sector.map(s=>[s,active.filter(o=>o.sector===s).reduce((a,o)=>a+(Number(o.total)||0),0)]).filter(p=>p[1]>0).sort((a,b)=>b[1]-a[1]);
-  // monthly
-  const monthMap={};
-  active.forEach(o=>{ const iso=poToISO(o.issue_date); if(iso){ const k=iso.slice(0,7); monthMap[k]=(monthMap[k]||0)+(Number(o.total)||0); } });
-  const monthPairs=Object.entries(monthMap).sort((a,b)=>a[0].localeCompare(b[0]));
-  // aging
-  const buckets=[['0 — 7 أيام',0],['8 — 14 يوم',0],['15 — 30 يوم',0],['أكثر من 30 يوم',0]];
-  active.forEach(o=>{ const d=o.days_delayed||0; if(d<=0) return; if(d<=7)buckets[0][1]++; else if(d<=14)buckets[1][1]++; else if(d<=30)buckets[2][1]++; else buckets[3][1]++; });
-  // payment mix
-  const payPairs=PO_ENUMS.payment_method.map(p=>[p,all.filter(o=>o.payment_method===p).length]).filter(p=>p[1]>0);
+  const all=STATE.purchaseOrders;
+  const n=all.length;
+  const num=v=>Number(v)||0;
+  const totalAll=all.reduce((a,o)=>a+num(o.total),0);
+  const active=all.filter(o=>o.status!=='ملغى');
+  const delivered=all.filter(o=>o.status==='مُسلَّم');
+  const review=all.filter(o=>o.status==='قيد المراجعة');
+  const avgPO=n?totalAll/n:0;
+  // 1) حالات
+  const statusRows=PO_ENUMS.status.map(s=>{const c=all.filter(o=>o.status===s).length;return [s,c,poPct(c,n).toFixed(1)+'%'];}).filter(r=>r[1]>0);
+  statusRows.push(['<strong>الإجمالي الكلي</strong>','<strong>'+n+'</strong>','<strong>100%</strong>']);
+  // 2) قطاعات (قيمة)
+  const sectorRows=PO_ENUMS.sector.map(s=>{const l=active.filter(o=>o.sector===s);return [s,l.length,l.reduce((a,o)=>a+num(o.total),0)];}).filter(r=>r[1]>0).sort((a,b)=>b[2]-a[2]);
+  const sectorTotal=sectorRows.reduce((a,r)=>a+r[2],0)||1;
+  // 3) تأخير ومخاطر
+  const lateNow=active.filter(o=>o.status!=='مُسلَّم'&&num(o.days_delayed)>0);
+  const delays=all.filter(o=>num(o.days_delayed)>0).map(o=>num(o.days_delayed));
+  const avgDelay=delays.length?delays.reduce((a,b)=>a+b,0)/delays.length:0;
+  const maxDelay=delays.length?Math.max(...delays):0, minDelay=delays.length?Math.min(...delays):0;
+  const onTimeDelivered=delivered.filter(o=>num(o.days_delayed)===0).length;
+  const lateValue=lateNow.reduce((a,o)=>a+num(o.total),0);
+  // 4) تقادم
+  const buckets=[['🟢 0 — 7 أيام',0],['🟡 8 — 14 يوم',0],['🟠 15 — 30 يوم',0],['🔴 أكثر من 30 يوم',0]];
+  lateNow.forEach(o=>{const d=num(o.days_delayed); if(d<=7)buckets[0][1]++; else if(d<=14)buckets[1][1]++; else if(d<=30)buckets[2][1]++; else buckets[3][1]++;});
+  // 5) موردون حسب القيمة
+  const supMap={};
+  active.forEach(o=>{const k=o.supplier||'—'; (supMap[k]=supMap[k]||{c:0,v:0}); supMap[k].c++; supMap[k].v+=num(o.total);});
+  const medals=['🥇','🥈','🥉','4','5'];
+  const topSup=Object.entries(supMap).sort((a,b)=>b[1].v-a[1].v).slice(0,5);
+  // 6) مسؤولو المشتريات
+  const offMap={};
+  all.forEach(o=>{const k=o.officer||'—'; (offMap[k]=offMap[k]||{c:0,v:0}); offMap[k].c++; offMap[k].v+=num(o.total);});
+  const offRows=Object.entries(offMap).sort((a,b)=>b[1].v-a[1].v).map(([k,x])=>[k,x.c,fmtPrice(x.v)]);
+  // 7) شهري
+  const monMap={};
+  active.forEach(o=>{const iso=poToISO(o.issue_date); if(iso){const k=iso.slice(0,7); (monMap[k]=monMap[k]||{c:0,v:0}); monMap[k].c++; monMap[k].v+=num(o.total);}});
+  const monRows=Object.entries(monMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,x])=>[k,x.c,fmtPrice(x.v)]);
+
   el.innerHTML=`
-    <div class="po-ai-summary" id="po-ai-summary" style="display:none"></div>
-    <div class="po-analytics-grid">
-      <div class="po-card-box"><h3>القيمة حسب القطاع (ر.س)</h3>${sectorPairs.length?poBarRows(sectorPairs,fmtPrice):'<div class="muted">لا بيانات</div>'}</div>
-      <div class="po-card-box"><h3>تفصيل الحالات</h3>${statusPairs.length?poBarRows(statusPairs):'<div class="muted">لا بيانات</div>'}</div>
-      <div class="po-card-box"><h3>الإنفاق الشهري (ر.س)</h3>${monthPairs.length?poBarRows(monthPairs,fmtPrice):'<div class="muted">لا بيانات</div>'}</div>
-      <div class="po-card-box"><h3>تحليل التقادم — الأوامر المتأخرة</h3>${poBarRows(buckets)}</div>
-      <div class="po-card-box"><h3>مزيج طرق الدفع</h3>${payPairs.length?poBarRows(payPairs):'<div class="muted">لا بيانات</div>'}</div>
-      <div class="po-card-box"><h3>تقارير</h3>
-        <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px">مذكرة الطلبات العاجلة بانتظار السداد + تقرير إداري.</p>
-        <button class="btn btn-ghost btn-sm" onclick="printUrgentMemo()">طباعة مذكرة الطلبات العاجلة</button>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poLoadAISummary()" data-requires-perm="can_use_ai">توليد ملخص ذكي</button>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poGenerateAIReport()" data-requires-perm="can_use_ai">توليد تقرير إداري ذكي</button>
+    <div class="po-dash">
+      <div class="po-hero-row">
+        <div class="po-hero"><span class="t">إجمالي أوامر الشراء</span><span class="v">${n}</span><span class="u">أمر</span></div>
+        <div class="po-hero accent"><span class="t">إجمالي قيمة المشتريات</span><span class="v">${fmtPrice(totalAll)}</span><span class="u">ريال · شامل الضريبة</span></div>
+        <div class="po-hero ok"><span class="t">مُسلَّم ✓</span><span class="v">${delivered.length}</span><span class="u">من ${n} أمر</span></div>
       </div>
+      <div class="po-kpi-row">
+        <div class="po-kpi"><span class="t">نسبة الأوامر المُسلَّمة</span><span class="v">${poPct(delivered.length,n).toFixed(1)}%</span></div>
+        <div class="po-kpi"><span class="t">متوسط قيمة أمر الشراء</span><span class="v">${fmtPrice(avgPO)}</span></div>
+        <div class="po-kpi"><span class="t">أوامر قيد المراجعة</span><span class="v">${review.length}</span></div>
+        <div class="po-kpi"><span class="t">التسليم بدون تأخير</span><span class="v">${poPct(onTimeDelivered,delivered.length).toFixed(1)}%</span></div>
+      </div>
+      <div class="po-analytics-grid">
+        <div class="po-card-box"><h3>📦 تفصيل الأوامر حسب الحالة</h3>${poDashTable(['الحالة','عدد','النسبة'],statusRows)}</div>
+        <div class="po-card-box"><h3>🏗 قيمة المشتريات حسب القطاع</h3>${sectorRows.length?poDashTable(['القطاع','عدد','القيمة (ر.س)','النسبة'],sectorRows.map(r=>[r[0],r[1],fmtPrice(r[2]),poPct(r[2],sectorTotal).toFixed(1)+'%'])):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>⚠ تحليل التأخير والمخاطر</h3>${poDashTable(['المؤشر','القيمة','التفصيل'],[
+          ['نسبة الأوامر المتأخرة',poPct(lateNow.length,active.length).toFixed(1)+'%',lateNow.length+' أمر متأخر حالياً من '+active.length],
+          ['متوسط أيام التأخير',avgDelay.toFixed(1),delays.length?('أعلى: '+maxDelay+' · أقل: '+minDelay+' يوم'):'لا يوجد تأخير'],
+          ['قيمة الأوامر المتأخرة',fmtPrice(lateValue),poPct(lateValue,totalAll).toFixed(1)+'% من الإجمالي'],
+          ['التسليم بدون تأخير',poPct(onTimeDelivered,delivered.length).toFixed(1)+'%',onTimeDelivered+' من '+delivered.length+' مُسلَّم في موعده'],
+        ])}</div>
+        <div class="po-card-box"><h3>📊 تقادم الأوامر المتأخرة</h3>${poDashTable(['الفئة','عدد الأوامر'],buckets.map(b=>[b[0],b[1]]))}</div>
+        <div class="po-card-box"><h3>🏆 أعلى الموردين حسب القيمة</h3>${topSup.length?poDashTable(['#','المورد','عدد','القيمة (ر.س)'],topSup.map((s,i)=>[medals[i],escapeHtml(s[0]),s[1].c,fmtPrice(s[1].v)])):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>👤 أداء مسؤولي المشتريات</h3>${offRows.length?poDashTable(['المسؤول','عدد','القيمة (ر.س)'],offRows.map(r=>[escapeHtml(r[0]),r[1],r[2]])):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>📅 التحليل الشهري — حركة المشتريات</h3>${monRows.length?poDashTable(['الشهر','عدد','القيمة (ر.س)'],monRows):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>🖨 تقارير مباشرة</h3>
+          <p class="po-rep-note">تقارير جاهزة للطباعة والمشاركة مع الإدارة، تُحدَّث فور إدخال أي أمر.</p>
+          <button class="btn btn-ghost btn-sm" onclick="printUrgentMemo()">مذكرة الطلبات العاجلة</button>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poPrintDashboard()">طباعة لوحة التحكم</button>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poLoadAISummary()" data-requires-perm="can_use_ai">ملخص ذكي</button>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poGenerateAIReport()" data-requires-perm="can_use_ai">تقرير إداري ذكي</button>
+        </div>
+      </div>
+      <div class="po-ai-summary" id="po-ai-summary" style="display:none"></div>
     </div>`;
+}
+function poPrintDashboard(){
+  const el=document.getElementById('po-dashboard'); if(!el) return;
+  const clone=el.cloneNode(true);
+  clone.querySelectorAll('button,.po-rep-note,.po-ai-summary').forEach(n=>n.remove());
+  poPrintWindow('لوحة تحكم المشتريات — مجموعة الذيابي','<h1>لوحة تحكم المشتريات</h1>'+clone.innerHTML);
 }
 
 /* ============================================================
