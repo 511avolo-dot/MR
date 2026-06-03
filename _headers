@@ -14,7 +14,7 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
-/guide
+/guide/*
   Cache-Control: public, max-age=0, must-revalidate
 
 /
