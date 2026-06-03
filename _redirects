@@ -1,6 +1,7 @@
 /register.html /register.html 200
 /rfq.html /rfq.html 200
 /guide.html /guide.html 200
+/guide /guide.html 200
 /q/* /rfq.html 200
 /q /rfq.html 200
 /* /index.html 200
