@@ -3335,17 +3335,17 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
             <div style="font-size:16px;font-weight:600;margin-bottom:6px">لا توجد طلبات</div>
             <div style="font-size:13px">ستظهر طلبات تسجيل الموردين هنا عند ورودها من بوابة التسجيل.</div>
           </div>
-          <div id="reg-table-wrap" style="display:none;overflow-x:auto">
+          <div id="reg-stats" style="display:none;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>
+          <div id="reg-table-wrap" style="display:none;overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:14px;background:var(--surface,#fff)">
             <table style="width:100%;border-collapse:collapse;font-size:13px">
               <thead>
-                <tr style="background:var(--navy,#1a3a5c);color:#fff">
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">اسم المنشأة</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">المدينة</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">الهاتف</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">تاريخ الطلب</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">الوثائق</th>
-                  <th style="padding:10px 12px;text-align:right;font-weight:600">الحالة</th>
-                  <th style="padding:10px 12px;text-align:center;font-weight:600">إجراء</th>
+                <tr style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
+                  <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px;letter-spacing:.02em">المنشأة</th>
+                  <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px">الهاتف</th>
+                  <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px">تاريخ الطلب</th>
+                  <th style="padding:13px 14px;text-align:center;font-weight:600;font-size:12px">الوثائق</th>
+                  <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px">الحالة</th>
+                  <th style="padding:13px 14px;text-align:center;font-weight:600;font-size:12px">إجراء</th>
                 </tr>
               </thead>
               <tbody id="reg-tbody"></tbody>
@@ -11001,12 +11001,18 @@ CREATE TABLE IF NOT EXISTS proc_supplier_registrations (
 CREATE INDEX IF NOT EXISTS idx_reg_status ON proc_supplier_registrations(status);
 CREATE INDEX IF NOT EXISTS idx_reg_submitted ON proc_supplier_registrations(submitted_at DESC);
 ALTER TABLE proc_supplier_registrations ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Enable insert for all" ON proc_supplier_registrations;
-DROP POLICY IF EXISTS "Enable read for auth"  ON proc_supplier_registrations;
+-- حماية بيانات الموردين (PII): الزوّار (anon) يمكنهم الإرسال فقط؛ القراءة/التعديل
+-- للمستخدمين المسجّلين (authenticated) فقط — فالمراجعة تتم بعد تسجيل دخول الموظف.
+-- استئناف/متابعة الطلب للزائر يتمّان عبر دوال SECURITY DEFINER آمنة (db/secure-resume.sql,
+-- db/registration-status.sql) لا عبر فتح الجدول.
+DROP POLICY IF EXISTS "Enable insert for all"  ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "Enable read for all"    ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "Enable update for all"  ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "Enable read for auth"   ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "Enable update for auth" ON proc_supplier_registrations;
-CREATE POLICY "Enable insert for all"  ON proc_supplier_registrations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable read for all"    ON proc_supplier_registrations FOR SELECT USING (true);
-CREATE POLICY "Enable update for all"  ON proc_supplier_registrations FOR UPDATE USING (true);
+CREATE POLICY "public_insert" ON proc_supplier_registrations FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "auth_read"     ON proc_supplier_registrations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_update"   ON proc_supplier_registrations FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 -- Storage bucket: supplier-docs (يُنشأ يدوياً من Supabase Dashboard → Storage)
 -- المسار: supplier-docs/{reg_id}/{doc_type}/{filename}
@@ -18491,9 +18497,11 @@ async function loadRegistrations() {
   const loading  = document.getElementById('reg-loading');
   const empty    = document.getElementById('reg-empty');
   const tableWrap= document.getElementById('reg-table-wrap');
+  const statsBar = document.getElementById('reg-stats');
   if (loading)   loading.style.display = '';
   if (empty)     empty.style.display   = 'none';
   if (tableWrap) tableWrap.style.display = 'none';
+  if (statsBar)  statsBar.style.display = 'none';
 
   try {
     let query = CLOUD.client.from(REG_TABLE).select('*').order('submitted_at', {ascending: false}).limit(100);
@@ -18515,26 +18523,48 @@ async function loadRegistrations() {
       badge.style.display = pendingCount ? '' : 'none';
     }
 
+    renderRegStats();   // شريط ملخّص الحالات (استعلام خفيف منفصل)
+
+    const STMAP = {
+      pending:        {label:'قيد المراجعة', c:'#b45309', bg:'#fef3c7'},
+      approved:       {label:'مقبول',        c:'#15803d', bg:'#dcfce7'},
+      rejected:       {label:'مرفوض',        c:'#b91c1c', bg:'#fee2e2'},
+      needs_revision: {label:'يحتاج تعديل',  c:'#c2410c', bg:'#ffedd5'},
+    };
+    const entityShort = {
+      'مؤسسة فردية':'مؤسسة فردية','شركة ذات مسؤولية محدودة':'ذ.م.م','شركة مساهمة':'مساهمة','فرع شركة أجنبية':'فرع أجنبي'
+    };
+    const initials = (s) => (String(s||'?').trim()[0] || '?');
     const tbody = document.getElementById('reg-tbody');
     if (!tbody) return;
-    tbody.innerHTML = data.map(r => {
+    tbody.innerHTML = data.map((r, i) => {
       const docCount  = Object.keys(r.doc_paths || {}).length;
       const date      = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '—';
-      const statusMap = {pending: {label:'معلّق', cls:'#f59e0b'}, approved: {label:'مقبول', cls:'#16a34a'}, rejected: {label:'مرفوض', cls:'#dc2626'}, needs_revision: {label:'يحتاج تعديل', cls:'#d97706'}};
-      const st = statusMap[r.status] || {label: r.status, cls:'#64748b'};
-      return `<tr style="border-bottom:1px solid #f1f5f9">
-        <td style="padding:10px 12px;font-weight:600">${r.legal_name_ar || '—'}</td>
-        <td style="padding:10px 12px">${r.city || '—'}</td>
-        <td style="padding:10px 12px;direction:ltr">${r.phone || r.contact_mobile || '—'}</td>
-        <td style="padding:10px 12px">${date}</td>
-        <td style="padding:10px 12px;text-align:center">
-          <span style="background:#f0f4f8;padding:3px 8px;border-radius:12px;font-size:12px">${docCount} وثيقة</span>
+      const st        = STMAP[r.status] || {label: r.status, c:'#475569', bg:'#f1f5f9'};
+      const ent       = entityShort[r.entity_type] || r.entity_type || '';
+      const name      = escapeHtml(r.legal_name_ar || r.legal_name_en || '—');
+      const sub       = [escapeHtml(r.city||''), escapeHtml(ent)].filter(Boolean).join(' · ');
+      const phone     = escapeHtml(r.phone || r.contact_mobile || '—');
+      return `<tr style="border-top:1px solid var(--border,#eef1f6);transition:background .15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+        <td style="padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="flex-shrink:0;width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#0B1B36,#22457e);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px">${escapeHtml(initials(r.legal_name_ar||r.legal_name_en))}</div>
+            <div style="min-width:0">
+              <div style="font-weight:700;color:var(--ink,#1f2937);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">${name}</div>
+              ${sub?`<div style="font-size:11.5px;color:var(--muted,#64748b);margin-top:2px">${sub}</div>`:''}
+            </div>
+          </div>
         </td>
-        <td style="padding:10px 12px">
-          <span style="background:${st.cls}20;color:${st.cls};padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600">${st.label}</span>
+        <td style="padding:12px 14px;direction:ltr;text-align:right;color:var(--ink-2,#334155)">${phone}</td>
+        <td style="padding:12px 14px;color:var(--muted,#64748b);white-space:nowrap">${date}</td>
+        <td style="padding:12px 14px;text-align:center">
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#eef2f7;color:#475569;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600">${docCount}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M13 2v7h7"/></svg></span>
         </td>
-        <td style="padding:10px 12px;text-align:center">
-          <button onclick='openRegDetail(${JSON.stringify(JSON.stringify(r))})' style="background:var(--navy,#1a3a5c);color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit">تفاصيل</button>
+        <td style="padding:12px 14px">
+          <span style="display:inline-flex;align-items:center;gap:6px;background:${st.bg};color:${st.c};padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:${st.c}"></span>${st.label}</span>
+        </td>
+        <td style="padding:12px 14px;text-align:center">
+          <button onclick='openRegDetail(${JSON.stringify(JSON.stringify(r))})' style="background:var(--navy,#0B1B36);color:#fff;border:none;border-radius:9px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s" onmouseover="this.style.opacity=.85" onmouseout="this.style.opacity=1">مراجعة</button>
         </td>
       </tr>`;
     }).join('');
@@ -18542,6 +18572,35 @@ async function loadRegistrations() {
     if (loading) loading.textContent = 'حدث خطأ: ' + e.message;
     toast('error', 'فشل تحميل الطلبات: ' + e.message);
   }
+}
+
+// شريط ملخّص الحالات (بطاقات قابلة للنقر للتصفية) — استعلام خفيف للحالة فقط
+async function renderRegStats() {
+  const wrap = document.getElementById('reg-stats');
+  if (!wrap || !CLOUD?.client) return;
+  try {
+    const {data, error} = await CLOUD.client.from(REG_TABLE).select('status').limit(2000);
+    if (error) throw error;
+    const counts = {pending:0, needs_revision:0, approved:0, rejected:0};
+    (data||[]).forEach(r => { if (counts[r.status] != null) counts[r.status]++; });
+    const total = (data||[]).length;
+    const cur = document.getElementById('reg-filter')?.value || 'pending';
+    const defs = [
+      {k:'all',            label:'الكل',         c:'#0B1B36', bg:'#eef2f7', n:total},
+      {k:'pending',        label:'قيد المراجعة', c:'#b45309', bg:'#fef3c7', n:counts.pending},
+      {k:'needs_revision', label:'يحتاج تعديل',  c:'#c2410c', bg:'#ffedd5', n:counts.needs_revision},
+      {k:'approved',       label:'مقبول',        c:'#15803d', bg:'#dcfce7', n:counts.approved},
+      {k:'rejected',       label:'مرفوض',        c:'#b91c1c', bg:'#fee2e2', n:counts.rejected},
+    ];
+    wrap.style.display = 'flex';
+    wrap.innerHTML = defs.map(d => {
+      const active = d.k === cur;
+      return `<button onclick="document.getElementById('reg-filter').value='${d.k}';loadRegistrations();" style="cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:9px;border:1.5px solid ${active?d.c:'var(--border,#e6e8ee)'};background:${active?d.bg:'var(--surface,#fff)'};border-radius:12px;padding:10px 16px;transition:all .15s">
+        <span style="font-size:19px;font-weight:800;color:${d.c};line-height:1">${d.n}</span>
+        <span style="font-size:12.5px;font-weight:600;color:${active?d.c:'var(--muted,#64748b)'}">${d.label}</span>
+      </button>`;
+    }).join('');
+  } catch(e) { wrap.style.display = 'none'; }
 }
 
 let _regDetailCurrent = null; // holds the open registration for button handlers
@@ -18817,6 +18876,20 @@ function closeRegDetail() {
   document.getElementById('modal-reg-detail').style.display = 'none';
 }
 
+// إشعار بريد المورد بتغيّر حالة طلبه (إن كان البريد مُفعّلاً على الخادم) — fire & forget
+// يُرفق رمز جلسة الموظف ليتحقّق الخادم من الصلاحية قبل إرسال بريد القبول/الرفض/التعديل.
+async function notifyRegEmail(id, event) {
+  try {
+    let token = null;
+    try { const { data } = await CLOUD.client.auth.getSession(); token = data?.session?.access_token || null; } catch (_) {}
+    fetch('/api/notify', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {}),
+      body: JSON.stringify({ id, event })
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 async function approveRegistration(reg) {
   if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
@@ -18851,6 +18924,7 @@ async function approveRegistration(reg) {
     }).eq('id', reg.id);
     if (upErr) throw upErr;
 
+    notifyRegEmail(reg.id, 'approved');
     closeRegDetail();
     toast('success', `تمت الموافقة — تم إضافة "${reg.legal_name_ar}" كمورد معتمد`);
     loadRegistrations();
@@ -18877,6 +18951,7 @@ async function rejectRegistration(regId) {
       review_notes: note ? JSON.stringify({type:'rejection', general: note}) : null,
     }).eq('id', regId);
     if (error) throw error;
+    notifyRegEmail(regId, 'rejected');
     closeRegDetail();
     toast('info', 'تم رفض الطلب نهائياً');
     loadRegistrations();
@@ -18949,6 +19024,7 @@ async function returnForRevision(regId) {
       revision_token: revisionToken,
     }).eq('id', regId);
     if (error) throw error;
+    notifyRegEmail(regId, 'needs_revision');
     const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(regId)}&t=${revisionToken}`;
     closeRegDetail();
     toast('success', 'تم إرجاع الطلب للتعديل');
