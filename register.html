@@ -2150,6 +2150,63 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
   .tweaks-panel { width: calc(100vw - var(--sp-8)); inset-inline-start: var(--sp-4); }
 }
 
+/* ── Top bar: language toggle + track button ── */
+.reg-topbar { position: absolute; top: 14px; inset-inline-end: 16px; display: flex; gap: 8px; z-index: 5; }
+.topbar-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.12); color: #fff;
+  border: 1px solid rgba(255,255,255,0.28); border-radius: 999px;
+  padding: 7px 14px; font-size: 12.5px; font-weight: 600;
+  backdrop-filter: blur(6px); transition: background .2s, transform .2s;
+}
+.topbar-btn:hover { background: rgba(255,255,255,0.22); transform: translateY(-1px); }
+.lang-btn { font-family: var(--font-ltr); letter-spacing: .02em; }
+
+/* ── Application status tracker ── */
+.tracker-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(6,15,35,0.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.tracker-overlay.hidden { display: none; }
+.tracker-card {
+  position: relative; width: 100%; max-width: 520px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; box-shadow: 0 30px 80px rgba(6,15,35,0.4);
+  padding: 30px 28px; max-height: 90vh; overflow-y: auto;
+}
+.tracker-close {
+  position: absolute; top: 14px; inset-inline-end: 14px; width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; color: var(--muted);
+}
+.tracker-close svg { width: 18px; height: 18px; }
+.tracker-close:hover { color: var(--ink); }
+.tracker-head h2 { font-size: var(--text-lg); color: var(--ink); margin: 6px 0 8px; }
+.tracker-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--gold, #B8923D); text-transform: uppercase; }
+.tracker-head p { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 18px; }
+.tracker-body .field { display: block; margin-bottom: 14px; }
+.tracker-result:empty { display: none; }
+.tracker-result { margin-top: 20px; }
+.trk-status-card { border-radius: 14px; padding: 20px; border: 1px solid var(--border); }
+.trk-badge { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 14px; padding: 7px 14px; border-radius: 999px; margin-bottom: 12px; }
+.trk-badge.pending  { background: rgba(245,158,11,0.12);  color: #b45309; }
+.trk-badge.approved { background: rgba(22,163,74,0.12);   color: #15803d; }
+.trk-badge.rejected { background: rgba(220,38,38,0.12);   color: #b91c1c; }
+.trk-badge.revision { background: rgba(217,119,6,0.12);   color: #c2410c; }
+.trk-status-msg { font-size: 13.5px; color: var(--ink-2, var(--ink)); line-height: 1.8; }
+.trk-meta { margin-top: 12px; font-size: 12px; color: var(--muted); }
+.trk-error { color: #b91c1c; font-size: 13.5px; line-height: 1.7; text-align: center; padding: 8px; }
+
+/* ── English (LTR) mode overrides ── */
+html[lang="en"] { direction: ltr; }
+html[lang="en"] body, html[lang="en"] input, html[lang="en"] select, html[lang="en"] textarea { direction: ltr; }
+html[lang="en"] .field-label, html[lang="en"] .card-title, html[lang="en"] h1,
+html[lang="en"] h2, html[lang="en"] .success-title, html[lang="en"] .success-sub,
+html[lang="en"] .step-label, html[lang="en"] .tracker-head p, html[lang="en"] p { text-align: left; }
+html[lang="en"] .reg-topbar { inset-inline-end: auto; inset-inline-start: 16px; }
+html[lang="en"] body { font-family: var(--font-ltr), 'IBM Plex Sans Arabic', sans-serif; }
+
 </style>
 </head>
 <body>
@@ -2195,6 +2252,13 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
 
   <!-- Header -->
   <div class="reg-header">
+    <div class="reg-topbar">
+      <button type="button" class="topbar-btn" id="track-open" onclick="openTracker()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span data-i18n="تتبّع طلبي">تتبّع طلبي</span>
+      </button>
+      <button type="button" class="topbar-btn lang-btn" id="lang-toggle" onclick="toggleLang()">English</button>
+    </div>
     <div class="header-inner">
       <div class="header-logo-wrap">
         <img src="data:image/png;base64,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" style="display:block;width:72px;height:72px;object-fit:contain;border-radius:6px">
@@ -2700,10 +2764,42 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
       </div>
       <div class="success-title">تم إرسال طلبكم بنجاح</div>
-      <div class="success-sub">شكراً لتسجيلكم كمورد في مجموعة الذيابي. سيقوم فريق إدارة العمليات وسلاسل الإمداد بمراجعة طلبكم والتواصل معكم خلال 3-5 أيام عمل.</div>
-      <div class="success-sub" style="margin-top:8px">يرجى الاحتفاظ برقم الطلب للمتابعة.</div>
+      <div class="success-sub">شكراً لتسجيلكم كمورد في مجموعة الذيابي. تم استلام طلبكم وسيقوم فريق إدارة العمليات وسلاسل الإمداد بمراجعته والعمل عليه والتواصل معكم خلال 3-5 أيام عمل.</div>
+      <div class="success-sub" style="margin-top:8px">يمكنكم متابعة حالة الطلب في أي وقت عبر النظام باستخدام رقم الطلب. يرجى الاحتفاظ به.</div>
       <div class="success-id" id="success-reg-id"></div>
+      <button type="button" class="btn btn-primary" style="margin-top:18px" onclick="openTracker(regId)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align:-3px;margin-inline-end:6px"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span data-i18n="تتبّع حالة الطلب">تتبّع حالة الطلب</span>
+      </button>
     </div>
+  </div>
+</div>
+
+<!-- ════ APPLICATION STATUS TRACKER ════ -->
+<div id="tracker-overlay" class="tracker-overlay hidden">
+  <div class="tracker-card">
+    <button type="button" class="tracker-close" onclick="closeTracker()" aria-label="إغلاق">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="tracker-head">
+      <div class="tracker-eyebrow" data-i18n="بوابة الموردين">بوابة الموردين</div>
+      <h2 data-i18n="متابعة حالة طلب التسجيل">متابعة حالة طلب التسجيل</h2>
+      <p data-i18n="أدخل رقم الطلب وقيمة تحقّق (السجل التجاري أو الرقم الضريبي أو البريد الإلكتروني) لعرض حالة طلبك.">أدخل رقم الطلب وقيمة تحقّق (السجل التجاري أو الرقم الضريبي أو البريد الإلكتروني) لعرض حالة طلبك.</p>
+    </div>
+    <div class="tracker-body" id="tracker-form">
+      <label class="field">
+        <span class="field-label" data-i18n="رقم الطلب">رقم الطلب</span>
+        <input type="text" id="trk-id" placeholder="reg_..." dir="ltr">
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="السجل التجاري أو الرقم الضريبي أو البريد">السجل التجاري أو الرقم الضريبي أو البريد</span>
+        <input type="text" id="trk-verify" placeholder="1010xxxxxxx" dir="ltr">
+      </label>
+      <button type="button" class="btn btn-gold" id="trk-btn" style="width:100%;justify-content:center;margin-top:6px" onclick="checkStatus()">
+        <span data-i18n="عرض الحالة">عرض الحالة</span>
+      </button>
+    </div>
+    <div class="tracker-result" id="tracker-result"></div>
   </div>
 </div>
 
@@ -2717,7 +2813,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const REG_TABLE     = 'proc_supplier_registrations';
 const BUCKET        = 'supplier-docs';
-const AI_MODELS     = ['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.0-flash'];
+const AI_MODELS     = ['gemini-2.5-flash','gemini-2.5-flash-lite']; // النماذج المجانية المتاحة فعلاً (2.0/pro تُرجع 429 limit:0)
 // Local-hosted libs — no CDN dependency
 const PDFJS_CDN     = '/lib/pdf.min.js';
 const PDFJS_WORKER  = '/lib/pdf.worker.min.js';
@@ -3128,6 +3224,7 @@ function showMainForm() {
   document.getElementById('main-form').classList.remove('hidden');
   renderDocCards();
   addServiceRow();
+  initLang();   // طبّق اللغة المحفوظة (عربي افتراضياً) على النموذج بعد عرضه
 }
 
 /* ════════════════════════════════════
@@ -3299,36 +3396,49 @@ async function aiExtractImage(base64, mime, docType) {
 }
 
 function buildExtractionPrompt(docType) {
-  return `أنت مساعد تسجيل موردين في شركة سعودية. استخرج البيانات من وثيقة "${docType}" وأعد JSON فقط بدون أي نص آخر:
+  return `You are an expert OCR + data-extraction assistant for a Saudi supplier-registration system.
+The document type is "${docType}". The document may be in ARABIC, ENGLISH, or BILINGUAL (mixed). Saudi official documents (Commercial Registration, ZATCA/VAT, GOSI, Chamber) are frequently bilingual — read BOTH languages and cross-check.
+
+Extraction rules:
+- Read text in any orientation; ignore stamps, watermarks, QR codes, and decorative headers.
+- For names: capture the Arabic legal name in legal_name_ar and the English/Latin legal name in legal_name_en. If only one language exists, fill that one and leave the other null (do NOT translate/transliterate yourself).
+- Numbers: return digits in Western form (0-9). Convert Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to Western. Strip spaces/separators from ID/registration/VAT numbers.
+- Dates: ALWAYS output Gregorian in strict YYYY-MM-DD. If the document shows a Hijri (هجري) date, convert it to the matching Gregorian date. If both are shown, use the Gregorian one.
+- entity_type: normalize to one of exactly: "مؤسسة فردية", "شركة ذات مسؤولية محدودة", "شركة مساهمة", "فرع شركة أجنبية" — or null.
+- Use null (not empty string, not guesses) for anything not clearly present in THIS document.
+
+Return ONLY valid JSON, no markdown, no commentary:
 {
-  "legal_name_ar": "الاسم القانوني بالعربية أو null",
-  "legal_name_en": "الاسم بالإنجليزية أو null",
-  "entity_type": "نوع الكيان: مؤسسة فردية أو شركة ذات مسؤولية محدودة أو شركة مساهمة أو فرع شركة أجنبية أو null",
-  "commercial_reg": "رقم السجل التجاري أو null",
-  "cr_issue_date": "تاريخ الإصدار YYYY-MM-DD أو null",
-  "cr_expiry_date": "تاريخ الانتهاء YYYY-MM-DD أو null",
-  "established_date": "تاريخ التأسيس YYYY-MM-DD أو null",
-  "vat_number": "الرقم الضريبي VAT أو null",
-  "zakat_number": "رقم الزكاة أو null",
-  "gosi_number": "رقم التأمينات الاجتماعية أو null",
-  "chamber": "اسم الغرفة التجارية أو null",
-  "chamber_membership": "رقم عضوية الغرفة أو null",
-  "chamber_expiry": "تاريخ انتهاء العضوية YYYY-MM-DD أو null",
-  "city": "المدينة أو null",
-  "address": "العنوان الكامل أو null",
-  "phone": "رقم الهاتف أو null",
-  "employees_total": "إجمالي الموظفين كرقم أو null",
-  "employees_saudi": "عدد السعوديين كرقم أو null",
-  "paid_capital": "رأس المال المدفوع كرقم أو null"
-}
-استجب فقط بـ JSON صحيح.`;
+  "legal_name_ar": "string|null",
+  "legal_name_en": "string|null",
+  "entity_type": "string|null",
+  "commercial_reg": "string|null",
+  "cr_issue_date": "YYYY-MM-DD|null",
+  "cr_expiry_date": "YYYY-MM-DD|null",
+  "established_date": "YYYY-MM-DD|null",
+  "vat_number": "string|null",
+  "zakat_number": "string|null",
+  "gosi_number": "string|null",
+  "chamber": "string|null",
+  "chamber_membership": "string|null",
+  "chamber_expiry": "YYYY-MM-DD|null",
+  "city": "string|null",
+  "address": "string|null",
+  "postal_code": "string|null",
+  "phone": "string|null",
+  "email": "string|null",
+  "employees_total": "number|null",
+  "employees_saudi": "number|null",
+  "paid_capital": "number|null"
+}`;
 }
 
 async function geminiCall(parts) {
   // يمرّ عبر الوسيط الآمن /api/ai — المفتاح لا يغادر الخادم.
+  // thinkingBudget:0 يمنع نماذج 2.5 من استهلاك حدّ المخرجات في "التفكير" وإرجاع رد فارغ.
   const body = {
     contents: [{role: 'user', parts}],
-    generationConfig: {temperature: 0.1, maxOutputTokens: 2048}
+    generationConfig: {temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: {thinkingBudget: 0}}
   };
   let lastErr = null;
   for (const model of AI_MODELS) {
@@ -3741,11 +3851,12 @@ async function submitForm() {
     document.getElementById('main-form').style.display = 'none';
     const successEl = document.getElementById('success-screen');
     successEl.style.display = 'flex';
-    document.getElementById('success-reg-id').textContent = 'رقم الطلب: ' + regId;
+    document.getElementById('success-reg-id').innerHTML = '<span>' + t('رقم الطلب:') + '</span> ' + escapeHtml(regId);
     if (_resumeId) {
       const subTitle = successEl.querySelector('.success-sub');
-      if (subTitle) subTitle.textContent = 'تم تحديث طلبك بنجاح وإعادة إرساله للمراجعة. سيتواصل معك فريق المشتريات قريباً.';
+      if (subTitle) subTitle.textContent = t('تم تحديث طلبك بنجاح وإعادة إرساله للمراجعة. سيتواصل معك فريق المشتريات قريباً.');
     }
+    applyLang(LANG);   // ترجمة شاشة النجاح إن كانت اللغة إنجليزية
     window.scrollTo({top:0});
 
   } catch(e) {
@@ -3780,7 +3891,7 @@ function toast(type, msg, duration = 4000) {
   const wrap = document.getElementById('toast');
   const el   = document.createElement('div');
   el.className = 'toast-msg ' + type;
-  el.innerHTML = `${icons[type] || ''}<span>${escapeHtml(msg)}</span>`;
+  el.innerHTML = `${icons[type] || ''}<span>${escapeHtml(t(msg))}</span>`;
   wrap.appendChild(el);
   // Max 3 toasts
   while (wrap.children.length > 3) wrap.removeChild(wrap.firstChild);
@@ -3788,6 +3899,223 @@ function toast(type, msg, duration = 4000) {
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ══════════════════════════════════════════════════════
+   BILINGUAL ENGINE (Arabic ⇄ English)
+   قاموس ترجمة + مترجم DOM فوري. الافتراضي عربي؛ يمكن للمستخدم التبديل.
+   ══════════════════════════════════════════════════════ */
+const DICT = {
+  // Header / chrome
+  'مجموعة الذيابي · بوابة الموردين':'Al-Dhiabi Group · Supplier Portal',
+  'بوابة الموردين':'Supplier Portal',
+  'تسجيل المورّدين':'Supplier Registration',
+  'نُرحّب بانضمامكم إلى منظومة المورّدين المعتمدين لدى مجموعة الذيابي. تُعبَّأ الحقول التالية بدقّة لضمان سرعة المراجعة والاعتماد.':'Welcome to the approved-suppliers network of Al-Dhiabi Group. Please complete the following fields accurately to ensure fast review and approval.',
+  'تتبّع طلبي':'Track my application',
+  'تتبّع حالة الطلب':'Track application status',
+  // Step labels
+  'الوثائق':'Documents','بيانات المنشأة':'Company Info','التواصل':'Contact','النشاط':'Activity','الإقرار':'Declaration',
+  // Step 1 docs
+  'رفع الوثائق النظامية':'Upload Official Documents',
+  'يرجى رفع الوثائق الرسمية المطلوبة — الوثائق الإلزامية ضرورية لإكمال الطلب وستتم مراجعتها من قِبل الفريق المختص':'Please upload the required official documents — mandatory documents are needed to complete the application and will be reviewed by the dedicated team.',
+  'الوثائق الإلزامية':'Mandatory Documents','وثائق إضافية':'Additional Documents','(اختيارية — تُقوّي طلبك)':'(optional — strengthen your application)',
+  'السجل التجاري':'Commercial Registration','PDF أو صورة واضحة':'PDF or a clear image',
+  'شهادة الزكاة / VAT':'Zakat / VAT Certificate','شهادة ZATCA سارية':'Valid ZATCA certificate',
+  'شهادة التأمينات (GOSI)':'GOSI Certificate','الشهادة السارية':'Valid certificate',
+  'شهادة الغرفة التجارية':'Chamber of Commerce Certificate','عضوية سارية المفعول':'Active membership',
+  'وثيقة العنوان الوطني':'National Address Document','من البريد السعودي':'From Saudi Post',
+  'رخصة البلدية / الترخيص الصناعي':'Municipal License / Industrial License','إن وجد':'If available',
+  'شهادات الجودة (ISO 9001...)':'Quality Certificates (ISO 9001...)','اختياري':'Optional',
+  'شهادات السلامة والبيئة':'Safety & Environment Certificates',
+  'قائمة أهم العملاء والمشاريع':'Key Clients & Projects List','PDF أو Excel':'PDF or Excel',
+  'بروشور / ملف تعريفي':'Brochure / Company Profile',
+  '✓ مرفوع مسبقاً — انقر للاستبدال':'✓ Already uploaded — click to replace',
+  '⚠ يحتاج إعادة رفع':'⚠ Needs re-upload',
+  // Buttons / nav
+  'التالي: بيانات المنشأة':'Next: Company Info','التالي: بيانات التواصل →':'Next: Contact Info →',
+  'التالي: النشاط والخدمات →':'Next: Activity & Services →','التالي: الإقرار والإرسال →':'Next: Declaration & Submit →',
+  '← رجوع':'← Back','إرسال طلب التسجيل':'Submit Registration','إضافة فئة':'Add Category','حذف':'Delete',
+  // Step 2 — company
+  'القسم الأول: المعلومات العامة عن المنشأة':'Section 1: General Company Information',
+  'بيانات المنشأة':'Company Details',
+  'الاسم القانوني للمنشأة (عربي)':'Legal Company Name (Arabic)','الاسم القانوني للمنشأة (إنجليزي)':'Legal Company Name (English)',
+  'الاسم التجاري':'Trade Name','نوع الكيان القانوني':'Legal Entity Type','بلد المنشأ':'Country of Origin','دولة التسجيل':'Country of Registration',
+  'مؤسسة فردية':'Sole Proprietorship','شركة ذات مسؤولية محدودة':'Limited Liability Company (LLC)','شركة مساهمة':'Joint-Stock Company','فرع شركة أجنبية':'Foreign Company Branch',
+  'داخل المملكة (محلي)':'Inside the Kingdom (Local)','دولي':'International','إقليمي':'Regional',
+  'بيانات السجل التجاري':'Commercial Registration Details','رقم السجل التجاري':'Commercial Registration No.',
+  'تاريخ التأسيس (ميلادي)':'Establishment Date (Gregorian)','تاريخ التأسيس (هجري)':'Establishment Date (Hijri)',
+  'بيانات الغرفة التجارية':'Chamber of Commerce Details','اسم الغرفة التجارية':'Chamber Name','رقم العضوية':'Membership No.','تاريخ انتهاء العضوية':'Membership Expiry Date',
+  'الأرقام الضريبية والتأمينية':'Tax & Insurance Numbers','الرقم الضريبي (VAT)':'VAT Number','رقم الزكاة (ZATCA)':'Zakat Number (ZATCA)','رقم التأمينات (GOSI)':'GOSI Number',
+  'تاريخ الإصدار':'Issue Date','تاريخ الانتهاء':'Expiry Date',
+  'العنوان وبيانات التواصل':'Address & Contact Details','العنوان الوطني (المدينة - الحي - الشارع - رقم المبنى)':'National Address (City - District - Street - Building No.)',
+  'المدينة':'City','الرمز البريدي':'Postal Code','ص.ب':'P.O. Box','هاتف المنشأة':'Company Phone','فاكس':'Fax',
+  'البريد الإلكتروني العام للمنشأة':'Company General Email','الموقع الإلكتروني':'Website',
+  // Step 3 — contact
+  'القسم الثاني: بيانات التواصل والمخولين':'Section 2: Contact & Authorized Persons',
+  'يرجى تعبئة بيانات المسؤولين في منشأتكم':'Please fill in your company contacts',
+  'الشخص الرئيسي للتواصل':'Primary Contact Person','الاسم':'Name','المنصب الوظيفي':'Job Title','الجوال':'Mobile','الهاتف المباشر':'Direct Phone','البريد الإلكتروني':'Email',
+  'مسؤول المبيعات / تطوير الأعمال':'Sales / Business Development Officer','مسؤول المالية والحسابات':'Finance & Accounts Officer',
+  // Step 4 — activity
+  'القسم الثالث: نبذة عن النشاط ونطاق الأعمال':'Section 3: Activity Overview & Business Scope',
+  'وصف موجز لنشاط المنشأة الرئيسي':'Brief description of the main business activity',
+  'سنة بدء مزاولة النشاط':'Year Activity Started','رأس المال المدفوع (ريال)':'Paid-up Capital (SAR)',
+  'إجمالي عدد الموظفين':'Total Employees','عدد الموظفين السعوديين':'Saudi Employees','درجة تصنيف المقاولين':'Contractor Classification Grade',
+  'نطاق عمل المنشأة':'Business Scope','القطاعات التي تخدمها المنشأة':'Sectors Served',
+  'المقاولات':'Contracting','التوريدات العامة':'General Supplies','التشغيل والصيانة':'Operation & Maintenance','النقليات':'Transportation','الخدمات اللوجستية':'Logistics','التقنية والاتصالات':'Technology & Communications','الاستشارات':'Consulting','أخرى':'Other',
+  'القسم الرابع: فئات المنتجات والخدمات المقدمة':'Section 4: Product & Service Categories',
+  'يرجى إدراج المنتجات أو الخدمات التي يمكن لمنشأتكم توريدها لمجموعة الذيابي':'Please list the products or services your company can supply to Al-Dhiabi Group',
+  'الفئة الرئيسية':'Main Category','وصف تفصيلي للمواد/الخدمات':'Detailed Description of Goods/Services','وصف تفصيلي':'Detailed description','العلامات التجارية':'Brands','وصف النشاط':'Activity description',
+  // Step 5 — compliance
+  'القسم التاسع: إقرارات الامتثال والسلوك المهني':'Section 9: Compliance & Professional Conduct Declarations',
+  'يرجى قراءة الإقرارات التالية والموافقة عليها جميعاً':'Please read and agree to all of the following declarations',
+  'نُقرّ بأن جميع البيانات الواردة في هذا النموذج صحيحة وكاملة وتعكس واقع المنشأة في تاريخ تقديمها.':'We declare that all information provided in this form is accurate, complete, and reflects the actual status of the company at the date of submission.',
+  'نُقرّ بالالتزام بجميع الأنظمة واللوائح المعمول بها في المملكة العربية السعودية، بما في ذلك أنظمة مكافحة الرشوة وغسل الأموال وتمويل الإرهاب.':'We undertake to comply with all laws and regulations in force in the Kingdom of Saudi Arabia, including anti-bribery, anti-money-laundering, and counter-terrorism-financing regulations.',
+  'نُقرّ بعدم وجود أي تعارض مصالح مع موظفي أو ممثلي مجموعة الذيابي، وسنُفصح فوراً في حال وجود أي حالة تعارض مصالح حالية أو مستقبلية.':'We declare there is no conflict of interest with Al-Dhiabi Group employees or representatives, and we will immediately disclose any current or future conflict of interest.',
+  'نلتزم بتطبيق معايير السلامة والجودة والبيئة المعتمدة لدى مجموعة الذيابي في حال قبولنا كمورد معتمد.':'We commit to applying the safety, quality, and environmental standards adopted by Al-Dhiabi Group if approved as an accredited supplier.',
+  'نُقرّ بأن مجموعة الذيابي تحتفظ بالحق في قبول أو رفض طلب التسجيل أو تعليق التعامل دون إبداء الأسباب.':'We acknowledge that Al-Dhiabi Group reserves the right to accept or reject the registration request, or suspend dealings, without stating reasons.',
+  'بيانات ممثل المنشأة المفوض بالتوقيع':'Authorized Signatory Details','رقم الهوية / الإقامة':'ID / Iqama Number',
+  // Success
+  'تم إرسال طلبكم بنجاح':'Your application was submitted successfully',
+  'شكراً لتسجيلكم كمورد في مجموعة الذيابي. تم استلام طلبكم وسيقوم فريق إدارة العمليات وسلاسل الإمداد بمراجعته والعمل عليه والتواصل معكم خلال 3-5 أيام عمل.':'Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received; the Operations & Supply Chain team will review and process it and contact you within 3–5 business days.',
+  'يمكنكم متابعة حالة الطلب في أي وقت عبر النظام باستخدام رقم الطلب. يرجى الاحتفاظ به.':'You can track your application status anytime through the system using your application number. Please keep it.',
+  'رقم الطلب:':'Application No.:',
+  // Tracker
+  'متابعة حالة طلب التسجيل':'Track Registration Status',
+  'أدخل رقم الطلب وقيمة تحقّق (السجل التجاري أو الرقم الضريبي أو البريد الإلكتروني) لعرض حالة طلبك.':'Enter your application number and a verification value (Commercial Registration, VAT number, or email) to view your status.',
+  'رقم الطلب':'Application Number','السجل التجاري أو الرقم الضريبي أو البريد':'Commercial Reg., VAT number, or email','عرض الحالة':'Show Status',
+  'جارٍ التحقق...':'Verifying...','لم نتمكن من العثور على طلب مطابق. تحقّق من رقم الطلب وقيمة التحقق.':'We could not find a matching application. Please check your application number and verification value.',
+  'تعذّر التحقق من الحالة. حاول لاحقاً.':'Could not verify status. Please try again later.','يرجى إدخال رقم الطلب وقيمة التحقق':'Please enter the application number and verification value',
+  'قيد المراجعة':'Under Review','تم القبول':'Approved','تم الرفض':'Rejected','يحتاج تعديل':'Needs Revision',
+  'طلبك قيد المراجعة حالياً لدى فريق المشتريات. سنبلغك عند اتخاذ القرار.':'Your application is currently under review by the procurement team. You will be notified once a decision is made.',
+  'تهانينا! تم قبول طلبكم واعتمادكم كمورد لدى مجموعة الذيابي. سيتواصل معكم الفريق بالخطوات التالية.':'Congratulations! Your application has been approved and you are now an accredited supplier of Al-Dhiabi Group. The team will contact you with next steps.',
+  'نعتذر، لم يُقبل طلبكم في الوقت الحالي. للاستفسار يرجى التواصل مع إدارة المشتريات.':'We are sorry, your application was not approved at this time. For inquiries, please contact the procurement department.',
+  'يحتاج طلبكم إلى تعديل أو استكمال بعض البيانات. استخدم الزر أدناه لفتح الطلب وتحديثه ثم إعادة إرساله.':'Your application requires editing or completion of some data. Use the button below to open, update, and resubmit it.',
+  'فتح الطلب وتعديله':'Open & edit application','ملاحظة الفريق:':'Team note:','تاريخ التقديم:':'Submitted:','تاريخ المراجعة:':'Reviewed:',
+  // Processing / toasts
+  'جارٍ المعالجة...':'Processing...','جارٍ الاتصال...':'Connecting...','جارٍ قراءة وثائقك...':'Reading your documents...','جارٍ معالجة الوثائق...':'Processing documents...','جارٍ حفظ البيانات...':'Saving data...','جارٍ تحميل بيانات طلبك...':'Loading your application data...',
+  'يرجى الانتظار — نحلل المستندات لتعبئة النموذج تلقائياً':'Please wait — we are analyzing the documents to auto-fill the form',
+  'تم تحديث طلبك بنجاح وإعادة إرساله للمراجعة. سيتواصل معك فريق المشتريات قريباً.':'Your application has been updated and resubmitted for review. The procurement team will contact you soon.',
+  'تعذّر استخراج البيانات من الوثائق تلقائياً — يرجى تعبئة بيانات المنشأة يدوياً.':'Could not auto-extract data from documents — please fill in the company details manually.',
+  'القراءة الذكية للوثائق غير مفعّلة حالياً (لم يُضبط مفتاح الذكاء على الخادم GEMINI_API_KEY). يرجى تعبئة البيانات يدوياً.':'Smart document reading is currently disabled (server GEMINI_API_KEY not set). Please fill in the data manually.',
+  'حدث خطأ أثناء الإرسال:':'An error occurred during submission:','فشل قراءة الملف':'Failed to read file','فشل استدعاء الذكاء الاصطناعي':'AI request failed','تعذّر الاتصال':'Connection failed',
+  // Validation
+  'يرجى رفع الوثائق الإلزامية:':'Please upload the mandatory documents:','يرجى رفع الوثائق المطلوب تعديلها:':'Please upload the documents requested for revision:',
+  'يرجى إدخال الاسم القانوني للمنشأة':'Please enter the legal company name','يرجى تحديد نوع الكيان القانوني':'Please select the legal entity type','يرجى إدخال المدينة':'Please enter the city',
+  'يرجى إدخال هاتف المنشأة':'Please enter the company phone','يرجى إدخال البريد الإلكتروني للمنشأة':'Please enter the company email',
+  'يرجى إدخال اسم الشخص الرئيسي للتواصل':'Please enter the primary contact name','يرجى إدخال رقم الجوال للشخص الرئيسي':'Please enter the primary contact mobile',
+  'يرجى كتابة وصف موجز لنشاط المنشأة':'Please write a brief description of the business activity','يرجى إضافة فئة منتجات أو خدمات واحدة على الأقل':'Please add at least one product or service category',
+  'يرجى الموافقة على جميع الإقرارات':'Please agree to all declarations','يرجى إدخال اسم ممثل المنشأة المفوض بالتوقيع':'Please enter the authorized signatory name',
+  'يرجى إدخال منصب ممثل المنشأة':'Please enter the signatory job title','يرجى إدخال رقم هوية / إقامة ممثل المنشأة':'Please enter the signatory ID / Iqama number',
+  'ملخص الطلب':'Application Summary','الوثائق المرفوعة':'Uploaded Documents'
+};
+let LANG = 'ar';
+const _origText = new WeakMap();
+function t(s){ if(LANG==='en' && s!=null){ const k=String(s).trim(); if(DICT[k]) return DICT[k]; } return s; }
+function _trTextNodes(root, toEN){
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes=[]; while(w.nextNode()) nodes.push(w.currentNode);
+  for(const n of nodes){
+    if(!n.nodeValue || !n.nodeValue.trim()) continue;
+    const par=n.parentNode; if(par && (par.nodeName==='SCRIPT'||par.nodeName==='STYLE')) continue;
+    if(!_origText.has(n)) _origText.set(n, n.nodeValue);
+    const orig=_origText.get(n); const key=orig.trim();
+    if(toEN){ const en=DICT[key]; if(en!=null) n.nodeValue = orig.replace(key, en); }
+    else n.nodeValue = orig;
+  }
+}
+function _trAttrs(root, toEN){
+  const els = root.querySelectorAll ? root.querySelectorAll('[placeholder]') : [];
+  els.forEach(el=>{
+    if(el.dataset.arPh===undefined) el.dataset.arPh = el.getAttribute('placeholder')||'';
+    const key=(el.dataset.arPh||'').trim();
+    el.setAttribute('placeholder', (toEN && DICT[key]) ? DICT[key] : el.dataset.arPh);
+  });
+}
+function applyLang(lang){
+  LANG = (lang==='en') ? 'en' : 'ar';
+  try{ localStorage.setItem('reg_lang', LANG); }catch(e){}
+  const html=document.documentElement;
+  html.setAttribute('lang', LANG);
+  html.setAttribute('dir', LANG==='en' ? 'ltr' : 'rtl');
+  const toEN = LANG==='en';
+  ['main-form','success-screen','tracker-overlay','setup-screen'].forEach(id=>{
+    const el=document.getElementById(id); if(el){ _trTextNodes(el,toEN); _trAttrs(el,toEN); }
+  });
+  const lb=document.getElementById('lang-toggle'); if(lb) lb.textContent = toEN ? 'العربية' : 'English';
+}
+function toggleLang(){ applyLang(LANG==='en' ? 'ar' : 'en'); }
+// Auto-translate dynamically inserted content while in English mode
+const _langMO = new MutationObserver(muts=>{
+  if(LANG!=='en') return;
+  for(const m of muts){ m.addedNodes && m.addedNodes.forEach(node=>{
+    if(node.nodeType===1){ _trTextNodes(node,true); _trAttrs(node,true); }
+    else if(node.nodeType===3 && node.nodeValue && node.nodeValue.trim()){
+      if(!_origText.has(node)) _origText.set(node,node.nodeValue);
+      const en=DICT[node.nodeValue.trim()]; if(en!=null) node.nodeValue=_origText.get(node).replace(node.nodeValue.trim(),en);
+    }
+  }); }
+});
+try{ _langMO.observe(document.body,{childList:true,subtree:true}); }catch(e){}
+function initLang(){ let saved='ar'; try{ saved=localStorage.getItem('reg_lang')||'ar'; }catch(e){} applyLang(saved); }
+
+/* ══════════════════════════════════════════════════════
+   APPLICATION STATUS TRACKER (supplier self-service)
+   ══════════════════════════════════════════════════════ */
+function openTracker(prefillId){
+  const ov=document.getElementById('tracker-overlay');
+  document.getElementById('tracker-result').innerHTML='';
+  if(prefillId) document.getElementById('trk-id').value = prefillId;
+  ov.classList.remove('hidden');
+  applyLang(LANG);
+}
+function closeTracker(){ document.getElementById('tracker-overlay').classList.add('hidden'); }
+function _trkFmtDate(v){ if(!v) return '—'; try{ return new Date(v).toLocaleDateString(LANG==='en'?'en-GB':'ar-SA'); }catch(e){ return String(v).slice(0,10); } }
+function renderStatus(d){
+  const MAP={
+    pending:       {cls:'pending', label:'قيد المراجعة', icon:'⏳', msg:'طلبك قيد المراجعة حالياً لدى فريق المشتريات. سنبلغك عند اتخاذ القرار.'},
+    approved:      {cls:'approved', label:'تم القبول',   icon:'✓',  msg:'تهانينا! تم قبول طلبكم واعتمادكم كمورد لدى مجموعة الذيابي. سيتواصل معكم الفريق بالخطوات التالية.'},
+    rejected:      {cls:'rejected', label:'تم الرفض',    icon:'✕',  msg:'نعتذر، لم يُقبل طلبكم في الوقت الحالي. للاستفسار يرجى التواصل مع إدارة المشتريات.'},
+    needs_revision:{cls:'revision', label:'يحتاج تعديل', icon:'✎',  msg:'يحتاج طلبكم إلى تعديل أو استكمال بعض البيانات. استخدم الزر أدناه لفتح الطلب وتحديثه ثم إعادة إرساله.'}
+  };
+  const s = MAP[d.status] || MAP.pending;
+  const name = (LANG==='en' ? (d.legal_name_en||d.legal_name_ar) : (d.legal_name_ar||d.legal_name_en)) || '';
+  let adminMsg='';
+  if(d.message){ let mm=d.message; if(typeof mm==='object') mm=JSON.stringify(mm); mm=String(mm).trim();
+    if(mm && mm!=='null') adminMsg=`<div class="trk-meta"><b>${t('ملاحظة الفريق:')}</b> ${escapeHtml(mm)}</div>`; }
+  let revBtn='';
+  if(d.status==='needs_revision' && d.revision_token){
+    const url='register.html?resume='+encodeURIComponent(document.getElementById('trk-id').value.trim())+'&t='+encodeURIComponent(d.revision_token);
+    revBtn=`<a href="${escapeHtml(url)}" class="btn btn-gold" style="margin-top:14px;display:inline-flex">${t('فتح الطلب وتعديله')}</a>`;
+  }
+  return `<div class="trk-status-card">
+    <div class="trk-badge ${s.cls}"><span>${s.icon}</span><span>${t(s.label)}</span></div>
+    ${name?`<div style="font-weight:700;margin-bottom:8px;color:var(--ink)">${escapeHtml(name)}</div>`:''}
+    <div class="trk-status-msg">${t(s.msg)}</div>
+    ${adminMsg}
+    <div class="trk-meta">${t('تاريخ التقديم:')} ${_trkFmtDate(d.submitted_at)}${d.reviewed_at?` · ${t('تاريخ المراجعة:')} ${_trkFmtDate(d.reviewed_at)}`:''}</div>
+    ${revBtn}
+  </div>`;
+}
+async function checkStatus(){
+  const id=document.getElementById('trk-id').value.trim();
+  const verify=document.getElementById('trk-verify').value.trim();
+  const res=document.getElementById('tracker-result');
+  if(!id || !verify){ toast('warn','يرجى إدخال رقم الطلب وقيمة التحقق'); return; }
+  if(!SB){ toast('error','تعذّر الاتصال'); return; }
+  const btn=document.getElementById('trk-btn'); btn.disabled=true;
+  res.innerHTML=`<div class="trk-error" style="color:var(--muted)">${t('جارٍ التحقق...')}</div>`;
+  try{
+    const {data,error}=await SB.rpc('get_registration_status',{p_id:id,p_verify:verify});
+    if(error) throw error;
+    if(!data || data.error==='verify_failed' || !data.found){
+      res.innerHTML=`<div class="trk-error">${t('لم نتمكن من العثور على طلب مطابق. تحقّق من رقم الطلب وقيمة التحقق.')}</div>`;
+      return;
+    }
+    res.innerHTML=renderStatus(data);
+  }catch(e){
+    console.error('status check', e);
+    res.innerHTML=`<div class="trk-error">${t('تعذّر التحقق من الحالة. حاول لاحقاً.')}</div>`;
+  }finally{ btn.disabled=false; }
+}
 
 /* ════════ START ════════ */
 init();
