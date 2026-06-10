@@ -52,6 +52,11 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS "Enable insert for all" ON %I', t);
     EXECUTE format('DROP POLICY IF EXISTS "Enable update for all" ON %I', t);
     EXECUTE format('DROP POLICY IF EXISTS "Enable delete for all" ON %I', t);
+    -- حذف الأسماء الجديدة أيضاً ليكون السكربت قابلاً لإعادة التشغيل (idempotent)
+    EXECUTE format('DROP POLICY IF EXISTS "auth_read"   ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_insert" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_update" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_delete" ON %I', t);
     EXECUTE format('CREATE POLICY "auth_read"   ON %I FOR SELECT TO authenticated USING (true)', t);
     EXECUTE format('CREATE POLICY "auth_insert" ON %I FOR INSERT TO authenticated WITH CHECK (true)', t);
     EXECUTE format('CREATE POLICY "auth_update" ON %I FOR UPDATE TO authenticated USING (true) WITH CHECK (true)', t);
@@ -65,6 +70,7 @@ DROP POLICY IF EXISTS "Enable read for all"   ON proc_users;
 DROP POLICY IF EXISTS "Enable insert for all" ON proc_users;
 DROP POLICY IF EXISTS "Enable update for all" ON proc_users;
 DROP POLICY IF EXISTS "Enable delete for all" ON proc_users;
+DROP POLICY IF EXISTS "auth_all"              ON proc_users;
 CREATE POLICY "auth_all" ON proc_users FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 3) الإعدادات — للمصادَق عليهم فقط (لم تعد تحوي أسراراً بعد المرحلة 0)
@@ -73,12 +79,15 @@ DROP POLICY IF EXISTS "Enable read for all"   ON proc_settings;
 DROP POLICY IF EXISTS "Enable insert for all" ON proc_settings;
 DROP POLICY IF EXISTS "Enable update for all" ON proc_settings;
 DROP POLICY IF EXISTS "Enable delete for all" ON proc_settings;
+DROP POLICY IF EXISTS "auth_all"              ON proc_settings;
 CREATE POLICY "auth_all" ON proc_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 4) سجل التدقيق — قراءة/إضافة للمصادَق عليهم، لا تعديل ولا حذف
 ALTER TABLE proc_audit_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable read for all"   ON proc_audit_log;
 DROP POLICY IF EXISTS "Enable insert for all" ON proc_audit_log;
+DROP POLICY IF EXISTS "auth_read"             ON proc_audit_log;
+DROP POLICY IF EXISTS "auth_insert"           ON proc_audit_log;
 CREATE POLICY "auth_read"   ON proc_audit_log FOR SELECT TO authenticated USING (true);
 CREATE POLICY "auth_insert" ON proc_audit_log FOR INSERT TO authenticated WITH CHECK (true);
 
@@ -86,6 +95,8 @@ CREATE POLICY "auth_insert" ON proc_audit_log FOR INSERT TO authenticated WITH C
 ALTER TABLE proc_ai_usage ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable read for all"   ON proc_ai_usage;
 DROP POLICY IF EXISTS "Enable insert for all" ON proc_ai_usage;
+DROP POLICY IF EXISTS "auth_read"             ON proc_ai_usage;
+DROP POLICY IF EXISTS "auth_insert"           ON proc_ai_usage;
 CREATE POLICY "auth_read"   ON proc_ai_usage FOR SELECT TO authenticated USING (true);
 CREATE POLICY "auth_insert" ON proc_ai_usage FOR INSERT TO authenticated WITH CHECK (true);
 
@@ -97,6 +108,9 @@ DROP POLICY IF EXISTS "Enable read for all"    ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "Enable update for all"  ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "Enable read for auth"   ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "Enable update for auth" ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "public_insert"          ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "auth_read"              ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "auth_update"            ON proc_supplier_registrations;
 -- إرسال جديد للجميع (المورد المجهول)
 CREATE POLICY "public_insert" ON proc_supplier_registrations FOR INSERT TO anon, authenticated WITH CHECK (true);
 -- القراءة والتعديل للمصادَق عليهم فقط (فريق المشتريات)
