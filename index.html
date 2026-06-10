@@ -3684,9 +3684,9 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
       </div>
       <div class="modal-title-block">
-        <div class="modal-eyebrow">ترحيل من الإكسل</div>
+        <div class="modal-eyebrow">ترحيل ذكي من الإكسل</div>
         <div class="modal-title">استيراد أوامر الشراء</div>
-        <div class="modal-subtitle">انقل سجلّك الكامل مرة واحدة — مع معاينة وتحقّق وإزالة تكرار</div>
+        <div class="modal-subtitle">ارفع سجلّك الكامل، أو ارفع نماذج أوامر الشراء كما هي — يقرأ النظام البنود والأسعار تلقائياً</div>
       </div>
       <button class="modal-close" data-close-modal aria-label="إغلاق">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -3694,10 +3694,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
     </div>
     <div class="modal-body">
       <label class="po-dropzone" id="po-dropzone">
-        <input type="file" id="po-import-file" accept=".xlsx,.xls,.csv" hidden>
+        <input type="file" id="po-import-file" accept=".xlsx,.xls,.csv" multiple hidden>
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <div style="font-weight:700;margin-top:8px">اختر ملف الإكسل أو أفلته هنا</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">ورقة «سجل أوامر الشراء» — يدعم .xlsx و .csv</div>
+        <div style="font-weight:700;margin-top:8px">اختر ملفات الإكسل أو أفلتها هنا</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">سجل «أوامر الشراء» أو نماذج الأوامر المفردة — يدعم رفع عدة ملفات دفعة واحدة (.xlsx ‏.csv)</div>
       </label>
       <div id="po-import-preview"></div>
     </div>
@@ -12571,59 +12571,175 @@ const PO_IMPORT_MAP={
   'الحالة':'status','سبب التأخير':'delay_reason','ملاحظات':'notes','فئة المشتريات':'category',
 };
 let _poImportRows=null;
-async function poHandleImportFile(file){
-  if(!file) return;
+
+/* ──────────────────────────────────────────────────────────────
+   قارئ نموذج أمر الشراء المفرد (المستند الرسمي المعمول به)
+   يقرأ التخطيط ذا التسميات: التسمية في عمود ثم القيمة في العمود المجاور،
+   وجدول الأصناف تحت رأس «م | الصنف | الوحدة | الكمية | السعر الإفرادي».
+   ────────────────────────────────────────────────────────────── */
+const PO_TPL_LEFT={  // التسمية في العمود A والقيمة في B
+  'رقم أمر الشراء':'po_number','مرجع عرض السعر':'quote_ref','الجهة الطالبة':'requester',
+  'مسؤول المشتريات':'officer','مدة التسليم':'delivery_period'
+};
+const PO_TPL_RIGHT={ // التسمية في العمود D والقيمة في E
+  'تاريخ الإصدار':'issue_date','المشروع/العقد':'project','مركز التكلفة':'cost_center',
+  'طريقة الدفع':'payment_method','موقع التسليم':'delivery_loc','اسم المورد':'supplier',
+  'العنوان':'sup_address','الهاتف':'sup_phone','البريد':'sup_email','السجل التجاري':'sup_cr',
+  'الرقم الضريبي':'sup_vat','اسم جهة الاتصال':'sup_contact','الجوال':'sup_mobile'
+};
+function poTplNorm(s){ return String(s==null?'':s).replace(/\s*\/\s*/g,'/').replace(/\s+/g,' ').trim(); }
+function poTplClean(v){
+  if(v==null) return '';
+  if(v instanceof Date) return v;
+  const s=String(v).trim();
+  if(/^[_\-—\s]+$/.test(s)) return ''; // عناصر نائبة مثل ____ أو —
+  return s;
+}
+function poFindRegisterHeader(aoa){
+  for(let i=0;i<aoa.length;i++){ if((aoa[i]||[]).some(c=>poTplNorm(c)==='رقم الأمر')) return i; }
+  return -1;
+}
+function poDetectItemsHeader(aoa){
+  for(let r=0;r<aoa.length;r++){
+    const row=aoa[r]||[];
+    if(poTplNorm(row[0])==='م' && poTplNorm(row[1])==='الصنف') return r;
+  }
+  return -1;
+}
+/* يحوّل صفوف ورقة نموذج مفرد (AOA) إلى كائن PO واحد، أو null إن لم ينجح */
+function poParseTemplateAOA(aoa,fileTag,warnings){
+  const f={};
+  for(let r=0;r<aoa.length;r++){
+    const row=aoa[r]||[];
+    const lk=PO_TPL_LEFT[poTplNorm(row[0])];  if(lk && f[lk]==null){ const cv=poTplClean(row[1]); if(cv!=='') f[lk]=cv; }
+    const rk=PO_TPL_RIGHT[poTplNorm(row[3])]; if(rk && f[rk]==null){ const cv=poTplClean(row[4]); if(cv!=='') f[rk]=cv; }
+  }
+  if(!f.po_number){ if(warnings) warnings.push(`${fileTag}: لم يُعثر على «رقم أمر الشراء» — تم تخطّي الملف`); return null; }
+  // الأصناف
+  const hr=poDetectItemsHeader(aoa);
+  const items=[];
+  if(hr>=0){
+    for(let r=hr+1;r<aoa.length;r++){
+      const row=aoa[r]||[];
+      const a=poTplNorm(row[0]);
+      if(a.includes('الإجمالي')||a.includes('الدفعة')||a.includes('اعتماد')) break; // بداية قسم الإجماليات
+      const desc=poTplClean(row[1]); if(!desc) continue;
+      items.push({
+        desc, unit:String(poTplClean(row[2])||''),
+        qty:Number(row[3])||1,
+        price:Number(String(row[4]).replace(/[^0-9.\-]/g,''))||0
+      });
+    }
+  }
+  // القطاع من «الجهة الطالبة»
+  const sector = f.requester ? (PO_ENUMS.sector.find(s=>String(f.requester).includes(s))||'') : '';
+  // الملاحظات: تُجمَع الحقول التي لا مكان مخصّص لها في النموذج
+  const noteParts=[];
+  if(f.quote_ref) noteParts.push('مرجع العرض: '+f.quote_ref);
+  if(f.requester) noteParts.push('الجهة الطالبة: '+f.requester);
+  if(f.cost_center) noteParts.push('مركز التكلفة: '+f.cost_center);
+  if(f.delivery_period) noteParts.push('مدة التسليم: '+f.delivery_period);
+  if(f.delivery_loc) noteParts.push('موقع التسليم: '+f.delivery_loc);
+  const supBits=[];
+  if(f.sup_address) supBits.push('العنوان: '+f.sup_address);
+  if(f.sup_phone) supBits.push('هاتف: '+f.sup_phone);
+  if(f.sup_email) supBits.push('بريد: '+f.sup_email);
+  if(f.sup_cr) supBits.push('سجل تجاري: '+f.sup_cr);
+  if(f.sup_vat) supBits.push('رقم ضريبي: '+f.sup_vat);
+  if(f.sup_contact) supBits.push('جهة الاتصال: '+f.sup_contact);
+  if(f.sup_mobile) supBits.push('جوال: '+f.sup_mobile);
+  if(supBits.length) noteParts.push('بيانات المورد — '+supBits.join('، '));
+  const po={
+    po_number:String(f.po_number).trim(), issue_date:poToISO(f.issue_date)||'', sector,
+    project:String(f.project||''), supplier:String(f.supplier||''), subtotal:0,
+    officer:String(f.officer||''), payment_method:String(f.payment_method||'تحويل بنكي'), priority:'متوسط',
+    expected_delivery:'', actual_delivery:'', status:'قيد المراجعة', delay_reason:'',
+    category:'', notes:noteParts.join(' · '), items, status_history:[],
+    created_by:(STATE.currentUser?STATE.currentUser.username:null), created_at:new Date().toISOString()
+  };
+  if(!items.length && warnings) warnings.push(`${fileTag}: لم تُقرأ بنود — تحقّق من جدول الأصناف في الملف`);
+  if(f.officer && !PO_ENUMS.officer.includes(po.officer) && warnings) warnings.push(`${fileTag}: مسؤول مشتريات غير مُعرّف: «${po.officer}» (محفوظ كما هو)`);
+  recomputePOderived(po);
+  return po;
+}
+/* يقرأ ورقة «سجل أوامر الشراء» (صف لكل أمر، بالأعمدة) ويضيف النتائج إلى out */
+function poParseRegisterSheet(sheet,fileTag,warnings,seen,out){
+  let raw=XLSX.utils.sheet_to_json(sheet,{defval:''});
+  if(raw.length && !('رقم الأمر' in raw[0])){
+    const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
+    const hi=aoa.findIndex(r=>r.includes('رقم الأمر'));
+    if(hi>=0){ const headers=aoa[hi]; raw=aoa.slice(hi+1).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]);return o;}); }
+  }
+  const tagPfx = fileTag ? fileTag+' ' : '';
+  raw.forEach((r,idx)=>{
+    const po={items:[],status_history:[]};
+    let hasNum=false;
+    for(const[k,v] of Object.entries(r)){
+      const key=PO_IMPORT_MAP[String(k).trim()];
+      if(!key) continue;
+      let val=v;
+      if(['issue_date','expected_delivery','actual_delivery'].includes(key)) val=poToISO(v);
+      else if(key==='subtotal') val=Number(String(v).replace(/[^0-9.\-]/g,''))||0;
+      else val=String(v==null?'':v).trim();
+      po[key]=val;
+      if(key==='po_number'&&val) hasNum=true;
+    }
+    if(!hasNum) return;
+    if(!poValidNumber(po.po_number)){ warnings.push(`${tagPfx}صف ${idx+2}: رقم أمر يحتوي رموزاً غير مسموحة — تم تخطّيه: ${po.po_number}`); return; }
+    if(seen.has(po.po_number)){ warnings.push(`${tagPfx}صف ${idx+2}: رقم مكرر ${po.po_number} (سيُحدَّث)`); }
+    seen.add(po.po_number);
+    [['sector','sector'],['status','status'],['priority','priority'],['payment_method','payment_method'],['category','category'],['officer','officer'],['delay_reason','delay_reason']].forEach(([fld,e])=>{
+      if(po[fld] && !PO_ENUMS[e].includes(po[fld])) warnings.push(`${tagPfx}صف ${idx+2}: قيمة غير معيارية في ${fld}: «${po[fld]}» (محفوظة)`);
+    });
+    if(!po.status) po.status='قيد المراجعة';
+    po.created_at=po.created_at||new Date().toISOString();
+    recomputePOderived(po);
+    out.push(po);
+  });
+}
+async function poHandleImportFile(files){
+  if(!files) return;
   if(!requirePermission('can_import','الاستيراد')) return;
+  const list=(files.length!=null)?Array.from(files):[files];
+  if(!list.length) return;
   const prev=document.getElementById('po-import-preview');
   prev.innerHTML='<div style="padding:14px;color:var(--muted)">جارٍ القراءة...</div>';
   try{
     await loadLib(SHEETJS_CDNS,()=>typeof XLSX!=='undefined');
-    const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array',cellDates:true});
-    const sheet=wb.Sheets['سجل أوامر الشراء']||wb.Sheets[wb.SheetNames.find(n=>/أوامر|سجل/.test(n))||wb.SheetNames[0]];
-    let raw=XLSX.utils.sheet_to_json(sheet,{defval:''}); // raw=true (افتراضي) مع cellDates → خلايا التاريخ ككائنات Date
-    // العثور على صف العناوين الحقيقي إن كانت هناك أسطر عنوان علوية
-    if(raw.length && !('رقم الأمر' in raw[0])){
-      const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
-      const hi=aoa.findIndex(r=>r.includes('رقم الأمر'));
-      if(hi>=0){ const headers=aoa[hi]; raw=aoa.slice(hi+1).map(r=>{const o={};headers.forEach((h,i)=>o[h]=r[i]);return o;}); }
-    }
     const warnings=[]; const seen=new Set(); const out=[];
-    raw.forEach((r,idx)=>{
-      const po={items:[],status_history:[]};
-      let hasNum=false;
-      for(const[k,v] of Object.entries(r)){
-        const key=PO_IMPORT_MAP[String(k).trim()];
-        if(!key) continue;
-        let val=v;
-        if(['issue_date','expected_delivery','actual_delivery'].includes(key)) val=poToISO(v);
-        else if(key==='subtotal') val=Number(String(v).replace(/[^0-9.\-]/g,''))||0;
-        else val=String(v==null?'':v).trim();
-        po[key]=val;
-        if(key==='po_number'&&val) hasNum=true;
+    for(const file of list){
+      const tag=list.length>1?`«${file.name}»`:'';
+      let wb;
+      try{ const buf=await file.arrayBuffer(); wb=XLSX.read(buf,{type:'array',cellDates:true}); }
+      catch(e){ warnings.push(`${tag||file.name}: تعذّرت قراءة الملف (${e.message})`); continue; }
+      // (1) سجل أوامر الشراء: ورقة فيها صف عناوين يحوي «رقم الأمر»
+      const regName=wb.SheetNames.find(n=>poFindRegisterHeader(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:''}))>=0);
+      if(regName){ poParseRegisterSheet(wb.Sheets[regName],tag,warnings,seen,out); continue; }
+      // (2) نموذج أمر شراء مفرد: ورقة فيها رأس جدول «م | الصنف»
+      const tplName=wb.SheetNames.find(n=>poDetectItemsHeader(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:''}))>=0);
+      if(tplName){
+        const aoa=XLSX.utils.sheet_to_json(wb.Sheets[tplName],{header:1,defval:''});
+        const po=poParseTemplateAOA(aoa,tag||file.name,warnings);
+        if(po){
+          if(!poValidNumber(po.po_number)){ warnings.push(`${tag||file.name}: رقم أمر غير صالح ${po.po_number} — تخطّي`); }
+          else { if(seen.has(po.po_number)) warnings.push(`${tag||file.name}: رقم مكرر ${po.po_number} (سيُحدَّث)`); seen.add(po.po_number); out.push(po); }
+        }
+        continue;
       }
-      if(!hasNum) return;
-      if(!poValidNumber(po.po_number)){ warnings.push(`صف ${idx+2}: رقم أمر يحتوي رموزاً غير مسموحة — تم تخطّيه: ${po.po_number}`); return; }
-      if(seen.has(po.po_number)){ warnings.push(`صف ${idx+2}: رقم مكرر ${po.po_number} (سيُحدَّث)`); }
-      seen.add(po.po_number);
-      // validate enums
-      [['sector','sector'],['status','status'],['priority','priority'],['payment_method','payment_method'],['category','category'],['officer','officer'],['delay_reason','delay_reason']].forEach(([f,e])=>{
-        if(po[f] && !PO_ENUMS[e].includes(po[f])) warnings.push(`صف ${idx+2}: قيمة غير معيارية في ${f}: «${po[f]}» (محفوظة)`);
-      });
-      if(!po.status) po.status='قيد المراجعة';
-      recomputePOderived(po);
-      out.push(po);
-    });
+      warnings.push(`${tag||file.name}: تنسيق غير معروف (لا «رقم الأمر» ولا جدول أصناف)`);
+    }
     _poImportRows=out;
     const newCount=out.filter(o=>!poFind(o.po_number)).length, updCount=out.length-newCount;
+    const totalItems=out.reduce((s,o)=>s+((o.items&&o.items.length)||0),0);
     prev.innerHTML=`
       <div class="po-import-summary">
-        <div class="po-import-stat"><b>${out.length}</b>صف صالح</div>
+        <div class="po-import-stat"><b>${out.length}</b>أمر صالح</div>
         <div class="po-import-stat"><b style="color:#1f7a55">${newCount}</b>جديد</div>
         <div class="po-import-stat"><b style="color:#9A7A45">${updCount}</b>تحديث</div>
+        <div class="po-import-stat"><b>${totalItems}</b>بند</div>
         <div class="po-import-stat"><b style="color:#c0392b">${warnings.length}</b>تنبيه</div>
       </div>
-      ${out.length?`<div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px"><table style="width:100%;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface-2)"><th style="padding:6px">رقم الأمر</th><th>المورد</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>${out.slice(0,30).map(o=>`<tr><td style="padding:5px 6px">${escapeHtml(o.po_number)}</td><td>${escapeHtml(o.supplier||'—')}</td><td>${fmtPrice(o.total)}</td><td>${escapeHtml(o.status)}</td></tr>`).join('')}</tbody></table></div>`:''}
+      ${out.length?`<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px"><table style="width:100%;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface-2)"><th style="padding:6px">رقم الأمر</th><th>المورد</th><th>بنود</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>${out.slice(0,40).map(o=>`<tr><td style="padding:5px 6px">${escapeHtml(o.po_number)}</td><td>${escapeHtml(o.supplier||'—')}</td><td style="text-align:center">${(o.items&&o.items.length)||0}</td><td>${fmtPrice(o.total)}</td><td>${escapeHtml(o.status)}</td></tr>`).join('')}</tbody></table></div>`:''}
       ${warnings.length?`<details><summary style="cursor:pointer;font-size:12px;color:#a93226">${warnings.length} تنبيه</summary><div style="max-height:120px;overflow:auto;margin-top:6px">${warnings.slice(0,50).map(w=>`<div class="po-warn-row">${escapeHtml(w)}</div>`).join('')}</div></details>`:''}`;
     document.getElementById('po-import-confirm').style.display=out.length?'':'none';
   }catch(e){ prev.innerHTML=`<div style="padding:14px;color:#c0392b">تعذّرت القراءة: ${escapeHtml(e.message)}</div>`; }
@@ -12636,6 +12752,7 @@ function poConfirmImport(){
     if(i>=0){
       const ex=STATE.purchaseOrders[i];
       const merged={...ex, ...po,
+        items:(po.items&&po.items.length)?po.items:(ex.items||[]),
         status_history:(ex.status_history&&ex.status_history.length)?ex.status_history:(po.status_history||[]),
         created_at: ex.created_at||po.created_at, created_by: ex.created_by||po.created_by};
       STATE.purchaseOrders[i]=merged; poUpsertLocal(merged); poCloudUpsert(merged); updated++;
@@ -12670,8 +12787,8 @@ function setupPOEvents(){
   const search=document.getElementById('po-search'); let t; if(search) search.addEventListener('input',e=>{ clearTimeout(t); t=setTimeout(()=>{ STATE.poFilter.q=e.target.value; STATE.poPage=1; renderPOTable(); },200); });
   ['sector','status','priority'].forEach(f=>{ const s=document.getElementById('po-filter-'+f); if(s) s.addEventListener('change',()=>{ STATE.poFilter[f]=s.value; STATE.poPage=1; renderPOTable(); }); });
   const dz=document.getElementById('po-dropzone'), fi=document.getElementById('po-import-file');
-  if(fi) fi.addEventListener('change',e=>poHandleImportFile(e.target.files[0]));
-  if(dz){ dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');}); dz.addEventListener('dragleave',()=>dz.classList.remove('drag')); dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0])poHandleImportFile(e.dataTransfer.files[0]);}); }
+  if(fi) fi.addEventListener('change',e=>poHandleImportFile(e.target.files));
+  if(dz){ dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');}); dz.addEventListener('dragleave',()=>dz.classList.remove('drag')); dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files&&e.dataTransfer.files.length)poHandleImportFile(e.dataTransfer.files);}); }
   const ic=document.getElementById('po-import-confirm'); if(ic) ic.addEventListener('click',poConfirmImport);
   const save=document.getElementById('po-save'); if(save) save.addEventListener('click',()=>savePO(false));
   const saveAdd=document.getElementById('po-save-add'); if(saveAdd) saveAdd.addEventListener('click',()=>savePO(true));
