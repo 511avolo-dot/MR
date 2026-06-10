@@ -4668,13 +4668,12 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       <label class="form-field" style="margin-top:14px">
         <span class="form-label">النموذج</span>
         <select id="ai-model">
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash (موصى به — متوازن وسريع) ⭐</option>
-          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (الأسرع والأرخص)</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro (أعلى جودة، أبطأ)</option>
-          <option value="gemini-flash-latest">Gemini Flash Latest (يستخدم آخر نسخة)</option>
-          <option value="gemini-pro-latest">Gemini Pro Latest (آخر نسخة Pro)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash (موصى به — متوازن وسريع، مجاني) ⭐</option>
+          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (الأسرع والأرخص، مجاني)</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro (يتطلب تفعيل الفوترة — غير متاح مجاناً)</option>
+          <option value="gemini-pro-latest">Gemini Pro Latest (يتطلب تفعيل الفوترة — غير متاح مجاناً)</option>
         </select>
-        <span class="form-help" style="font-size:11px;color:var(--muted);margin-top:4px">إن لم يعمل نموذج، النظام يجرب النماذج الأخرى تلقائياً.</span>
+        <span class="form-help" style="font-size:11px;color:var(--muted);margin-top:4px">النماذج المجانية: Flash و Flash Lite. نماذج Pro تتطلب تفعيل الفوترة في Google AI Studio. إن لم يعمل نموذج، يجرّب النظام البقية تلقائياً.</span>
       </label>
 
       <div style="margin-top:18px;padding:14px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
@@ -6913,13 +6912,13 @@ function loadAudit(){
    ============================================================ */
 
 const AI_DEFAULT_MODEL = 'gemini-2.5-flash';
-// Fallback chain: try these in order if the user's selected model fails
+// Fallback chain: try these in order if the user's selected model fails.
+// ملاحظة: اقتصرت القائمة على النماذج المتاحة فعلياً في الخطة المجانية.
+// نماذج 2.0 و pro تُرجع 429 (limit: 0) لأنها لم تعد ضمن الخطة المجانية،
+// فاستبعادها يمنع المحاولات الفاشلة ورسالة "الخوادم مزدحمة" المضلِّلة.
 const AI_FALLBACK_MODELS = [
   'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-001',
-  'gemini-flash-latest'
+  'gemini-2.5-flash-lite'
 ];
 const AI_DAILY_LIMIT = 1500; // Gemini free tier limit
 const AI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min cache for repeat questions
@@ -6939,6 +6938,17 @@ function isTransientAIError(status, msg){
   if(msg.includes('quota')) return true;
   if(msg.includes('temporarily')) return true;
   if(msg.includes('503')) return true;
+  return false;
+}
+
+// Hard quota wall (free tier limit: 0 / RESOURCE_EXHAUSTED). NOT transient —
+// retrying or waiting never helps. النموذج غير مشمول بالخطة المجانية أو نفدت حصته.
+function isHardQuotaError(status, msg){
+  msg = (msg || '').toLowerCase();
+  if(!msg) return false;
+  if(msg.includes('limit: 0')) return true;
+  if(msg.includes('resource_exhausted') && msg.includes('free_tier')) return true;
+  if(msg.includes('exceeded your current quota') && msg.includes('billing')) return true;
   return false;
 }
 const _sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -7134,6 +7144,9 @@ async function aiComplete(opts){
       topK: 40,
       topP: 0.95,
       maxOutputTokens: opts.maxTokens || 2048,
+      // تعطيل "التفكير" في نماذج 2.5: وإلا تستهلك مرحلة التفكير كامل حد المخرجات
+      // فيعود الرد فارغاً (finishReason: MAX_TOKENS بلا نص). مدعوم ويُتجاهل بأمان لغير النماذج المفكِّرة.
+      thinkingConfig: { thinkingBudget: 0 },
     },
     safetySettings: [
       {category:'HARM_CATEGORY_HARASSMENT', threshold:'BLOCK_NONE'},
@@ -7175,7 +7188,17 @@ async function aiComplete(opts){
       }
 
       if(response.ok){
-        data = await response.json();
+        const okData = await response.json();
+        const okText = okData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const fr = okData?.candidates?.[0]?.finishReason;
+        // رد فارغ بسبب استهلاك "التفكير" لحد المخرجات (MAX_TOKENS بلا نص):
+        // لا تَعُدّه نجاحاً — جرّب النموذج التالي بدل إظهار "رد فارغ".
+        if(!okText && fr === 'MAX_TOKENS'){
+          lastError = {status: 200, message: 'رد فارغ (استهلك التفكير حدّ المخرجات)', apiError: 'empty MAX_TOKENS'};
+          console.warn(`[AI] ${model} returned empty (MAX_TOKENS thinking), trying next model...`);
+          break; // to next model
+        }
+        data = okData;
         modelUsed = model;
         modelSucceeded = true;
         break; // Success — stop retrying this model
@@ -7212,6 +7235,13 @@ async function aiComplete(opts){
         throw err;
       }
 
+      // Hard quota wall (limit: 0 — النموذج خارج الخطة المجانية): لا فائدة من إعادة المحاولة،
+      // انتقل فوراً للنموذج التالي.
+      if(isHardQuotaError(response.status, apiErrorMsg)){
+        console.warn(`[AI] ${model} hard quota (limit:0), skipping to next model...`);
+        break;
+      }
+
       // Transient (overload/high-demand/rate-limit): retry SAME model with backoff
       if(transient && attempt < MAX_ATTEMPTS){
         const waitMs = [1500, 4000, 8000][attempt - 1] || 8000;
@@ -7232,16 +7262,21 @@ async function aiComplete(opts){
   // All models failed
   if(!data){
     logAIUsage(feature, false, 0);
-    const wasTransient = lastError && isTransientAIError(lastError.status, lastError.apiError || lastError.message);
+    const wasHardQuota = lastError && isHardQuotaError(lastError.status, lastError.apiError || lastError.message);
+    const wasTransient = !wasHardQuota && lastError && isTransientAIError(lastError.status, lastError.apiError || lastError.message);
     let msg;
-    if(wasTransient){
+    if(wasHardQuota){
+      msg = 'النموذج المحدّد في الإعدادات غير متاح ضمن الخطة المجانية لمفتاح Gemini (الحصة = 0)، والانتظار لا يحلّ ذلك. ' +
+            'افتح: الإعدادات ← الذكاء الاصطناعي، واختر "gemini-2.5-flash" أو "gemini-2.5-flash-lite" (المتاحان مجاناً)، ' +
+            'أو فعّل الفوترة في Google AI Studio لاستخدام النماذج الأعلى.';
+    } else if(wasTransient){
       msg = 'خوادم Gemini مزدحمة حالياً بشكل مؤقت. حاولنا تلقائياً عدة مرات وبعدة نماذج دون جدوى. الرجاء الانتظار دقيقة ثم إعادة المحاولة (الضغط مؤقت وعادةً ينتهي سريعاً).';
     } else {
       msg = `جميع نماذج Gemini غير متاحة لمفتاحك. آخر خطأ: ${lastError?.message || 'غير معروف'}.\n` +
             `الحل: أنشئ مفتاحاً جديداً من https://aistudio.google.com/apikey باختيار "Create API key in new project".`;
     }
     const err = new Error(msg);
-    err.code = wasTransient ? 'AI_OVERLOADED' : 'AI_NO_MODELS_AVAILABLE';
+    err.code = wasHardQuota ? 'AI_QUOTA_EXHAUSTED' : (wasTransient ? 'AI_OVERLOADED' : 'AI_NO_MODELS_AVAILABLE');
     err.lastError = lastError;
     throw err;
   }
@@ -7319,6 +7354,7 @@ async function aiCompleteStream(opts){
       topK: 40,
       topP: 0.95,
       maxOutputTokens: opts.maxTokens || 8192,
+      thinkingConfig: { thinkingBudget: 0 },
     },
     safetySettings: [
       {category:'HARM_CATEGORY_HARASSMENT', threshold:'BLOCK_NONE'},
@@ -13522,8 +13558,10 @@ async function rfqAIImport(si, sups, lines){
       const prompt = 'هذه صورة عرض سعر من مورد. طابق كل بند بسعر الوحدة وأعد JSON فقط بالشكل {"L1":السعر,...} حسب البنود التالية:\n'
         + lines.map(l=>`${l.id}: ${l.desc} (${l.qty||1} ${l.unit||''})`).join('\n')
         + '\nأعد JSON صحيحاً فقط بأرقام لسعر الوحدة، واترك البند الذي لا يظهر سعره.';
-      const body = { contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg', data:b64}}]}], generationConfig:{temperature:0.1, maxOutputTokens:1024} };
-      const resp = await aiFetch(cfg.model||AI_DEFAULT_MODEL, 'generateContent', body, cfg);
+      const body = { contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg', data:b64}}]}], generationConfig:{temperature:0.1, maxOutputTokens:1024, thinkingConfig:{thinkingBudget:0}} };
+      // النموذج المحفوظ قد يكون خارج الخطة المجانية → استخدم نموذجاً مضموناً.
+      const rfqModel = AI_FALLBACK_MODELS.includes(cfg.model) ? cfg.model : AI_DEFAULT_MODEL;
+      const resp = await aiFetch(rfqModel, 'generateContent', body, cfg);
       const data = await resp.json();
       let txt = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
       txt = txt.replace(/```(?:json)?/gi,'').trim();
@@ -16005,7 +16043,8 @@ async function siAIExtractFromImage(base64, mimeType){
         { inline_data: { mime_type: mimeType, data: base64 } }
       ]
     }],
-    generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+    // thinkingBudget:0 يمنع استهلاك "التفكير" لحدّ المخرجات فيعود JSON كاملاً بدل رد فارغ.
+    generationConfig: { temperature: 0.1, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } }
   };
 
   const modelsToTry = [cfg.model];
@@ -16030,6 +16069,13 @@ async function siAIExtractFromImage(base64, mimeType){
           }
           if(resp.status === 403){
             throw new Error('مفتاح Gemini مرفوض. تأكد من تفعيل الخدمة.');
+          }
+
+          // Hard quota (limit:0 — النموذج خارج الخطة المجانية): لا تُعد المحاولة، انتقل للتالي.
+          if(isHardQuotaError(resp.status, emsg)){
+            console.warn(`[AI-Vision] ${model} hard quota (limit:0), skipping to next model...`);
+            lastError = emsg;
+            break;
           }
 
           // Transient (overload/high-demand/429/503): retry SAME model with backoff
@@ -16075,6 +16121,9 @@ async function siAIExtractFromImage(base64, mimeType){
     }
   }
   // All models + retries exhausted
+  if(lastError && isHardQuotaError(0, lastError)){
+    throw new Error('النموذج المحدّد في الإعدادات غير متاح ضمن الخطة المجانية لمفتاح Gemini (الحصة = 0). افتح: الإعدادات ← الذكاء الاصطناعي واختر "gemini-2.5-flash" أو "gemini-2.5-flash-lite".');
+  }
   if(lastError && isTransientAIError(0, lastError)){
     throw new Error('خوادم Gemini مزدحمة مؤقتاً. حاولنا تلقائياً عدة مرات. انتظر دقيقة ثم أعد المحاولة.');
   }
@@ -18165,8 +18214,9 @@ async function geminiAgentRound(systemPrompt, geminiContents, tools){
       {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
     ]
   };
-  // Fallback model list — try next on 503/429/overload
-  const models = [cfg.model,'gemini-2.0-flash','gemini-2.0-flash-001','gemini-2.5-flash-lite']
+  // Fallback model list — try next on 503/429/overload.
+  // النماذج المتاحة مجاناً فقط (نماذج 2.0/pro تُرجع 429 limit:0).
+  const models = [cfg.model, ...AI_FALLBACK_MODELS]
     .filter((m,i,a)=>m&&a.indexOf(m)===i);
   let lastErr;
   for (const model of models) {
