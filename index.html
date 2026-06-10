@@ -6920,6 +6920,9 @@ const AI_FALLBACK_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite'
 ];
+// قفل النماذج المجانية: عند true يُتجاهَل أي نموذج مدفوع محفوظ ويُثبَّت على المجاني.
+// لإلغاء القفل لاحقاً (السماح بنماذج Pro المدفوعة) غيّره إلى false.
+const AI_FREE_LOCK = true;
 const AI_DAILY_LIMIT = 1500; // Gemini free tier limit
 const AI_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min cache for repeat questions
 const _aiCache = new Map(); // simple in-memory cache
@@ -6981,6 +6984,11 @@ async function loadAIConfig(force){
         cfg.dailyLimit = v.daily_limit || AI_DAILY_LIMIT;
       }
     }catch(e){ /* ignore */ }
+  }
+  // قفل على النماذج المجانية: يتجاهل أي نموذج مدفوع (Pro/limit:0) محفوظ في الإعدادات
+  // ويُثبّت على نموذج مجاني إلى أن يُغيَّر هذا القفل يدوياً. AI_FREE_LOCK
+  if(AI_FREE_LOCK && !AI_FALLBACK_MODELS.includes(cfg.model)){
+    cfg.model = AI_DEFAULT_MODEL;
   }
   // إن لم يوجد مفتاح محلي، استخدم الوسيط الآمن على الخادم (سرّ Cloudflare) إن كان متاحاً.
   cfg.useProxy = false;
