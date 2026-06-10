@@ -1,0 +1,239 @@
+/**
+ * Cloudflare Pages Function — إشعارات البريد لطلبات تسجيل الموردين
+ * ----------------------------------------------------------------
+ * يرسل بريداً احترافياً (عربي + إنجليزي) عند كل حالة:
+ *   received | approved | rejected | needs_revision
+ *
+ * الإعداد (أسرار بيئة Cloudflare Pages):
+ *   SUPABASE_URL                رابط مشروع Supabase
+ *   SUPABASE_SERVICE_ROLE_KEY   مفتاح service_role (سرّ — لقراءة بريد المتقدّم فقط)
+ *   RESEND_API_KEY              مفتاح Resend (https://resend.com) لإرسال البريد
+ *   NOTIFY_FROM                 المُرسِل، مثل: "موردو الذيابي <noreply@aldeyabi.com>"
+ *   NOTIFY_REPLY_TO (اختياري)   بريد الرد، مثل supply@aldeyabi.com
+ *
+ * الأمان (لا مُرسِل مفتوح / no open relay):
+ *   - same-origin فقط.
+ *   - المستقبل يُؤخذ حصراً من بريد الطلب المخزّن (لا يقبل عنواناً من العميل).
+ *   - المحتوى قوالب ثابتة على الخادم (لا نص من العميل).
+ *   - يجب أن تطابق حالة الطلب في قاعدة البيانات نوع الحدث المطلوب،
+ *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
+ */
+
+const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+  });
+}
+function sameOrigin(request) {
+  const host = request.headers.get('host');
+  const src = request.headers.get('origin') || request.headers.get('referer');
+  if (!host || !src) return false;
+  try { return new URL(src).host === host; } catch (_) { return false; }
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+const emailConfigured = (env) =>
+  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY && env.NOTIFY_FROM);
+
+// خريطة بريد→مستخدم (تطابق index.html / admin-users.js)
+const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'supply@aldeyabi.com', mahmoud: 'mahmoud@aldeyabi.com' };
+const emailToUsername = (email) => {
+  const e = String(email || '').toLowerCase();
+  for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
+  return e.split('@')[0];
+};
+// تحقّق أن المستدعي موظف نشط (جلسة Supabase صالحة + سجل في proc_users) — لإشعارات القبول/الرفض/التعديل
+async function verifyStaff(env, base, jwt) {
+  try {
+    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` } });
+    if (!r.ok) return false;
+    const u = await r.json();
+    if (!u || !u.email) return false;
+    const uname = emailToUsername(u.email);
+    const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
+    const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
+    const pr = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`, { headers: svc });
+    if (!pr.ok) return false;
+    const rows = await pr.json();
+    const prof = (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
+    return !!(prof && prof.active !== false);
+  } catch (_) { return false; }
+}
+
+export async function onRequestGet({ env }) {
+  return json({ ok: emailConfigured(env) });
+}
+
+export async function onRequestPost({ request, env }) {
+  if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
+  // إن لم يُضبط البريد على الخادم: تجاهل بهدوء كي لا تتعطّل عملية التسجيل/المراجعة.
+  if (!emailConfigured(env)) return json({ skipped: true, reason: 'email_not_configured' });
+
+  let payload;
+  try { payload = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
+  const id = String(payload?.id || '').trim();
+  const event = String(payload?.event || '').trim();
+  if (!id || !EVENTS.has(event)) return json({ error: 'مدخلات غير صالحة' }, 400);
+
+  const base = env.SUPABASE_URL;
+
+  // إشعارات تغيّر الحالة (قبول/رفض/تعديل) يبدؤها موظف فقط → اشترط جلسة موظف صالحة.
+  // إشعار "الاستلام" يبدؤه المتقدّم العام عند الإرسال (محدود: لا يُرسَل إلا لبريد الطلب نفسه).
+  if (event !== 'received') {
+    const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
+    if (!(await verifyStaff(env, base, jwt))) return json({ error: 'غير مصرّح' }, 403);
+  }
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  // اقرأ الحقول العامة فقط من سجل الطلب (لا وثائق)
+  let row;
+  try {
+    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,status,revision_token';
+    const r = await fetch(
+      `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}&select=${cols}`,
+      { headers });
+    if (!r.ok) return json({ error: 'تعذّر جلب الطلب' }, 502);
+    const rows = await r.json();
+    row = Array.isArray(rows) ? rows[0] : null;
+  } catch (_) { return json({ error: 'تعذّر الاتصال بقاعدة البيانات' }, 502); }
+  if (!row) return json({ error: 'الطلب غير موجود' }, 404);
+
+  // تحقّق من تطابق الحالة (منع الانتحال)
+  const expectStatus = event === 'received' ? 'pending' : event;
+  if (String(row.status) !== expectStatus) {
+    return json({ skipped: true, reason: 'status_mismatch', status: row.status });
+  }
+
+  const to = (row.email || row.contact_email || '').trim();
+  if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    return json({ skipped: true, reason: 'no_recipient' });
+  }
+
+  let origin = '';
+  try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+  const resumeUrl = (event === 'needs_revision' && row.revision_token)
+    ? `${origin}/register.html?resume=${encodeURIComponent(id)}&t=${encodeURIComponent(row.revision_token)}`
+    : '';
+
+  const { subject, html } = buildEmail(event, row, id, resumeUrl);
+
+  // أرسل عبر Resend
+  try {
+    const body = {
+      from: env.NOTIFY_FROM,
+      to: [to],
+      subject,
+      html,
+      ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}),
+    };
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      return json({ error: 'تعذّر إرسال البريد', detail: t.slice(0, 300) }, 502);
+    }
+    return json({ ok: true, sent: true });
+  } catch (e) {
+    return json({ error: 'تعذّر إرسال البريد' }, 502);
+  }
+}
+
+/* ── قوالب البريد الاحترافية (ثنائية اللغة) ── */
+const BRAND = { navy: '#0B1B36', gold: '#B8923D', ink: '#1f2937', soft: '#6b7280', line: '#e6e8ee', wash: '#f6f4ee' };
+
+function buildEmail(event, row, id, resumeUrl) {
+  const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
+  const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
+
+  const T = {
+    received: {
+      subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
+      badge: ['تم الاستلام', 'Received', '#2563eb'],
+      ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.`,
+      en: `Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.`,
+      extraAr: `يمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
+      extraEn: `You can track your application status anytime via the supplier portal using the application number below.`,
+    },
+    approved: {
+      subject: `تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved`,
+      badge: ['تم القبول', 'Approved', '#16a34a'],
+      ar: `يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.`,
+      en: `We are pleased to inform you that your application has been approved and you are now part of Al-Dhiabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities.`,
+      extraAr: '', extraEn: '',
+    },
+    rejected: {
+      subject: `بخصوص طلب تسجيلكم — مجموعة الذيابي | Application Update`,
+      badge: ['غير مقبول', 'Not Approved', '#dc2626'],
+      ar: `نشكر لكم اهتمامكم بالتسجيل كمورد لدى مجموعة الذيابي. بعد المراجعة، نأسف لإبلاغكم بعدم قبول الطلب في الوقت الحالي. للاستفسار أو إعادة التقديم مستقبلاً يسعدنا تواصلكم مع إدارة المشتريات.`,
+      en: `Thank you for your interest in registering as a supplier with Al-Dhiabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.`,
+      extraAr: '', extraEn: '',
+    },
+    needs_revision: {
+      subject: `طلبكم بحاجة إلى استكمال — مجموعة الذيابي | Action Required`,
+      badge: ['يحتاج تعديل', 'Action Required', '#d97706'],
+      ar: `راجعنا طلبكم ونحتاج إلى تعديل أو استكمال بعض البيانات/الوثائق لإتمام الاعتماد. يرجى فتح الطلب عبر الزر أدناه وتحديث المطلوب ثم إعادة إرساله.`,
+      en: `We have reviewed your application and need some data/documents to be revised or completed before approval. Please open your application using the button below, update the required items, and resubmit.`,
+      extraAr: '', extraEn: '',
+    },
+  }[event];
+
+  const cta = resumeUrl
+    ? `<tr><td style="padding:8px 0 4px">
+         <a href="${esc(resumeUrl)}" style="display:inline-block;background:${BRAND.gold};color:#fff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:10px;font-size:15px">فتح الطلب وتعديله · Open &amp; edit</a>
+       </td></tr>`
+    : '';
+
+  const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:${BRAND.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${BRAND.ink}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.wash};padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BRAND.line};border-radius:16px;overflow:hidden">
+        <tr><td style="background:${BRAND.navy};padding:26px 30px">
+          <div style="color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.8">AL-DHIABI GROUP · بوابة الموردين</div>
+          <div style="color:#fff;font-size:21px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
+        </td></tr>
+        <tr><td style="height:4px;background:${BRAND.gold}"></td></tr>
+        <tr><td style="padding:30px">
+          <span style="display:inline-block;background:${T.badge[2]}1a;color:${T.badge[2]};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${esc(T.badge[0])} · ${esc(T.badge[1])}</span>
+
+          <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
+          <p style="font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink}">${esc(T.ar)}</p>
+          ${T.extraAr ? `<p style="font-size:13px;line-height:1.8;margin:8px 0;color:${BRAND.soft}">${esc(T.extraAr)}</p>` : ''}
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0">${cta}</table>
+
+          <div style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:10px;padding:12px 16px;margin:14px 0">
+            <span style="font-size:12px;color:${BRAND.soft}">رقم الطلب · Application No.</span><br>
+            <span style="font-size:15px;font-weight:700;direction:ltr;display:inline-block;color:${BRAND.navy}">${esc(id)}</span>
+          </div>
+
+          <hr style="border:none;border-top:1px solid ${BRAND.line};margin:22px 0">
+          <div dir="ltr" style="text-align:left">
+            <h3 style="font-size:15px;margin:0 0 6px;color:${BRAND.navy}">${esc(nameEn)}</h3>
+            <p style="font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink}">${esc(T.en)}</p>
+            ${T.extraEn ? `<p style="font-size:12.5px;line-height:1.7;margin:8px 0;color:${BRAND.soft}">${esc(T.extraEn)}</p>` : ''}
+          </div>
+        </td></tr>
+        <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">
+          <div style="color:#fff;opacity:.85;font-size:12px">مجموعة الذيابي · Al-Dhiabi Group · Operations &amp; Supply Chain</div>
+          <div style="color:#fff;opacity:.55;font-size:11px;margin-top:4px">هذه رسالة آلية — يرجى عدم الرد عليها مباشرة · This is an automated message.</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  return { subject: T.subject, html };
+}
