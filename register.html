@@ -2862,7 +2862,14 @@ let currentStep = 1;
 const _urlParams = new URLSearchParams(location.search);
 const _resumeId = _urlParams.get('resume') || null;
 const _resumeToken = _urlParams.get('t') || null;
-let regId = _resumeId || ('reg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+// رقم طلب قصير وسهل القراءة/البحث، مثل DG-K7Q9PX (بلا أحرف ملتبسة 0/O/1/I/L)
+function genRegId(){
+  const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789', n=6; let s='';
+  if(window.crypto && crypto.getRandomValues){ const a=new Uint32Array(n); crypto.getRandomValues(a); for(let i=0;i<n;i++) s+=A[a[i]%A.length]; }
+  else { for(let i=0;i<n;i++) s+=A[Math.floor(Math.random()*A.length)]; }
+  return 'DG-'+s;
+}
+let regId = _resumeId || genRegId();
 let _resumeData = null;   // holds existing registration when in resume mode
 let _existingDocPaths = {};  // doc_paths already in storage from previous submission
 let _revisionInfo = {};      // parsed review_notes from admin (fields/sections flagged)
@@ -2958,8 +2965,8 @@ async function connectSupabase(url, key) {
 }
 
 async function loadResumeData() {
-  // Validate ID format to prevent IDOR/injection
-  if (!_resumeId || !/^reg_\d+_[a-z0-9]+$/.test(_resumeId)) {
+  // Validate ID format to prevent IDOR/injection (يقبل القديم reg_... والجديد DG-...)
+  if (!_resumeId || !/^[A-Za-z0-9_-]{5,40}$/.test(_resumeId)) {
     toast('error', 'رابط التعديل غير صالح');
     showMainForm();
     return;
