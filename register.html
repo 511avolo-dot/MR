@@ -2862,6 +2862,7 @@ let currentStep = 1;
 const _urlParams = new URLSearchParams(location.search);
 const _resumeId = _urlParams.get('resume') || null;
 const _resumeToken = _urlParams.get('t') || null;
+const _trackId = _urlParams.get('track') || null;   // رابط التتبّع من البريد
 // رقم طلب قصير وسهل القراءة/البحث، مثل DG-K7Q9PX (بلا أحرف ملتبسة 0/O/1/I/L)
 function genRegId(){
   const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789', n=6; let s='';
@@ -3238,6 +3239,7 @@ function showMainForm() {
   renderDocCards();
   addServiceRow();
   initLang();   // طبّق اللغة المحفوظة (عربي افتراضياً) على النموذج بعد عرضه
+  if (_trackId) openTracker(_trackId);   // فتح نافذة التتبّع تلقائياً عند القدوم من رابط البريد
 }
 
 /* ════════════════════════════════════
