@@ -3315,6 +3315,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
             أرشفة وتنظيف
           </button>
+          <button class="btn btn-ghost" onclick="openEmailTemplates()" style="gap:6px" data-tooltip="تخصيص قوالب رسائل البريد للموردين">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+            قوالب الإشعارات
+          </button>
           <div style="margin-inline-start:auto;display:flex;gap:8px">
             <select id="reg-filter" onchange="loadRegistrations()" style="border:1.5px solid var(--border,#e2e8f0);border-radius:7px;padding:7px 12px;font-size:13px;font-family:inherit">
               <option value="pending">معلّق</option>
@@ -3369,6 +3373,49 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
             <div id="reg-detail-body" style="flex:1;overflow-y:auto;padding:24px 28px;min-height:0"></div>
             <!-- Sticky actions footer -->
             <div id="reg-detail-actions" style="display:flex;gap:10px;align-items:center;padding:16px 28px;border-top:2px solid #e2e8f0;background:#f8fafc;border-radius:0 0 14px 14px;flex-shrink:0;flex-wrap:wrap"></div>
+          </div>
+        </div>
+
+        <!-- ════ Email notification templates manager ════ -->
+        <div id="modal-email-templates" style="display:none;position:fixed;inset:0;background:rgba(6,15,35,.55);z-index:4200;align-items:center;justify-content:center;padding:18px" onclick="if(event.target===this)closeEmailTemplates()">
+          <div style="background:#fff;border-radius:16px;width:100%;max-width:1100px;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 26px 70px rgba(6,15,35,.3)">
+            <div style="padding:20px 26px;border-bottom:1px solid #e6e8ee;display:flex;align-items:center;gap:12px;flex-shrink:0">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">قوالب رسائل الموردين</div>
+                <h2 style="font-size:18px;font-weight:700;color:var(--navy,#0B1B36);margin:2px 0 0">تخصيص قوالب الإشعارات</h2>
+              </div>
+              <button onclick="closeEmailTemplates()" style="flex-shrink:0;background:#f1f5f9;border:none;border-radius:8px;width:36px;height:36px;font-size:20px;cursor:pointer;color:#64748b">×</button>
+            </div>
+            <div id="et-tabs" style="display:flex;gap:8px;flex-wrap:wrap;padding:14px 26px 0;flex-shrink:0"></div>
+            <div style="flex:1;display:flex;min-height:0;overflow:hidden;flex-wrap:wrap">
+              <div style="flex:1 1 360px;min-width:300px;padding:18px 26px;overflow:auto;border-inline-end:1px solid #eef1f6">
+                <label style="display:block;font-size:12.5px;font-weight:600;color:#334155;margin:4px 0 5px">عنوان الرسالة (Subject)</label>
+                <input id="et-subject" type="text" oninput="etOnInput()" style="width:100%;border:1.5px solid #e2e8f0;border-radius:9px;padding:10px 12px;font-size:13px;font-family:inherit;margin-bottom:14px">
+                <label style="display:block;font-size:12.5px;font-weight:600;color:#334155;margin:4px 0 5px">النص العربي</label>
+                <textarea id="et-ar" rows="7" oninput="etOnInput()" style="width:100%;border:1.5px solid #e2e8f0;border-radius:9px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.8;resize:vertical;margin-bottom:14px"></textarea>
+                <label style="display:block;font-size:12.5px;font-weight:600;color:#334155;margin:4px 0 5px">English Text</label>
+                <textarea id="et-en" rows="7" dir="ltr" oninput="etOnInput()" style="width:100%;border:1.5px solid #e2e8f0;border-radius:9px;padding:10px 12px;font-size:13px;font-family:inherit;line-height:1.7;resize:vertical;text-align:left"></textarea>
+                <div style="margin-top:12px;background:#f8fafc;border:1px solid #eef1f6;border-radius:9px;padding:10px 12px;font-size:12px;color:#475569;line-height:1.9">
+                  <b>المتغيّرات</b> (تُستبدل تلقائياً عند الإرسال):
+                  <code style="background:#eef2f7;padding:1px 6px;border-radius:4px">{name}</code> اسم المنشأة ·
+                  <code style="background:#eef2f7;padding:1px 6px;border-radius:4px">{name_en}</code> بالإنجليزية ·
+                  <code style="background:#eef2f7;padding:1px 6px;border-radius:4px">{id}</code> رقم الطلب.
+                  افصل الفقرات بسطر فارغ.
+                </div>
+              </div>
+              <div style="flex:1 1 360px;min-width:300px;padding:16px 18px;background:#f6f4ee;overflow:auto">
+                <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-weight:600">معاينة حيّة للبريد</div>
+                <iframe id="et-preview" title="معاينة" style="width:100%;height:600px;border:1px solid #e6e8ee;border-radius:10px;background:#fff"></iframe>
+              </div>
+            </div>
+            <div style="padding:14px 26px;border-top:1px solid #e6e8ee;display:flex;gap:10px;align-items:center;background:#f8fafc;border-radius:0 0 16px 16px;flex-shrink:0;flex-wrap:wrap">
+              <button class="btn btn-ghost" onclick="etResetCurrent()" style="gap:6px">استعادة الافتراضي لهذه الحالة</button>
+              <span id="et-status" style="font-size:12px;color:#64748b"></span>
+              <div style="margin-inline-start:auto;display:flex;gap:10px">
+                <button class="btn btn-ghost" onclick="closeEmailTemplates()">إغلاق</button>
+                <button class="btn btn-primary" onclick="etSave()">حفظ القوالب</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -18604,6 +18651,156 @@ async function renderRegStats() {
       </button>`;
     }).join('');
   } catch(e) { wrap.style.display = 'none'; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   محرّر قوالب رسائل الموردين — يُحفظ في proc_settings.email_templates
+   ويستهلكه functions/api/notify.js تلقائياً (مع رجوع آمن للافتراضي).
+   ════════════════════════════════════════════════════════════ */
+const ET_BRAND = { navy:'#0B1B36', gold:'#B8923D', ink:'#1f2937', soft:'#6b7280', line:'#e6e8ee', wash:'#f6f4ee' };
+const ET_ORDER = ['received','approved','rejected','needs_revision'];
+const EMAIL_TPL_DEFAULTS = {
+  received: { label:'تم الاستلام', labelEn:'Received', color:'#2563eb',
+    subject:'تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received',
+    ar:'شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.',
+    en:'Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.' },
+  approved: { label:'تم القبول', labelEn:'Approved', color:'#16a34a',
+    subject:'تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved',
+    ar:'يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.',
+    en:"We are pleased to inform you that your application has been approved and you are now part of Al-Dhiabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities." },
+  rejected: { label:'غير مقبول', labelEn:'Not Approved', color:'#dc2626',
+    subject:'بخصوص طلب تسجيلكم — مجموعة الذيابي | Application Update',
+    ar:'نشكر لكم اهتمامكم بالتسجيل كمورد لدى مجموعة الذيابي. بعد المراجعة، نأسف لإبلاغكم بعدم قبول الطلب في الوقت الحالي. للاستفسار أو إعادة التقديم مستقبلاً يسعدنا تواصلكم مع إدارة المشتريات.',
+    en:'Thank you for your interest in registering as a supplier with Al-Dhiabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.' },
+  needs_revision: { label:'يحتاج تعديل', labelEn:'Action Required', color:'#d97706',
+    subject:'طلبكم بحاجة إلى استكمال — مجموعة الذيابي | Action Required',
+    ar:'راجعنا طلبكم ونحتاج إلى تعديل أو استكمال بعض البيانات/الوثائق لإتمام الاعتماد. يرجى فتح الطلب عبر الزر أدناه وتحديث المطلوب ثم إعادة إرساله.',
+    en:'We have reviewed your application and need some data/documents to be revised or completed before approval. Please open your application using the button below, update the required items, and resubmit.' },
+};
+let _etState = { current:'received', data:{} };
+
+async function openEmailTemplates() {
+  if (!requirePermission('can_review_registrations', 'تخصيص قوالب الإشعارات')) return;
+  _etState.data = {};
+  ET_ORDER.forEach(k => { const d = EMAIL_TPL_DEFAULTS[k]; _etState.data[k] = { subject:d.subject, ar:d.ar, en:d.en }; });
+  try {
+    if (CLOUD?.client) {
+      const { data } = await CLOUD.client.from('proc_settings').select('value').eq('key','email_templates').maybeSingle();
+      let v = data?.value; if (typeof v === 'string') { try { v = JSON.parse(v); } catch(_) { v = null; } }
+      if (v && typeof v === 'object') ET_ORDER.forEach(k => {
+        if (v[k]) _etState.data[k] = {
+          subject: v[k].subject ?? _etState.data[k].subject,
+          ar: v[k].ar ?? _etState.data[k].ar,
+          en: v[k].en ?? _etState.data[k].en,
+        };
+      });
+    }
+  } catch(e) {}
+  _etState.current = 'received';
+  document.getElementById('et-status').textContent = '';
+  etRenderTabs(); etFillInputs(); etPreview();
+  document.getElementById('modal-email-templates').style.display = 'flex';
+}
+function closeEmailTemplates() { const m = document.getElementById('modal-email-templates'); if (m) m.style.display = 'none'; }
+function etRenderTabs() {
+  const wrap = document.getElementById('et-tabs'); if (!wrap) return;
+  wrap.innerHTML = ET_ORDER.map(k => {
+    const d = EMAIL_TPL_DEFAULTS[k], active = k === _etState.current;
+    return `<button onclick="etSelect('${k}')" style="cursor:pointer;font-family:inherit;border:1.5px solid ${active?d.color:'#e2e8f0'};background:${active?d.color+'14':'#fff'};color:${active?d.color:'#475569'};font-weight:600;font-size:12.5px;border-radius:999px;padding:8px 16px;display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:${d.color}"></span>${d.label}</button>`;
+  }).join('');
+}
+function etSelect(k) { etReadInputs(); _etState.current = k; etRenderTabs(); etFillInputs(); etPreview(); }
+function etFillInputs() {
+  const t = _etState.data[_etState.current] || {};
+  document.getElementById('et-subject').value = t.subject || '';
+  document.getElementById('et-ar').value = t.ar || '';
+  document.getElementById('et-en').value = t.en || '';
+}
+function etReadInputs() {
+  _etState.data[_etState.current] = {
+    subject: document.getElementById('et-subject').value,
+    ar: document.getElementById('et-ar').value,
+    en: document.getElementById('et-en').value,
+  };
+}
+function etOnInput() { etReadInputs(); etPreview(); }
+function etResetCurrent() {
+  const d = EMAIL_TPL_DEFAULTS[_etState.current];
+  _etState.data[_etState.current] = { subject:d.subject, ar:d.ar, en:d.en };
+  etFillInputs(); etPreview();
+}
+function etFillVars(s) {
+  return String(s == null ? '' : s)
+    .replace(/\{name_en\}/g, 'Al-Noor Contracting Co.')
+    .replace(/\{name\}/g, 'شركة النور للمقاولات')
+    .replace(/\{id\}/g, 'reg_demo_2026_a1b2');
+}
+function etParas(text, style) {
+  return String(text || '').split(/\n{2,}/).filter(s => s.trim() !== '')
+    .map(p => `<p style="${style}">${escapeHtml(p).replace(/\n/g,'<br>')}</p>`).join('');
+}
+function etBuildEmailHtml(key, t) {
+  const D = EMAIL_TPL_DEFAULTS[key], B = ET_BRAND;
+  const subj = etFillVars(t.subject || D.subject);
+  const arH = etParas(etFillVars(t.ar || D.ar), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${B.ink}`);
+  const enH = etParas(etFillVars(t.en || D.en), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${B.ink}`);
+  const cta = key === 'needs_revision'
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0"><tr><td style="padding:8px 0 4px"><a href="#" style="display:inline-block;background:${B.gold};color:#fff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:10px;font-size:15px">فتح الطلب وتعديله · Open &amp; edit</a></td></tr></table>` : '';
+  return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"></head>
+<body style="margin:0;background:${B.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${B.ink}">
+  <div style="padding:6px 4px;font-size:11px;color:${B.soft}">Subject: ${escapeHtml(subj)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${B.wash};padding:14px 8px">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${B.line};border-radius:16px;overflow:hidden">
+        <tr><td style="background:${B.navy};padding:24px 28px">
+          <div style="color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.8">AL-DHIABI GROUP · بوابة الموردين</div>
+          <div style="color:#fff;font-size:20px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
+        </td></tr>
+        <tr><td style="height:4px;background:${B.gold}"></td></tr>
+        <tr><td style="padding:28px">
+          <span style="display:inline-block;background:${D.color}1a;color:${D.color};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${escapeHtml(D.label)} · ${escapeHtml(D.labelEn)}</span>
+          <h2 style="font-size:17px;margin:18px 0 6px;color:${B.navy}">شركة النور للمقاولات</h2>
+          ${arH}
+          ${cta}
+          <div style="background:${B.wash};border:1px solid ${B.line};border-radius:10px;padding:12px 16px;margin:14px 0">
+            <span style="font-size:12px;color:${B.soft}">رقم الطلب · Application No.</span><br>
+            <span style="font-size:15px;font-weight:700;direction:ltr;display:inline-block;color:${B.navy}">reg_demo_2026_a1b2</span>
+          </div>
+          <hr style="border:none;border-top:1px solid ${B.line};margin:22px 0">
+          <div dir="ltr" style="text-align:left">
+            <h3 style="font-size:15px;margin:0 0 6px;color:${B.navy}">Al-Noor Contracting Co.</h3>
+            ${enH}
+          </div>
+        </td></tr>
+        <tr><td style="background:${B.navy};padding:16px 28px;text-align:center">
+          <div style="color:#fff;opacity:.85;font-size:12px">مجموعة الذيابي · Al-Dhiabi Group · Operations &amp; Supply Chain</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+function etPreview() {
+  const f = document.getElementById('et-preview'); if (!f) return;
+  f.srcdoc = etBuildEmailHtml(_etState.current, _etState.data[_etState.current] || {});
+}
+async function etSave() {
+  if (!requirePermission('can_review_registrations', 'حفظ القوالب')) return;
+  etReadInputs();
+  if (!CLOUD?.client) { toast('error', 'غير متصل', 'اتصل بقاعدة البيانات أولاً'); return; }
+  const value = {}; ET_ORDER.forEach(k => { value[k] = _etState.data[k]; });
+  const st = document.getElementById('et-status'); st.textContent = 'جارٍ الحفظ...';
+  try {
+    const { error } = await CLOUD.client.from('proc_settings').upsert({
+      key: 'email_templates', value,
+      description: 'قوالب بريد إشعارات الموردين',
+      updated_by: STATE.currentUser?.username || null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+    if (error) throw error;
+    st.textContent = '✓ تم الحفظ — ستُطبَّق على الرسائل القادمة';
+    toast('success', 'تم الحفظ', 'حُدّثت قوالب الإشعارات');
+  } catch(e) { st.textContent = ''; toast('error', 'فشل الحفظ', e.message); }
 }
 
 let _regDetailCurrent = null; // holds the open registration for button handlers
