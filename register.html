@@ -4072,6 +4072,21 @@ function openTracker(prefillId){
 }
 function closeTracker(){ document.getElementById('tracker-overlay').classList.add('hidden'); }
 function _trkFmtDate(v){ if(!v) return '—'; try{ return new Date(v).toLocaleDateString(LANG==='en'?'en-GB':'ar-SA'); }catch(e){ return String(v).slice(0,10); } }
+const TRK_DOC_LABELS = { cr:{ar:'السجل التجاري',en:'Commercial Registration'}, vat:{ar:'شهادة الزكاة / ضريبة القيمة المضافة',en:'Zakat / VAT Certificate'}, gosi:{ar:'شهادة التأمينات الاجتماعية',en:'GOSI Certificate'}, chamber:{ar:'شهادة الغرفة التجارية',en:'Chamber of Commerce Certificate'}, natl_addr:{ar:'وثيقة العنوان الوطني',en:'National Address Document'}, municipal:{ar:'رخصة البلدية / الترخيص الصناعي',en:'Municipal / Industrial License'} };
+const TRK_SEC_LABELS = { general_info:{ar:'بيانات المنشأة',en:'Company Information'}, contact_info:{ar:'بيانات التواصل',en:'Contact Information'}, activity_info:{ar:'النشاط والخدمات',en:'Activity & Services'} };
+function renderTrkRevision(rev){
+  if(!rev || typeof rev!=='object') return '';
+  const lang = LANG==='en'?'en':'ar', tr=(a,e)=>lang==='en'?e:a;
+  const docs=(rev.fields||[]).map(id=>(TRK_DOC_LABELS[id]&&TRK_DOC_LABELS[id][lang])||id);
+  const secs=(rev.sections||[]).map(id=>(TRK_SEC_LABELS[id]&&TRK_SEC_LABELS[id][lang])||id);
+  let items='';
+  if(docs.length) items+=`<div style="margin-top:6px;font-weight:600;font-size:13px;color:#7c2d12">${tr('وثائق مطلوب إعادة رفعها:','Documents to re-upload:')}</div><ul style="margin:4px 0;padding-inline-start:18px;font-size:13px;line-height:1.85;color:#7c2d12">${docs.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
+  if(secs.length) items+=`<div style="margin-top:6px;font-weight:600;font-size:13px;color:#7c2d12">${tr('أقسام تحتاج مراجعة:','Sections to review:')}</div><ul style="margin:4px 0;padding-inline-start:18px;font-size:13px;line-height:1.85;color:#7c2d12">${secs.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
+  const gen=rev.general?`<div style="margin-top:8px;font-size:13px;color:#7c2d12"><b>${tr('ملاحظة الفريق:','Team note:')}</b> ${escapeHtml(String(rev.general))}</div>`:'';
+  if(!items && !gen) return '';
+  return `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin:12px 0">
+    <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:4px">${tr('المطلوب تعديله أو استكماله','Items to update or complete')}</div>${items}${gen}</div>`;
+}
 function renderStatus(d){
   const MAP={
     pending:       {cls:'pending', label:'قيد المراجعة', icon:'⏳', msg:'طلبك قيد المراجعة حالياً لدى فريق المشتريات. سنبلغك عند اتخاذ القرار.'},
@@ -4089,11 +4104,14 @@ function renderStatus(d){
     const url='register.html?resume='+encodeURIComponent(document.getElementById('trk-id').value.trim())+'&t='+encodeURIComponent(d.revision_token);
     revBtn=`<a href="${escapeHtml(url)}" class="btn btn-gold" style="margin-top:14px;display:inline-flex">${t('فتح الطلب وتعديله')}</a>`;
   }
+  // عند «يحتاج تعديل»: اعرض البنود المطلوبة بالتحديد بدل الملاحظة العامة
+  const revHtml = (d.status==='needs_revision') ? renderTrkRevision(d.revision) : '';
+  const detailHtml = revHtml || adminMsg;
   return `<div class="trk-status-card">
     <div class="trk-badge ${s.cls}"><span>${s.icon}</span><span>${t(s.label)}</span></div>
     ${name?`<div style="font-weight:700;margin-bottom:8px;color:var(--ink)">${escapeHtml(name)}</div>`:''}
     <div class="trk-status-msg">${t(s.msg)}</div>
-    ${adminMsg}
+    ${detailHtml}
     <div class="trk-meta">${t('تاريخ التقديم:')} ${_trkFmtDate(d.submitted_at)}${d.reviewed_at?` · ${t('تاريخ المراجعة:')} ${_trkFmtDate(d.reviewed_at)}`:''}</div>
     ${revBtn}
   </div>`;
