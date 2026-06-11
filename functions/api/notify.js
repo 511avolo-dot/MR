@@ -47,22 +47,23 @@ const emailToUsername = (email) => {
   for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
   return e.split('@')[0];
 };
-// تحقّق أن المستدعي موظف نشط (جلسة Supabase صالحة + سجل في proc_users) — لإشعارات القبول/الرفض/التعديل
+// تحقّق أن المستدعي موظف نشط (جلسة Supabase صالحة + سجل في proc_users).
+// يُعيد بريد الموظف عند النجاح (يُستخدم كمستقبِل للبريد التجريبي)، وإلا null.
 async function verifyStaff(env, base, jwt) {
   try {
     const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` } });
-    if (!r.ok) return false;
+    if (!r.ok) return null;
     const u = await r.json();
-    if (!u || !u.email) return false;
+    if (!u || !u.email) return null;
     const uname = emailToUsername(u.email);
     const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
     const pr = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`, { headers: svc });
-    if (!pr.ok) return false;
+    if (!pr.ok) return null;
     const rows = await pr.json();
     const prof = (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
-    return !!(prof && prof.active !== false);
-  } catch (_) { return false; }
+    return (prof && prof.active !== false) ? String(u.email) : null;
+  } catch (_) { return null; }
 }
 
 export async function onRequestGet({ env }) {
@@ -78,6 +79,32 @@ export async function onRequestPost({ request, env }) {
   try { payload = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
   const id = String(payload?.id || '').trim();
   const event = String(payload?.event || '').trim();
+
+  // ── بريد تجريبي: يُرسَل حصراً إلى بريد الموظف المستدعي (لا يقبل أي عنوان من العميل) ──
+  if (event === 'test') {
+    const tbase = env.SUPABASE_URL;
+    const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
+    const staffEmail = await verifyStaff(env, tbase, jwt);
+    if (!staffEmail) return json({ error: 'غير مصرّح' }, 403);
+    const status = EVENTS.has(payload?.status) ? payload.status : 'received';
+    const tpl = (payload && payload.tpl && typeof payload.tpl === 'object') ? payload.tpl : null;
+    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+    const resumeUrl = status === 'needs_revision' ? `${origin}/register.html?resume=reg_demo&t=demo` : '';
+    const sampleRow = { legal_name_ar: 'شركة النور للمقاولات (تجربة)', legal_name_en: 'Al-Noor Contracting Co. (Test)' };
+    let { subject, html } = buildEmail(status, sampleRow, 'reg_demo_2026_a1b2', resumeUrl, tpl);
+    subject = '[تجربة] ' + subject;
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: env.NOTIFY_FROM, to: [staffEmail], subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
+      });
+      if (!r.ok) { const t = await r.text().catch(() => ''); return json({ error: 'تعذّر إرسال البريد التجريبي', detail: t.slice(0, 300) }, 502); }
+      return json({ ok: true, sent: true, to: staffEmail });
+    } catch (e) { return json({ error: 'تعذّر إرسال البريد التجريبي' }, 502); }
+  }
+
   if (!id || !EVENTS.has(event)) return json({ error: 'مدخلات غير صالحة' }, 400);
 
   const base = env.SUPABASE_URL;
