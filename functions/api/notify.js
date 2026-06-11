@@ -211,19 +211,19 @@ const DEFAULTS = {
     badge: ['تم الاستلام', 'Received', '#2563eb'],
     subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
     ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
-    en: `Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
+    en: `Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
   },
   approved: {
     badge: ['تم القبول', 'Approved', '#16a34a'],
     subject: `تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved`,
     ar: `يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.`,
-    en: `We are pleased to inform you that your application has been approved and you are now part of Al-Dhiabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities.`,
+    en: `We are pleased to inform you that your application has been approved and you are now part of Al-Deyabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities.`,
   },
   rejected: {
     badge: ['غير مقبول', 'Not Approved', '#dc2626'],
     subject: `بخصوص طلب تسجيلكم — مجموعة الذيابي | Application Update`,
     ar: `نشكر لكم اهتمامكم بالتسجيل كمورد لدى مجموعة الذيابي. بعد المراجعة، نأسف لإبلاغكم بعدم قبول الطلب في الوقت الحالي. للاستفسار أو إعادة التقديم مستقبلاً يسعدنا تواصلكم مع إدارة المشتريات.`,
-    en: `Thank you for your interest in registering as a supplier with Al-Dhiabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.`,
+    en: `Thank you for your interest in registering as a supplier with Al-Deyabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.`,
   },
   needs_revision: {
     badge: ['يحتاج تعديل', 'Action Required', '#d97706'],
@@ -304,7 +304,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo) {
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BRAND.line};border-radius:16px;overflow:hidden">
         <tr><td style="background:${BRAND.navy};padding:26px 30px">
-          <div style="color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.8">AL-DHIABI GROUP · بوابة الموردين</div>
+          <div style="color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.8">AL-DEYABI GROUP · بوابة الموردين</div>
           <div style="color:#fff;font-size:21px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
         </td></tr>
         <tr><td style="height:4px;background:${BRAND.gold}"></td></tr>
@@ -329,7 +329,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo) {
           </div>
         </td></tr>
         <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">
-          <div style="color:#fff;opacity:.85;font-size:12px">مجموعة الذيابي · Al-Dhiabi Group · Operations &amp; Supply Chain</div>
+          <div style="color:#fff;opacity:.85;font-size:12px">مجموعة الذيابي · Al-Deyabi Group · Operations &amp; Supply Chain</div>
           <div style="color:#fff;opacity:.55;font-size:11px;margin-top:4px">هذه رسالة آلية — يرجى عدم الرد عليها مباشرة · This is an automated message.</div>
         </td></tr>
       </table>
