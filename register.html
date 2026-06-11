@@ -2952,7 +2952,7 @@ async function connectSupabase(url, key) {
     }
   } catch(e) {
     hideProc();
-    toast('error', 'فشل الاتصال: ' + e.message);
+    toast('error', t('فشل الاتصال:') + ' ' + e.message);
     document.getElementById('setup-screen').classList.remove('hidden');
   }
 }
@@ -3005,7 +3005,7 @@ async function loadResumeData() {
     highlightRevisionFields(revisionInfo);
   } catch(e) {
     hideProc();
-    toast('error', 'فشل تحميل بيانات الطلب: ' + e.message);
+    toast('error', t('فشل تحميل بيانات الطلب:') + ' ' + e.message);
     showMainForm();
   }
 }
@@ -3221,7 +3221,7 @@ async function setupSave() {
     showMainForm();
   } catch(e) {
     hideProc();
-    errEl.textContent = 'فشل الاتصال: ' + (e.message || e);
+    errEl.textContent = t('فشل الاتصال:') + ' ' + (e.message || e);
     errEl.style.display = 'block';
   }
 }
@@ -3882,8 +3882,8 @@ async function submitForm() {
    UI HELPERS
    ════════════════════════════════════ */
 function showProc(title, sub) {
-  document.getElementById('proc-title').textContent = title;
-  document.getElementById('proc-sub').textContent   = sub;
+  document.getElementById('proc-title').textContent = t(title);
+  document.getElementById('proc-sub').textContent   = t(sub);
   document.getElementById('proc-overlay').classList.remove('hidden');
 }
 function hideProc() {
@@ -3930,6 +3930,23 @@ const DICT = {
   'اسحب أو انقر للرفع':'Drag or click to upload',
   'الوثائق المطلوب إعادة رفعها:':'Documents to re-upload:','الأقسام التي تحتاج مراجعة:':'Sections to review:','رقم الطلب المحفوظ:':'Saved application no.:',
   'تم إرجاع طلبك للمراجعة':'Your application was returned for revision',
+  // أمثلة الحقول (placeholders) + تسميات
+  'مثال: شركة النور للمقاولات':'e.g., Al-Noor Contracting Co.','مثال: 1440/03/15':'e.g., 1440/03/15',
+  'غرفة الرياض':'Riyadh Chamber','الرياض':'Riyadh','الرياض، حي العليا، شارع التخصصي، مبنى رقم 12':'Riyadh, Al-Olaya, Takhassusi St., Building 12',
+  'محمد عبدالله':'Mohammed Abdullah','محمد علي أحمد':'Mohammed Ali Ahmed','مدير المبيعات':'Sales Manager','المدير التنفيذي':'CEO',
+  'الدرجة الأولى — هيئة المقاولين':'First grade — Saudi Contractors Authority',
+  'اكتب وصفاً واضحاً لطبيعة نشاط منشأتكم، المنتجات أو الخدمات الرئيسية التي تقدمونها...':'Describe your business activity and the main products or services you provide...',
+  'الاسم الثلاثي':'Full name (three parts)','الدور':'Role','(إن وجد)':'(if any)','إغلاق':'Close',
+  // شاشة الإعداد (للمسؤول فقط)
+  'إعداد بوابة الموردين':'Supplier Portal Setup','اختبار الاتصال والمتابعة':'Test connection & continue',
+  'رابط Supabase':'Supabase URL','Anon Key (المفتاح العام)':'Anon Key (public key)',
+  'من لوحة Supabase → Settings → API → Project URL':'From Supabase → Settings → API → Project URL',
+  'من Supabase → Settings → API → anon public key':'From Supabase → Settings → API → anon public key',
+  'يرجى إدخال بيانات الاتصال بقاعدة البيانات (هذه الخطوة للمسؤول فقط)':'Please enter the database connection details (administrator only)',
+  'الاتصال بقاعدة البيانات':'Connecting to database','اختبار الاتصال...':'Testing connection...',
+  'فشل الاتصال:':'Connection failed:','فشل تحميل بيانات الطلب:':'Failed to load application data:',
+  'رابط التعديل غير صالح':'Invalid edit link','هذا الطلب لا يحتاج إلى تعديل':'This application does not require revision',
+  'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد':'The edit link is invalid or expired — please contact procurement for a new link.',
   'السجل التجاري':'Commercial Registration','PDF أو صورة واضحة':'PDF or a clear image',
   'شهادة الزكاة / VAT':'Zakat / VAT Certificate','شهادة ZATCA سارية':'Valid ZATCA certificate',
   'شهادة التأمينات (GOSI)':'GOSI Certificate','الشهادة السارية':'Valid certificate',
@@ -4035,11 +4052,13 @@ function _trTextNodes(root, toEN){
   }
 }
 function _trAttrs(root, toEN){
-  const els = root.querySelectorAll ? root.querySelectorAll('[placeholder]') : [];
-  els.forEach(el=>{
-    if(el.dataset.arPh===undefined) el.dataset.arPh = el.getAttribute('placeholder')||'';
-    const key=(el.dataset.arPh||'').trim();
-    el.setAttribute('placeholder', (toEN && DICT[key]) ? DICT[key] : el.dataset.arPh);
+  if(!root.querySelectorAll) return;
+  [['placeholder','arPh'],['title','arTitle'],['aria-label','arAria']].forEach(([attr,ds])=>{
+    root.querySelectorAll('['+attr+']').forEach(el=>{
+      if(el.dataset[ds]===undefined) el.dataset[ds] = el.getAttribute(attr)||'';
+      const key=(el.dataset[ds]||'').trim();
+      el.setAttribute(attr, (toEN && DICT[key]) ? DICT[key] : el.dataset[ds]);
+    });
   });
 }
 function applyLang(lang){
