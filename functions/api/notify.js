@@ -92,7 +92,10 @@ export async function onRequestPost({ request, env }) {
     let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
     const resumeUrl = status === 'needs_revision' ? `${origin}/register.html?resume=reg_demo&t=demo` : '';
     const sampleRow = { legal_name_ar: 'شركة النور للمقاولات (تجربة)', legal_name_en: 'Al-Noor Contracting Co. (Test)' };
-    let { subject, html } = buildEmail(status, sampleRow, 'reg_demo_2026_a1b2', resumeUrl, tpl);
+    const sampleRev = status === 'needs_revision'
+      ? { general: 'يرجى تحديث السجل التجاري بنسخة سارية المفعول.', fields: ['cr', 'vat'], sections: ['contact_info'] }
+      : null;
+    let { subject, html } = buildEmail(status, sampleRow, 'reg_demo_2026_a1b2', resumeUrl, tpl, sampleRev);
     subject = '[تجربة] ' + subject;
     try {
       const r = await fetch('https://api.resend.com/emails', {
@@ -125,7 +128,7 @@ export async function onRequestPost({ request, env }) {
   // اقرأ الحقول العامة فقط من سجل الطلب (لا وثائق)
   let row;
   try {
-    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,status,revision_token';
+    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,status,revision_token,review_notes';
     const r = await fetch(
       `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}&select=${cols}`,
       { headers });
@@ -164,7 +167,16 @@ export async function onRequestPost({ request, env }) {
     }
   } catch (_) {}
 
-  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom);
+  // عند «يحتاج تعديل»: استخرج البنود المطلوبة بالتحديد (وثائق/أقسام/ملاحظة) من ملاحظات المراجِع
+  let revisionInfo = null;
+  if (event === 'needs_revision' && row.review_notes) {
+    try {
+      const rn = typeof row.review_notes === 'string' ? JSON.parse(row.review_notes) : row.review_notes;
+      if (rn && ((rn.fields && rn.fields.length) || (rn.sections && rn.sections.length) || rn.general)) revisionInfo = rn;
+    } catch (_) {}
+  }
+
+  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom, revisionInfo);
 
   // أرسل عبر Resend
   try {
@@ -221,6 +233,40 @@ const DEFAULTS = {
   },
 };
 
+// تسميات ثنائية اللغة لبنود التعديل (تطابق معرّفات لوحة المراجعة في index.html)
+const DOC_LABELS = {
+  cr: { ar: 'السجل التجاري', en: 'Commercial Registration' },
+  vat: { ar: 'شهادة الزكاة / ضريبة القيمة المضافة', en: 'Zakat / VAT Certificate' },
+  gosi: { ar: 'شهادة التأمينات الاجتماعية', en: 'GOSI Certificate' },
+  chamber: { ar: 'شهادة الغرفة التجارية', en: 'Chamber of Commerce Certificate' },
+  natl_addr: { ar: 'وثيقة العنوان الوطني', en: 'National Address Document' },
+  municipal: { ar: 'رخصة البلدية / الترخيص الصناعي', en: 'Municipal / Industrial License' },
+  quality: { ar: 'شهادات الجودة', en: 'Quality Certificates' },
+  safety: { ar: 'شهادات السلامة والبيئة', en: 'Safety & Environment Certificates' },
+  clients: { ar: 'قائمة العملاء والمشاريع', en: 'Clients & Projects List' },
+  brochure: { ar: 'بروشور / ملف تعريفي', en: 'Company Profile' },
+};
+const SEC_LABELS = {
+  general_info: { ar: 'بيانات المنشأة', en: 'Company Information' },
+  contact_info: { ar: 'بيانات التواصل', en: 'Contact Information' },
+  activity_info: { ar: 'النشاط والخدمات', en: 'Activity & Services' },
+};
+function renderRevisionBox(rev, lang) {
+  const B = BRAND;
+  const docs = (rev.fields || []).map((id) => (DOC_LABELS[id] && DOC_LABELS[id][lang]) || id);
+  const secs = (rev.sections || []).map((id) => (SEC_LABELS[id] && SEC_LABELS[id][lang]) || id);
+  const tr = (ar, en) => (lang === 'ar' ? ar : en);
+  const pad = lang === 'ar' ? 'right' : 'left';
+  let items = '';
+  if (docs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('وثائق مطلوب إعادة رفعها:', 'Documents to re-upload:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${docs.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`;
+  if (secs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('أقسام تحتاج مراجعة:', 'Sections to review:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${secs.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`;
+  const gen = rev.general ? `<div style="margin-top:8px;font-size:13px;color:${B.ink}"><b>${tr('ملاحظة الفريق:', 'Team note:')}</b> ${esc(rev.general)}</div>` : '';
+  if (!items && !gen) return '';
+  return `<div dir="${lang === 'ar' ? 'rtl' : 'ltr'}" style="text-align:${pad};background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin:14px 0">
+    <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:4px">${tr('المطلوب تعديله أو استكماله', 'Items to update or complete')}</div>
+    ${items}${gen}
+  </div>`;
+}
 function fillVars(t, v) {
   return String(t == null ? '' : t)
     .replace(/\{name_en\}/g, v.name_en).replace(/\{name\}/g, v.name).replace(/\{id\}/g, v.id);
@@ -230,11 +276,13 @@ function paragraphs(text, style) {
     .map(p => `<p style="${style}">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-function buildEmail(event, row, id, resumeUrl, custom) {
+function buildEmail(event, row, id, resumeUrl, custom, revisionInfo) {
   const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
   const D = DEFAULTS[event] || DEFAULTS.received;
   const c = custom || {};
+  const revAr = revisionInfo ? renderRevisionBox(revisionInfo, 'ar') : '';
+  const revEn = revisionInfo ? renderRevisionBox(revisionInfo, 'en') : '';
 
   const subjectRaw = (c.subject && String(c.subject).trim()) ? c.subject : D.subject;
   const arRaw = (c.ar && String(c.ar).trim()) ? c.ar : D.ar;
@@ -265,6 +313,7 @@ function buildEmail(event, row, id, resumeUrl, custom) {
 
           <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
           ${arHtml}
+          ${revAr}
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0">${cta}</table>
 
           <div style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:10px;padding:12px 16px;margin:14px 0">
@@ -276,6 +325,7 @@ function buildEmail(event, row, id, resumeUrl, custom) {
           <div dir="ltr" style="text-align:left">
             <h3 style="font-size:15px;margin:0 0 6px;color:${BRAND.navy}">${esc(nameEn)}</h3>
             ${enHtml}
+            ${revEn}
           </div>
         </td></tr>
         <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">

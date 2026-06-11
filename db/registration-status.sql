@@ -22,6 +22,7 @@ DECLARE
   v_verify text;
   v_notes  text := NULL;
   v_msg    jsonb := NULL;
+  v_rev    jsonb := NULL;
 BEGIN
   IF p_id IS NULL OR p_verify IS NULL OR length(btrim(p_verify)) < 3 THEN
     RETURN NULL;
@@ -50,9 +51,11 @@ BEGIN
   v_notes := v_row.review_notes;
   IF v_notes IS NOT NULL AND length(btrim(v_notes)) > 0 THEN
     BEGIN
-      v_msg := (v_notes::jsonb -> 'general');
+      v_rev := v_notes::jsonb;                 -- الكائن الكامل (general/fields/sections)
+      v_msg := (v_rev -> 'general');
       IF v_msg IS NULL THEN v_msg := to_jsonb(v_notes); END IF;
     EXCEPTION WHEN others THEN
+      v_rev := NULL;
       v_msg := to_jsonb(v_notes);
     END;
   END IF;
@@ -65,7 +68,8 @@ BEGIN
     'submitted_at',  v_row.submitted_at,
     'reviewed_at',   v_row.reviewed_at,
     'message',       v_msg,
-    -- يُعاد فقط عند الحاجة لتعديل، ليتمكن المورد من فتح رابط الاستئناف
+    -- تفاصيل التعديل المطلوبة (وثائق/أقسام/ملاحظة) — تُعرض للمورد في المتابعة
+    'revision',      CASE WHEN v_row.status = 'needs_revision' THEN v_rev ELSE NULL END,
     'needs_revision', (v_row.status = 'needs_revision'),
     'revision_token', CASE WHEN v_row.status = 'needs_revision' THEN v_row.revision_token ELSE NULL END
   );
