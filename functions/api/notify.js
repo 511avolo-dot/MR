@@ -125,7 +125,19 @@ export async function onRequestPost({ request, env }) {
     ? `${origin}/register.html?resume=${encodeURIComponent(id)}&t=${encodeURIComponent(row.revision_token)}`
     : '';
 
-  const { subject, html } = buildEmail(event, row, id, resumeUrl);
+  // اقرأ القوالب المخصّصة من قاعدة البيانات (إن وُجدت) — وإلا تُستخدم الافتراضية المدمجة
+  let custom = null;
+  try {
+    const tr = await fetch(`${base}/rest/v1/proc_settings?key=eq.email_templates&select=value`, { headers });
+    if (tr.ok) {
+      const rows = await tr.json();
+      let v = rows && rows[0] ? rows[0].value : null;
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (_) { v = null; } }
+      if (v && typeof v === 'object') custom = v[event] || null;
+    }
+  } catch (_) {}
+
+  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom);
 
   // أرسل عبر Resend
   try {
@@ -151,44 +163,59 @@ export async function onRequestPost({ request, env }) {
   }
 }
 
-/* ── قوالب البريد الاحترافية (ثنائية اللغة) ── */
+/* ── قوالب البريد الاحترافية (ثنائية اللغة) — افتراضية، تُتجاوز بقوالب قاعدة البيانات ── */
 const BRAND = { navy: '#0B1B36', gold: '#B8923D', ink: '#1f2937', soft: '#6b7280', line: '#e6e8ee', wash: '#f6f4ee' };
 
-function buildEmail(event, row, id, resumeUrl) {
+// المتغيّرات المدعومة في النصوص: {name} اسم المنشأة · {name_en} الاسم الإنجليزي · {id} رقم الطلب
+const DEFAULTS = {
+  received: {
+    badge: ['تم الاستلام', 'Received', '#2563eb'],
+    subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
+    ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
+    en: `Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
+  },
+  approved: {
+    badge: ['تم القبول', 'Approved', '#16a34a'],
+    subject: `تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved`,
+    ar: `يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.`,
+    en: `We are pleased to inform you that your application has been approved and you are now part of Al-Dhiabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities.`,
+  },
+  rejected: {
+    badge: ['غير مقبول', 'Not Approved', '#dc2626'],
+    subject: `بخصوص طلب تسجيلكم — مجموعة الذيابي | Application Update`,
+    ar: `نشكر لكم اهتمامكم بالتسجيل كمورد لدى مجموعة الذيابي. بعد المراجعة، نأسف لإبلاغكم بعدم قبول الطلب في الوقت الحالي. للاستفسار أو إعادة التقديم مستقبلاً يسعدنا تواصلكم مع إدارة المشتريات.`,
+    en: `Thank you for your interest in registering as a supplier with Al-Dhiabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.`,
+  },
+  needs_revision: {
+    badge: ['يحتاج تعديل', 'Action Required', '#d97706'],
+    subject: `طلبكم بحاجة إلى استكمال — مجموعة الذيابي | Action Required`,
+    ar: `راجعنا طلبكم ونحتاج إلى تعديل أو استكمال بعض البيانات/الوثائق لإتمام الاعتماد. يرجى فتح الطلب عبر الزر أدناه وتحديث المطلوب ثم إعادة إرساله.`,
+    en: `We have reviewed your application and need some data/documents to be revised or completed before approval. Please open your application using the button below, update the required items, and resubmit.`,
+  },
+};
+
+function fillVars(t, v) {
+  return String(t == null ? '' : t)
+    .replace(/\{name_en\}/g, v.name_en).replace(/\{name\}/g, v.name).replace(/\{id\}/g, v.id);
+}
+function paragraphs(text, style) {
+  return String(text || '').split(/\n{2,}/).filter(s => s.trim() !== '')
+    .map(p => `<p style="${style}">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+function buildEmail(event, row, id, resumeUrl, custom) {
   const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
+  const D = DEFAULTS[event] || DEFAULTS.received;
+  const c = custom || {};
 
-  const T = {
-    received: {
-      subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
-      badge: ['تم الاستلام', 'Received', '#2563eb'],
-      ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.`,
-      en: `Thank you for registering as a supplier with Al-Dhiabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.`,
-      extraAr: `يمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
-      extraEn: `You can track your application status anytime via the supplier portal using the application number below.`,
-    },
-    approved: {
-      subject: `تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved`,
-      badge: ['تم القبول', 'Approved', '#16a34a'],
-      ar: `يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.`,
-      en: `We are pleased to inform you that your application has been approved and you are now part of Al-Dhiabi Group's accredited suppliers. Our procurement team will contact you with next steps and supply opportunities.`,
-      extraAr: '', extraEn: '',
-    },
-    rejected: {
-      subject: `بخصوص طلب تسجيلكم — مجموعة الذيابي | Application Update`,
-      badge: ['غير مقبول', 'Not Approved', '#dc2626'],
-      ar: `نشكر لكم اهتمامكم بالتسجيل كمورد لدى مجموعة الذيابي. بعد المراجعة، نأسف لإبلاغكم بعدم قبول الطلب في الوقت الحالي. للاستفسار أو إعادة التقديم مستقبلاً يسعدنا تواصلكم مع إدارة المشتريات.`,
-      en: `Thank you for your interest in registering as a supplier with Al-Dhiabi Group. After review, we regret to inform you that the application was not approved at this time. For inquiries or to re-apply in the future, please contact our procurement department.`,
-      extraAr: '', extraEn: '',
-    },
-    needs_revision: {
-      subject: `طلبكم بحاجة إلى استكمال — مجموعة الذيابي | Action Required`,
-      badge: ['يحتاج تعديل', 'Action Required', '#d97706'],
-      ar: `راجعنا طلبكم ونحتاج إلى تعديل أو استكمال بعض البيانات/الوثائق لإتمام الاعتماد. يرجى فتح الطلب عبر الزر أدناه وتحديث المطلوب ثم إعادة إرساله.`,
-      en: `We have reviewed your application and need some data/documents to be revised or completed before approval. Please open your application using the button below, update the required items, and resubmit.`,
-      extraAr: '', extraEn: '',
-    },
-  }[event];
+  const subjectRaw = (c.subject && String(c.subject).trim()) ? c.subject : D.subject;
+  const arRaw = (c.ar && String(c.ar).trim()) ? c.ar : D.ar;
+  const enRaw = (c.en && String(c.en).trim()) ? c.en : D.en;
+
+  const subject = fillVars(subjectRaw, { name: nameAr, name_en: nameEn, id });
+  const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink}`);
+  const enHtml = paragraphs(fillVars(enRaw, { name: nameEn, name_en: nameEn, id }), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink}`);
 
   const cta = resumeUrl
     ? `<tr><td style="padding:8px 0 4px">
@@ -207,11 +234,10 @@ function buildEmail(event, row, id, resumeUrl) {
         </td></tr>
         <tr><td style="height:4px;background:${BRAND.gold}"></td></tr>
         <tr><td style="padding:30px">
-          <span style="display:inline-block;background:${T.badge[2]}1a;color:${T.badge[2]};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${esc(T.badge[0])} · ${esc(T.badge[1])}</span>
+          <span style="display:inline-block;background:${D.badge[2]}1a;color:${D.badge[2]};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${esc(D.badge[0])} · ${esc(D.badge[1])}</span>
 
           <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
-          <p style="font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink}">${esc(T.ar)}</p>
-          ${T.extraAr ? `<p style="font-size:13px;line-height:1.8;margin:8px 0;color:${BRAND.soft}">${esc(T.extraAr)}</p>` : ''}
+          ${arHtml}
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0">${cta}</table>
 
           <div style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:10px;padding:12px 16px;margin:14px 0">
@@ -222,8 +248,7 @@ function buildEmail(event, row, id, resumeUrl) {
           <hr style="border:none;border-top:1px solid ${BRAND.line};margin:22px 0">
           <div dir="ltr" style="text-align:left">
             <h3 style="font-size:15px;margin:0 0 6px;color:${BRAND.navy}">${esc(nameEn)}</h3>
-            <p style="font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink}">${esc(T.en)}</p>
-            ${T.extraEn ? `<p style="font-size:12.5px;line-height:1.7;margin:8px 0;color:${BRAND.soft}">${esc(T.extraEn)}</p>` : ''}
+            ${enHtml}
           </div>
         </td></tr>
         <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">
@@ -235,5 +260,5 @@ function buildEmail(event, row, id, resumeUrl) {
   </table>
 </body></html>`;
 
-  return { subject: T.subject, html };
+  return { subject, html };
 }
