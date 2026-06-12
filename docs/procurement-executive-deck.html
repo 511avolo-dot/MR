@@ -3,7 +3,7 @@
 <title>تطوير وحوكمة منظومة المشتريات — مجموعة الذيابي</title>
 <style>
 :root{--ink:#0E2A38;--ink2:#143A4C;--gold:#C9A24B;--sand:#F6F3ED;--line:#DDD4C2;
---slate:#3A4650;--mute:#6B747C;--red:#9E2B25;--amber:#C57A0C;--green:#2E6B3E;--card:#fff}
+--slate:#3A4650;--mute:#6B747C;--red:#9E2B25;--amber:#C57A0C;--green:#2E6B3E}
 *{box-sizing:border-box}
 body{margin:0;background:#e9e4d8;color:var(--slate);
 font-family:"Segoe UI","Tahoma","Geeza Pro","Noto Naskh Arabic","Arial",sans-serif;line-height:1.7}
@@ -12,91 +12,89 @@ font-family:"Segoe UI","Tahoma","Geeza Pro","Noto Naskh Arabic","Arial",sans-ser
 padding:26px 24px;margin:18px 0;box-shadow:0 4px 18px rgba(14,42,56,.08)}
 .cover{background:var(--ink);color:#fff;text-align:center;padding:54px 26px;border:none}
 .cover .br{color:var(--gold);font-weight:700;letter-spacing:1px}
-.cover h1{font-size:34px;margin:14px 0 8px}
-.cover .sub{color:var(--gold);font-size:18px}
+.cover h1{font-size:32px;margin:14px 0 8px}
+.cover .sub{color:var(--gold);font-size:17px}
 .cover .meta{margin-top:26px;border-top:3px solid var(--gold);padding-top:18px;font-size:15px;color:#eee}
 .band{background:var(--ink);color:#fff;font-weight:700;font-size:20px;
 padding:12px 16px;border-radius:10px;border-right:6px solid var(--gold);margin-bottom:16px}
 h2.t{color:var(--ink);font-size:24px;margin:4px 0 2px}
 .kick{color:var(--gold);font-weight:700;margin-bottom:12px}
-table.sol{width:100%;border-collapse:collapse;font-size:15px;overflow:hidden;border-radius:10px}
-table.sol th{background:var(--ink);color:#fff;padding:11px 10px;font-size:15px}
-table.sol td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
-table.sol tr:nth-child(even) td{background:#efeadf}
-table.sol tr:nth-child(odd) td{background:#fff}
-.prob{color:var(--ink);font-weight:700;width:40%}
-.eff{color:var(--slate);width:26%}
+table.tbl{width:100%;border-collapse:collapse;font-size:15px;border-radius:10px;overflow:hidden}
+table.tbl th{background:var(--ink);color:#fff;padding:11px 10px}
+table.tbl td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tbl tr:nth-child(even) td{background:#efeadf} table.tbl tr:nth-child(odd) td{background:#fff}
+.prob{color:var(--ink);font-weight:700;width:40%} .eff{color:var(--slate);width:26%}
 .sol{color:var(--green);font-weight:600;width:34%}
+.st{color:var(--ink);font-weight:700;text-align:center;width:16%} .ac{width:40%}
+.ow{text-align:center;width:18%;color:var(--ink)} .dc{text-align:center;width:18%;color:var(--green);font-weight:600}
 .decision{background:var(--ink2);color:#fff;border-right:6px solid var(--gold);
 padding:12px 16px;border-radius:10px;margin-top:16px}
 .decision b{color:var(--gold);display:block;font-size:13px;margin-bottom:3px}
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.cards .c{background:#fff;border:1px solid var(--line);border-radius:10px;
-padding:14px;border-right:7px solid var(--gold)}
+.cards .c{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;border-right:7px solid var(--gold)}
 .cards .c h3{margin:0 0 6px;color:var(--ink)}
+.pols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pol{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-right:6px solid var(--gold)}
+.pol h4{margin:0 0 4px;color:var(--ink);font-size:16px} .pol p{margin:0;font-size:13px;color:var(--slate)}
 .matrix{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .mcard{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center}
 .mcard .mh{color:#fff;font-weight:700;padding:8px}
 .mcard.lvl-g .mh{background:var(--green)} .mcard.lvl-a .mh{background:var(--amber)}
 .mcard.lvl-r .mh{background:var(--red)} .mcard.lvl-i .mh{background:var(--ink)}
 .mcard .mv{font-weight:700;color:var(--ink);padding:8px 6px 4px}
-.mcard .ml{color:var(--gold);font-weight:700;font-size:12px;margin-top:6px}
-.mcard .md{font-size:13px;padding:0 6px}
-.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-start}
-.step{background:var(--ink);color:#fff;border-radius:10px;padding:12px 10px;
-font-weight:700;font-size:14px;flex:1 1 160px;text-align:center;min-width:140px}
-.step.key{background:var(--gold);color:var(--ink)}
-.arr{color:var(--mute);font-weight:700}
+.mcard .ml{color:var(--gold);font-weight:700;font-size:12px;margin-top:6px} .mcard .md{font-size:13px;padding:0 6px}
+.exc{background:#f0e7d2;border:1px solid var(--gold);border-radius:10px;padding:12px 14px;margin-top:14px}
+.exc b{color:var(--red)}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.step{background:var(--ink);color:#fff;border-radius:10px;padding:12px 10px;font-weight:700;
+font-size:14px;flex:1 1 160px;text-align:center;min-width:140px}
+.step.key{background:var(--gold);color:var(--ink)} .arr{color:var(--mute);font-weight:700}
 .asks{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.ask{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
-font-weight:700;color:var(--ink);display:flex;align-items:center;gap:10px}
-.ask .n{background:var(--green);color:#fff;width:34px;height:34px;border-radius:8px;
-display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.ask{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-weight:700;
+color:var(--ink);display:flex;align-items:center;gap:10px}
+.ask .n{background:var(--green);color:#fff;width:34px;height:34px;border-radius:8px;display:flex;
+align-items:center;justify-content:center;font-size:18px;flex:none}
 .road{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .phase{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .phase .ph{background:var(--ink);color:#fff;padding:12px;font-weight:700;font-size:18px;text-align:center}
 .phase .ph small{display:block;color:var(--sand);font-weight:400;font-size:13px;margin-top:2px}
-.phase ul{margin:10px 14px;padding:0 16px 6px}
-.phase li{margin:6px 0}
+.phase ul{margin:10px 14px;padding:0 16px 6px} .phase li{margin:6px 0}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .kpi{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;text-align:center}
-.kpi .kh{background:var(--ink);color:#fff;font-weight:700;padding:9px}
-.kpi .kd{padding:8px;color:var(--slate)}
+.kpi .kh{background:var(--ink);color:#fff;font-weight:700;padding:9px} .kpi .kd{padding:8px;color:var(--slate)}
 .kpi .kt{color:var(--green);font-weight:700;padding-bottom:10px}
 .heat{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.hrow{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
-display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--ink)}
+.hrow{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;
+justify-content:space-between;align-items:center;font-weight:700;color:var(--ink)}
 .tag{color:#fff;border-radius:6px;padding:3px 10px;font-size:13px}
 .tag.r{background:var(--red)} .tag.a{background:var(--amber)} .tag.g{background:var(--green)}
-@media(max-width:760px){.cards,.asks,.road,.kpis,.heat{grid-template-columns:1fr}
-.matrix{grid-template-columns:1fr 1fr} .cover h1{font-size:26px}
-table.sol{font-size:13px} .step{flex-basis:120px}}
+@media(max-width:760px){.cards,.asks,.road,.kpis,.heat,.pols{grid-template-columns:1fr}
+.matrix{grid-template-columns:1fr 1fr} table.tbl{font-size:13px}}
 @media print{body{background:#fff} .slide{page-break-inside:avoid;box-shadow:none}}
 </style></head><body><div class="wrap">
 
 <section class="slide cover">
   <div class="br">مجموعة الذيابي للمقاولات</div>
   <h1>تطوير وحوكمة منظومة المشتريات وسلسلة الإمداد</h1>
-  <div class="sub">تشخيص الوضع الراهن — وحلول عملية لكل تحدٍّ — وخارطة طريق للاعتماد</div>
-  <div class="meta">وثيقة قرار تنفيذية مرفوعة إلى سعادة المدير العام والإدارة العليا<br>
-  إعداد: إدارة العمليات والمشتريات</div>
+  <div class="sub">تشخيص الوضع الراهن — وحلول عملية لكل تحدٍّ — وسياسات وإجراءات ودورة داخلية كاملة</div>
+  <div class="meta">وثيقة قرار تنفيذية مرفوعة إلى سعادة المدير العام والإدارة العليا<br>إعداد: إدارة العمليات والمشتريات</div>
 </section>
 
 <section class="slide"><h2 class="t">السياق والهدف</h2><div class="kick">لماذا الآن؟</div>
 <ul>
 <li><b>إدارة المشتريات هي القلب الذي يربط المشاريع والصيانة والمالية والمستودعات والموردين</b>، وأي خلل في تنظيمها ينعكس على الجميع.</li>
 <li>تراكمت ملاحظات متكرّرة تؤثر على كفاءة الإنفاق وانتظام التوريد وعلاقتنا بالموردين.</li>
-<li>الهدف ليس تحميل أي إدارة اللوم، بل وضع سياسات ثابتة ومُلزِمة تحمي مصلحة الشركة.</li>
+<li>الهدف ليس تحميل أي إدارة اللوم، بل وضع سياسات وإجراءات ثابتة ومُلزِمة تحمي مصلحة الشركة.</li>
 <li>المسار: مناقشة النقاط مع الإدارات ذات العلاقة، ثم رفعها للإدارة العليا لاعتماد القرار المناسب لكل بند.</li>
 </ul>
-<div class="decision"><b>القرار / السياسة المطلوبة</b>اعتماد هذه الوثيقة أساساً للنقاش المؤسسي ثم إقرار سياسة ثابتة لكل بند فيها.</div></section>
+<div class="decision"><b>القرار / السياسة المطلوبة</b>اعتماد هذه الوثيقة أساساً للنقاش المؤسسي ثم إقرار سياسة وإجراء ثابت لكل بند فيها.</div></section>
 
 <section class="slide"><h2 class="t">الملخص التنفيذي</h2><div class="kick">الصورة الكاملة في صفحة واحدة</div>
 <div class="cards">
-<div class="c"><h3>جوهر المشكلة</h3>غياب دورة مستندية مُلزِمة وقناة موحّدة للطلبات وصلاحيات واضحة وسجل أسعار مرجعي.</div>
+<div class="c"><h3>جوهر المشكلة</h3>غياب دورة مستندية مُلزِمة وقناة موحّدة للطلبات وصلاحيات واضحة وضوابط ثابتة للعمل.</div>
 <div class="c"><h3>الأثر</h3>ازدواج في الإنفاق، وتأخّر في التوريد، وتآكل في ثقة الموردين، وضعف في الرقابة على التكلفة.</div>
-<div class="c"><h3>الحل</h3>مأسسة المشتريات: قناة واحدة إلزامية ودورة موثّقة ومصفوفة صلاحيات وسجل أسعار وعقود إطارية.</div>
-<div class="c"><h3>المطلوب</h3>إقرار السياسات الثابتة وخارطة الطريق (٣٠ يوماً / ٩٠ يوماً / المدى البعيد).</div>
+<div class="c"><h3>الحل</h3>مأسسة المشتريات: قناة واحدة إلزامية ودورة موثّقة وثلاثة عروض لكل شراء ومصفوفة صلاحيات وعقود إطارية.</div>
+<div class="c"><h3>المطلوب</h3>إقرار السياسات والإجراءات وخارطة الطريق (٣٠ يوماً / ٩٠ يوماً / المدى البعيد).</div>
 </div></section>
 
 <section class="slide"><h2 class="t">لوحة التحديات المرصودة</h2><div class="kick">مصنّفة حسب درجة الأثر</div>
@@ -106,127 +104,90 @@ table.sol{font-size:13px} .step{flex-basis:120px}}
 <div class="hrow"><span>بطء التحويل المالي للموردين</span><span class="tag r">حرج</span></div>
 <div class="hrow"><span>الإفراط في «العاجل» وتآكل الثقة</span><span class="tag a">مرتفع</span></div>
 <div class="hrow"><span>الطلبات المعلّقة دون إجراء</span><span class="tag a">مرتفع</span></div>
-<div class="hrow"><span>تكرار التسعير وغياب سجل الأسعار</span><span class="tag a">مرتفع</span></div>
-<div class="hrow"><span>غياب الصلاحيات والدورة المستندية</span><span class="tag a">مرتفع</span></div>
+<div class="hrow"><span>غياب دورة مستندية وإجراءات موحّدة</span><span class="tag a">مرتفع</span></div>
+<div class="hrow"><span>غياب مصفوفة الصلاحيات</span><span class="tag a">مرتفع</span></div>
+<div class="hrow"><span>بطء تسعير المناقصات</span><span class="tag g">متوسط</span></div>
 <div class="hrow"><span>عهدة قصر الياسمين</span><span class="tag g">متوسط</span></div>
 <div class="hrow"><span>طلبات البنية التحتية المتكررة</span><span class="tag g">متوسط</span></div>
-<div class="hrow"><span>غياب العقود الإطارية</span><span class="tag g">متوسط</span></div>
 </div></section>
 
 <section class="slide">
   <div class="band">أولاً: تنظيم الطلبات والدورة المستندية</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>طلبات عبر البريد والواتساب بصفة «عاجل» دون نموذج رسمي.</td><td class='eff'>غياب الالتزام والتتبّع وإرباك التنفيذ.</td><td class='sol'>نموذج طلب شراء موحّد إلزامي موقّع من صاحب الصلاحية؛ ولا يُعتدّ بأي طلب خارجه.</td></tr><tr><td class='prob'>الإفراط في وصف الطلبات بالعاجل وأغلبها لا يُستكمل بأمر شراء.</td><td class='eff'>فتور استجابة الموردين وارتفاع الأسعار.</td><td class='sol'>قصر «العاجل» على ما يعتمده مدير الإدارة الطالبة خطياً بمبرّر، مع سقف عددي.</td></tr><tr><td class='prob'>طلبات تبقى معلّقة دون اعتماد أو تحويل للمورد لفترات طويلة.</td><td class='eff'>تأخّر التوريد وتعطّل الأعمال.</td><td class='sol'>مدة معيارية للبتّ (٣ أيام عمل)، ولوحة متابعة بحالة كل طلب، وإغلاق المنتفي.</td></tr><tr><td class='prob'>غموض في الدورة المستندية ومن يوقّع ومن يعتمد.</td><td class='eff'>عشوائية وتأخير وتكرار للإجراءات.</td><td class='sol'>دورة مستندية موثّقة، ومصفوفة صلاحيات تحدّد الموقّع والمعتمِد لكل قيمة.</td></tr><tr><td class='prob'>طلبات بمواصفات ناقصة وتشتّت قنوات المستندات.</td><td class='eff'>أخطاء في التوريد وإعادة عمل.</td><td class='sol'>إلزام إرفاق صورة البند أو اسم العلامة التجارية، واعتماد قناة رسمية واحدة.</td></tr></tbody>
-  </table>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>طلبات عبر البريد والواتساب بصفة «عاجل» دون نموذج رسمي.</td><td class='eff'>غياب الالتزام والتتبّع وإرباك التنفيذ.</td><td class='sol'>نموذج طلب شراء موحّد إلزامي موقّع من صاحب الصلاحية؛ ولا يُعتدّ بأي طلب خارجه.</td></tr><tr><td class='prob'>الإفراط في وصف الطلبات بالعاجل وأغلبها لا يُستكمل بأمر شراء.</td><td class='eff'>فتور استجابة الموردين وارتفاع الأسعار.</td><td class='sol'>قصر «العاجل» على ما يعتمده مدير الإدارة الطالبة خطياً بمبرّر، مع سقف عددي.</td></tr><tr><td class='prob'>طلبات تبقى معلّقة دون اعتماد أو تحويل للمورد لفترات طويلة.</td><td class='eff'>تأخّر التوريد وتعطّل الأعمال.</td><td class='sol'>مدة معيارية للبتّ (٣ أيام عمل)، ولوحة متابعة بحالة كل طلب، وإغلاق المنتفي.</td></tr><tr><td class='prob'>غموض في الدورة المستندية ومن يوقّع ومن يعتمد.</td><td class='eff'>عشوائية وتأخير وتكرار للإجراءات.</td><td class='sol'>دورة مستندية موثّقة، ومصفوفة صلاحيات تحدّد الموقّع والمعتمِد لكل قيمة.</td></tr><tr><td class='prob'>طلبات بمواصفات ناقصة وتشتّت قنوات المستندات.</td><td class='eff'>أخطاء في التوريد وإعادة عمل.</td><td class='sol'>إلزام إرفاق صورة البند أو اسم العلامة التجارية، واعتماد قناة رسمية واحدة.</td></tr></tbody></table>
 </section><section class="slide">
   <div class="band">ثانياً: ازدواجية التوريد والشراء المباشر</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>تُكلَّف المشتريات بالتوريد ثم يتبيّن أن الصيانة وردّت الصنف من مورد أجل.</td><td class='eff'>التزام مالي مزدوج وإرباك المورد وإهدار الجهد.</td><td class='sol'>إشعار فوري عند انتفاء الحاجة، ومنع أي توريد موازٍ بعد إصدار أمر الشراء.</td></tr><tr><td class='prob'>تنفيذ عمليات شراء مباشرة خارج إدارة المشتريات.</td><td class='eff'>فقدان الرقابة وضعف التفاوض وتعدّد قنوات المورد.</td><td class='sol'>حصر كل شراء وتوريد لقطاعات المجموعة عبر المشتريات حصراً بقرار من الإدارة العليا.</td></tr><tr><td class='prob'>التعامل مع موردين بعينهم والشراء منهم مباشرة دون الرجوع للمشتريات.</td><td class='eff'>ازدواج الحسابات وصعوبة التدقيق.</td><td class='sol'>إدراجهم ضمن قائمة موردين معتمدة موحّدة تُدار عبر المشتريات.</td></tr><tr><td class='prob'>عدم ربط الطلب برصيد المستودع قبل الشراء.</td><td class='eff'>شراء أصناف متوفّرة أصلاً في المخزون.</td><td class='sol'>جعل فحص رصيد المستودع خطوة إلزامية قبل أي طلب شراء.</td></tr></tbody>
-  </table>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>تُكلَّف المشتريات بالتوريد ثم يتبيّن أن الصيانة وردّت الصنف من مورد أجل.</td><td class='eff'>التزام مالي مزدوج وإرباك المورد وإهدار الجهد.</td><td class='sol'>إشعار فوري عند انتفاء الحاجة، ومنع أي توريد موازٍ بعد إصدار أمر الشراء.</td></tr><tr><td class='prob'>تنفيذ عمليات شراء مباشرة خارج إدارة المشتريات.</td><td class='eff'>فقدان الرقابة وضعف التفاوض وتعدّد قنوات المورد.</td><td class='sol'>حصر كل شراء وتوريد لقطاعات المجموعة عبر المشتريات حصراً بقرار من الإدارة العليا.</td></tr><tr><td class='prob'>التعامل مع موردين بعينهم والشراء منهم مباشرة دون الرجوع للمشتريات.</td><td class='eff'>ازدواج الحسابات وصعوبة التدقيق.</td><td class='sol'>إدراجهم ضمن قائمة موردين معتمدة موحّدة تُدار عبر المشتريات.</td></tr><tr><td class='prob'>عدم ربط الطلب برصيد المستودع قبل الشراء.</td><td class='eff'>شراء أصناف متوفّرة أصلاً في المخزون.</td><td class='sol'>جعل فحص رصيد المستودع خطوة إلزامية قبل أي طلب شراء.</td></tr></tbody></table>
 </section><section class="slide">
-  <div class="band">رابعاً: التسعير وسجل الأسعار المرجعي</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>إعادة تسعير البنود نفسها لكل مشروع رغم التزويد بالأسعار سابقاً.</td><td class='eff'>إهدار الوقت وتفاوت سعر الصنف الواحد.</td><td class='sol'>إنشاء سجل أسعار مرجعي موحّد يُرجَع إليه قبل أي استفسار من المورد.</td></tr><tr><td class='prob'>لا يوجد تاريخ لأسعار المواد رغم الشراء المستمر.</td><td class='eff'>غياب مرجع للمقارنة والرقابة على الأسعار.</td><td class='sol'>تغذية السجل آلياً من فواتير الشراء في النظام المالي وتحديثه دورياً.</td></tr><tr><td class='prob'>تسعير منافسات المشاريع تحت ضغط وقت غير كافٍ.</td><td class='eff'>أسعار غير دقيقة وضياع فرص التقديم.</td><td class='sol'>تحديد مدة معيارية كافية لتسعير المنافسات تُتّفق عليها مسبقاً.</td></tr><tr><td class='prob'>تكرار مخاطبة الموردين لكل تسعيرة جديدة.</td><td class='eff'>استهلاك علاقة المورد بكثرة طلبات التسعير.</td><td class='sol'>الرجوع للسجل أولاً، ثم تحديث العروض للبنود المتغيّرة فقط.</td></tr></tbody>
-  </table>
+  <div class="band">ثالثاً: تسعير المناقصات وسجل الأسعار</div>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>إعادة تجميع الأسعار يدوياً عند تسعير كل مناقصة رغم توفّر بيانات سابقة.</td><td class='eff'>بطء تجهيز عروض المناقصات وتفويت فرص الترسية.</td><td class='sol'>إنشاء سجل أسعار مرجعي يُستعان به عند إعداد عروض المناقصات فقط — دون أن يُستخدم في الشراء أو يُغني عن العروض.</td></tr><tr><td class='prob'>لا يوجد تاريخ لأسعار المواد رغم الشراء المستمر.</td><td class='eff'>غياب مرجع يدعم دقة تسعير المناقصات.</td><td class='sol'>تغذية السجل آلياً من فواتير الشراء والنظام المالي وتحديثه دورياً.</td></tr><tr><td class='prob'>تسعير المناقصات تحت ضغط وقت غير كافٍ.</td><td class='eff'>أسعار غير دقيقة وضياع فرص التقديم.</td><td class='sol'>تخصيص مدة معيارية كافية لتسعير المناقصات تُتّفق عليها مسبقاً.</td></tr><tr><td class='prob'>الخلط بين سجل الأسعار وعروض الشراء.</td><td class='eff'>إضعاف الرقابة على الشراء عند الخلط بينهما.</td><td class='sol'>الفصل التام: الشراء يخضع دائماً لثلاثة عروض، والسجل أداة لتسعير المناقصات حصراً.</td></tr></tbody></table>
 </section><section class="slide">
-  <div class="band">خامساً: الموردون والعلاقات التجارية</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>تآكل مصداقية طلباتنا لدى الموردين وفتور تجاوبهم.</td><td class='eff'>تراجع الاستجابة وجودة العروض.</td><td class='sol'>ضبط صفة «العاجل» والالتزام بإغلاق الطلبات يعيدان جدية الموردين.</td></tr><tr><td class='prob'>الطلبات الشهرية المتكررة وكبيرة الحجم بلا عقود.</td><td class='eff'>أسعار متذبذبة وتفاوض متكرّر.</td><td class='sol'>إبرام عقود إطارية سنوية بأسعار ثابتة مع الموردين الرئيسيين.</td></tr><tr><td class='prob'>الطلبات المستديمة لقطاعات المجموعة تُسعّر كل مرة.</td><td class='eff'>بطء متكرّر في التوريد.</td><td class='sol'>توفير ثلاثة عروض للمرة الأولى فقط، ثم اعتماد مورد ثابت.</td></tr><tr><td class='prob'>مشاكل مع الموردين موزّعة على إدارات متعددة.</td><td class='eff'>تضارب وتكرار في معالجة المشاكل.</td><td class='sol'>تسليم المشتريات حصراً بالمشاكل القائمة والشخص المسؤول لتوحيد التعامل.</td></tr><tr><td class='prob'>مديونيات على الصيانة والتشغيل لدى الموردين.</td><td class='eff'>مخاطر ائتمانية وتعليق توريد.</td><td class='sol'>تسليم المشتريات كشف حساب بالمديونية لتسويتها ضمن خطة.</td></tr></tbody>
-  </table>
+  <div class="band">رابعاً: الموردون والعلاقات التجارية</div>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>تآكل مصداقية طلباتنا لدى الموردين وفتور تجاوبهم.</td><td class='eff'>تراجع الاستجابة وجودة العروض.</td><td class='sol'>ضبط صفة «العاجل» والالتزام بإغلاق الطلبات يعيدان جدية الموردين.</td></tr><tr><td class='prob'>الطلبات الشهرية المتكررة وكبيرة الحجم بلا عقود.</td><td class='eff'>أسعار متذبذبة وتفاوض متكرّر.</td><td class='sol'>إبرام عقود إطارية سنوية بأسعار ثابتة (بعد ترسيتها بثلاثة عروض).</td></tr><tr><td class='prob'>الطلبات المستديمة لقطاعات المجموعة تُسعّر كل مرة.</td><td class='eff'>بطء متكرّر في التوريد.</td><td class='sol'>ثلاثة عروض للمرة الأولى ثم اعتماد مورد ثابت بعقد.</td></tr><tr><td class='prob'>مشاكل مع الموردين موزّعة على إدارات متعددة.</td><td class='eff'>تضارب وتكرار في معالجة المشاكل.</td><td class='sol'>تسليم المشتريات حصراً بالمشاكل القائمة والشخص المسؤول لتوحيد التعامل.</td></tr><tr><td class='prob'>مديونيات على الصيانة والتشغيل لدى الموردين.</td><td class='eff'>مخاطر ائتمانية وتعليق توريد.</td><td class='sol'>تسليم المشتريات كشف حساب بالمديونية لتسويتها ضمن خطة.</td></tr></tbody></table>
 </section><section class="slide">
-  <div class="band">سادساً: تنظيم العلاقة مع الصيانة والتشغيل</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>غياب إطار منظّم للعلاقة بين الإدارتين.</td><td class='eff'>تداخل المسؤوليات والاحتكاك.</td><td class='sol'>اتفاقية تنظيمية تحدّد المسارات: العادية والعاجلة والموردون ومقاولو الباطن.</td></tr><tr><td class='prob'>لا توجد جهة تنسيق واحدة من الصيانة والتشغيل.</td><td class='eff'>تشتّت التواصل وتعدّد المرجعيات.</td><td class='sol'>تعيين منسّق إداري من الصيانة على دراية بآلية المشتريات.</td></tr><tr><td class='prob'>مشرفو الشراء بالموقع خارج مظلة المشتريات.</td><td class='eff'>شراء ميداني غير منضبط.</td><td class='sol'>جعل مشرفي الشراء في المواقع تابعين إشرافياً لإدارة المشتريات.</td></tr><tr><td class='prob'>اختلاف آلية التعامل حسب نوع الطلب.</td><td class='eff'>ارتباك في التنفيذ وتأخير.</td><td class='sol'>توضيح آلية موحّدة لكل نوع طلب يلتزم بها الطرفان.</td></tr></tbody>
-  </table>
+  <div class="band">خامساً: تنظيم العلاقة مع الصيانة والتشغيل</div>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>غياب إطار منظّم للعلاقة بين الإدارتين.</td><td class='eff'>تداخل المسؤوليات والاحتكاك.</td><td class='sol'>اتفاقية تنظيمية تحدّد المسارات: العادية والعاجلة والموردون ومقاولو الباطن.</td></tr><tr><td class='prob'>لا توجد جهة تنسيق واحدة من الصيانة والتشغيل.</td><td class='eff'>تشتّت التواصل وتعدّد المرجعيات.</td><td class='sol'>تعيين منسّق إداري من الصيانة على دراية بآلية المشتريات.</td></tr><tr><td class='prob'>مشرفو الشراء بالموقع خارج مظلة المشتريات.</td><td class='eff'>شراء ميداني غير منضبط.</td><td class='sol'>جعل مشرفي الشراء في المواقع تابعين إشرافياً لإدارة المشتريات.</td></tr><tr><td class='prob'>اختلاف آلية التعامل حسب نوع الطلب.</td><td class='eff'>ارتباك في التنفيذ وتأخير.</td><td class='sol'>توضيح آلية موحّدة لكل نوع طلب يلتزم بها الطرفان.</td></tr></tbody></table>
 </section><section class="slide">
-  <div class="band">سابعاً: العهد والموارد التشغيلية</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>عهدة قصر الياسمين مسجّلة على مندوب المشتريات رغم أن الشراء عبر المشروع.</td><td class='eff'>عدم تطابق المسؤولية مع المنفّذ.</td><td class='sol'>نقل العهدة إلى مسؤول المشروع باعتباره المنفّذ الفعلي للشراء.</td></tr><tr><td class='prob'>طلبات البنية التحتية أسبوعية صغيرة متكررة وليست تحت سقف مورد واحد.</td><td class='eff'>تأخّر احتياجات متكررة منخفضة القيمة.</td><td class='sol'>اعتمادها دون عروض ضمن سقف محدّد ومورد إطاري.</td></tr><tr><td class='prob'>لا توجد عهدة نقدية لدى المشتريات للحالات الصغيرة العاجلة.</td><td class='eff'>بطء تنفيذ البنود البسيطة.</td><td class='sol'>تخصيص عهدة مالية مستديمة للمشتريات باعتماد مديرها.</td></tr><tr><td class='prob'>لا توجد وسيلة توريد مخصّصة للمواقع.</td><td class='eff'>تأخّر التسليم والاعتماد على الغير.</td><td class='sol'>تعيين سائق تابع لإدارة المشتريات لتوريد الطلبات إلى المواقع.</td></tr></tbody>
-  </table>
+  <div class="band">سادساً: العهد والموارد التشغيلية</div>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>عهدة قصر الياسمين مسجّلة على مندوب المشتريات رغم أن الشراء عبر المشروع.</td><td class='eff'>عدم تطابق المسؤولية مع المنفّذ.</td><td class='sol'>نقل العهدة إلى مسؤول المشروع باعتباره المنفّذ الفعلي للشراء.</td></tr><tr><td class='prob'>طلبات البنية التحتية أسبوعية صغيرة متكررة وليست تحت سقف مورد واحد.</td><td class='eff'>تأخّر احتياجات متكررة منخفضة القيمة.</td><td class='sol'>اعتمادها ضمن عقد إطاري وسقف محدّد لتسريع تنفيذها.</td></tr><tr><td class='prob'>لا توجد عهدة نقدية لدى المشتريات للحالات الصغيرة العاجلة.</td><td class='eff'>بطء تنفيذ البنود البسيطة.</td><td class='sol'>تخصيص عهدة مالية مستديمة للمشتريات باعتماد مديرها.</td></tr><tr><td class='prob'>لا توجد وسيلة توريد مخصّصة للمواقع.</td><td class='eff'>تأخّر التسليم والاعتماد على الغير.</td><td class='sol'>تعيين سائق تابع لإدارة المشتريات لتوريد الطلبات إلى المواقع.</td></tr></tbody></table>
 </section><section class="slide">
-  <div class="band">ثامناً: التكامل مع الإدارة المالية</div>
-  <table class="sol">
-    <thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
-    <tbody><tr><td class='prob'>بطء استجابة الإدارة المالية لتحويلات الموردين.</td><td class='eff'>تعطّل الموردين وتحميل المشتريات تبعة التأخير.</td><td class='sol'>التزام زمني للتحويل (٣–٥ أيام عمل، و٢٤ ساعة للطوارئ) ودفعات أسبوعية مجمّعة.</td></tr><tr><td class='prob'>عدم تغذية سجل الأسعار من النظام المالي.</td><td class='eff'>استمرار تكرار التسعير وغياب المرجع.</td><td class='sol'>ربط فواتير الشراء بسجل الأسعار آلياً لتغذيته أولاً بأول.</td></tr><tr><td class='prob'>غياب مسار طوارئ مالي محكوم.</td><td class='eff'>استخدام صفة «العاجل» للالتفاف على الإجراءات.</td><td class='sol'>اعتماد مسار طوارئ بموافقة مسبقة موثّقة وسقف محدّد.</td></tr></tbody>
-  </table>
+  <div class="band">سابعاً: التكامل مع الإدارة المالية</div>
+  <table class="tbl"><thead><tr><th>المشكلة / الوضع الحالي</th><th>الأثر على العمل</th><th>الحل المقترح</th></tr></thead>
+  <tbody><tr><td class='prob'>بطء استجابة الإدارة المالية لتحويلات الموردين.</td><td class='eff'>تعطّل الموردين وتحميل المشتريات تبعة التأخير.</td><td class='sol'>التزام زمني للتحويل (٣–٥ أيام عمل، و٢٤ ساعة للطوارئ) ودفعات أسبوعية مجمّعة.</td></tr><tr><td class='prob'>عدم تغذية سجل الأسعار من النظام المالي.</td><td class='eff'>ضعف دقة تسعير المناقصات.</td><td class='sol'>تغذية سجل أسعار المناقصات من فواتير الشراء في النظام المالي أولاً بأول.</td></tr><tr><td class='prob'>غياب مسار طوارئ مالي محكوم.</td><td class='eff'>استخدام صفة «العاجل» للالتفاف على الإجراءات.</td><td class='sol'>اعتماد مسار طوارئ بموافقة مسبقة موثّقة وسقف محدّد.</td></tr></tbody></table>
 </section>
 
-<section class="slide"><h2 class="t">مصفوفة الصلاحيات والاعتماد</h2><div class="kick">أرقام مقترحة قابلة للاعتماد</div>
-<div class="matrix"><div class="mcard lvl-g">
-              <div class="mh">الشريحة الأولى</div>
-              <div class="mv">حتى ٥٬٠٠٠ ريال</div>
-              <div class="ml">المعتمِد</div><div class="md">مدير المشتريات</div>
-              <div class="ml">الإجراء</div><div class="md">دون عروض، ضمن السقف</div>
-            </div><div class="mcard lvl-g">
-              <div class="mh">الشريحة الثانية</div>
-              <div class="mv">حتى ٢٥٬٠٠٠ ريال</div>
-              <div class="ml">المعتمِد</div><div class="md">مدير المشتريات</div>
-              <div class="ml">الإجراء</div><div class="md">عرضان كحد أدنى</div>
-            </div><div class="mcard lvl-a">
-              <div class="mh">الشريحة الثالثة</div>
-              <div class="mv">حتى ١٠٠٬٠٠٠ ريال</div>
-              <div class="ml">المعتمِد</div><div class="md">المشتريات والمالية</div>
-              <div class="ml">الإجراء</div><div class="md">ثلاثة عروض ومقارنة</div>
-            </div><div class="mcard lvl-r">
-              <div class="mh">الشريحة الرابعة</div>
-              <div class="mv">أكثر من ١٠٠٬٠٠٠</div>
-              <div class="ml">المعتمِد</div><div class="md">المدير العام ولجنة</div>
-              <div class="ml">الإجراء</div><div class="md">ثلاثة عروض وتفاوض</div>
-            </div><div class="mcard lvl-i">
-              <div class="mh">مسار الطوارئ</div>
-              <div class="mv">حالات حرجة فعلاً</div>
-              <div class="ml">المعتمِد</div><div class="md">موافقة مسبقة موثّقة</div>
-              <div class="ml">الإجراء</div><div class="md">سقف محدّد مع تبرير</div>
-            </div></div>
-<div class="decision"><b>القرار / السياسة المطلوبة</b>إقرار حد أدنى (٥٬٠٠٠ ريال) يُشترى باعتماد مدير المشتريات دون عروض، واعتماد بقية الشرائح.</div></section>
+<section class="slide"><h2 class="t">سياسات إدارة المشتريات الحاكمة</h2><div class="kick">الإطار الذي تُبنى عليه الإجراءات</div>
+<div class="pols"><div class='pol'><h4>القناة الموحّدة</h4><p>كل شراء وتوريد لقطاعات المجموعة عبر المشتريات حصراً.</p></div><div class='pol'><h4>ثلاثة عروض إلزامية</h4><p>لكل طلب شراء مهما كان حجمه؛ والاستثناءات موثّقة فقط.</p></div><div class='pol'><h4>مصفوفة الصلاحيات</h4><p>الاعتماد حسب القيمة وصاحب الصلاحية المحدّد.</p></div><div class='pol'><h4>الدورة المستندية</h4><p>مسار موحّد موثّق من الاحتياج حتى الإغلاق.</p></div><div class='pol'><h4>اعتماد الموردين</h4><p>قائمة موردين معتمدة وتقييم دوري لأدائهم.</p></div><div class='pol'><h4>العقود الإطارية</h4><p>للطلبات المتكررة والمستديمة بأسعار ثابتة.</p></div><div class='pol'><h4>سجل أسعار المناقصات</h4><p>مرجع لتسعير المناقصات فقط، لا للشراء ولا بديلاً عن العروض.</p></div><div class='pol'><h4>المشتريات العاجلة</h4><p>مسار طوارئ محكوم بموافقة مسبقة موثّقة.</p></div><div class='pol'><h4>العهد المالية</h4><p>عهدة مستديمة للمشتريات بضوابط صرف واضحة.</p></div><div class='pol'><h4>الاستثناءات الموثّقة</h4><p>النثريات والبنية التحتية ضمن سقف باعتماد مدير المشتريات.</p></div><div class='pol'><h4>المطابقة قبل الصرف</h4><p>مطابقة الطلب وأمر الشراء والفاتورة والاستلام.</p></div><div class='pol'><h4>النزاهة والتوثيق</h4><p>سرية العروض ومنع تعارض المصالح وأرشفة كاملة.</p></div></div></section>
 
-<section class="slide"><h2 class="t">خريطة الدورة المستندية الموحّدة</h2><div class="kick">مسار واحد إلزامي من الاحتياج حتى الإغلاق</div>
-<div class="flow"><div class='step'>نشوء الاحتياج</div><div class='arr'>◀</div><div class='step'>طلب شراء رسمي بالمواصفات</div><div class='arr'>◀</div><div class='step key'>فحص رصيد المستودع</div><div class='arr'>◀</div><div class='step key'>الرجوع لسجل الأسعار</div><div class='arr'>◀</div><div class='step'>عروض ومقارنة عند اللزوم</div><div class='arr'>◀</div><div class='step key'>الاعتماد حسب الصلاحية</div><div class='arr'>◀</div><div class='step'>إصدار أمر الشراء</div><div class='arr'>◀</div><div class='step'>التحويل المالي ضمن المدة</div><div class='arr'>◀</div><div class='step'>التوريد والاستلام والمطابقة</div><div class='arr'>◀</div><div class='step'>الإغلاق وتحديث سجل الأسعار</div></div>
-<div class="decision"><b>القرار / السياسة المطلوبة</b>منع أي توريد خارج هذا المسار، ووقف أي توريد موازٍ بعد إصدار أمر الشراء.</div></section>
+<section class="slide"><h2 class="t">الدورة الداخلية الكاملة للمشتريات</h2><div class="kick">مسار واحد إلزامي من الاحتياج حتى الإغلاق</div>
+<div class="flow"><div class='step'>نشوء الاحتياج</div><div class='arr'>◀</div><div class='step'>طلب شراء رسمي بالمواصفات</div><div class='arr'>◀</div><div class='step'>فحص رصيد المستودع</div><div class='arr'>◀</div><div class='step key'>طلب ثلاثة عروض</div><div class='arr'>◀</div><div class='step key'>تحليل العروض والمقارنة</div><div class='arr'>◀</div><div class='step key'>الاعتماد حسب الصلاحية</div><div class='arr'>◀</div><div class='step'>إصدار أمر الشراء</div><div class='arr'>◀</div><div class='step'>التوريد والاستلام والمطابقة</div><div class='arr'>◀</div><div class='step'>الصرف للمورد ضمن المدة</div><div class='arr'>◀</div><div class='step'>الإغلاق والأرشفة</div></div>
+<div class="decision"><b>القرار / السياسة المطلوبة</b>ثلاثة عروض إلزامية في كل دورة، ومنع أي توريد خارج هذا المسار أو موازٍ بعد أمر الشراء.</div></section>
+
+<section class="slide"><h2 class="t">إجراءات الدورة الداخلية خطوة بخطوة</h2><div class="kick">المرحلة والإجراء والمسؤول والمستند</div>
+<table class="tbl"><thead><tr><th>المرحلة</th><th>الإجراء</th><th>المسؤول</th><th>المستند</th></tr></thead>
+<tbody><tr><td class='st'>١) الاحتياج</td><td class='ac'>تحديد الحاجة وتعبئة طلب الشراء بالمواصفات</td><td class='ow'>الإدارة الطالبة</td><td class='dc'>نموذج طلب شراء</td></tr><tr><td class='st'>٢) التسجيل</td><td class='ac'>استلام الطلب ومنحه رقماً مرجعياً ومراجعة اكتماله</td><td class='ow'>المشتريات</td><td class='dc'>سجل الطلبات</td></tr><tr><td class='st'>٣) فحص المخزون</td><td class='ac'>التأكد من عدم توفّر الصنف في المستودع</td><td class='ow'>المستودعات</td><td class='dc'>تقرير الرصيد</td></tr><tr><td class='st'>٤) طلب العروض</td><td class='ac'>مخاطبة ثلاثة موردين معتمدين على الأقل</td><td class='ow'>المشتريات</td><td class='dc'>طلب عروض أسعار</td></tr><tr><td class='st'>٥) تحليل العروض</td><td class='ac'>إعداد جدول المقارنة فنياً ومالياً</td><td class='ow'>المشتريات</td><td class='dc'>جدول المفاضلة</td></tr><tr><td class='st'>٦) التوصية</td><td class='ac'>ترشيح المورد الأنسب مع المبرّر</td><td class='ow'>المشتريات</td><td class='dc'>محضر توصية</td></tr><tr><td class='st'>٧) الاعتماد</td><td class='ac'>الموافقة حسب مصفوفة الصلاحيات</td><td class='ow'>صاحب الصلاحية</td><td class='dc'>اعتماد موقّع</td></tr><tr><td class='st'>٨) أمر الشراء</td><td class='ac'>تحرير أمر الشراء المعتمد وإصداره</td><td class='ow'>المشتريات</td><td class='dc'>أمر الشراء</td></tr><tr><td class='st'>٩) التعاقد والإشعار</td><td class='ac'>إشعار المورد وتأكيد الشروط والمدة</td><td class='ow'>المشتريات</td><td class='dc'>أمر شراء / عقد</td></tr><tr><td class='st'>١٠) المتابعة والتوريد</td><td class='ac'>متابعة المورد حتى التسليم في الموعد</td><td class='ow'>المشتريات</td><td class='dc'>إشعار تسليم</td></tr><tr><td class='st'>١١) الاستلام والفحص</td><td class='ac'>استلام الصنف وفحص مطابقته للمواصفات</td><td class='ow'>المستودعات / الطالبة</td><td class='dc'>محضر استلام</td></tr><tr><td class='st'>١٢) المطابقة</td><td class='ac'>مطابقة الطلب وأمر الشراء والفاتورة والاستلام</td><td class='ow'>المشتريات</td><td class='dc'>حزمة المطابقة</td></tr><tr><td class='st'>١٣) الصرف</td><td class='ac'>تحويل المستحق للمورد ضمن المدة المعتمدة</td><td class='ow'>المالية</td><td class='dc'>سند صرف</td></tr><tr><td class='st'>١٤) الإغلاق</td><td class='ac'>إقفال المعاملة وحفظ الملف كاملاً</td><td class='ow'>المشتريات</td><td class='dc'>ملف المعاملة</td></tr></tbody></table></section>
+
+<section class="slide"><h2 class="t">مصفوفة الصلاحيات والاعتماد</h2><div class="kick">مستويات الاعتماد حسب القيمة — والعروض الثلاثة قاعدة ثابتة</div>
+<div class="matrix"><div class="mcard lvl-g"><div class="mh">المستوى الأول</div>
+            <div class="mv">حتى 25,000 ريال</div><div class="ml">المعتمِد</div><div class="md">مدير المشتريات</div>
+            <div class="ml">العروض</div><div class="md">ثلاثة عروض</div></div><div class="mcard lvl-a"><div class="mh">المستوى الثاني</div>
+            <div class="mv">حتى 100,000 ريال</div><div class="ml">المعتمِد</div><div class="md">المشتريات والمالية</div>
+            <div class="ml">العروض</div><div class="md">ثلاثة عروض ومقارنة</div></div><div class="mcard lvl-r"><div class="mh">المستوى الثالث</div>
+            <div class="mv">حتى 500,000 ريال</div><div class="ml">المعتمِد</div><div class="md">المدير العام</div>
+            <div class="ml">العروض</div><div class="md">ثلاثة عروض وتفاوض</div></div><div class="mcard lvl-i"><div class="mh">المستوى الرابع</div>
+            <div class="mv">أكثر من 500,000</div><div class="ml">المعتمِد</div><div class="md">المدير العام ولجنة</div>
+            <div class="ml">العروض</div><div class="md">لجنة وثلاثة عروض</div></div><div class="mcard lvl-i"><div class="mh">مسار الطوارئ</div>
+            <div class="mv">حالات حرجة فعلاً</div><div class="ml">المعتمِد</div><div class="md">موافقة مسبقة موثّقة</div>
+            <div class="ml">العروض</div><div class="md">حسب المتاح وتسوية لاحقة</div></div></div>
+<div class="exc"><b>الاستثناءات من قاعدة العروض الثلاثة (موثّقة وباعتماد مدير المشتريات):</b><br>
+المشتريات النثرية تحت الحد الأدنى — أصناف البنية التحتية المتكررة ضمن سقف — الأصناف المتعاقد عليها بعقود إطارية (سبق ترسيتها بثلاثة عروض) — الطوارئ المعتمدة مسبقاً.</div>
+<div class="decision"><b>القرار / السياسة المطلوبة</b>اعتماد مستويات الصلاحية بقيمها، مع إبقاء العروض الثلاثة قاعدةً، وحصر الاستثناءات في الحالات الموثّقة.</div></section>
 
 <section class="slide"><h2 class="t">نموذج الحوكمة المقترح</h2><div class="kick">المشتريات قناة واحدة محكومة بأربع ركائز</div>
 <div class="cards" style="grid-template-columns:repeat(4,1fr)">
 <div class="c">دورة مستندية موثّقة</div><div class="c">مصفوفة صلاحيات</div>
-<div class="c">سجل أسعار مرجعي</div><div class="c">قائمة موردين معتمدة</div></div>
+<div class="c">قائمة موردين معتمدة</div><div class="c">سجل أسعار المناقصات</div></div>
 <p style="text-align:center;margin-top:14px;color:var(--ink);font-weight:700">
-الإدارة العليا ← إدارة المشتريات (القناة الموحّدة) ← الإدارات الطالبة / المالية / المستودعات / الموردون</p>
-</section>
+الإدارة العليا ← إدارة المشتريات (القناة الموحّدة) ← الإدارات الطالبة / المالية / المستودعات / الموردون</p></section>
 
 <section class="slide"><h2 class="t">خارطة طريق التنفيذ</h2><div class="kick">مراحل زمنية واضحة وقابلة للقياس</div>
-<div class="road"><div class="phase">
-              <div class="ph">أول ٣٠ يوماً<small>تثبيت الحوكمة</small></div>
-              <ul><li>النموذج الموحّد للطلبات</li><li>مصفوفة الصلاحيات بقيمها</li><li>حصر الشراء عبر المشتريات</li><li>التزام المالية الزمني</li><li>إيقاف ازدواجية التوريد</li></ul>
-            </div><div class="phase">
-              <div class="ph">حتى ٩٠ يوماً<small>البناء المؤسسي</small></div>
-              <ul><li>سجل الأسعار من المالية</li><li>العقود الإطارية للمتكرر</li><li>عهدة وسائق للمشتريات</li><li>معالجة قصر الياسمين والبنية التحتية</li><li>تعيين منسّق الصيانة</li></ul>
-            </div><div class="phase">
-              <div class="ph">المدى البعيد<small>الاستدامة والتميّز</small></div>
-              <ul><li>نظام مشتريات موحّد</li><li>لوحات متابعة الأداء</li><li>تقييم دوري للموردين</li><li>تطوير استراتيجية التوريد</li></ul>
-            </div></div></section>
+<div class="road"><div class='phase'><div class='ph'>أول ٣٠ يوماً<small>تثبيت الحوكمة</small></div><ul><li>النموذج الموحّد للطلبات</li><li>مصفوفة الصلاحيات بقيمها</li><li>حصر الشراء عبر المشتريات</li><li>التزام المالية الزمني</li><li>إيقاف ازدواجية التوريد</li></ul></div><div class='phase'><div class='ph'>حتى ٩٠ يوماً<small>البناء المؤسسي</small></div><ul><li>سجل أسعار المناقصات</li><li>العقود الإطارية للمتكرر</li><li>عهدة وسائق للمشتريات</li><li>معالجة قصر الياسمين والبنية التحتية</li><li>تعيين منسّق الصيانة</li></ul></div><div class='phase'><div class='ph'>المدى البعيد<small>الاستدامة والتميّز</small></div><ul><li>نظام مشتريات موحّد</li><li>لوحات متابعة الأداء</li><li>تقييم دوري للموردين</li><li>تطوير استراتيجية التوريد</li></ul></div></div></section>
 
 <section class="slide"><h2 class="t">مؤشرات قياس النجاح</h2><div class="kick">ما لا يُقاس لا يُمكن تطويره</div>
-<div class="kpis"><div class="kpi"><div class="kh">زمن دورة الشراء</div>
-            <div class="kd">من الطلب حتى أمر الشراء</div><div class="kt">تقليصه إلى النصف</div></div><div class="kpi"><div class="kh">التزام الطلبات بالدورة</div>
-            <div class="kd">نسبة الطلبات الرسمية</div><div class="kt">لا تقل عن ٩٥٪</div></div><div class="kpi"><div class="kh">إغلاق الطلبات في وقتها</div>
-            <div class="kd">دون معلّقات متراكمة</div><div class="kt">لا معلّقات متأخرة</div></div><div class="kpi"><div class="kh">الوفر المحقّق</div>
-            <div class="kd">مقارنةً بسجل الأسعار</div><div class="kt">يُقاس كل ربع سنة</div></div><div class="kpi"><div class="kh">التزام المالية بالتحويل</div>
-            <div class="kd">ضمن المدة المعتمدة</div><div class="kt">لا تقل عن ٩٠٪</div></div><div class="kpi"><div class="kh">استجابة الموردين</div>
-            <div class="kd">نسبة الرد على العروض</div><div class="kt">اتجاه متصاعد</div></div></div></section>
+<div class="kpis"><div class='kpi'><div class='kh'>زمن دورة الشراء</div><div class='kd'>من الطلب حتى أمر الشراء</div><div class='kt'>تقليصه إلى النصف</div></div><div class='kpi'><div class='kh'>التزام الطلبات بالدورة</div><div class='kd'>نسبة الطلبات الرسمية</div><div class='kt'>لا تقل عن ٩٥٪</div></div><div class='kpi'><div class='kh'>التزام الشراء بالعروض</div><div class='kd'>نسبة الطلبات بثلاثة عروض</div><div class='kt'>لا تقل عن ٩٥٪</div></div><div class='kpi'><div class='kh'>إغلاق الطلبات في وقتها</div><div class='kd'>دون معلّقات متراكمة</div><div class='kt'>لا معلّقات متأخرة</div></div><div class='kpi'><div class='kh'>التزام المالية بالتحويل</div><div class='kd'>ضمن المدة المعتمدة</div><div class='kt'>لا تقل عن ٩٠٪</div></div><div class='kpi'><div class='kh'>استجابة الموردين</div><div class='kd'>نسبة الرد على العروض</div><div class='kt'>اتجاه متصاعد</div></div></div></section>
 
 <section class="slide"><h2 class="t">القرارات المطلوبة من الإدارة العليا</h2><div class="kick">ثمانية قرارات تُنهي التكرار</div>
-<div class="asks"><div class='ask'><span class='n'>1</span>حصر كل شراء وتوريد لقطاعات المجموعة عبر المشتريات حصراً.</div><div class='ask'><span class='n'>2</span>اعتماد النموذج الموحّد للطلبات ومصفوفة الصلاحيات.</div><div class='ask'><span class='n'>3</span>إلزام الإدارة المالية بمدة زمنية للتحويل ومسار طوارئ.</div><div class='ask'><span class='n'>4</span>إنشاء سجل أسعار مرجعي يُغذّى من النظام المالي.</div><div class='ask'><span class='n'>5</span>تفويض إبرام عقود إطارية للطلبات المتكررة والبنية التحتية.</div><div class='ask'><span class='n'>6</span>نقل عهدة قصر الياسمين إلى مسؤول المشروع.</div><div class='ask'><span class='n'>7</span>تخصيص عهدة مالية وسائق لإدارة المشتريات.</div><div class='ask'><span class='n'>8</span>اعتماد خارطة الطريق ومؤشرات الأداء.</div></div></section>
+<div class="asks"><div class='ask'><span class='n'>1</span>حصر كل شراء وتوريد لقطاعات المجموعة عبر المشتريات حصراً.</div><div class='ask'><span class='n'>2</span>اعتماد سياسات وإجراءات المشتريات ودورتها الداخلية الكاملة.</div><div class='ask'><span class='n'>3</span>إقرار مصفوفة الصلاحيات وقاعدة العروض الثلاثة واستثناءاتها الموثّقة.</div><div class='ask'><span class='n'>4</span>إلزام الإدارة المالية بمدة زمنية للتحويل ومسار طوارئ.</div><div class='ask'><span class='n'>5</span>إنشاء سجل أسعار لتسعير المناقصات يُغذّى من النظام المالي.</div><div class='ask'><span class='n'>6</span>تفويض إبرام عقود إطارية للطلبات المتكررة والبنية التحتية.</div><div class='ask'><span class='n'>7</span>نقل عهدة قصر الياسمين، وتخصيص عهدة وسائق للمشتريات.</div><div class='ask'><span class='n'>8</span>اعتماد خارطة الطريق ومؤشرات الأداء.</div></div></section>
 
 <section class="slide cover">
 <h1 style="font-size:28px">الحوكمة ليست قيداً على العمل، بل ضمانة استمراره وكفاءته</h1>
 <div class="sub">لسنا بصدد معالجة أخطاء فردية، بل تأسيس منظومة تحمي مال الشركة وتنظّم توريدها وتعيد لها ثقة موردِيها</div>
-<div class="meta">وفريق المشتريات على أتم الاستعداد للتنفيذ فور اعتماد القرارات<br>
-مع وافر الاحترام والتقدير — إدارة العمليات والمشتريات</div>
+<div class="meta">وفريق المشتريات على أتم الاستعداد للتنفيذ فور اعتماد القرارات<br>مع وافر الاحترام والتقدير — إدارة العمليات والمشتريات</div>
 </section>
 
 </div></body></html>
