@@ -114,6 +114,23 @@ ASKS = [
     "اعتماد خارطة الطريق والمؤشرات.",
 ]
 
+TILES = [
+    ("53", "أمر شراء", "في السجل", "i"),
+    ("405", "ألف ريال", "إجمالي قيمة الأوامر", "gold"),
+    ("68٪", "طلبات متأخرة", "٣٦ من ٥٣", "r"),
+    ("19", "يوم متوسط التأخير", "أقصى تأخير ٥٢ يوماً", "r"),
+    ("42", "مورد", "٣٨ مستخدماً فعلياً", "i"),
+    ("23٪", "لم تكتمل", "ملغاة أو قيد المراجعة", "a"),
+]
+STATUS = [("مُسلَّم", 38, "g"), ("قيد المراجعة", 7, "a"), ("ملغى", 5, "r"),
+          ("مُسلَّم جزئياً", 2, "a"), ("قيد التوريد", 1, "i")]
+PRIORITY = [("متوسط", 22, "i"), ("عالي", 18, "a"), ("عاجل", 13, "r")]
+SECTORS = [("الصيانة والتشغيل", 27, "i"), ("الإنشاءات", 12, "a"),
+           ("الإدارة العامة", 9, "g"), ("النقليات", 4, "gold")]
+BIG3 = [("44٪", "من الطلبات المتأخرة", "سببها التحويل المالي", "r"),
+        ("336", "يوم تأخير", "من أصل 688 بسبب المالية", "r"),
+        ("15.6", "يوم متوسط", "زمن التوريد الكلي", "a")]
+
 e = html.escape
 clr = {"g": "g", "a": "a", "r": "r", "i": "i"}
 
@@ -138,6 +155,16 @@ def build():
                    for t, c, it in ROADMAP)
     kpis = "".join(f"<div class='kpi'><div class='kh'>{e(t)}</div><div class='kt'>{e(g)}</div></div>" for t, g in KPIS)
     asks = "".join(f"<div class='ask'><span class='n'>{i+1}</span>{e(a)}</div>" for i, a in enumerate(ASKS))
+    tiles = "".join(f"<div class='tile {c}'><div class='big'>{e(b)}</div><div class='tl'>{e(l)}</div><div class='ts'>{e(s)}</div></div>"
+                    for b, l, s, c in TILES)
+
+    def bars(rows, mx):
+        return "".join(
+            f"<div class='br'><span class='bl'>{e(l)}</span>"
+            f"<span class='bt'><span class='bf {c}' style='width:{round(100*v/mx)}%'>{v}</span></span></div>"
+            for l, v, c in rows)
+    big3 = "".join(f"<div class='tile {c}'><div class='big'>{e(b)}</div><div class='tl'>{e(l)}</div><div class='ts'>{e(s)}</div></div>"
+                   for b, l, s, c in BIG3)
 
     return f"""<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -203,6 +230,22 @@ font-size:15px;flex:1 1 150px;text-align:center;min-width:130px}} .step.key{{bac
 .heat{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .hrow{{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--ink)}}
 .tag{{color:#fff;border-radius:6px;padding:4px 12px}} .tag.r{{background:var(--red)}} .tag.a{{background:var(--amber)}} .tag.g{{background:var(--green)}}
+.tiles{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}
+.tile{{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 10px;text-align:center;border-top:6px solid var(--gold)}}
+.tile.r{{border-top-color:var(--red)}} .tile.a{{border-top-color:var(--amber)}} .tile.g{{border-top-color:var(--green)}}
+.tile.i{{border-top-color:var(--ink)}} .tile.gold{{border-top-color:var(--gold)}}
+.tile .big{{font-size:40px;font-weight:700;color:var(--ink)}} .tile.r .big{{color:var(--red)}} .tile.a .big{{color:var(--amber)}} .tile.gold .big{{color:var(--gold)}}
+.tile .tl{{font-weight:700;color:var(--ink);margin-top:4px}} .tile .ts{{font-size:12px;color:var(--mute)}}
+.chartbox{{margin-top:8px}} .chartbox h3{{color:var(--gold);font-size:16px;margin:14px 0 8px}}
+.br{{display:flex;align-items:center;gap:10px;margin:9px 0}}
+.bl{{width:130px;text-align:left;font-weight:700;color:var(--ink);flex:none;font-size:14px}}
+.bt{{flex:1;background:#ece6da;border-radius:6px;overflow:hidden;direction:ltr}}
+.bf{{display:block;text-align:right;color:#fff;font-weight:700;padding:6px 10px;border-radius:6px;font-size:14px;min-width:34px}}
+.bf.g{{background:var(--green)}} .bf.a{{background:var(--amber)}} .bf.r{{background:var(--red)}} .bf.i{{background:var(--ink)}} .bf.gold{{background:var(--gold)}}
+.urg{{background:#f7e9e7;border:1px solid var(--red);border-radius:10px;padding:14px;margin-top:14px}}
+.urg b{{color:var(--red)}}
+.src{{text-align:left;color:var(--mute);font-size:12px;margin-top:10px}}
+.two{{display:grid;grid-template-columns:1fr 1fr;gap:24px}}
 @media(max-width:760px){{.cards,.asks,.heat{{grid-template-columns:1fr}} .pols,.matrix,.road,.kpis{{grid-template-columns:1fr 1fr}}
 table.tc{{font-size:14px}} .cover h1{{font-size:30px}}}}
 @media print{{body{{background:#fff}} .slide{{page-break-inside:avoid;box-shadow:none}}}}
@@ -239,6 +282,23 @@ table.tc{{font-size:14px}} .cover h1{{font-size:30px}}}}
 <div class="hrow"><span>بطء تسعير المناقصات</span><span class="tag g">متوسط</span></div>
 <div class="hrow"><span>عهدة قصر الياسمين</span><span class="tag g">متوسط</span></div>
 </div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">الوضع الراهن بالأرقام</h2>
+<div class="tiles">{tiles}</div>
+<div class="src">المصدر: نظام المشتريات — سجل أوامر الشراء (٥٣ أمراً)</div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">حالة الأوامر والأولوية</h2>
+<div class="two">
+<div class="chartbox"><h3>حسب الحالة</h3>{bars(STATUS,38)}</div>
+<div class="chartbox"><h3>حسب الأولوية</h3>{bars(PRIORITY,22)}
+<div class="urg"><b>مفارقة «العاجل»:</b> من ١٣ طلباً «عاجلاً» تأخّر ٨ وأُلغي ١ — أي أن صفة العاجل لا تضمن السرعة.</div></div>
+</div>
+<div class="src">المصدر: نظام المشتريات — سجل أوامر الشراء (٥٣ أمراً)</div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">أين يضيع الوقت؟ تشخيص التأخير</h2>
+<div class="tiles">{big3}</div>
+<div class="chartbox"><h3>أوامر الشراء حسب القطاع</h3>{bars(SECTORS,27)}</div>
+<div class="src">نحو نصف أيام التأخير سببها التحويل المالي — المصدر: نظام المشتريات (٥٣ أمراً)</div></section>
 
 {axes}
 

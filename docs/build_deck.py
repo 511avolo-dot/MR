@@ -83,9 +83,9 @@ def bullets(s, l, t, w, h, items, size=16, gap=10, color=SLATE, mark="•  "):
     return tb
 
 
-def page(s, idx):
+def page(s, idx=None):
     txt(s, Inches(0.3), SH - Inches(0.46), Inches(2), Inches(0.32),
-        f"{idx} / {TOTAL}", size=10, color=MUTE, align=PP_ALIGN.LEFT, is_rtl=False)
+        f"{len(slides)} / {TOTAL}", size=10, color=MUTE, align=PP_ALIGN.LEFT, is_rtl=False)
 
 
 def brandbar(s, title, part):
@@ -164,6 +164,38 @@ def proc_col(s, l, top, w, rows, row_h=0.7):
     return g
 
 
+def kpi_tile(s, x, y, w, h, big, label, co, sub=None):
+    rect(s, x, y, w, h, CARD, line=LINE)
+    rect(s, x, y, w, Pt(7), co)
+    txt(s, x + Inches(0.05), y + Inches(0.14), w - Inches(0.1), Inches(0.62),
+        big, size=34, color=co, bold=True, align=PP_ALIGN.CENTER)
+    txt(s, x + Inches(0.05), y + h - Inches(0.62), w - Inches(0.1), Inches(0.56),
+        ([{'t': label, 'size': 13.5, 'color': INK, 'bold': True, 'space': 1}]
+         + ([{'t': sub, 'size': 11, 'color': MUTE}] if sub else [])),
+        align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+
+
+def hbars(s, l, t, w, rows, maxv, lblw=Inches(2.2), bar_h=Inches(0.42), gap=Inches(0.22)):
+    """أعمدة أفقية: التسمية يميناً، والعمود يمتدّ نحو اليسار."""
+    track_r = l + w - lblw - Inches(0.15)
+    track_w = w - lblw - Inches(0.15)
+    for i, (lbl, val, co) in enumerate(rows):
+        y = t + i * (bar_h + gap)
+        txt(s, l + w - lblw, y - Inches(0.02), lblw, bar_h + Inches(0.04), lbl,
+            size=14, color=INK, bold=True, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
+        rect(s, l, y, track_w, bar_h, RGBColor(0xEC, 0xE6, 0xDA))
+        bw = max(int(track_w * (val / maxv)), Inches(0.5))
+        rect(s, track_r - bw, y, bw, bar_h, co)
+        txt(s, track_r - bw + Inches(0.05), y, bw - Inches(0.1), bar_h, str(val),
+            size=14, color=WHITE, bold=True, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.MIDDLE,
+            is_rtl=False)
+
+
+def source_note(s, text='المصدر: نظام المشتريات — سجل أوامر الشراء (53 أمراً)'):
+    txt(s, Inches(0.35), Inches(0.66), Inches(5.0), Inches(0.4), text,
+        size=10.5, color=SAND, align=PP_ALIGN.LEFT, is_rtl=True)
+
+
 TOTAL = 20
 slides = []
 P1 = 'الجزء الأول · المشاكل ومعالجتها'
@@ -194,7 +226,7 @@ txt(s, Inches(1), Inches(4.7), SW - Inches(2), Inches(1.2),
 # 2) المحتوى
 s = new(); brandbar(s, 'محتوى العرض', 'ثلاثة أجزاء')
 agenda = [
-    ('1', 'المشاكل ومعالجتها', 'سبعة محاور: كل مشكلة ومعالجتها المقترحة', GREEN),
+    ('1', 'الوضع والمشاكل', 'أرقام النظام، ثم سبعة محاور بمعالجاتها', GREEN),
     ('2', 'المنظومة المقترحة', 'السياسات · الدورة الكاملة · مصفوفة الصلاحيات', AMBER),
     ('3', 'التنفيذ والقرار', 'خارطة الطريق · مؤشرات النجاح · القرارات المطلوبة', INK),
 ]
@@ -214,7 +246,7 @@ page(s, 2)
 s = new(); brandbar(s, 'الملخص التنفيذي', 'الفكرة في أربع نقاط')
 cards = [
     ('المشكلة', 'لا توجد قناة موحّدة ولا دورة مُلزِمة ولا صلاحيات واضحة للمشتريات.', RED),
-    ('الأثر', 'ازدواج إنفاق، وتأخّر توريد، وتآكل ثقة الموردين.', AMBER),
+    ('الأثر', 'تأخّر 68٪ من الأوامر، وازدواج إنفاق، وتآكل ثقة الموردين.', AMBER),
     ('الحل', 'قناة واحدة + دورة موثّقة + ثلاثة عروض لكل شراء + صلاحيات واضحة.', GREEN),
     ('المطلوب', 'إقرار السياسات وخارطة الطريق من الإدارة العليا.', INK),
 ]
@@ -248,6 +280,69 @@ for i, (t, lvl, co) in enumerate(rowsT):
     txt(s, x + Inches(0.15), y, colw - Inches(1.35), Inches(0.92), t, size=16,
         color=INK, bold=True, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
 page(s, 4)
+
+# لوحة 1) الوضع الراهن بالأرقام
+s = new(); brandbar(s, 'الوضع الراهن بالأرقام', 'من واقع نظام المشتريات')
+tiles = [
+    ('53', 'أمر شراء', INK, 'في السجل'),
+    ('405', 'ألف ريال', GOLD, 'إجمالي قيمة الأوامر'),
+    ('68٪', 'طلبات متأخرة', RED, '36 من 53'),
+    ('19', 'يوم متوسط التأخير', RED, 'أقصى تأخير 52 يوماً'),
+    ('42', 'مورد', INK, '38 مستخدماً فعلياً'),
+    ('23٪', 'لم تكتمل', AMBER, 'ملغاة أو قيد المراجعة'),
+]
+cw = (SW - Inches(1.2)) / 3
+for i, (big, lbl, co, sub) in enumerate(tiles):
+    r, c = divmod(i, 3)
+    x = SW - Inches(0.5) - (c + 1) * cw - c * Inches(0.1) + Inches(0.1)
+    y = Inches(1.55) + r * Inches(2.05)
+    kpi_tile(s, x, y, cw, Inches(1.85), big, lbl, co, sub)
+source_note(s)
+page(s)
+
+# لوحة 2) حالة الأوامر والأولوية
+s = new(); brandbar(s, 'لوحة حالة الأوامر والأولوية', 'توزيع أوامر الشراء')
+txt(s, SW - Inches(6.6), Inches(1.35), Inches(6.3), Inches(0.4),
+    'حسب الحالة', size=16, color=GOLD, bold=True, align=PP_ALIGN.RIGHT)
+hbars(s, Inches(0.5), Inches(1.95), Inches(6.3), [
+    ('مُسلَّم', 38, GREEN), ('قيد المراجعة', 7, AMBER), ('ملغى', 5, RED),
+    ('مُسلَّم جزئياً', 2, AMBER), ('قيد التوريد', 1, INK),
+], maxv=38, lblw=Inches(1.9))
+txt(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(0.4),
+    'حسب الأولوية', size=16, color=GOLD, bold=True, align=PP_ALIGN.RIGHT)
+hbars(s, Inches(6.95), Inches(1.95), Inches(5.9), [
+    ('متوسط', 22, INK), ('عالي', 18, AMBER), ('عاجل', 13, RED),
+], maxv=22, lblw=Inches(1.6))
+# تنبيه العاجل
+rect(s, Inches(6.95), Inches(4.15), Inches(5.9), Inches(1.25), RGBColor(0xF7, 0xE9, 0xE7), line=RED, lw=1.5)
+txt(s, Inches(7.15), Inches(4.3), Inches(5.5), Inches(1.0),
+    [{'t': 'مفارقة «العاجل»', 'size': 15, 'color': RED, 'bold': True, 'space': 4},
+     {'t': 'من 13 طلباً «عاجلاً»: تأخّر 8 وأُلغي 1 — أي أن صفة العاجل نفسها لا تضمن السرعة.', 'size': 14, 'color': INK}],
+    align=PP_ALIGN.RIGHT)
+decision(s, '12 طلباً لم تكتمل (ملغاة/قيد المراجعة)، وثلثا الأوامر متأخرة — مؤشر على خلل في الدورة.')
+source_note(s)
+page(s)
+
+# لوحة 3) أين يضيع الوقت
+s = new(); brandbar(s, 'أين يضيع الوقت؟ تشخيص التأخير', 'سبب التأخير الأبرز')
+big = [
+    ('44٪', 'من الطلبات المتأخرة', 'سببها التحويل المالي', RED),
+    ('336', 'يوم تأخير', 'من أصل 688 بسبب المالية', RED),
+    ('15.6', 'يوم متوسط', 'زمن التوريد الكلي', AMBER),
+]
+cw = (SW - Inches(1.2)) / 3
+for i, (b, l1, l2, co) in enumerate(big):
+    x = SW - Inches(0.5) - (i + 1) * cw - i * Inches(0.1) + Inches(0.1)
+    kpi_tile(s, x, Inches(1.55), cw, Inches(1.9), b, l1, co, l2)
+txt(s, SW - Inches(6.6), Inches(3.75), Inches(6.3), Inches(0.4),
+    'أوامر الشراء حسب القطاع', size=16, color=GOLD, bold=True, align=PP_ALIGN.RIGHT)
+hbars(s, Inches(0.5), Inches(4.25), Inches(12.3), [
+    ('الصيانة والتشغيل', 27, INK), ('الإنشاءات', 12, AMBER),
+    ('الإدارة العامة', 9, GREEN), ('النقليات', 4, GOLD),
+], maxv=27, lblw=Inches(3.0), bar_h=Inches(0.34), gap=Inches(0.16))
+decision(s, 'نحو نصف أيام التأخير سببها التحويل المالي — ما يؤكد أولوية إلزام المالية بمدة زمنية.')
+source_note(s)
+page(s)
 
 # 5–11) المحاور السبعة (عمودان)
 axes = [

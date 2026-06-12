@@ -62,6 +62,22 @@ font-size:15px;flex:1 1 150px;text-align:center;min-width:130px} .step.key{backg
 .heat{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .hrow{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-weight:700;color:var(--ink)}
 .tag{color:#fff;border-radius:6px;padding:4px 12px} .tag.r{background:var(--red)} .tag.a{background:var(--amber)} .tag.g{background:var(--green)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 10px;text-align:center;border-top:6px solid var(--gold)}
+.tile.r{border-top-color:var(--red)} .tile.a{border-top-color:var(--amber)} .tile.g{border-top-color:var(--green)}
+.tile.i{border-top-color:var(--ink)} .tile.gold{border-top-color:var(--gold)}
+.tile .big{font-size:40px;font-weight:700;color:var(--ink)} .tile.r .big{color:var(--red)} .tile.a .big{color:var(--amber)} .tile.gold .big{color:var(--gold)}
+.tile .tl{font-weight:700;color:var(--ink);margin-top:4px} .tile .ts{font-size:12px;color:var(--mute)}
+.chartbox{margin-top:8px} .chartbox h3{color:var(--gold);font-size:16px;margin:14px 0 8px}
+.br{display:flex;align-items:center;gap:10px;margin:9px 0}
+.bl{width:130px;text-align:left;font-weight:700;color:var(--ink);flex:none;font-size:14px}
+.bt{flex:1;background:#ece6da;border-radius:6px;overflow:hidden;direction:ltr}
+.bf{display:block;text-align:right;color:#fff;font-weight:700;padding:6px 10px;border-radius:6px;font-size:14px;min-width:34px}
+.bf.g{background:var(--green)} .bf.a{background:var(--amber)} .bf.r{background:var(--red)} .bf.i{background:var(--ink)} .bf.gold{background:var(--gold)}
+.urg{background:#f7e9e7;border:1px solid var(--red);border-radius:10px;padding:14px;margin-top:14px}
+.urg b{color:var(--red)}
+.src{text-align:left;color:var(--mute);font-size:12px;margin-top:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 @media(max-width:760px){.cards,.asks,.heat{grid-template-columns:1fr} .pols,.matrix,.road,.kpis{grid-template-columns:1fr 1fr}
 table.tc{font-size:14px} .cover h1{font-size:30px}}
 @media print{body{background:#fff} .slide{page-break-inside:avoid;box-shadow:none}}
@@ -98,6 +114,23 @@ table.tc{font-size:14px} .cover h1{font-size:30px}}
 <div class="hrow"><span>بطء تسعير المناقصات</span><span class="tag g">متوسط</span></div>
 <div class="hrow"><span>عهدة قصر الياسمين</span><span class="tag g">متوسط</span></div>
 </div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">الوضع الراهن بالأرقام</h2>
+<div class="tiles"><div class='tile i'><div class='big'>53</div><div class='tl'>أمر شراء</div><div class='ts'>في السجل</div></div><div class='tile gold'><div class='big'>405</div><div class='tl'>ألف ريال</div><div class='ts'>إجمالي قيمة الأوامر</div></div><div class='tile r'><div class='big'>68٪</div><div class='tl'>طلبات متأخرة</div><div class='ts'>٣٦ من ٥٣</div></div><div class='tile r'><div class='big'>19</div><div class='tl'>يوم متوسط التأخير</div><div class='ts'>أقصى تأخير ٥٢ يوماً</div></div><div class='tile i'><div class='big'>42</div><div class='tl'>مورد</div><div class='ts'>٣٨ مستخدماً فعلياً</div></div><div class='tile a'><div class='big'>23٪</div><div class='tl'>لم تكتمل</div><div class='ts'>ملغاة أو قيد المراجعة</div></div></div>
+<div class="src">المصدر: نظام المشتريات — سجل أوامر الشراء (٥٣ أمراً)</div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">حالة الأوامر والأولوية</h2>
+<div class="two">
+<div class="chartbox"><h3>حسب الحالة</h3><div class='br'><span class='bl'>مُسلَّم</span><span class='bt'><span class='bf g' style='width:100%'>38</span></span></div><div class='br'><span class='bl'>قيد المراجعة</span><span class='bt'><span class='bf a' style='width:18%'>7</span></span></div><div class='br'><span class='bl'>ملغى</span><span class='bt'><span class='bf r' style='width:13%'>5</span></span></div><div class='br'><span class='bl'>مُسلَّم جزئياً</span><span class='bt'><span class='bf a' style='width:5%'>2</span></span></div><div class='br'><span class='bl'>قيد التوريد</span><span class='bt'><span class='bf i' style='width:3%'>1</span></span></div></div>
+<div class="chartbox"><h3>حسب الأولوية</h3><div class='br'><span class='bl'>متوسط</span><span class='bt'><span class='bf i' style='width:100%'>22</span></span></div><div class='br'><span class='bl'>عالي</span><span class='bt'><span class='bf a' style='width:82%'>18</span></span></div><div class='br'><span class='bl'>عاجل</span><span class='bt'><span class='bf r' style='width:59%'>13</span></span></div>
+<div class="urg"><b>مفارقة «العاجل»:</b> من ١٣ طلباً «عاجلاً» تأخّر ٨ وأُلغي ١ — أي أن صفة العاجل لا تضمن السرعة.</div></div>
+</div>
+<div class="src">المصدر: نظام المشتريات — سجل أوامر الشراء (٥٣ أمراً)</div></section>
+
+<section class="slide"><div class="part">الجزء الأول · الوضع الراهن</div><h2 class="t">أين يضيع الوقت؟ تشخيص التأخير</h2>
+<div class="tiles"><div class='tile r'><div class='big'>44٪</div><div class='tl'>من الطلبات المتأخرة</div><div class='ts'>سببها التحويل المالي</div></div><div class='tile r'><div class='big'>336</div><div class='tl'>يوم تأخير</div><div class='ts'>من أصل 688 بسبب المالية</div></div><div class='tile a'><div class='big'>15.6</div><div class='tl'>يوم متوسط</div><div class='ts'>زمن التوريد الكلي</div></div></div>
+<div class="chartbox"><h3>أوامر الشراء حسب القطاع</h3><div class='br'><span class='bl'>الصيانة والتشغيل</span><span class='bt'><span class='bf i' style='width:100%'>27</span></span></div><div class='br'><span class='bl'>الإنشاءات</span><span class='bt'><span class='bf a' style='width:44%'>12</span></span></div><div class='br'><span class='bl'>الإدارة العامة</span><span class='bt'><span class='bf g' style='width:33%'>9</span></span></div><div class='br'><span class='bl'>النقليات</span><span class='bt'><span class='bf gold' style='width:15%'>4</span></span></div></div>
+<div class="src">نحو نصف أيام التأخير سببها التحويل المالي — المصدر: نظام المشتريات (٥٣ أمراً)</div></section>
 
 <section class="slide"><div class="part">الجزء الأول · المشاكل ومعالجتها</div>
 <div class="band">أولاً: تنظيم الطلبات</div>
