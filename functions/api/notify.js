@@ -91,11 +91,12 @@ export async function onRequestPost({ request, env }) {
     const tpl = (payload && payload.tpl && typeof payload.tpl === 'object') ? payload.tpl : null;
     let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
     const resumeUrl = status === 'needs_revision' ? `${origin}/register.html?resume=reg_demo&t=demo` : '';
+    const trackUrl = origin ? `${origin}/register.html?track=DG-DEMO12` : '';
     const sampleRow = { legal_name_ar: 'شركة النور للمقاولات (تجربة)', legal_name_en: 'Al-Noor Contracting Co. (Test)' };
     const sampleRev = status === 'needs_revision'
       ? { general: 'يرجى تحديث السجل التجاري بنسخة سارية المفعول.', fields: ['cr', 'vat'], sections: ['contact_info'] }
       : null;
-    let { subject, html } = buildEmail(status, sampleRow, 'reg_demo_2026_a1b2', resumeUrl, tpl, sampleRev);
+    let { subject, html } = buildEmail(status, sampleRow, 'DG-DEMO12', resumeUrl, tpl, sampleRev, trackUrl);
     subject = '[تجربة] ' + subject;
     try {
       const r = await fetch('https://api.resend.com/emails', {
@@ -154,6 +155,7 @@ export async function onRequestPost({ request, env }) {
   const resumeUrl = (event === 'needs_revision' && row.revision_token)
     ? `${origin}/register.html?resume=${encodeURIComponent(id)}&t=${encodeURIComponent(row.revision_token)}`
     : '';
+  const trackUrl = origin ? `${origin}/register.html?track=${encodeURIComponent(id)}` : '';
 
   // اقرأ القوالب المخصّصة من قاعدة البيانات (إن وُجدت) — وإلا تُستخدم الافتراضية المدمجة
   let custom = null;
@@ -176,7 +178,7 @@ export async function onRequestPost({ request, env }) {
     } catch (_) {}
   }
 
-  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom, revisionInfo);
+  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl);
 
   // أرسل عبر Resend
   try {
@@ -276,13 +278,19 @@ function paragraphs(text, style) {
     .map(p => `<p style="${style}">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-function buildEmail(event, row, id, resumeUrl, custom, revisionInfo) {
+function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
   const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
   const D = DEFAULTS[event] || DEFAULTS.received;
   const c = custom || {};
   const revAr = revisionInfo ? renderRevisionBox(revisionInfo, 'ar') : '';
   const revEn = revisionInfo ? renderRevisionBox(revisionInfo, 'en') : '';
+  // كتلة تتبّع الطلب + تنبيه البريد التلقائي (تظهر في كل الرسائل)
+  const trackBlock = trackUrl ? `
+          <div style="background:#eef4ff;border:1px solid #cdddff;border-radius:12px;padding:16px;margin:14px 0;text-align:center">
+            <a href="${esc(trackUrl)}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;padding:11px 24px;border-radius:9px;font-size:14px">تتبّع حالة الطلب · Track your application</a>
+            <p style="font-size:12.5px;color:${BRAND.soft};margin:11px 0 0;line-height:1.7">تابع حالة طلبك في أي وقت برقم الطلب أعلاه. وستصلك رسالة تلقائية عند أي تحديث على حالته.<br>Track your status anytime using the application number above. You'll automatically receive an email whenever your application status is updated.</p>
+          </div>` : '';
 
   const subjectRaw = (c.subject && String(c.subject).trim()) ? c.subject : D.subject;
   const arRaw = (c.ar && String(c.ar).trim()) ? c.ar : D.ar;
@@ -320,6 +328,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo) {
             <span style="font-size:12px;color:${BRAND.soft}">رقم الطلب · Application No.</span><br>
             <span style="font-size:15px;font-weight:700;direction:ltr;display:inline-block;color:${BRAND.navy}">${esc(id)}</span>
           </div>
+          ${trackBlock}
 
           <hr style="border:none;border-top:1px solid ${BRAND.line};margin:22px 0">
           <div dir="ltr" style="text-align:left">
