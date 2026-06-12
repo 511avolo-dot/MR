@@ -3338,6 +3338,32 @@ function removeDoc(docId) {
 /* ════════════════════════════════════
    AI EXTRACTION
    ════════════════════════════════════ */
+// تطبيع نتائج الاستخراج: تحويل الأرقام العربية، تنظيف معرّفات الأرقام، التحقق من التواريخ
+function _toWesternDigits(s){
+  return String(s)
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+}
+function normalizeExtracted(data){
+  if (!data || typeof data !== 'object') return {};
+  const numId = ['commercial_reg','vat_number','zakat_number','gosi_number','chamber_membership','postal_code','po_box'];
+  const dates = ['cr_issue_date','cr_expiry_date','established_date','chamber_expiry'];
+  const nums  = ['employees_total','employees_saudi','paid_capital'];
+  const out = {};
+  for (let [k, v] of Object.entries(data)){
+    if (v == null) continue;
+    if (typeof v === 'string'){ v = _toWesternDigits(v).trim(); if (v === '' || v.toLowerCase() === 'null') continue; }
+    if (numId.includes(k)) { v = String(v).replace(/[^0-9]/g,''); if (!v) continue; }
+    else if (dates.includes(k)) { const m = String(v).match(/\d{4}-\d{2}-\d{2}/); if (!m) continue; v = m[0]; }
+    else if (nums.includes(k)) { const n = Number(String(v).replace(/[^0-9.]/g,'')); if (!isFinite(n) || n <= 0) continue; v = n; }
+    if (v !== '' && v != null) out[k] = v;
+  }
+  // فحوص خفيفة لتقليل الأخطاء الشائعة
+  if (out.commercial_reg && out.commercial_reg.length !== 10) { /* أبقِه لكن قد يكون ناقصاً */ }
+  if (out.vat_number && out.vat_number.length !== 15) { /* بعض الوثائق تعرض الرقم بصيغ مختلفة */ }
+  return out;
+}
+
 async function extractAllDocs() {
   if (!AI_AVAILABLE) { return {}; }
   const merged = {};
@@ -3348,7 +3374,7 @@ async function extractAllDocs() {
     const docName = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find(d => d.id === docId)?.name || docId;
     showProc('جارٍ معالجة الوثائق...', `${docName}`);
     try {
-      const result = await extractFromFile(docData.file, docName);
+      const result = normalizeExtracted(await extractFromFile(docData.file, docName));
       Object.keys(result).forEach(k => {
         if (result[k] && !merged[k]) merged[k] = result[k];
       });
@@ -3382,13 +3408,22 @@ async function extractFromPdf(file, docType) {
     text += content.items.map(i => i.str).join(' ') + '\n';
   }
   if (text.trim().length < 60) {
-    // Scanned PDF — use vision on page 1
+    // Scanned/low-text PDF.
+    // أفضل دقة: أرسل ملف PDF نفسه للنموذج (يقرأ كل الصفحات بدقة كاملة) بدل صورة مرسومة.
+    if (file.size && file.size < 12 * 1024 * 1024) {
+      try {
+        const b64pdf = await fileToBase64(file);
+        const r = await aiExtractImage(b64pdf, 'application/pdf', docType);
+        if (r && Object.keys(r).length) return r;
+      } catch (e) { /* fall back to rendering below */ }
+    }
+    // Fallback: render page 1 at high resolution and use vision
     const page = await pdf.getPage(1);
-    const vp = page.getViewport({scale: 2});
+    const vp = page.getViewport({scale: 2.5});
     const canvas = document.createElement('canvas');
     canvas.width = vp.width; canvas.height = vp.height;
     await page.render({canvasContext: canvas.getContext('2d'), viewport: vp}).promise;
-    const base64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+    const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
     canvas.width = 0; canvas.height = 0;
     return await aiExtractImage(base64, 'image/jpeg', docType);
   }
@@ -3411,26 +3446,40 @@ async function aiExtractImage(base64, mime, docType) {
 }
 
 function buildExtractionPrompt(docType) {
+  const d = String(docType || '');
+  let focus = 'Capture EVERY field that is clearly present in this document.';
+  if (/سجل|تجاري|commercial/i.test(d)) focus = 'PRIMARY fields for this document: commercial_reg, legal_name_ar, legal_name_en, entity_type, cr_issue_date, cr_expiry_date, established_date, established_hijri, paid_capital, city, address.';
+  else if (/زكاة|ضريب|vat|zatca|ضريبة/i.test(d)) focus = 'PRIMARY field for this document: vat_number (the 15-digit VAT/tax number).';
+  else if (/تأمين|gosi/i.test(d)) focus = 'PRIMARY field for this document: gosi_number.';
+  else if (/غرفة|chamber/i.test(d)) focus = 'PRIMARY fields for this document: chamber, chamber_membership, chamber_expiry.';
+  else if (/عنوان|وطني|address|national/i.test(d)) focus = 'PRIMARY fields for this document: address (full line), district, city, postal_code, po_box.';
+
   return `You are an expert OCR + data-extraction assistant for a Saudi supplier-registration system.
-The document type is "${docType}". The document may be in ARABIC, ENGLISH, or BILINGUAL (mixed). Saudi official documents (Commercial Registration, ZATCA/VAT, GOSI, Chamber) are frequently bilingual — read BOTH languages and cross-check.
+The document type is "${docType}". It may be ARABIC, ENGLISH, or BILINGUAL. Saudi official documents (Commercial Registration "السجل التجاري", ZATCA/VAT "شهادة ضريبية", GOSI "التأمينات", Chamber "الغرفة التجارية", National Address "العنوان الوطني") are usually bilingual — read BOTH languages and cross-check.
 
-Extraction rules:
-- Read text in any orientation; ignore stamps, watermarks, QR codes, and decorative headers.
-- For names: capture the Arabic legal name in legal_name_ar and the English/Latin legal name in legal_name_en. If only one language exists, fill that one and leave the other null (do NOT translate/transliterate yourself).
-- Numbers: return digits in Western form (0-9). Convert Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to Western. Strip spaces/separators from ID/registration/VAT numbers.
-- Dates: ALWAYS output Gregorian in strict YYYY-MM-DD. If the document shows a Hijri (هجري) date, convert it to the matching Gregorian date. If both are shown, use the Gregorian one.
-- entity_type: normalize to one of exactly: "مؤسسة فردية", "شركة ذات مسؤولية محدودة", "شركة مساهمة", "فرع شركة أجنبية" — or null.
-- Use null (not empty string, not guesses) for anything not clearly present in THIS document.
+${focus}
+Still capture any OTHER field that is clearly present too; use null for anything not clearly in THIS document (never guess).
 
-Return ONLY valid JSON, no markdown, no commentary:
+Rules:
+- Read text in any orientation; ignore stamps, watermarks, QR codes, decorative headers, and personal/national ID numbers of individuals.
+- Names: legal_name_ar = the Arabic legal name; legal_name_en = the English/Latin legal name. Fill only the language that exists; do NOT translate or transliterate yourself.
+- Numbers: output Western digits 0-9 (convert Arabic-Indic ٠-٩). Strip spaces/dashes from ID/registration numbers.
+- Field formats: commercial_reg = 10 digits; vat_number = 15 digits (usually starts with 3 and ends with 3); postal_code = 5 digits.
+- Dates: output Gregorian as strict YYYY-MM-DD. If only a Hijri (هجري) date exists, convert it to Gregorian; also keep the raw Hijri text in established_hijri when present. If both Gregorian and Hijri are shown, use Gregorian for the date fields.
+- entity_type: normalize to EXACTLY one of: "مؤسسة فردية", "شركة ذات مسؤولية محدودة", "شركة مساهمة", "فرع شركة أجنبية" — or null.
+- address = the full national address line (building no., street, district, city). district/city/postal_code separately too if shown.
+
+Return ONLY valid JSON (no markdown, no commentary):
 {
   "legal_name_ar": "string|null",
   "legal_name_en": "string|null",
+  "trade_name": "string|null",
   "entity_type": "string|null",
   "commercial_reg": "string|null",
   "cr_issue_date": "YYYY-MM-DD|null",
   "cr_expiry_date": "YYYY-MM-DD|null",
   "established_date": "YYYY-MM-DD|null",
+  "established_hijri": "string|null",
   "vat_number": "string|null",
   "zakat_number": "string|null",
   "gosi_number": "string|null",
@@ -3438,13 +3487,18 @@ Return ONLY valid JSON, no markdown, no commentary:
   "chamber_membership": "string|null",
   "chamber_expiry": "YYYY-MM-DD|null",
   "city": "string|null",
+  "district": "string|null",
   "address": "string|null",
   "postal_code": "string|null",
+  "po_box": "string|null",
   "phone": "string|null",
+  "fax": "string|null",
   "email": "string|null",
+  "website": "string|null",
   "employees_total": "number|null",
   "employees_saudi": "number|null",
-  "paid_capital": "number|null"
+  "paid_capital": "number|null",
+  "contractor_grade": "string|null"
 }`;
 }
 
@@ -3498,21 +3552,32 @@ function fileToBase64(file) {
    ════════════════════════════════════ */
 function fillFromAI(data) {
   const map = {
-    'f-legal-ar':      data.legal_name_ar,
-    'f-legal-en':      data.legal_name_en,
-    'f-cr':            data.commercial_reg,
-    'f-cr-issue':      data.cr_issue_date,
-    'f-cr-expiry':     data.cr_expiry_date,
-    'f-est-date':      data.established_date,
-    'f-vat':           data.vat_number,
-    'f-zakat':         data.zakat_number,
-    'f-gosi':          data.gosi_number,
-    'f-chamber':       data.chamber,
-    'f-chamber-num':   data.chamber_membership,
-    'f-chamber-exp':   data.chamber_expiry,
-    'f-city':          data.city,
-    'f-address':       data.address,
-    'f-phone':         data.phone,
+    'f-legal-ar':       data.legal_name_ar,
+    'f-legal-en':       data.legal_name_en,
+    'f-trade-name':     data.trade_name,
+    'f-cr':             data.commercial_reg,
+    'f-cr-issue':       data.cr_issue_date,
+    'f-cr-expiry':      data.cr_expiry_date,
+    'f-est-date':       data.established_date,
+    'f-est-hijri':      data.established_hijri,
+    'f-vat':            data.vat_number,
+    'f-zakat':          data.zakat_number,
+    'f-gosi':           data.gosi_number,
+    'f-chamber':        data.chamber,
+    'f-chamber-num':    data.chamber_membership,
+    'f-chamber-exp':    data.chamber_expiry,
+    'f-city':           data.city,
+    'f-address':        data.address,
+    'f-postal':         data.postal_code,
+    'f-pobox':          data.po_box,
+    'f-phone':          data.phone,
+    'f-fax':            data.fax,
+    'f-email':          data.email,
+    'f-website':        data.website,
+    'f-capital':        data.paid_capital,
+    'f-emp-total':      data.employees_total,
+    'f-emp-saudi':      data.employees_saudi,
+    'f-contractor-grade': data.contractor_grade,
   };
   let filled = 0;
   for (const [id, val] of Object.entries(map)) {
