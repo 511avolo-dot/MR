@@ -38,6 +38,17 @@ def rtl(p):
     p._p.get_or_add_pPr().set('rtl', '1')
 
 
+def table_rtl(tb):
+    """تفعيل اتجاه RTL للجدول على عنصر tblPr (المكان الصحيح)."""
+    from pptx.oxml.ns import qn
+    tbl = tb._tbl
+    tblPr = tbl.find(qn('a:tblPr'))
+    if tblPr is None:
+        tblPr = tbl.makeelement(qn('a:tblPr'), {})
+        tbl.insert(0, tblPr)
+    tblPr.set('rtl', '1')
+
+
 def rect(s, l, t, w, h, fill, line=None, lw=1.0):
     sp = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, l, t, w, h)
     sp.shadow.inherit = False
@@ -115,7 +126,7 @@ def two_col(s, top, rows, *, fsize=15, row_h=0.74):
     """جدول مبسّط: الوضع الحالي (يمين) ← المعالجة المقترحة (يسار)."""
     l = Inches(0.5); w = SW - Inches(1.0)
     g = s.shapes.add_table(len(rows) + 1, 2, l, top, w, Inches(row_h * (len(rows) + 1)))
-    tb = g.table; tb._tbl.set('rtl', '1')
+    tb = g.table; table_rtl(tb)
     tb.columns[0].width = Emu(int(w * 0.5)); tb.columns[1].width = Emu(int(w * 0.5))
     for j, (h, bg) in enumerate([('الوضع الحالي', INK), ('المعالجة المقترحة', GREEN)]):
         c = tb.cell(0, j); c.fill.solid(); c.fill.fore_color.rgb = bg
@@ -139,7 +150,7 @@ def two_col(s, top, rows, *, fsize=15, row_h=0.74):
 def proc_col(s, l, top, w, rows, row_h=0.7):
     """عمود إجراءات: المرحلة + الإجراء + المسؤول."""
     g = s.shapes.add_table(len(rows) + 1, 3, l, top, w, Inches(row_h * (len(rows) + 1)))
-    tb = g.table; tb._tbl.set('rtl', '1')
+    tb = g.table; table_rtl(tb)
     cw = (3.0, 4.0, 2.6); total = sum(cw)
     for i, c in enumerate(cw):
         tb.columns[i].width = Emu(int(w * c / total))
@@ -253,7 +264,7 @@ cards = [
 cw = (SW - Inches(1.2)) / 2
 for i, (ti, de, co) in enumerate(cards):
     r, c = divmod(i, 2)
-    x = Inches(0.5) + c * (cw + Inches(0.2)); y = Inches(1.6) + r * Inches(1.7)
+    x = SW - Inches(0.5) - cw - c * (cw + Inches(0.2)); y = Inches(1.6) + r * Inches(1.7)
     rect(s, x, y, cw, Inches(1.5), CARD, line=LINE)
     rect(s, x + cw - Pt(9), y, Pt(9), Inches(1.5), co)
     txt(s, x + Inches(0.2), y + Inches(0.18), cw - Inches(0.5), Inches(1.2),
@@ -300,24 +311,26 @@ for i, (big, lbl, co, sub) in enumerate(tiles):
 source_note(s)
 page(s)
 
-# لوحة 2) حالة الأوامر والأولوية
+# لوحة 2) حالة الأوامر والأولوية  (الحالة يميناً، الأولوية يساراً)
 s = new(); brandbar(s, 'لوحة حالة الأوامر والأولوية', 'توزيع أوامر الشراء')
-txt(s, SW - Inches(6.6), Inches(1.35), Inches(6.3), Inches(0.4),
-    'حسب الحالة', size=16, color=GOLD, bold=True, align=PP_ALIGN.RIGHT)
-hbars(s, Inches(0.5), Inches(1.95), Inches(6.3), [
+RX = Inches(6.95); RW = Inches(5.9)   # النصف الأيمن
+LX = Inches(0.5); LW = Inches(5.9)    # النصف الأيسر
+txt(s, RX, Inches(1.35), RW, Inches(0.4), 'حسب الحالة', size=16, color=GOLD,
+    bold=True, align=PP_ALIGN.RIGHT)
+hbars(s, RX, Inches(1.95), RW, [
     ('مُسلَّم', 38, GREEN), ('قيد المراجعة', 7, AMBER), ('ملغى', 5, RED),
     ('مُسلَّم جزئياً', 2, AMBER), ('قيد التوريد', 1, INK),
 ], maxv=38, lblw=Inches(1.9))
-txt(s, Inches(0.5), Inches(1.35), Inches(6.0), Inches(0.4),
-    'حسب الأولوية', size=16, color=GOLD, bold=True, align=PP_ALIGN.RIGHT)
-hbars(s, Inches(6.95), Inches(1.95), Inches(5.9), [
+txt(s, LX, Inches(1.35), LW, Inches(0.4), 'حسب الأولوية', size=16, color=GOLD,
+    bold=True, align=PP_ALIGN.RIGHT)
+hbars(s, LX, Inches(1.95), LW, [
     ('متوسط', 22, INK), ('عالي', 18, AMBER), ('عاجل', 13, RED),
 ], maxv=22, lblw=Inches(1.6))
-# تنبيه العاجل
-rect(s, Inches(6.95), Inches(4.15), Inches(5.9), Inches(1.25), RGBColor(0xF7, 0xE9, 0xE7), line=RED, lw=1.5)
-txt(s, Inches(7.15), Inches(4.3), Inches(5.5), Inches(1.0),
+# تنبيه العاجل (أسفل عمود الأولوية يساراً)
+rect(s, LX, Inches(4.0), LW, Inches(1.35), RGBColor(0xF7, 0xE9, 0xE7), line=RED, lw=1.5)
+txt(s, LX + Inches(0.2), Inches(4.15), LW - Inches(0.4), Inches(1.1),
     [{'t': 'مفارقة «العاجل»', 'size': 15, 'color': RED, 'bold': True, 'space': 4},
-     {'t': 'من 13 طلباً «عاجلاً»: تأخّر 8 وأُلغي 1 — أي أن صفة العاجل نفسها لا تضمن السرعة.', 'size': 14, 'color': INK}],
+     {'t': 'من 13 طلباً «عاجلاً»: تأخّر 8 وأُلغي 1 — أي أن صفة العاجل لا تضمن السرعة.', 'size': 14, 'color': INK}],
     align=PP_ALIGN.RIGHT)
 decision(s, '12 طلباً لم تكتمل (ملغاة/قيد المراجعة)، وثلثا الأوامر متأخرة — مؤشر على خلل في الدورة.')
 source_note(s)
