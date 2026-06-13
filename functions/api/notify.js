@@ -297,8 +297,8 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
   const enRaw = (c.en && String(c.en).trim()) ? c.en : D.en;
 
   const subject = fillVars(subjectRaw, { name: nameAr, name_en: nameEn, id });
-  const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink}`);
-  const enHtml = paragraphs(fillVars(enRaw, { name: nameEn, name_en: nameEn, id }), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink}`);
+  const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink};direction:rtl;text-align:right`);
+  const enHtml = paragraphs(fillVars(enRaw, { name: nameEn, name_en: nameEn, id }), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink};direction:ltr;text-align:left`);
 
   const cta = resumeUrl
     ? `<tr><td style="padding:8px 0 4px">
@@ -316,7 +316,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
           <div style="color:#fff;font-size:21px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
         </td></tr>
         <tr><td style="height:4px;background:${BRAND.gold}"></td></tr>
-        <tr><td style="padding:30px">
+        <tr><td dir="rtl" style="padding:30px;text-align:right">
           <span style="display:inline-block;background:${D.badge[2]}1a;color:${D.badge[2]};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${esc(D.badge[0])} · ${esc(D.badge[1])}</span>
 
           <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
