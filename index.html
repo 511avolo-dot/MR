@@ -18745,15 +18745,15 @@ function etParas(text, style) {
 }
 const ET_DOC_LABELS = { cr:{ar:'السجل التجاري',en:'Commercial Registration'}, vat:{ar:'شهادة الزكاة / ضريبة القيمة المضافة',en:'Zakat / VAT Certificate'}, gosi:{ar:'شهادة التأمينات الاجتماعية',en:'GOSI Certificate'}, chamber:{ar:'شهادة الغرفة التجارية',en:'Chamber of Commerce Certificate'}, natl_addr:{ar:'وثيقة العنوان الوطني',en:'National Address Document'}, municipal:{ar:'رخصة البلدية / الترخيص الصناعي',en:'Municipal / Industrial License'} };
 const ET_SEC_LABELS = { general_info:{ar:'بيانات المنشأة',en:'Company Information'}, contact_info:{ar:'بيانات التواصل',en:'Contact Information'}, activity_info:{ar:'النشاط والخدمات',en:'Activity & Services'} };
-function etRevBox(rev, lang) {
-  const B = ET_BRAND, tr = (a, e) => lang === 'ar' ? a : e, pad = lang === 'ar' ? 'right' : 'left';
-  const docs = (rev.fields || []).map(id => (ET_DOC_LABELS[id] && ET_DOC_LABELS[id][lang]) || id);
-  const secs = (rev.sections || []).map(id => (ET_SEC_LABELS[id] && ET_SEC_LABELS[id][lang]) || id);
+function etRevBox(rev) {
+  const B = ET_BRAND, bi = m => m ? `${m.ar} · ${m.en}` : '';
+  const docs = (rev.fields || []).map(id => bi(ET_DOC_LABELS[id]) || id);
+  const secs = (rev.sections || []).map(id => bi(ET_SEC_LABELS[id]) || id);
   let items = '';
-  if (docs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('وثائق مطلوب إعادة رفعها:','Documents to re-upload:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${docs.map(d=>`<li>${escapeHtml(d)}</li>`).join('')}</ul>`;
-  if (secs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('أقسام تحتاج مراجعة:','Sections to review:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${secs.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ul>`;
-  const gen = rev.general ? `<div style="margin-top:8px;font-size:13px;color:${B.ink}"><b>${tr('ملاحظة الفريق:','Team note:')}</b> ${escapeHtml(rev.general)}</div>` : '';
-  return `<div dir="${lang==='ar'?'rtl':'ltr'}" style="text-align:${pad};background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin:14px 0"><div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:4px">${tr('المطلوب تعديله أو استكماله','Items to update or complete')}</div>${items}${gen}</div>`;
+  if (docs.length) items += `<div style="margin-top:8px;font-weight:700;color:${B.navy};font-size:13px">وثائق مطلوب إعادة رفعها · Documents to re-upload</div><ul style="margin:4px 18px 0;padding:0;color:${B.ink};font-size:13px;line-height:1.9">${docs.map(d=>`<li>${escapeHtml(d)}</li>`).join('')}</ul>`;
+  if (secs.length) items += `<div style="margin-top:8px;font-weight:700;color:${B.navy};font-size:13px">أقسام تحتاج مراجعة · Sections to review</div><ul style="margin:4px 18px 0;padding:0;color:${B.ink};font-size:13px;line-height:1.9">${secs.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ul>`;
+  const gen = rev.general ? `<div style="margin-top:10px;font-size:13px;color:${B.ink}"><b>ملاحظة الفريق · Team note:</b> ${escapeHtml(rev.general)}</div>` : '';
+  return `<div dir="rtl" style="text-align:right;background:#fff7ed;border:1px solid #fed7aa;border-right:4px solid #d97706;border-radius:12px;padding:14px 16px;margin:16px 0"><div style="font-weight:800;color:#c2410c;font-size:14px">المطلوب تعديله أو استكماله · Items to update or complete</div>${items}${gen}</div>`;
 }
 function etBuildEmailHtml(key, t) {
   const D = EMAIL_TPL_DEFAULTS[key], B = ET_BRAND;
@@ -18761,8 +18761,7 @@ function etBuildEmailHtml(key, t) {
   const arH = etParas(etFillVars(t.ar || D.ar), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${B.ink};direction:rtl;text-align:right`);
   const enH = etParas(etFillVars(t.en || D.en), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${B.ink};direction:ltr;text-align:left`);
   const _sampleRev = { general:'يرجى تحديث السجل التجاري بنسخة سارية المفعول.', fields:['cr','vat'], sections:['contact_info'] };
-  const revAr = key === 'needs_revision' ? etRevBox(_sampleRev, 'ar') : '';
-  const revEn = key === 'needs_revision' ? etRevBox(_sampleRev, 'en') : '';
+  const revBox = key === 'needs_revision' ? etRevBox(_sampleRev) : '';
   const cta = key === 'needs_revision'
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0"><tr><td style="padding:8px 0 4px"><a href="#" style="display:inline-block;background:${B.gold};color:#fff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:10px;font-size:15px">فتح الطلب وتعديله · Open &amp; edit</a></td></tr></table>` : '';
   return `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"></head>
@@ -18780,7 +18779,7 @@ function etBuildEmailHtml(key, t) {
           <span style="display:inline-block;background:${D.color}1a;color:${D.color};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${escapeHtml(D.label)} · ${escapeHtml(D.labelEn)}</span>
           <h2 style="font-size:17px;margin:18px 0 6px;color:${B.navy}">شركة النور للمقاولات</h2>
           ${arH}
-          ${revAr}
+          ${revBox}
           ${cta}
           <div style="background:${B.wash};border:1px solid ${B.line};border-radius:10px;padding:12px 16px;margin:14px 0">
             <span style="font-size:12px;color:${B.soft}">رقم الطلب · Application No.</span><br>
@@ -18794,7 +18793,6 @@ function etBuildEmailHtml(key, t) {
           <div dir="ltr" style="text-align:left">
             <h3 style="font-size:15px;margin:0 0 6px;color:${B.navy}">Al-Noor Contracting Co.</h3>
             ${enH}
-            ${revEn}
           </div>
         </td></tr>
         <tr><td style="background:${B.navy};padding:16px 28px;text-align:center">

@@ -253,19 +253,19 @@ const SEC_LABELS = {
   contact_info: { ar: 'بيانات التواصل', en: 'Contact Information' },
   activity_info: { ar: 'النشاط والخدمات', en: 'Activity & Services' },
 };
-function renderRevisionBox(rev, lang) {
+// صندوق بنود التعديل — ثنائي اللغة (كل عنوان/بند: عربي · English)
+function renderRevisionBox(rev) {
   const B = BRAND;
-  const docs = (rev.fields || []).map((id) => (DOC_LABELS[id] && DOC_LABELS[id][lang]) || id);
-  const secs = (rev.sections || []).map((id) => (SEC_LABELS[id] && SEC_LABELS[id][lang]) || id);
-  const tr = (ar, en) => (lang === 'ar' ? ar : en);
-  const pad = lang === 'ar' ? 'right' : 'left';
+  const bi = (m) => (m ? `${m.ar} · ${m.en}` : '');
+  const docs = (rev.fields || []).map((id) => bi(DOC_LABELS[id]) || id);
+  const secs = (rev.sections || []).map((id) => bi(SEC_LABELS[id]) || id);
   let items = '';
-  if (docs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('وثائق مطلوب إعادة رفعها:', 'Documents to re-upload:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${docs.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`;
-  if (secs.length) items += `<div style="margin-top:6px;font-weight:600;color:${B.navy};font-size:13px">${tr('أقسام تحتاج مراجعة:', 'Sections to review:')}</div><ul style="margin:4px 0;padding-${pad}:18px;color:${B.ink};font-size:13px;line-height:1.85">${secs.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`;
-  const gen = rev.general ? `<div style="margin-top:8px;font-size:13px;color:${B.ink}"><b>${tr('ملاحظة الفريق:', 'Team note:')}</b> ${esc(rev.general)}</div>` : '';
+  if (docs.length) items += `<div style="margin-top:8px;font-weight:700;color:${B.navy};font-size:13px">وثائق مطلوب إعادة رفعها · Documents to re-upload</div><ul style="margin:4px 18px 0;padding:0;color:${B.ink};font-size:13px;line-height:1.9">${docs.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>`;
+  if (secs.length) items += `<div style="margin-top:8px;font-weight:700;color:${B.navy};font-size:13px">أقسام تحتاج مراجعة · Sections to review</div><ul style="margin:4px 18px 0;padding:0;color:${B.ink};font-size:13px;line-height:1.9">${secs.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>`;
+  const gen = rev.general ? `<div style="margin-top:10px;font-size:13px;color:${B.ink}"><b>ملاحظة الفريق · Team note:</b> ${esc(rev.general)}</div>` : '';
   if (!items && !gen) return '';
-  return `<div dir="${lang === 'ar' ? 'rtl' : 'ltr'}" style="text-align:${pad};background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin:14px 0">
-    <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:4px">${tr('المطلوب تعديله أو استكماله', 'Items to update or complete')}</div>
+  return `<div dir="rtl" style="text-align:right;background:#fff7ed;border:1px solid #fed7aa;border-right:4px solid #d97706;border-radius:12px;padding:14px 16px;margin:16px 0">
+    <div style="font-weight:800;color:#c2410c;font-size:14px">المطلوب تعديله أو استكماله · Items to update or complete</div>
     ${items}${gen}
   </div>`;
 }
@@ -283,8 +283,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
   const D = DEFAULTS[event] || DEFAULTS.received;
   const c = custom || {};
-  const revAr = revisionInfo ? renderRevisionBox(revisionInfo, 'ar') : '';
-  const revEn = revisionInfo ? renderRevisionBox(revisionInfo, 'en') : '';
+  const revBox = revisionInfo ? renderRevisionBox(revisionInfo) : '';
   // كتلة تتبّع الطلب + تنبيه البريد التلقائي (تظهر في كل الرسائل)
   const trackBlock = trackUrl ? `
           <div style="background:#eef4ff;border:1px solid #cdddff;border-radius:12px;padding:16px;margin:14px 0;text-align:center">
@@ -321,7 +320,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
 
           <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
           ${arHtml}
-          ${revAr}
+          ${revBox}
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0">${cta}</table>
 
           <div style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:10px;padding:12px 16px;margin:14px 0">
@@ -334,7 +333,6 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
           <div dir="ltr" style="text-align:left">
             <h3 style="font-size:15px;margin:0 0 6px;color:${BRAND.navy}">${esc(nameEn)}</h3>
             ${enHtml}
-            ${revEn}
           </div>
         </td></tr>
         <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">
