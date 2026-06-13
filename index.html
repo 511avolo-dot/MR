@@ -18867,7 +18867,7 @@ async function openRegDetail(jsonStr) {
   title.textContent = r.legal_name_ar || 'تفاصيل الطلب';
   modal.style.display = 'flex';
 
-  const statusMap = {pending:'معلّق', approved:'مقبول', rejected:'مرفوض', needs_revision:'يحتاج تعديل'};
+  const statusMap = {pending:'قيد المراجعة', approved:'مقبول', rejected:'مرفوض', needs_revision:'يحتاج تعديل'};
   const statusColor = {pending:'#f59e0b', approved:'#16a34a', rejected:'#dc2626', needs_revision:'#d97706'};
   const statusBg    = {pending:'#fef3c7', approved:'#f0fdf4', rejected:'#fef2f2', needs_revision:'#fffbeb'};
   const st = r.status || 'pending';
@@ -18935,15 +18935,21 @@ async function openRegDetail(jsonStr) {
       ['نوع الكيان', r.entity_type],
       ['المدينة / الدولة', [r.city, r.country].filter(Boolean).join(' — ')],
       ['تاريخ التأسيس', r.established_date],
+      ['تاريخ التأسيس (هجري)', r.established_hijri],
       ['رقم السجل التجاري', r.commercial_reg],
+      ['تاريخ إصدار السجل', r.cr_issue_date],
       ['تاريخ انتهاء السجل', r.cr_expiry_date],
       ['الرقم الضريبي (VAT)', r.vat_number],
       ['رقم الزكاة', r.zakat_number],
       ['رقم التأمينات (GOSI)', r.gosi_number],
       ['الغرفة التجارية', r.chamber],
       ['رقم عضوية الغرفة', r.chamber_membership],
+      ['تاريخ انتهاء العضوية', r.chamber_expiry],
       ['العنوان', r.address],
+      ['الرمز البريدي', r.postal_code],
+      ['ص.ب', r.po_box],
       ['هاتف المنشأة', r.phone],
+      ['الفاكس', r.fax],
       ['البريد الإلكتروني', r.email],
       ['الموقع الإلكتروني', r.website],
     ]),
@@ -19133,11 +19139,14 @@ async function notifyRegEmail(id, event) {
   try {
     let token = null;
     try { const { data } = await CLOUD.client.auth.getSession(); token = data?.session?.access_token || null; } catch (_) {}
-    fetch('/api/notify', {
+    const r = await fetch('/api/notify', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {}),
       body: JSON.stringify({ id, event })
-    }).catch(() => {});
+    });
+    const d = await r.json().catch(() => ({}));
+    // تأكيد للمراجِع عند نجاح الإرسال؛ صامت إن لم يُفعّل البريد بعد (لا إزعاج)
+    if (d && d.ok && d.sent) toast('info', 'تم إشعار المورد', 'أُرسلت رسالة بريد بالحالة الجديدة');
   } catch (_) {}
 }
 
