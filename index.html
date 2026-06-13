@@ -18758,8 +18758,8 @@ function etRevBox(rev, lang) {
 function etBuildEmailHtml(key, t) {
   const D = EMAIL_TPL_DEFAULTS[key], B = ET_BRAND;
   const subj = etFillVars(t.subject || D.subject);
-  const arH = etParas(etFillVars(t.ar || D.ar), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${B.ink}`);
-  const enH = etParas(etFillVars(t.en || D.en), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${B.ink}`);
+  const arH = etParas(etFillVars(t.ar || D.ar), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${B.ink};direction:rtl;text-align:right`);
+  const enH = etParas(etFillVars(t.en || D.en), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${B.ink};direction:ltr;text-align:left`);
   const _sampleRev = { general:'يرجى تحديث السجل التجاري بنسخة سارية المفعول.', fields:['cr','vat'], sections:['contact_info'] };
   const revAr = key === 'needs_revision' ? etRevBox(_sampleRev, 'ar') : '';
   const revEn = key === 'needs_revision' ? etRevBox(_sampleRev, 'en') : '';
@@ -18776,7 +18776,7 @@ function etBuildEmailHtml(key, t) {
           <div style="color:#fff;font-size:20px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
         </td></tr>
         <tr><td style="height:4px;background:${B.gold}"></td></tr>
-        <tr><td style="padding:28px">
+        <tr><td dir="rtl" style="padding:28px;text-align:right">
           <span style="display:inline-block;background:${D.color}1a;color:${D.color};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${escapeHtml(D.label)} · ${escapeHtml(D.labelEn)}</span>
           <h2 style="font-size:17px;margin:18px 0 6px;color:${B.navy}">شركة النور للمقاولات</h2>
           ${arH}
