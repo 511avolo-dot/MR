@@ -18927,7 +18927,21 @@ async function openRegDetail(jsonStr) {
     ${r.submitted_at ? `<span style="font-size:11px;color:#94a3b8">${new Date(r.submitted_at).toLocaleDateString('ar-SA')}</span>` : ''}
   </div>${revisionBanner}`;
 
-  body.innerHTML = statusBanner + [
+  // مؤشّر حالة إشعار البريد للمورد (آخر إشعار أُرسل)
+  let notifyChip = '';
+  if (r.last_notify) {
+    const ln = r.last_notify;
+    const evMap = {received:'الاستلام', approved:'القبول', rejected:'الرفض', needs_revision:'طلب تعديل'};
+    const when = ln.at ? new Date(ln.at).toLocaleString('ar-SA') : '';
+    notifyChip = `<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${ln.sent?'#f0fdf4':'#fef2f2'};border:1px solid ${ln.sent?'#bbf7d0':'#fecaca'};border-radius:8px;margin-bottom:16px;font-size:12px;flex-wrap:wrap">
+      <span style="font-size:14px">📧</span>
+      <span style="font-weight:700;color:${ln.sent?'#15803d':'#b91c1c'}">${ln.sent?'تم إشعار المورد بالبريد':'تعذّر إرسال الإشعار'}</span>
+      <span style="color:#64748b">${ln.sent ? '(' + (evMap[ln.event]||ln.event) + (ln.to ? ' → ' + escapeHtml(ln.to) : '') + ')' : escapeHtml(ln.reason||'')}</span>
+      <span style="color:#94a3b8;margin-inline-start:auto">${when}</span>
+    </div>`;
+  }
+
+  body.innerHTML = statusBanner + notifyChip + [
     sect('المعلومات العامة', [
       ['الاسم القانوني (عربي)', r.legal_name_ar],
       ['الاسم القانوني (إنجليزي)', r.legal_name_en],
@@ -19147,6 +19161,12 @@ async function notifyRegEmail(id, event) {
     const d = await r.json().catch(() => ({}));
     // تأكيد للمراجِع عند نجاح الإرسال؛ صامت إن لم يُفعّل البريد بعد (لا إزعاج)
     if (d && d.ok && d.sent) toast('info', 'تم إشعار المورد', 'أُرسلت رسالة بريد بالحالة الجديدة');
+    // سجّل نتيجة الإشعار على الطلب ليراها المراجِع لاحقاً في التفاصيل (يتطلب عمود last_notify)
+    const rec = { event, at: new Date().toISOString(), sent: !!(d && d.ok && d.sent), to: (d && d.to) || null, reason: (d && (d.reason || d.error)) || null };
+    try {
+      await CLOUD.client.from(REG_TABLE).update({ last_notify: rec }).eq('id', id);
+      if (_regDetailCurrent && _regDetailCurrent.id === id) _regDetailCurrent.last_notify = rec;
+    } catch (_) {}
   } catch (_) {}
 }
 
