@@ -19037,11 +19037,11 @@ async function openRegDetail(jsonStr) {
           <th style="padding:7px 10px;text-align:right;border:1px solid #e2e8f0">بلد المنشأ</th>
         </tr></thead>
         <tbody>${services.map(s => `<tr>
-          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.category||'—'}</td>
-          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.description||'—'}</td>
-          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.role||'—'}</td>
-          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.brands||'—'}</td>
-          <td style="padding:6px 10px;border:1px solid #e2e8f0">${s.country||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${escapeHtml(s.category||'—')}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${escapeHtml(s.description||'—')}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${escapeHtml(s.role||'—')}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${escapeHtml(s.brands||'—')}</td>
+          <td style="padding:6px 10px;border:1px solid #e2e8f0">${escapeHtml(s.country||'—')}</td>
         </tr>`).join('')}</tbody>
       </table>
     </div>`;
