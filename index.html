@@ -18666,8 +18666,8 @@ const ET_ORDER = ['received','approved','rejected','needs_revision'];
 const EMAIL_TPL_DEFAULTS = {
   received: { label:'تم الاستلام', labelEn:'Received', color:'#2563eb',
     subject:'تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received',
-    ar:'شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.',
-    en:'Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.' },
+    ar:'شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة علاقات الموردين. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.',
+    en:'Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Supplier Relations team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.' },
   approved: { label:'تم القبول', labelEn:'Approved', color:'#16a34a',
     subject:'تهانينا — تم اعتماد تسجيلكم كمورد | Supplier Application Approved',
     ar:'يسعدنا إبلاغكم بقبول طلب تسجيلكم واعتمادكم ضمن قائمة الموردين المعتمدين لدى مجموعة الذيابي. سيتواصل معكم فريق المشتريات بالخطوات التالية وفرص التوريد.',
@@ -18767,22 +18767,18 @@ function etBuildEmailHtml(key, t) {
   const heroIcon = HERO[key] || '•';
   const cta = key === 'needs_revision'
     ? `<a href="#" style="display:block;background:${B.gold};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:14px 0 0">فتح الطلب وتعديله · Open &amp; edit</a>` : '';
-  const logoUrl = (location.origin || '') + '/logo.png';
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"></head>
 <body style="margin:0;background:${B.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${B.ink}">
   <div style="padding:6px 4px;font-size:11px;color:${B.soft}">Subject: ${escapeHtml(subj)}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${B.wash};padding:14px 8px">
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 40px -16px rgba(11,27,54,.35)">
-        <tr><td style="background:linear-gradient(135deg,${B.navy},${NAVY2});padding:18px 26px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td width="140" valign="middle"><div style="background:linear-gradient(180deg,#FBF6E9,#F1E9D2);border:1px solid rgba(212,175,107,.55);border-radius:10px;padding:7px 10px;display:inline-block"><img src="${logoUrl}" alt="AL-DEYABI GROUP" height="40" style="display:block;height:40px;width:auto;border:0"></div></td>
-            <td valign="middle" dir="rtl" style="text-align:right;padding-right:12px">
-              <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.04em">بوابة الموردين · <span dir="ltr">Supplier Portal</span></div>
-              <div style="color:#fff;font-size:16px;font-weight:800;margin-top:3px">إشعار حالة طلب التسجيل</div>
-              <div dir="ltr" style="color:#cdd6e6;font-size:11.5px;font-weight:600;text-align:right">Registration Status Notification</div>
-            </td>
-          </tr></table>
+        <tr><td style="background:linear-gradient(135deg,${B.navy},${NAVY2});padding:24px 30px" align="center">
+          <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">AL-DEYABI GROUP · مجموعة الذيابي</div>
+          <div style="color:#fff;font-size:13px;margin-top:6px">بوابة الموردين · <span dir="ltr">Supplier Portal</span></div>
+          <div style="height:1px;width:60px;background:${B.gold};margin:12px auto;opacity:.6"></div>
+          <div style="color:#fff;font-size:19px;font-weight:800">إشعار حالة طلب التسجيل</div>
+          <div dir="ltr" style="color:#cdd6e6;font-size:12.5px;font-weight:600;margin-top:2px">Registration Status Notification</div>
         </td></tr>
         <tr><td style="height:3px;background:${B.gold}"></td></tr>
         <tr><td style="background:${D.color}14;padding:24px 30px" align="center">
@@ -18809,7 +18805,7 @@ function etBuildEmailHtml(key, t) {
           ${enH}
         </td></tr>
         <tr><td style="background:${B.navy};padding:18px 30px" align="center">
-          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة العمليات وسلاسل الإمداد · Al-Deyabi Group</div>
+          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة علاقات الموردين · Al-Deyabi Group</div>
           <div style="color:${B.gold};font-size:12px;margin-top:4px" dir="ltr">supply@aldeyabi.com</div>
         </td></tr>
       </table>

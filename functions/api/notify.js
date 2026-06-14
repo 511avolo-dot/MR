@@ -212,8 +212,8 @@ const DEFAULTS = {
   received: {
     badge: ['تم الاستلام', 'Received', '#2563eb'],
     subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
-    ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
-    en: `Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
+    ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة علاقات الموردين. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
+    en: `Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Supplier Relations team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
   },
   approved: {
     badge: ['تم القبول', 'Approved', '#16a34a'],
@@ -288,7 +288,6 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
   const heroIcon = HERO[event] || '•';
   const heroColor = D.badge[2];
   const heroBg = D.badge[2] + '14';
-  const logoUrl = origin ? `${origin}/logo.png` : '';
 
   const revBox = revisionInfo ? renderRevisionBox(revisionInfo) : '';
 
@@ -307,28 +306,17 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
     ? `<a href="${esc(trackUrl)}" style="display:block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:10px 0 6px">تتبّع حالة طلبك · Track your application</a>
        <p style="font-size:12px;color:${BRAND.soft};text-align:center;line-height:1.7;margin:6px 0 0">تابع حالة طلبك في أي وقت برقم الطلب أعلاه، وستصلك رسالة تلقائية عند أي تحديث على حالته.<br><span dir="ltr">You'll automatically receive an email whenever your application status is updated.</span></p>`
     : '';
-  const logoCell = logoUrl
-    ? `<td width="140" valign="middle">
-         <div style="background:linear-gradient(180deg,#FBF6E9,#F1E9D2);border:1px solid rgba(212,175,107,.55);border-radius:10px;padding:7px 10px;display:inline-block">
-           <img src="${esc(logoUrl)}" alt="AL-DEYABI GROUP" height="40" style="display:block;height:40px;width:auto;border:0">
-         </div>
-       </td>`
-    : '';
-
   const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:${BRAND.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${BRAND.ink}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.wash};padding:22px 12px">
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 40px -16px rgba(11,27,54,.35)">
-        <tr><td style="background:linear-gradient(135deg,${BRAND.navy},${NAVY2});padding:18px 26px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            ${logoCell}
-            <td valign="middle" dir="rtl" style="text-align:right;padding-${logoCell ? 'right' : ''}:${logoCell ? '12px' : '0'}">
-              <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.04em">بوابة الموردين · <span dir="ltr">Supplier Portal</span></div>
-              <div style="color:#fff;font-size:16px;font-weight:800;margin-top:3px">إشعار حالة طلب التسجيل</div>
-              <div dir="ltr" style="color:#cdd6e6;font-size:11.5px;font-weight:600;text-align:right">Registration Status Notification</div>
-            </td>
-          </tr></table>
+        <tr><td style="background:linear-gradient(135deg,${BRAND.navy},${NAVY2});padding:24px 30px" align="center">
+          <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">AL-DEYABI GROUP · مجموعة الذيابي</div>
+          <div style="color:#fff;font-size:13px;margin-top:6px">بوابة الموردين · <span dir="ltr">Supplier Portal</span></div>
+          <div style="height:1px;width:60px;background:${BRAND.gold};margin:12px auto;opacity:.6"></div>
+          <div style="color:#fff;font-size:19px;font-weight:800">إشعار حالة طلب التسجيل</div>
+          <div dir="ltr" style="color:#cdd6e6;font-size:12.5px;font-weight:600;margin-top:2px">Registration Status Notification</div>
         </td></tr>
         <tr><td style="height:3px;background:${BRAND.gold}"></td></tr>
 
@@ -358,7 +346,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
         </td></tr>
 
         <tr><td style="background:${BRAND.navy};padding:18px 30px" align="center">
-          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة العمليات وسلاسل الإمداد · Al-Deyabi Group</div>
+          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة علاقات الموردين · Al-Deyabi Group</div>
           <div style="color:${BRAND.gold};font-size:12px;margin-top:4px" dir="ltr">supply@aldeyabi.com</div>
           <div style="color:#fff;opacity:.5;font-size:10.5px;margin-top:6px">رسالة آلية — لا يلزم الرد · This is an automated message.</div>
         </td></tr>
