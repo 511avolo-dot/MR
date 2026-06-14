@@ -18766,7 +18766,7 @@ function etBuildEmailHtml(key, t) {
   const HERO = { received:'⏳', approved:'✓', rejected:'✕', needs_revision:'✎' };
   const heroIcon = HERO[key] || '•';
   const cta = key === 'needs_revision'
-    ? `<a href="#" style="display:block;background:${B.gold};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:14px 0 0">فتح الطلب وتعديله · Open &amp; edit</a>` : '';
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0 0"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="#" style="display:block;padding:15px 18px;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;text-align:center">فتح الطلب وتعديله · Open &amp; edit</a></td></tr></table>` : '';
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"></head>
 <body style="margin:0;background:${B.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${B.ink}">
   <div style="padding:6px 4px;font-size:11px;color:${B.soft}">Subject: ${escapeHtml(subj)}</div>
@@ -18796,7 +18796,7 @@ function etBuildEmailHtml(key, t) {
               <span style="font-size:12px;color:${B.soft}">رقم الطلب · Application No.</span><br>
               <span dir="ltr" style="font-size:18px;font-weight:800;color:${B.navy};letter-spacing:.06em">DG-DEMO12</span>
             </td></tr></table>
-          <a href="#" style="display:block;background:${B.navy};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:10px 0 6px">تتبّع حالة طلبك · Track your application</a>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0 6px"><tr><td align="center" bgcolor="${B.navy}" style="background:${B.navy};border-radius:12px"><a href="#" style="display:block;padding:15px 18px;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;text-align:center">تتبّع حالة طلبك · Track your application</a></td></tr></table>
           <p style="font-size:12px;color:${B.soft};text-align:center;line-height:1.7;margin:6px 0 0">تابع حالة طلبك في أي وقت برقم الطلب أعلاه، وستصلك رسالة تلقائية عند أي تحديث على حالته.<br><span dir="ltr">You'll automatically receive an email whenever your application status is updated.</span></p>
         </td></tr>
         <tr><td style="padding:6px 30px"><div style="border-top:1px solid ${B.line}"></div></td></tr>
