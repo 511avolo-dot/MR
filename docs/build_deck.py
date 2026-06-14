@@ -598,28 +598,31 @@ kpis = [
     ('متوسط أيام التأخير', '20.4 يوم', 'أقل من 5 أيام'),
     ('أوامر عالقة لدى المالية', '10 أوامر', 'إلى الصفر'),
     ('مؤشر صحة النظام', '42٪', '85٪ فأكثر'),
+    ('الأوامر الملغاة', '8.8٪', 'أقل من 3٪'),
     ('الالتزام بالعروض الثلاثة', 'يُبدأ القياس', '95٪ فأكثر'),
+    ('الموردون المعتمدون', '53 مورداً', 'نموّ مستمر'),
+    ('زمن دورة الشراء', 'يُبدأ القياس', 'ضمن 9 أيام عمل'),
 ]
 cw = (SW - Inches(1.2)) / 3
 for i, (ti, cur, tg) in enumerate(kpis):
     r, c = divmod(i, 3)
     x = SW - Inches(0.5) - (c + 1) * cw - c * Inches(0.1) + Inches(0.1)
-    y = Inches(1.65) + r * Inches(2.15)
-    rect(s, x, y, cw, Inches(1.85), CARD, line=LINE)
-    rect(s, x, y, cw, Inches(0.55), INK)
-    txt(s, x, y, cw, Inches(0.55), ti, size=15, color=WHITE, bold=True,
+    y = Inches(1.42) + r * Inches(1.78)
+    rect(s, x, y, cw, Inches(1.55), CARD, line=LINE)
+    rect(s, x, y, cw, Inches(0.5), INK)
+    txt(s, x, y, cw, Inches(0.5), ti, size=14, color=WHITE, bold=True,
         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
     half = cw / 2
-    txt(s, x + half, y + Inches(0.62), half, Inches(1.15),
-        [{'t': 'الحالي', 'size': 11, 'color': MUTE, 'bold': True, 'space': 3},
-         {'t': cur, 'size': 19, 'color': RED, 'bold': True}],
+    txt(s, x + half, y + Inches(0.55), half, Inches(0.95),
+        [{'t': 'الحالي', 'size': 10.5, 'color': MUTE, 'bold': True, 'space': 2},
+         {'t': cur, 'size': 17, 'color': RED, 'bold': True}],
         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    txt(s, x, y + Inches(0.62), half, Inches(1.15),
-        [{'t': 'الهدف', 'size': 11, 'color': MUTE, 'bold': True, 'space': 3},
-         {'t': tg, 'size': 19, 'color': GREEN, 'bold': True}],
+    txt(s, x, y + Inches(0.55), half, Inches(0.95),
+        [{'t': 'الهدف', 'size': 10.5, 'color': MUTE, 'bold': True, 'space': 2},
+         {'t': tg, 'size': 17, 'color': GREEN, 'bold': True}],
         align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    txt(s, x + half - Inches(0.12), y + Inches(0.75), Inches(0.24), Inches(0.9), '←',
-        size=20, color=GOLD, bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, is_rtl=False)
+    txt(s, x + half - Inches(0.12), y + Inches(0.65), Inches(0.24), Inches(0.8), '←',
+        size=18, color=GOLD, bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, is_rtl=False)
 page(s)
 
 # 18) القرارات المطلوبة
