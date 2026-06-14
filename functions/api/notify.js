@@ -96,7 +96,7 @@ export async function onRequestPost({ request, env }) {
     const sampleRev = status === 'needs_revision'
       ? { general: 'يرجى تحديث السجل التجاري بنسخة سارية المفعول.', fields: ['cr', 'vat'], sections: ['contact_info'] }
       : null;
-    let { subject, html } = buildEmail(status, sampleRow, 'DG-DEMO12', resumeUrl, tpl, sampleRev, trackUrl);
+    let { subject, html } = buildEmail(status, sampleRow, 'DG-DEMO12', resumeUrl, tpl, sampleRev, trackUrl, origin);
     subject = '[تجربة] ' + subject;
     try {
       const r = await fetch('https://api.resend.com/emails', {
@@ -178,7 +178,7 @@ export async function onRequestPost({ request, env }) {
     } catch (_) {}
   }
 
-  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl);
+  const { subject, html } = buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, origin);
 
   // أرسل عبر Resend
   try {
@@ -278,66 +278,89 @@ function paragraphs(text, style) {
     .map(p => `<p style="${style}">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl) {
+function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, origin) {
   const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
   const D = DEFAULTS[event] || DEFAULTS.received;
   const c = custom || {};
+  const NAVY2 = '#16315c';
+  const HERO = { received:'⏳', approved:'✓', rejected:'✕', needs_revision:'✎' };
+  const heroIcon = HERO[event] || '•';
+  const heroColor = D.badge[2];
+  const heroBg = D.badge[2] + '14';
+  const logoUrl = origin ? `${origin}/logo.png` : '';
+
   const revBox = revisionInfo ? renderRevisionBox(revisionInfo) : '';
-  // كتلة تتبّع الطلب + تنبيه البريد التلقائي (تظهر في كل الرسائل)
-  const trackBlock = trackUrl ? `
-          <div style="background:#eef4ff;border:1px solid #cdddff;border-radius:12px;padding:16px;margin:14px 0;text-align:center">
-            <a href="${esc(trackUrl)}" style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:700;padding:11px 24px;border-radius:9px;font-size:14px">تتبّع حالة الطلب · Track your application</a>
-            <p style="font-size:12.5px;color:${BRAND.soft};margin:11px 0 0;line-height:1.7">تابع حالة طلبك في أي وقت برقم الطلب أعلاه. وستصلك رسالة تلقائية عند أي تحديث على حالته.<br>Track your status anytime using the application number above. You'll automatically receive an email whenever your application status is updated.</p>
-          </div>` : '';
 
   const subjectRaw = (c.subject && String(c.subject).trim()) ? c.subject : D.subject;
   const arRaw = (c.ar && String(c.ar).trim()) ? c.ar : D.ar;
   const enRaw = (c.en && String(c.en).trim()) ? c.en : D.en;
 
   const subject = fillVars(subjectRaw, { name: nameAr, name_en: nameEn, id });
-  const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.9;margin:6px 0;color:${BRAND.ink};direction:rtl;text-align:right`);
+  const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.95;margin:6px 0;color:${BRAND.ink};direction:rtl;text-align:right`);
   const enHtml = paragraphs(fillVars(enRaw, { name: nameEn, name_en: nameEn, id }), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink};direction:ltr;text-align:left`);
 
   const cta = resumeUrl
-    ? `<tr><td style="padding:8px 0 4px">
-         <a href="${esc(resumeUrl)}" style="display:inline-block;background:${BRAND.gold};color:#fff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:10px;font-size:15px">فتح الطلب وتعديله · Open &amp; edit</a>
-       </td></tr>`
+    ? `<a href="${esc(resumeUrl)}" style="display:block;background:${BRAND.gold};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:14px 0 0">فتح الطلب وتعديله · Open &amp; edit</a>`
+    : '';
+  const trackBlock = trackUrl
+    ? `<a href="${esc(trackUrl)}" style="display:block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:10px 0 6px">تتبّع حالة طلبك · Track your application</a>
+       <p style="font-size:12px;color:${BRAND.soft};text-align:center;line-height:1.7;margin:6px 0 0">تابع حالة طلبك في أي وقت برقم الطلب أعلاه، وستصلك رسالة تلقائية عند أي تحديث على حالته.<br><span dir="ltr">You'll automatically receive an email whenever your application status is updated.</span></p>`
+    : '';
+  const logoCell = logoUrl
+    ? `<td width="140" valign="middle">
+         <div style="background:linear-gradient(180deg,#FBF6E9,#F1E9D2);border:1px solid rgba(212,175,107,.55);border-radius:10px;padding:7px 10px;display:inline-block">
+           <img src="${esc(logoUrl)}" alt="AL-DEYABI GROUP" height="40" style="display:block;height:40px;width:auto;border:0">
+         </div>
+       </td>`
     : '';
 
-  const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:${BRAND.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${BRAND.ink}">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.wash};padding:24px 12px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.wash};padding:22px 12px">
     <tr><td align="center">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BRAND.line};border-radius:16px;overflow:hidden">
-        <tr><td style="background:${BRAND.navy};padding:26px 30px">
-          <div style="color:#fff;font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.8">AL-DEYABI GROUP · بوابة الموردين</div>
-          <div style="color:#fff;font-size:21px;font-weight:800;margin-top:6px">إشعار حالة طلب التسجيل</div>
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 40px -16px rgba(11,27,54,.35)">
+        <tr><td style="background:linear-gradient(135deg,${BRAND.navy},${NAVY2});padding:18px 26px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            ${logoCell}
+            <td valign="middle" dir="rtl" style="text-align:right;padding-${logoCell ? 'right' : ''}:${logoCell ? '12px' : '0'}">
+              <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.04em">بوابة الموردين · <span dir="ltr">Supplier Portal</span></div>
+              <div style="color:#fff;font-size:16px;font-weight:800;margin-top:3px">إشعار حالة طلب التسجيل</div>
+              <div dir="ltr" style="color:#cdd6e6;font-size:11.5px;font-weight:600;text-align:right">Registration Status Notification</div>
+            </td>
+          </tr></table>
         </td></tr>
-        <tr><td style="height:4px;background:${BRAND.gold}"></td></tr>
-        <tr><td dir="rtl" style="padding:30px;text-align:right">
-          <span style="display:inline-block;background:${D.badge[2]}1a;color:${D.badge[2]};font-weight:700;font-size:13px;padding:7px 16px;border-radius:999px">${esc(D.badge[0])} · ${esc(D.badge[1])}</span>
+        <tr><td style="height:3px;background:${BRAND.gold}"></td></tr>
 
-          <h2 style="font-size:17px;margin:18px 0 6px;color:${BRAND.navy}">${esc(nameAr)}</h2>
+        <tr><td style="background:${heroBg};padding:24px 30px" align="center">
+          <div style="width:60px;height:60px;border-radius:50%;background:${heroColor};color:#fff;font-size:29px;line-height:60px;margin:0 auto;font-weight:700">${heroIcon}</div>
+          <div style="font-size:21px;font-weight:800;color:${heroColor};margin-top:12px">${esc(D.badge[0])}</div>
+          <div dir="ltr" style="font-size:13px;color:${BRAND.soft};margin-top:2px;letter-spacing:.04em">${esc(D.badge[1])}</div>
+        </td></tr>
+
+        <tr><td dir="rtl" style="padding:26px 30px 6px;text-align:right">
+          <div style="font-size:16px;font-weight:700;color:${BRAND.navy};margin-bottom:8px">عزيزنا ${esc(nameAr)}،</div>
           ${arHtml}
           ${revBox}
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0">${cta}</table>
-
-          <div style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:10px;padding:12px 16px;margin:14px 0">
-            <span style="font-size:12px;color:${BRAND.soft}">رقم الطلب · Application No.</span><br>
-            <span style="font-size:15px;font-weight:700;direction:ltr;display:inline-block;color:${BRAND.navy}">${esc(id)}</span>
-          </div>
+          ${cta}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 8px"><tr>
+            <td style="background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:12px;padding:12px 16px" align="center">
+              <span style="font-size:12px;color:${BRAND.soft}">رقم الطلب · Application No.</span><br>
+              <span dir="ltr" style="font-size:18px;font-weight:800;color:${BRAND.navy};letter-spacing:.06em">${esc(id)}</span>
+            </td></tr></table>
           ${trackBlock}
-
-          <hr style="border:none;border-top:1px solid ${BRAND.line};margin:22px 0">
-          <div dir="ltr" style="text-align:left">
-            <h3 style="font-size:15px;margin:0 0 6px;color:${BRAND.navy}">${esc(nameEn)}</h3>
-            ${enHtml}
-          </div>
         </td></tr>
-        <tr><td style="background:${BRAND.navy};padding:18px 30px;text-align:center">
-          <div style="color:#fff;opacity:.85;font-size:12px">مجموعة الذيابي · Al-Deyabi Group · Operations &amp; Supply Chain</div>
-          <div style="color:#fff;opacity:.55;font-size:11px;margin-top:4px">هذه رسالة آلية — يرجى عدم الرد عليها مباشرة · This is an automated message.</div>
+
+        <tr><td style="padding:6px 30px"><div style="border-top:1px solid ${BRAND.line}"></div></td></tr>
+        <tr><td dir="ltr" style="padding:6px 30px 22px;text-align:left">
+          <div style="font-size:15px;font-weight:700;color:${BRAND.navy};margin-bottom:6px">Dear ${esc(nameEn)},</div>
+          ${enHtml}
+        </td></tr>
+
+        <tr><td style="background:${BRAND.navy};padding:18px 30px" align="center">
+          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة العمليات وسلاسل الإمداد · Al-Deyabi Group</div>
+          <div style="color:${BRAND.gold};font-size:12px;margin-top:4px" dir="ltr">supply@aldeyabi.com</div>
+          <div style="color:#fff;opacity:.5;font-size:10.5px;margin-top:6px">رسالة آلية — لا يلزم الرد · This is an automated message.</div>
         </td></tr>
       </table>
     </td></tr>
