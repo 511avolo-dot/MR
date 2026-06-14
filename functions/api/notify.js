@@ -212,8 +212,8 @@ const DEFAULTS = {
   received: {
     badge: ['تم الاستلام', 'Received', '#2563eb'],
     subject: `تم استلام طلب تسجيلكم — مجموعة الذيابي | Application Received`,
-    ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة العمليات وسلاسل الإمداد. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
-    en: `Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Operations & Supply Chain team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
+    ar: `شكراً لتسجيلكم كمورد لدى مجموعة الذيابي. تم استلام طلبكم بنجاح وهو الآن قيد المراجعة من فريق إدارة علاقات الموردين. سنتواصل معكم خلال 3–5 أيام عمل.\n\nيمكنكم متابعة حالة الطلب في أي وقت عبر بوابة الموردين باستخدام رقم الطلب أدناه.`,
+    en: `Thank you for registering as a supplier with Al-Deyabi Group. Your application has been received and is now under review by our Supplier Relations team. We will contact you within 3–5 business days.\n\nYou can track your application status anytime via the supplier portal using the application number below.`,
   },
   approved: {
     badge: ['تم القبول', 'Approved', '#16a34a'],
@@ -346,7 +346,7 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
         </td></tr>
 
         <tr><td style="background:${BRAND.navy};padding:18px 30px" align="center">
-          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة العمليات وسلاسل الإمداد · Al-Deyabi Group</div>
+          <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · إدارة علاقات الموردين · Al-Deyabi Group</div>
           <div style="color:${BRAND.gold};font-size:12px;margin-top:4px" dir="ltr">supply@aldeyabi.com</div>
           <div style="color:#fff;opacity:.5;font-size:10.5px;margin-top:6px">رسالة آلية — لا يلزم الرد · This is an automated message.</div>
         </td></tr>
