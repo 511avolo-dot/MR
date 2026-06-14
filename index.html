@@ -4912,7 +4912,7 @@ const PERMISSION_DEFS = [
   { key:'can_manage_items',         label:'إضافة وتعديل الأصناف',          short:'أصناف',         cat:'البيانات',   userDefault:true  },
   { key:'can_delete',               label:'حذف السجلات والأصناف',          short:'حذف',           cat:'البيانات',   userDefault:false },
   { key:'can_export',               label:'تصدير CSV / Excel',             short:'تصدير',         cat:'البيانات',   userDefault:true  },
-  { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:false },
+  { key:'can_import',               label:'استيراد CSV الجماعي',           short:'استيراد',       cat:'البيانات',   userDefault:true  },
   { key:'can_manage_suppliers',     label:'إدارة الموردين',                short:'موردين',        cat:'الموردون',   userDefault:true  },
   { key:'can_review_registrations', label:'مراجعة طلبات تسجيل الموردين',    short:'مراجعة طلبات',  cat:'الموردون',   userDefault:true  },
   { key:'can_manage_rfq',           label:'طلبات عروض الأسعار (RFQ)',       short:'عروض أسعار',    cat:'الموردون',   userDefault:true  },
@@ -17744,14 +17744,15 @@ function saveAIKey() {
 
 async function triggerAIInsights() {
   if(!requirePermission('can_use_ai', 'استخدام الذكاء الاصطناعي')) return;
-  const geminiKey = localStorage.getItem('proc_ai_key') || '';
   const noKey = document.getElementById('ai-no-key');
   const loading = document.getElementById('ai-loading');
   const result = document.getElementById('ai-result');
   const idle = document.getElementById('ai-idle-msg');
   const btn = document.getElementById('btn-ai-analyze');
 
-  if (!geminiKey) {
+  // يعمل عبر المفتاح المحلي أو الوسيط الآمن على الخادم (للجميع) — لا يتطلب مفتاحاً محلياً
+  let _aiOk = false; try { const _c = await loadAIConfig(); _aiOk = !!(_c && _c.enabled); } catch(e) {}
+  if (!_aiOk) {
     if (noKey) noKey.style.display = 'block';
     if (idle) idle.style.display = 'none';
     if (result) result.style.display = 'none';
@@ -18135,12 +18136,12 @@ function renderKPIs() {
   const _orig = window.renderDashboard || (typeof renderDashboard !== 'undefined' ? renderDashboard : null);
   if (_orig) {
     const _wrapped = window.renderDashboard;
-    window._postRenderDashboard = function() {
-      const geminiKey = localStorage.getItem('proc_ai_key') || '';
+    window._postRenderDashboard = async function() {
       const noKey = document.getElementById('ai-no-key');
       const idle = document.getElementById('ai-idle-msg');
-      if (noKey) noKey.style.display = geminiKey ? 'none' : 'block';
-      if (idle) idle.style.display = geminiKey ? 'block' : 'none';
+      let ok = false; try { const c = await loadAIConfig(); ok = !!(c && c.enabled); } catch(e) {}
+      if (noKey) noKey.style.display = ok ? 'none' : 'block';
+      if (idle) idle.style.display = ok ? 'block' : 'none';
     };
   }
 })();
@@ -18428,9 +18429,9 @@ async function sendAgentMessage(){
   const q=(input?.value||'').trim();
   if(!q)return;
 
-  // Check Gemini key
-  const geminiKey=getAgentKey();
-  if(!geminiKey){document.getElementById('agent-no-key').style.display='';return;}
+  // الذكاء متاح عبر المفتاح المحلي أو الوسيط على الخادم (للجميع)
+  let _agentOk=false; try{ const _c=await loadAIConfig(); _agentOk=!!(_c&&_c.enabled); }catch(e){}
+  if(!_agentOk){document.getElementById('agent-no-key').style.display='';return;}
 
   input.value='';input.style.height='';
   AGENT_BUSY=true;
