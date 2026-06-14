@@ -299,12 +299,13 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
   const arHtml = paragraphs(fillVars(arRaw, { name: nameAr, name_en: nameEn, id }), `font-size:14.5px;line-height:1.95;margin:6px 0;color:${BRAND.ink};direction:rtl;text-align:right`);
   const enHtml = paragraphs(fillVars(enRaw, { name: nameEn, name_en: nameEn, id }), `font-size:13.5px;line-height:1.8;margin:6px 0;color:${BRAND.ink};direction:ltr;text-align:left`);
 
+  // أزرار مبنية بجدول (bulletproof) لتظهر بعرض كامل ومتوسّطة في كل عملاء البريد
   const cta = resumeUrl
-    ? `<a href="${esc(resumeUrl)}" style="display:block;background:${BRAND.gold};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:14px 0 0">فتح الطلب وتعديله · Open &amp; edit</a>`
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0 0"><tr><td align="center" bgcolor="${BRAND.gold}" style="background:${BRAND.gold};border-radius:12px"><a href="${esc(resumeUrl)}" style="display:block;padding:15px 18px;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;text-align:center">فتح الطلب وتعديله · Open &amp; edit</a></td></tr></table>`
     : '';
   const trackBlock = trackUrl
-    ? `<a href="${esc(trackUrl)}" style="display:block;background:${BRAND.navy};color:#fff;text-decoration:none;font-weight:800;padding:14px;border-radius:12px;font-size:15px;text-align:center;margin:10px 0 6px">تتبّع حالة طلبك · Track your application</a>
-       <p style="font-size:12px;color:${BRAND.soft};text-align:center;line-height:1.7;margin:6px 0 0">تابع حالة طلبك في أي وقت برقم الطلب أعلاه، وستصلك رسالة تلقائية عند أي تحديث على حالته.<br><span dir="ltr">You'll automatically receive an email whenever your application status is updated.</span></p>`
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0 6px"><tr><td align="center" bgcolor="${BRAND.navy}" style="background:${BRAND.navy};border-radius:12px"><a href="${esc(trackUrl)}" style="display:block;padding:15px 18px;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;text-align:center">تتبّع حالة طلبك · Track your application</a></td></tr></table>
+       <p style="font-size:12px;color:${BRAND.soft};text-align:center;line-height:1.7;margin:8px 0 0">تابع حالة طلبك في أي وقت برقم الطلب أعلاه، وستصلك رسالة تلقائية عند أي تحديث على حالته.<br><span dir="ltr">You'll automatically receive an email whenever your application status is updated.</span></p>`
     : '';
   const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;background:${BRAND.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${BRAND.ink}">
