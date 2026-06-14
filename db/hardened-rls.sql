@@ -42,11 +42,13 @@ UPDATE proc_settings
 --   • بقية الجداول            → القراءة والكتابة لمستخدمي Auth فقط.
 --   • سجل التدقيق             → إضافة فقط، لا تعديل ولا حذف.
 
--- 1) البنود / الموردين / السجل — للمصادَق عليهم فقط
+-- 1) البنود / الموردين / السجل / مطابقات البنود — للمصادَق عليهم فقط
+--    proc_item_aliases يُنشأ افتراضياً بسياسات USING(true) مفتوحة (bootstrap)؛
+--    نضمّه هنا ليُحصَّن مثل بقية جداول اللوحة (لا تقرؤه أي صفحة عامة anon).
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['proc_items','proc_suppliers','proc_history'] LOOP
+  FOREACH t IN ARRAY ARRAY['proc_items','proc_suppliers','proc_history','proc_item_aliases'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS "Enable read for all"   ON %I', t);
     EXECUTE format('DROP POLICY IF EXISTS "Enable insert for all" ON %I', t);
