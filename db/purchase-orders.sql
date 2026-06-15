@@ -31,11 +31,14 @@ CREATE TABLE IF NOT EXISTS proc_purchase_orders (
   lead_time_days     INT,                                    -- زمن التوريد (يوم) (محسوب)
   items              JSONB DEFAULT '[]'::jsonb,              -- بنود الأمر (اختيارية): [{desc,qty,unit,price}]
   status_history     JSONB DEFAULT '[]'::jsonb,             -- سجل انتقالات الحالة: [{from,to,by,at}]
+  source             JSONB,                                  -- مصدر الأمر عند إنشائه من ترسية RFQ: {rfq_id, pr_id, supplier}
   created_by         TEXT,
   created_at         TIMESTAMPTZ DEFAULT now(),
   updated_by         TEXT,
   updated_at         TIMESTAMPTZ DEFAULT now()
 );
+-- ترقية متوافقة للجداول القائمة (يربط أمر الشراء بترسية عروض الأسعار التي أنشأته)
+ALTER TABLE proc_purchase_orders ADD COLUMN IF NOT EXISTS source JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_po_status    ON proc_purchase_orders(status);
 CREATE INDEX IF NOT EXISTS idx_po_sector    ON proc_purchase_orders(sector);
