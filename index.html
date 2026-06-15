@@ -9864,9 +9864,16 @@ async function loadLib(urls, globalCheck, libName) {
   if (chk()) return;
   let lastErr; const tried = [];
   for (const url of list) {
-    delete _scriptLoadPromises[url]; // clear any stale failed promise
-    tried.push(url.startsWith('/') ? 'المحلي (نفس الموقع)' : url.replace(/^https?:\/\//,'').split('/')[0]);
-    try { await loadScriptOnce(url, globalCheck); return; } catch(e) { lastErr = e; console.warn('[loadLib] فشل المصدر:', url, e && e.message); }
+    const isLocal = url.startsWith('/');
+    // الملف المحلي (نفس الموقع) موثوق؛ نعيد محاولته عدة مرات قبل اللجوء لمصادر CDN
+    // (قد تحجبها شبكة الشركة) — يعالج تعثّر بروكسي الشركة العابر مع الملفات الكبيرة.
+    const attempts = isLocal ? 3 : 1;
+    tried.push(isLocal ? 'المحلي (نفس الموقع)' : url.replace(/^https?:\/\//,'').split('/')[0]);
+    for (let a = 1; a <= attempts; a++) {
+      delete _scriptLoadPromises[url]; // clear any stale failed promise
+      try { await loadScriptOnce(url, globalCheck); return; }
+      catch(e) { lastErr = e; console.warn(`[loadLib] فشل المصدر (${a}/${attempts}):`, url, e && e.message); if (a < attempts) await new Promise(r => setTimeout(r, 1200)); }
+    }
   }
   const nm = libName ? `«${libName}» ` : '';
   throw new Error(`تعذّر تحميل مكتبة ${nm}من جميع المصادر (${tried.join('، ')}). الحل غالباً: أعد تحميل الصفحة بالضغط Ctrl+Shift+R لتجاوز الكاش القديم. وإن استمرّت فقد تكون شبكتكم تحجب الوصول.${lastErr ? ' — تفاصيل: '+lastErr.message : ''}`);
