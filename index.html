@@ -19184,28 +19184,39 @@ async function notifyRegEmail(id, event) {
 async function approveRegistration(reg) {
   if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
+  // حماية من الموافقة المزدوجة (نقر مزدوج أو إعادة فتح طلب موافَق عليه)
+  if (reg.status === 'approved') { toast('info', 'هذا الطلب موافَق عليه مسبقاً'); return; }
   try {
-    // Create supplier in proc_suppliers
-    const suppId  = 'sup_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    const payload = {
-      id:             suppId,
-      name:           reg.legal_name_ar,
-      specialty:      (reg.sectors || []).join('، ') || (reg.products_services?.[0]?.category || ''),
-      contact:        reg.contact_name,
-      phone:          reg.phone,
-      mobile:         reg.contact_mobile,
-      email:          reg.email || reg.contact_email,
-      address:        reg.address,
-      commercial_reg: reg.commercial_reg,
-      tax_id:         reg.vat_number || reg.zakat_number,
-      notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
-      created_by:     STATE.currentUser?.username || null,
-      updated_by:     STATE.currentUser?.username || null,
-      created_at:     new Date().toISOString(),
-      updated_at:     new Date().toISOString(),
-    };
-    const {error: insErr} = await CLOUD.client.from('proc_suppliers').insert(payload);
-    if (insErr) throw insErr;
+    // إن وُجد مورد بنفس السجل التجاري مسبقاً، لا نُنشئ نسخة مكررة — نربط الطلب به
+    let suppId = null, alreadyExisted = false;
+    if (reg.commercial_reg) {
+      const {data: existing} = await CLOUD.client.from('proc_suppliers')
+        .select('id').eq('commercial_reg', reg.commercial_reg).maybeSingle();
+      if (existing && existing.id) { suppId = existing.id; alreadyExisted = true; }
+    }
+    if (!suppId) {
+      // Create supplier in proc_suppliers
+      suppId  = 'sup_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      const payload = {
+        id:             suppId,
+        name:           reg.legal_name_ar,
+        specialty:      (reg.sectors || []).join('، ') || (reg.products_services?.[0]?.category || ''),
+        contact:        reg.contact_name,
+        phone:          reg.phone,
+        mobile:         reg.contact_mobile,
+        email:          reg.email || reg.contact_email,
+        address:        reg.address,
+        commercial_reg: reg.commercial_reg,
+        tax_id:         reg.vat_number || reg.zakat_number,
+        notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
+        created_by:     STATE.currentUser?.username || null,
+        updated_by:     STATE.currentUser?.username || null,
+        created_at:     new Date().toISOString(),
+        updated_at:     new Date().toISOString(),
+      };
+      const {error: insErr} = await CLOUD.client.from('proc_suppliers').insert(payload);
+      if (insErr) throw insErr;
+    }
 
     // Update registration status
     const {error: upErr} = await CLOUD.client.from(REG_TABLE).update({
@@ -19214,10 +19225,13 @@ async function approveRegistration(reg) {
       reviewed_at: new Date().toISOString(),
     }).eq('id', reg.id);
     if (upErr) throw upErr;
+    reg.status = 'approved'; // منع الموافقة المتكررة على نفس الكائن في الذاكرة
 
     notifyRegEmail(reg.id, 'approved');
     closeRegDetail();
-    toast('success', `تمت الموافقة — تم إضافة "${reg.legal_name_ar}" كمورد معتمد`);
+    toast('success', alreadyExisted
+      ? `تمت الموافقة — المورد "${reg.legal_name_ar}" مرتبط بسجل قائم`
+      : `تمت الموافقة — تم إضافة "${reg.legal_name_ar}" كمورد معتمد`);
     loadRegistrations();
 
     // Reload suppliers in main app
