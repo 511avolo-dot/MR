@@ -11883,6 +11883,8 @@ async function poCloudUpsert(po){
     items:po.items||[], status_history:po.status_history||[],
     updated_at:new Date().toISOString(), updated_by:u
   };
+  // ربط أمر الشراء بمصدره (ترسية RFQ) — يتطلب عمود source jsonb؛ يُضاف فقط عند وجوده لئلا يكسر الحفظ العادي
+  if(po.source) payload.source = po.source;
   try{
     const {data}=await CLOUD.client.from('proc_purchase_orders').select('po_number').eq('po_number',po.po_number).maybeSingle();
     if(!data) payload.created_by=u;
@@ -12276,11 +12278,14 @@ function closePODrawer(){
    ADD / EDIT MODAL
    ============================================================ */
 let _poEditingNum=null;
+// مصدر أمر الشراء عند إنشائه من ترسية RFQ معتمدة (rfq_id + pr_id + supplier) — يُحفظ للربط ومنع التكرار
+let _poAwardSource=null;
 function openPOModal(num){
   if(num){ if(!requirePermission('can_edit_po','تعديل الأمر')) return; }
   else { if(!requirePermission('can_create_po','إنشاء أمر')) return; }
   fillPOSelects();
   _poEditingNum=num||null;
+  _poAwardSource=null; // يُضبط لاحقاً فقط عبر poFromAward
   const po=num?poFind(num):null;
   const g=id=>document.getElementById(id);
   document.getElementById('po-form-title').textContent=num?'تعديل أمر شراء':'أمر شراء جديد';
@@ -12382,6 +12387,7 @@ function poCollectForm(){
     status:g('po-f-status'), delay_reason:g('po-f-delayreason'), category:g('po-f-category'), notes:g('po-f-notes'),
     items:poCollectItems(),
     status_history: existing?(existing.status_history||[]):[],
+    source: existing?(existing.source||null):(_poAwardSource||null),
     created_by: existing?existing.created_by:null, created_at: existing?existing.created_at:new Date().toISOString(),
   };
   // record status change in history if edited
@@ -12397,6 +12403,42 @@ function savePO(addAnother){
   toast('success','تم الحفظ',`${po.po_number} · ${fmtPrice(po.total)} ر.س`);
   if(addAnother){ openPOModal(null); }
   else { closeModal('modal-po'); }
+}
+
+// إنشاء أمر شراء من ترسية RFQ معتمدة — يفتح نافذة الأمر معبّأة ببنود المورد وأسعاره المعتمدة
+async function poFromAward(prId){
+  if(!requirePermission('can_create_po','إنشاء أمر شراء')) return;
+  if(!(CLOUD && CLOUD.enabled)){ toast('error','غير متصل','يلزم الاتصال بالسحابة'); return; }
+  try{
+    const {data:pr} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('id', prId).maybeSingle();
+    if(!pr){ toast('error','غير موجود','طلب الاعتماد غير موجود'); return; }
+    if(pr.status!=='approved'){ toast('warn','غير معتمد','لا يمكن إنشاء أمر شراء قبل اعتماد الترسية'); return; }
+    const rfqId = pr.details && pr.details.rfq_id;
+    if(!rfqId){ toast('warn','غير مرتبط','هذا الطلب غير مرتبط بترسية عروض أسعار'); return; }
+    // منع التكرار: هل سبق إنشاء أمر شراء من هذه الترسية؟
+    const dup = (STATE.purchaseOrders||[]).find(p=>p.source && p.source.pr_id===prId);
+    if(dup && !confirm(`سبق إنشاء أمر الشراء «${dup.po_number}» من هذه الترسية. إنشاء أمر آخر؟`)) return;
+    const {rfq, quotes} = await rfqLoadOne(rfqId);
+    if(!rfq){ toast('error','غير موجود','الترسية غير موجودة'); return; }
+    const qmap={}; (quotes||[]).forEach(q=>qmap[q.supplier]=q.prices||{});
+    const supplier = pr.supplier || rfq.awarded_to || '';
+    // بنود هذا المورد فقط (حسب خريطة الترسية awards: line.id → supplier) بأسعاره المعتمدة
+    const items = (rfq.lines||[])
+      .filter(l => (rfq.awards||{})[l.id] === supplier)
+      .map(l => ({ desc: l.desc || l.code || '', qty: Number(l.qty)||1, unit: l.unit||'', price: rfqNum((qmap[supplier]||{})[l.id]) }));
+    // افتح النافذة الفارغة ثم عبّئها
+    const ap = document.getElementById('modal-approvals'); if(ap) ap.style.display='none';
+    openPOModal(null);
+    const g=id=>document.getElementById(id);
+    if(g('po-f-supplier')) g('po-f-supplier').value = supplier;
+    if(g('po-f-project'))  g('po-f-project').value  = rfq.title || '';
+    if(g('po-f-notes'))    g('po-f-notes').value    = `مُنشأ من ترسية عروض الأسعار: ${rfq.title||rfqId} · طلب الاعتماد: ${pr.title||prId}`;
+    const wrap=document.getElementById('po-items-rows'); if(wrap) wrap.innerHTML='';
+    if(items.length) items.forEach(it=>addPOItemRow(it)); else addPOItemRow({});
+    poItemsRecalc(); poFormRecompute();
+    _poAwardSource = { rfq_id: rfqId, pr_id: prId, supplier }; // يُحفظ مع الأمر للربط ومنع التكرار
+    toast('info','جاهز للحفظ', items.length ? `عُبّئت ${items.length} بنود من الترسية — راجعها ثم احفظ` : 'راجع البنود ثم احفظ');
+  }catch(e){ toast('error','تعذّر', e.message); }
 }
 
 /* ============================================================
@@ -13473,6 +13515,7 @@ function wfRequestCard(r, withActions){
     <div class="wf-card-meta">${fmtPrice(r.amount)} ر.س · ${escapeHtml(r.supplier||'—')} · يعتمده: ${wfLevelName(r.required_level)}</div>
     <div class="wf-card-meta">مُقدّم الطلب: ${escapeHtml(r.requested_by_name||r.requested_by)} · ${new Date(r.created_at).toLocaleDateString('ar-SA-u-nu-latn')}</div>
     ${r.decision_note?`<div class="wf-card-note">ملاحظة: ${escapeHtml(r.decision_note)}</div>`:''}
+    ${(r.status==='approved' && r.details && r.details.rfq_id)?`<div class="wf-card-act"><button class="btn btn-primary btn-sm" data-makepo data-id="${escapeHtml(r.id)}" style="gap:6px">📦 إنشاء أمر شراء من الترسية</button></div>`:''}
     ${withActions?`<div class="wf-card-act"><input id="wfnote-${escapeHtml(r.id)}" class="wf-note" placeholder="ملاحظة (اختياري)"><button class="btn btn-accent btn-sm" data-approve data-id="${escapeHtml(r.id)}">اعتماد</button><button class="btn btn-ghost btn-sm" data-reject data-id="${escapeHtml(r.id)}">رفض</button></div>`:''}
   </div>`;
 }
@@ -13482,6 +13525,7 @@ async function wfRenderMyRequests(){
   try{
     const {data} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('requested_by', STATE.currentUser.username).order('created_at',{ascending:false}).limit(50);
     el.innerHTML = (data && data.length) ? data.map(r=>wfRequestCard(r,false)).join('') : '<div class="wf-empty">لا توجد طلبات</div>';
+    el.querySelectorAll('[data-makepo]').forEach(b=>b.addEventListener('click', ()=> poFromAward(b.getAttribute('data-id')) ));
   }catch(e){ el.innerHTML = '<div class="wf-empty">تعذّر التحميل</div>'; }
 }
 async function wfRenderInbox(){
