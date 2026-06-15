@@ -2857,7 +2857,11 @@ async function aiProbeProxy(){
   try {
     const r = await fetch(AI_PROXY_ENDPOINT, {method:'GET'});
     const ct = r.headers.get('content-type') || '';
-    __AI_PROXY_OK = r.ok && ct.includes('application/json');
+    // متاح عند 200 + JSON بلا حقل error (يردّ قائمة النماذج عند ضبط المفتاح، أو 503 عند غيابه)
+    if (r.ok && ct.includes('application/json')) {
+      const j = await r.json().catch(()=>null);
+      __AI_PROXY_OK = !!(j && !j.error);
+    } else { __AI_PROXY_OK = false; }
   } catch(e){ __AI_PROXY_OK = false; }
   return __AI_PROXY_OK;
 }
