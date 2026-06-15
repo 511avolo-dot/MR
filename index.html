@@ -12483,6 +12483,16 @@ function renderPODashboard(){
   const maxDelay=delays.length?Math.max(...delays):0, minDelay=delays.length?Math.min(...delays):0;
   const onTimeDelivered=delivered.filter(o=>num(o.days_delayed)===0).length;
   const lateValue=lateNow.reduce((a,o)=>a+num(o.total),0);
+  // 3.ب) التأخير حسب القطاع — كم أمراً تأخّر وكم مجموع/متوسط أيام التأخير ونسبة الالتزام لكل قطاع
+  const sectorDelayRows=PO_ENUMS.sector.map(s=>{
+    const l=active.filter(o=>o.sector===s); if(!l.length) return null;
+    const lateL=l.filter(o=>!PO_TERMINAL.includes(o.status)&&num(o.days_delayed)>0);
+    const dl=l.filter(o=>num(o.days_delayed)>0).map(o=>num(o.days_delayed));
+    const tot=dl.reduce((a,b)=>a+b,0);
+    return {sector:s,count:l.length,late:lateL.length,tot,avg:dl.length?tot/dl.length:0,
+            lateVal:lateL.reduce((a,o)=>a+num(o.total),0),onTime:poPct(l.length-lateL.length,l.length)};
+  }).filter(Boolean).sort((a,b)=>b.tot-a.tot||b.late-a.late);
+  const worstSector=sectorDelayRows.find(r=>r.late>0);
   // 4) تقادم
   const buckets=[['🟢 0 — 7 أيام',0],['🟡 8 — 14 يوم',0],['🟠 15 — 30 يوم',0],['🔴 أكثر من 30 يوم',0]];
   lateNow.forEach(o=>{const d=num(o.days_delayed); if(d<=7)buckets[0][1]++; else if(d<=14)buckets[1][1]++; else if(d<=30)buckets[2][1]++; else buckets[3][1]++;});
@@ -12514,6 +12524,7 @@ function renderPODashboard(){
         <div class="po-kpi"><span class="t">متوسط قيمة أمر الشراء</span><span class="v">${fmtPrice(avgPO)}</span></div>
         <div class="po-kpi"><span class="t">أوامر قيد المراجعة</span><span class="v">${review.length}</span></div>
         <div class="po-kpi"><span class="t">التسليم بدون تأخير</span><span class="v">${poPct(onTimeDelivered,delivered.length).toFixed(1)}%</span></div>
+        <div class="po-kpi"><span class="t">القطاع الأكثر تأخّراً</span><span class="v" style="font-size:14px">${worstSector?escapeHtml(worstSector.sector):'—'}</span><span class="t">${worstSector?(worstSector.late+' متأخر · '+worstSector.tot+' يوم'):'لا تأخير'}</span></div>
       </div>
       <div class="po-analytics-grid">
         <div class="po-card-box"><h3>📦 تفصيل الأوامر حسب الحالة</h3>${poDashTable(['الحالة','عدد','النسبة'],statusRows)}</div>
@@ -12525,6 +12536,10 @@ function renderPODashboard(){
           ['التسليم بدون تأخير',poPct(onTimeDelivered,delivered.length).toFixed(1)+'%',onTimeDelivered+' من '+delivered.length+' مُسلَّم في موعده'],
         ])}</div>
         <div class="po-card-box"><h3>📊 تقادم الأوامر المتأخرة</h3>${poDashTable(['الفئة','عدد الأوامر'],buckets.map(b=>[b[0],b[1]]))}</div>
+        <div class="po-card-box"><h3>🏗⏱ التأخير حسب القطاع</h3>${sectorDelayRows.length?poDashTable(
+          ['القطاع','أوامر','متأخر','إجمالي أيام','متوسط التأخير','قيمة المتأخر','الالتزام'],
+          sectorDelayRows.map(r=>[escapeHtml(r.sector),r.count,r.late,r.tot,r.avg.toFixed(1)+' يوم',fmtPrice(r.lateVal),r.onTime.toFixed(0)+'%'])
+        ):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>🏆 أعلى الموردين حسب القيمة</h3>${topSup.length?poDashTable(['#','المورد','عدد','القيمة (ر.س)'],topSup.map((s,i)=>[medals[i],escapeHtml(s[0]),s[1].c,fmtPrice(s[1].v)])):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>👤 أداء مسؤولي المشتريات</h3>${offRows.length?poDashTable(['المسؤول','عدد','القيمة (ر.س)'],offRows.map(r=>[escapeHtml(r[0]),r[1],r[2]])):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>📅 التحليل الشهري — حركة المشتريات</h3>${monRows.length?poDashTable(['الشهر','عدد','القيمة (ر.س)'],monRows):'<div class="muted">لا بيانات</div>'}</div>
@@ -18685,7 +18700,7 @@ async function renderRegStats() {
   const wrap = document.getElementById('reg-stats');
   if (!wrap || !CLOUD?.client) return;
   try {
-    const {data, error} = await CLOUD.client.from(REG_TABLE).select('status').limit(2000);
+    const {data, error} = await CLOUD.client.from(REG_TABLE).select('status, metrics').limit(2000);
     if (error) throw error;
     const counts = {pending:0, needs_revision:0, approved:0, rejected:0};
     (data||[]).forEach(r => { if (counts[r.status] != null) counts[r.status]++; });
@@ -18699,13 +18714,30 @@ async function renderRegStats() {
       {k:'rejected',       label:'مرفوض',        c:'#b91c1c', bg:'#fee2e2', n:counts.rejected},
     ];
     wrap.style.display = 'flex';
-    wrap.innerHTML = defs.map(d => {
+    const statusCards = defs.map(d => {
       const active = d.k === cur;
       return `<button onclick="document.getElementById('reg-filter').value='${d.k}';loadRegistrations();" style="cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:9px;border:1.5px solid ${active?d.c:'var(--border,#e6e8ee)'};background:${active?d.bg:'var(--surface,#fff)'};border-radius:12px;padding:10px 16px;transition:all .15s">
         <span style="font-size:19px;font-weight:800;color:${d.c};line-height:1">${d.n}</span>
         <span style="font-size:12.5px;font-weight:600;color:${active?d.c:'var(--muted,#64748b)'}">${d.label}</span>
       </button>`;
     }).join('');
+    // مؤشّرات كفاءة التسجيل المجمّعة (متوسط الزمن/النقرات/نسبة التعبئة التلقائية)
+    const ms = (data||[]).map(r => r.metrics).filter(m => m && typeof m === 'object');
+    let effBar = '';
+    if (ms.length) {
+      const avg = (sel) => { const v = ms.map(sel).filter(x => typeof x === 'number' && isFinite(x)); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+      const f1 = (x) => x==null ? '—' : (Math.round(x*10)/10);
+      const aiPct = Math.round(ms.filter(m=>m.ai_used).length / ms.length * 100);
+      const ec = (label, val, sub) => `<div style="text-align:center;padding:8px 12px;background:var(--surface,#fff);border:1px solid var(--border,#e6e8ee);border-radius:10px;min-width:96px"><div style="font-size:16px;font-weight:800;color:#0B1B36">${val}</div><div style="font-size:10.5px;color:var(--muted,#64748b)">${label}</div>${sub?`<div style="font-size:9.5px;color:#94a3b8">${sub}</div>`:''}</div>`;
+      effBar = `<div style="flex-basis:100%;height:0"></div>
+        <div style="flex-basis:100%;font-size:11.5px;font-weight:700;color:#475569;margin:4px 0 2px">⚡ كفاءة تسجيل الموردين — متوسط ${ms.length} طلب</div>
+        ${ec('متوسط الزمن', f1(avg(m=>m.duration_min)) + ' د')}
+        ${ec('متوسط النقرات', f1(avg(m=>m.clicks)))}
+        ${ec('تعبئة تلقائية', f1(avg(m=>m.auto_fill_rate)) + '%', 'بالذكاء الاصطناعي')}
+        ${ec('حقول/طلب', f1(avg(m=>m.fields_filled)), 'تلقائي '+f1(avg(m=>m.fields_auto))+' · يدوي '+f1(avg(m=>m.fields_manual)))}
+        ${ec('استُخدم الذكاء', aiPct + '%', 'من الطلبات')}`;
+    }
+    wrap.innerHTML = statusCards + effBar;
   } catch(e) { wrap.style.display = 'none'; }
 }
 
@@ -19003,7 +19035,26 @@ async function openRegDetail(jsonStr) {
     </div>`;
   }
 
-  body.innerHTML = statusBanner + notifyChip + [
+  // مؤشّر كفاءة تعبئة الطلب (زمن/نقرات/تلقائي مقابل يدوي) — يظهر إن سُجّلت المقاييس
+  let metricsChip = '';
+  if (r.metrics) {
+    const m = r.metrics;
+    const mn = (m.duration_min != null) ? m.duration_min : (m.duration_ms ? +(m.duration_ms/60000).toFixed(1) : '—');
+    const cell = (label, val, sub) => `<div style="flex:1;min-width:86px;text-align:center;padding:8px 6px;background:#fff;border:1px solid #e2e8f0;border-radius:8px"><div style="font-size:16px;font-weight:800;color:#0B1B36">${val}</div><div style="font-size:10.5px;color:#64748b;margin-top:2px">${label}</div>${sub?`<div style="font-size:9.5px;color:#94a3b8">${sub}</div>`:''}</div>`;
+    metricsChip = `<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:8px">⚡ كفاءة تعبئة الطلب${m.ai_used?' · <span style="color:#15803d">عُبّئ بالذكاء</span>':''}${m.resumed?' · <span style="color:#d97706">استُؤنف</span>':''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${cell('الزمن', mn + ' د')}
+        ${cell('النقرات', m.clicks != null ? m.clicks : '—')}
+        ${cell('حقول معبّأة', (m.fields_filled != null ? m.fields_filled : '—') + (m.fields_total ? ('/' + m.fields_total) : ''))}
+        ${cell('تلقائي (ذكاء)', m.fields_auto != null ? m.fields_auto : '—', m.auto_fill_rate != null ? (m.auto_fill_rate + '%') : '')}
+        ${cell('يدوي', m.fields_manual != null ? m.fields_manual : '—')}
+        ${cell('وثائق مرفوعة', m.docs_uploaded != null ? m.docs_uploaded : '—')}
+      </div>
+    </div>`;
+  }
+
+  body.innerHTML = statusBanner + notifyChip + metricsChip + [
     sect('المعلومات العامة', [
       ['الاسم القانوني (عربي)', r.legal_name_ar],
       ['الاسم القانوني (إنجليزي)', r.legal_name_en],
