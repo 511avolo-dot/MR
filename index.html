@@ -18096,6 +18096,27 @@ function renderKPIs() {
   const totalCats = Object.keys(catSpend).length;
   const activeSupCount = Object.keys(supData).length;
 
+  /* ── مؤشرات تسعير تفصيلية: تغطية · نضارة · تنافسية · عمق ── */
+  const _now = Date.now(), _DAY = 86400000;
+  const coveragePct = items.length ? Math.round(pricedItems.length / items.length * 100) : 0;
+  const unpricedCount = items.length - pricedItems.length;
+  // آخر تاريخ سعر + مجموعة الموردين لكل صنف من السجل التاريخي
+  const lastDateByItem = {}, supsByItem = {};
+  hist.forEach(h => {
+    const k = h.code || h.name; if (!k) return;
+    const t = h.date ? new Date(h.date).getTime() : NaN;
+    if (!isNaN(t)) lastDateByItem[k] = Math.max(lastDateByItem[k] || 0, t);
+    if (h.supplier) { (supsByItem[k] = supsByItem[k] || new Set()).add(h.supplier); }
+  });
+  const pricedKeys = Object.keys(lastDateByItem);
+  const fresh90 = pricedKeys.filter(k => (_now - lastDateByItem[k]) <= 90 * _DAY).length;
+  const stale180 = pricedKeys.filter(k => (_now - lastDateByItem[k]) > 180 * _DAY).length;
+  const freshPct = pricedKeys.length ? Math.round(fresh90 / pricedKeys.length * 100) : 0;
+  const supItemKeys = Object.keys(supsByItem);
+  const multiSupCount = supItemKeys.filter(k => supsByItem[k].size >= 2).length;
+  const avgSupsPerItem = supItemKeys.length ? (supItemKeys.reduce((a, k) => a + supsByItem[k].size, 0) / supItemKeys.length) : 0;
+  const avgRecsPerItem = pricedItems.length ? (hist.length / pricedItems.length) : 0;
+
   kpiEl.innerHTML = `
     <div style="margin-bottom:20px">
 
@@ -18106,6 +18127,24 @@ function renderKPIs() {
           {label:'سجلات الأسعار', val: fmtInt(hist.length), sub: `عبر ${totalCats} فئة`, icon:'📋', color:'#7c3aed'},
           {label:'موردون نشطون', val: fmtInt(activeSupCount), sub: `من ${fmtInt(suppliers.length)} إجمالي`, icon:'🏢', color:'#0891b2'},
           {label:'تنبيهات التذبذب', val: fmtInt(alerts.length), sub: alerts.length ? 'تستحق المراجعة' : 'أسعار مستقرة', icon: alerts.length ? '⚠️' : '✅', color: alerts.length ? '#d97706' : '#16a34a'},
+        ].map(c=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+            <div style="width:38px;height:38px;border-radius:9px;background:${c.color}18;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${c.icon}</div>
+            <div>
+              <div style="font-size:19px;font-weight:700;color:var(--ink);font-family:'IBM Plex Mono',monospace;line-height:1">${c.val}</div>
+              <div style="font-size:11px;color:var(--ink-2);margin-top:2px;font-weight:500">${c.label}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:1px">${c.sub}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Pricing Detail Strip: coverage / freshness / competitiveness / depth -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+        ${[
+          {label:'تغطية التسعير', val: coveragePct + '%', sub: `${fmtInt(unpricedCount)} صنف بلا سعر`, icon:'🎯', color: coveragePct>=70?'#16a34a':coveragePct>=40?'#d97706':'#dc2626'},
+          {label:'نضارة الأسعار', val: freshPct + '%', sub: `سُعّر خلال 90 يوم · ${fmtInt(stale180)} متقادم >180`, icon:'⏳', color: freshPct>=60?'#16a34a':'#d97706'},
+          {label:'تنافسية الموردين', val: avgSupsPerItem.toFixed(1), sub: `${fmtInt(multiSupCount)} صنف بـ٢+ مورد`, icon:'⚖️', color:'#0891b2'},
+          {label:'عمق السجل السعري', val: avgRecsPerItem.toFixed(1), sub: 'سجل سعري لكل صنف مُسعَّر', icon:'📚', color:'#7c3aed'},
         ].map(c=>`
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px">
             <div style="width:38px;height:38px;border-radius:9px;background:${c.color}18;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${c.icon}</div>
