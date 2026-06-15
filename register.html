@@ -3260,7 +3260,8 @@ function loadScriptOnce(src, check) {
     if (existing) { existing.addEventListener('load', () => check() ? resolve() : reject()); return; }
     const s = document.createElement('script');
     s.src = src; s.async = true;
-    const timer = setTimeout(() => reject(new Error('timeout:' + src)), src.startsWith('/') ? 8000 : 20000);
+    // مهلة سخية للملف المحلي (~880KB قد يبطؤ على شبكات الشركات) — المحلي موثوق فلا نُسقطه مبكراً
+    const timer = setTimeout(() => reject(new Error('timeout:' + src)), src.startsWith('/') ? 60000 : 25000);
     s.onload = () => { clearTimeout(timer); check() ? resolve() : reject(new Error('failed:' + src)); };
     s.onerror = () => { clearTimeout(timer); reject(new Error('error:' + src)); };
     document.head.appendChild(s);

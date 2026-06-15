@@ -7234,7 +7234,7 @@ async function aiComplete(opts){
 
   for(const model of modelsToTry){
     // Retry this model up to 3 times with exponential backoff on transient overload
-    const MAX_ATTEMPTS = 3;
+    const MAX_ATTEMPTS = 5;
     let modelSucceeded = false;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
@@ -7310,7 +7310,7 @@ async function aiComplete(opts){
 
       // Transient (overload/high-demand/rate-limit): retry SAME model with backoff
       if(transient && attempt < MAX_ATTEMPTS){
-        const waitMs = [1500, 4000, 8000][attempt - 1] || 8000;
+        const waitMs = [2000, 4000, 8000, 13000, 20000][attempt - 1] || 20000;
         console.warn(`[AI] ${model} transient error (${response.status}), retry ${attempt}/${MAX_ATTEMPTS} after ${waitMs}ms`);
         await _sleep(waitMs);
         continue;
@@ -7443,7 +7443,7 @@ async function aiCompleteStream(opts){
 
   for(const model of modelsToTry){
     let response;
-    const MAX_ATTEMPTS = 3;
+    const MAX_ATTEMPTS = 5;
     let advanceModel = false;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
@@ -7476,7 +7476,7 @@ async function aiCompleteStream(opts){
         }
         // Transient overload → retry same model with backoff
         if(isTransientAIError(response.status, apiErrorMsg || errorMsg) && attempt < MAX_ATTEMPTS){
-          const waitMs = [1500, 4000, 8000][attempt - 1] || 8000;
+          const waitMs = [2000, 4000, 8000, 13000, 20000][attempt - 1] || 20000;
           console.warn(`[AI-Stream] ${model} transient (${response.status}), retry ${attempt}/${MAX_ATTEMPTS} after ${waitMs}ms`);
           await _sleep(waitMs);
           continue;
@@ -9896,20 +9896,24 @@ function loadScriptOnce(url, globalCheck){
     };
 
     // Poll for the global appearing (covers cached scripts whose onload already fired)
+    // مهلة سخية للملف المحلي (نفس الموقع): ملف Excel ~880KB قد يستغرق وقتاً على
+    // شبكات الشركات البطيئة. الملف المحلي موثوق فلا داعي لمهلة قصيرة تُسقطه إلى
+    // مصادر CDN التي قد تحجبها شبكة الشركة. المحلي 60ث، ومصادر الـ CDN 25ث.
+    const isLocal = url.startsWith('/');
+    const maxMs = isLocal ? 60000 : 25000;
     let polls = 0;
+    const maxPolls = Math.ceil(maxMs / 100);
     const poller = setInterval(() => {
       polls++;
       if(checkGlobal()){ clearInterval(poller); finish(true); }
-      else if(polls > 200){ clearInterval(poller); /* ~20s — let timeout handle reject */ }
+      else if(polls > maxPolls){ clearInterval(poller); /* اترك المهلة تتولّى الرفض */ }
     }, 100);
 
-    // Timeout: 8s for local files (fast), 25s for CDN fallbacks
-    const isLocal = url.startsWith('/');
     const timeout = setTimeout(() => {
       clearInterval(poller);
       if(checkGlobal()) finish(true);
       else finish(false, new Error('انتهت مهلة تحميل المكتبة. تحقق من اتصال الإنترنت وحاول مجدداً.'));
-    }, isLocal ? 8000 : 25000);
+    }, maxMs);
 
     const done = (ok, err) => { clearInterval(poller); clearTimeout(timeout); finish(ok, err); };
 
@@ -16305,7 +16309,7 @@ async function siAIExtractFromImage(base64, mimeType){
 
   let lastError = null;
   for(const model of modelsToTry){
-    const MAX_ATTEMPTS = 3;
+    const MAX_ATTEMPTS = 5;
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try {
@@ -16331,7 +16335,7 @@ async function siAIExtractFromImage(base64, mimeType){
 
           // Transient (overload/high-demand/429/503): retry SAME model with backoff
           if(isTransientAIError(resp.status, emsg) && attempt < MAX_ATTEMPTS){
-            const waitMs = [1500, 4000, 8000][attempt - 1] || 8000;
+            const waitMs = [2000, 4000, 8000, 13000, 20000][attempt - 1] || 20000;
             console.warn(`[AI-Vision] ${model} transient (${resp.status}), retry ${attempt}/${MAX_ATTEMPTS} after ${waitMs}ms`);
             await _sleep(waitMs);
             continue;
