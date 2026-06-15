@@ -18750,7 +18750,10 @@ async function renderRegStats() {
   const wrap = document.getElementById('reg-stats');
   if (!wrap || !CLOUD?.client) return;
   try {
-    const {data, error} = await CLOUD.client.from(REG_TABLE).select('status, metrics').limit(2000);
+    let {data, error} = await CLOUD.client.from(REG_TABLE).select('status, metrics').limit(2000);
+    if (error) { // عمود metrics قد لا يكون منشأً بعد — لا تُخفِ الشريط، اكتفِ بالحالات
+      ({data, error} = await CLOUD.client.from(REG_TABLE).select('status').limit(2000));
+    }
     if (error) throw error;
     const counts = {pending:0, needs_revision:0, approved:0, rejected:0};
     (data||[]).forEach(r => { if (counts[r.status] != null) counts[r.status]++; });
