@@ -2898,6 +2898,46 @@ function genRegId(){
 }
 let regId = _resumeId || genRegId();
 let _resumeData = null;   // holds existing registration when in resume mode
+
+/* ── مقاييس كفاءة التعبئة (مؤشرات أداء التسجيل: نقرات/دقائق/تعبئة تلقائية مقابل يدوية) ── */
+const SESSION_START = Date.now();
+let CLICK_COUNT = 0;
+let AI_USED = false;
+document.addEventListener('click', () => { CLICK_COUNT++; }, true);
+// عند تعديل المستخدم لحقل عبّأه الذكاء، أزل وسم «تلقائي» ليُحتسب لمسة يدوية بدقّة
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el && el.classList && el.classList.contains('ai-filled')) el.classList.remove('ai-filled');
+}, true);
+function collectRegMetrics(){
+  // حقول النموذج الأساسية (المعرّفات تبدأ بـ f-) — وهي ذاتها التي يعبّئها الذكاء
+  const fields = [...document.querySelectorAll('[id^="f-"]')]
+    .filter(el => ['INPUT','SELECT','TEXTAREA'].includes(el.tagName) && el.type !== 'file' && el.type !== 'hidden');
+  let filled = 0, auto = 0, manual = 0;
+  fields.forEach(el => {
+    const v = (el.value || '').trim();
+    if (!v) return;
+    filled++;
+    if (el.classList.contains('ai-filled')) auto++; else manual++;
+  });
+  const durMs = Date.now() - SESSION_START;
+  let docs = 0;
+  try { docs = Object.values(uploadedDocs || {}).filter(d => d && d.file).length; } catch(_) {}
+  return {
+    duration_ms: durMs,
+    duration_min: +(durMs / 60000).toFixed(1),
+    clicks: CLICK_COUNT,
+    fields_total: fields.length,
+    fields_filled: filled,
+    fields_auto: auto,
+    fields_manual: manual,
+    auto_fill_rate: filled ? Math.round(auto / filled * 100) : 0,
+    docs_uploaded: docs,
+    ai_used: AI_USED,
+    lang: (typeof LANG !== 'undefined' ? LANG : 'ar'),
+    resumed: !!_resumeId,
+  };
+}
 let _existingDocPaths = {};  // doc_paths already in storage from previous submission
 let _revisionInfo = {};      // parsed review_notes from admin (fields/sections flagged)
 
@@ -3632,7 +3672,7 @@ function fillFromAI(data) {
   for (const [id, val] of Object.entries(map)) {
     if (val && val !== 'null') {
       const el = document.getElementById(id);
-      if (el && !el.value) { el.value = val; el.classList.add('ai-filled'); filled++; }
+      if (el && !el.value) { el.value = val; el.classList.add('ai-filled'); filled++; AI_USED = true; }
     }
   }
   // Entity type radio
@@ -3958,6 +3998,7 @@ async function submitForm() {
       doc_paths:            docPaths,
       status:               'pending',
       submitted_at:         new Date().toISOString(),
+      metrics:              collectRegMetrics(),
     };
 
     showProc('جارٍ حفظ البيانات...', '');
@@ -3971,7 +4012,13 @@ async function submitForm() {
       });
       dbErr = error;
     } else {
-      const {error} = await SB.from(REG_TABLE).insert(payload);
+      let {error} = await SB.from(REG_TABLE).insert(payload);
+      // إن لم يكن عمود المقاييس موجوداً بعد (لم تُشغّل الترقية)، أعد الإرسال بدونه
+      // حتى لا يفشل التسجيل إطلاقاً — التسجيل أهمّ من حفظ المقاييس.
+      if (error && /metrics/i.test(error.message || '')) {
+        const cleaned = Object.assign({}, payload); delete cleaned.metrics;
+        ({error} = await SB.from(REG_TABLE).insert(cleaned));
+      }
       dbErr = error;
     }
     if (dbErr) throw dbErr;
