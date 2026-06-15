@@ -3272,7 +3272,12 @@ async function loadLib(urls, check) {
   if (check()) return;
   let last;
   for (const u of (Array.isArray(urls) ? urls : [urls])) {
-    try { await loadScriptOnce(u, check); return; } catch(e) { last = e; }
+    // الملف المحلي موثوق فنعيد محاولته 3 مرات قبل اللجوء لمصادر CDN (قد تحجبها الشبكة)
+    const attempts = u.startsWith('/') ? 3 : 1;
+    for (let a = 1; a <= attempts; a++) {
+      try { await loadScriptOnce(u, check); return; }
+      catch(e) { last = e; if (a < attempts) await delay(1200); }
+    }
   }
   throw last || new Error('فشل تحميل المكتبة');
 }
