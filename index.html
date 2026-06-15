@@ -7066,8 +7066,15 @@ async function aiProbeProxy(){
   try{
     const r = await fetch(AI_PROXY_ENDPOINT, { method:'GET' });
     const ct = r.headers.get('content-type') || '';
-    // 200 + JSON = وسيط حقيقي. (يتجنّب الإيجابية الكاذبة عند إعادة توجيه SPA لـ HTML)
-    __AI_PROXY_OK = r.ok && ct.includes('application/json');
+    // 200 + JSON + body.ok=true = وسيط حقيقي ومفتاح الخادم مضبوط.
+    // لا يكفي 200/JSON وحده: الخادم يردّ {ok:false} عند غياب GEMINI_API_KEY،
+    // وقبولها كـ"متاح" يجعل الذكاء يبدو مفعّلاً ثم تفشل الاستدعاءات بـ503 لغير المدير.
+    if(r.ok && ct.includes('application/json')){
+      const j = await r.json().catch(()=>null);
+      __AI_PROXY_OK = !!(j && j.ok === true);
+    } else {
+      __AI_PROXY_OK = false;
+    }
   }catch(e){ __AI_PROXY_OK = false; }
   return __AI_PROXY_OK;
 }
@@ -10834,14 +10841,14 @@ WHERE NOT EXISTS (SELECT 1 FROM proc_users WHERE role='admin');
 -- Mostafa / Mostafa2003
 INSERT INTO proc_users (username, display_name, password_hash, role, permissions, active, created_by)
 SELECT 'Mostafa', 'مصطفى خليل', '26e35d3a2e82a374060dd10e197903e5fb9b39db23fdb90ca09ecdbacda3fa37', 'user',
-  '{"can_delete":false,"can_export":false,"can_import":false,"can_manage_suppliers":true,"can_manage_cloud":false,"can_manage_users":false}'::jsonb,
+  '{"can_delete":false,"can_export":true,"can_import":true,"can_manage_suppliers":true,"can_manage_cloud":false,"can_manage_users":false}'::jsonb,
   true, 'system'
 WHERE NOT EXISTS (SELECT 1 FROM proc_users WHERE username='Mostafa');
 
 -- Mahmoud / Mahmoud2025
 INSERT INTO proc_users (username, display_name, password_hash, role, permissions, active, created_by)
 SELECT 'Mahmoud', 'محمود العمودي', '10568b89b4363f543a5344681a11a175262a7adc09b04232a0be990cf6217e54', 'user',
-  '{"can_delete":false,"can_export":false,"can_import":false,"can_manage_suppliers":true,"can_manage_cloud":false,"can_manage_users":false}'::jsonb,
+  '{"can_delete":false,"can_export":true,"can_import":true,"can_manage_suppliers":true,"can_manage_cloud":false,"can_manage_users":false}'::jsonb,
   true, 'system'
 WHERE NOT EXISTS (SELECT 1 FROM proc_users WHERE username='Mahmoud');
 

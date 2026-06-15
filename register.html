@@ -3380,11 +3380,21 @@ function normalizeExtracted(data){
     else if (nums.includes(k)) { const n = Number(String(v).replace(/[^0-9.]/g,'')); if (!isFinite(n) || n <= 0) continue; v = n; }
     if (v !== '' && v != null) out[k] = v;
   }
+  // حارس: أسقط أي بيانات تعود للجهة الحكومية المُصدِرة لا للشركة مقدِّمة الطلب
+  // (مثال شائع: موقع/بريد هيئة الزكاة zatca.gov.sa يُملأ خطأً في حقل موقع الشركة)
+  if (out.website && AUTHORITY_DOMAIN_RE.test(out.website)) delete out.website;
+  if (out.email   && AUTHORITY_DOMAIN_RE.test(out.email))   delete out.email;
+  ['legal_name_ar','legal_name_en','trade_name'].forEach(k=>{
+    if (out[k] && AUTHORITY_NAME_RE.test(out[k])) delete out[k];
+  });
   // فحوص خفيفة لتقليل الأخطاء الشائعة
   if (out.commercial_reg && out.commercial_reg.length !== 10) { /* أبقِه لكن قد يكون ناقصاً */ }
   if (out.vat_number && out.vat_number.length !== 15) { /* بعض الوثائق تعرض الرقم بصيغ مختلفة */ }
   return out;
 }
+// أنماط للتعرّف على الجهات الحكومية المُصدِرة (لإسقاط بياناتها من حقول الشركة)
+const AUTHORITY_DOMAIN_RE = /\b[a-z0-9.-]*\.gov\.sa\b|zatca|gosi\.gov|saudichambers|mc\.gov\.sa|\bgazt\b/i;
+const AUTHORITY_NAME_RE = /هيئة\s*الزكاة|الزكاة\s*والضريبة|الضريبة\s*والجمارك|المؤسسة\s*العامة\s*للتأمينات|التأمينات\s*الاجتماعية|وزارة\s*التجارة|ZATCA|GOSI|General\s*Authority\s*of\s*Zakat|General\s*Organization\s*for\s*Social\s*Insurance/i;
 
 async function extractAllDocs() {
   if (!AI_AVAILABLE) { return {}; }
@@ -3392,11 +3402,21 @@ async function extractAllDocs() {
   const docsToExtract = Object.entries(uploadedDocs).filter(([,v]) => v.file);
   if (!docsToExtract.length) return {};
 
+  const docNameOf = (docId) => [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find(d => d.id === docId)?.name || docId;
+  const isCommercialReg = (name) => /سجل|تجاري|commercial/i.test(String(name||''));
+  const isAuthorityDoc  = (name) => /زكاة|ضريب|vat|zatca|تأمين|gosi|غرفة|chamber/i.test(String(name||''));
+  // حقول تخص الشركة فقط — لا تُؤخذ أبداً من وثائق الجهات الحكومية (تجنّب موقع/بريد الهيئة)
+  const CONTACT_FIELDS = ['website','email','phone','fax','address','city','district','postal_code','po_box'];
+  // أولوية المعالجة: السجل التجاري أولاً ليكون مصدر هوية الشركة (الاسم/النوع/التأسيس) قبل غيره
+  docsToExtract.sort((a,b) => (isCommercialReg(docNameOf(a[0]))?0:1) - (isCommercialReg(docNameOf(b[0]))?0:1));
+
   for (const [docId, docData] of docsToExtract) {
-    const docName = [...REQUIRED_DOCS, ...OPTIONAL_DOCS].find(d => d.id === docId)?.name || docId;
+    const docName = docNameOf(docId);
     showProc('جارٍ معالجة الوثائق...', `${docName}`);
     try {
       const result = normalizeExtracted(await extractFromFile(docData.file, docName));
+      // من وثائق الجهات الحكومية: لا نأخذ بيانات تواصل/عنوان (تخص الهيئة لا الشركة)
+      if (isAuthorityDoc(docName)) CONTACT_FIELDS.forEach(f => { delete result[f]; });
       Object.keys(result).forEach(k => {
         if (result[k] && !merged[k]) merged[k] = result[k];
       });
@@ -3484,6 +3504,9 @@ Still capture any OTHER field that is clearly present too; use null for anything
 
 Rules:
 - Read text in any orientation; ignore stamps, watermarks, QR codes, decorative headers, and personal/national ID numbers of individuals.
+- CRITICAL — the ISSUING AUTHORITY is NOT the applicant company. A VAT/ZATCA certificate, GOSI certificate, or Chamber certificate is issued BY a government body. NEVER take that body's name, website, email, phone, fax or address as the company's. The issuers are: "هيئة الزكاة والضريبة والجمارك" / ZATCA (zatca.gov.sa), "المؤسسة العامة للتأمينات الاجتماعية" / GOSI (gosi.gov.sa), "الغرفة التجارية" / Chamber of Commerce, "وزارة التجارة" / Ministry of Commerce (mc.gov.sa). Any *.gov.sa site or these names belong to the ISSUER — output null for them.
+- On a VAT/ZATCA, GOSI, or Chamber document, set website, email, phone and fax to null — these papers show the AUTHORITY's contacts, not the applicant company's. Only take website/email/phone from the company's OWN documents (commercial registration, letterhead, national address).
+- legal_name_ar/legal_name_en = the APPLICANT company (the taxpayer / member / registrant named on the certificate), never the authority that issued it.
 - Names: legal_name_ar = the Arabic legal name; legal_name_en = the English/Latin legal name. Fill only the language that exists; do NOT translate or transliterate yourself.
 - Numbers: output Western digits 0-9 (convert Arabic-Indic ٠-٩). Strip spaces/dashes from ID/registration numbers.
 - Field formats: commercial_reg = 10 digits; vat_number = 15 digits (usually starts with 3 and ends with 3); postal_code = 5 digits.
