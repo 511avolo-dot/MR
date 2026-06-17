@@ -145,7 +145,8 @@ export async function onRequestPost({ request, env }) {
     return json({ skipped: true, reason: 'status_mismatch', status: row.status });
   }
 
-  const to = (row.email || row.contact_email || '').trim();
+  // الأولوية لبريد مسؤول التواصل (هو من سجّل وسيتابع حالة الطلب)، ثم بريد الشركة احتياطاً
+  const to = (row.contact_email || row.email || '').trim();
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
     return json({ skipped: true, reason: 'no_recipient' });
   }
