@@ -5902,8 +5902,17 @@ function renderItems(){
   if(total===0){
     document.getElementById('items-tbody').innerHTML = `<tr><td colspan="${selMode?11:10}"><div class="empty"><svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4-4"/></svg><div class="empty-title">لا توجد نتائج</div><div class="empty-text">جرّب كلمات مختلفة أو أزل الفلاتر</div></div></td></tr>`;
   }else{
+    // M5: خريطة كود→أسعار لصفحة العرض فقط، بمسحة واحدة على السجل (بدل مسحه لكل صف)
+    const pageCodes = new Set(pageList.map(i=>i.code));
+    const sparkByCode = new Map();
+    for(const h of STATE.history){
+      if(!pageCodes.has(h.code)) continue;
+      const pr = Number(h.price); if(h.price==null || !isFinite(pr)) continue;
+      let e = sparkByCode.get(h.code); if(!e){ e=[]; sparkByCode.set(h.code, e); }
+      e.push({date:h.date, price:pr});
+    }
     document.getElementById('items-tbody').innerHTML = pageList.map(i=>{
-      const spark = renderSparkline(i.code);
+      const spark = renderSparkline(sparkByCode.get(i.code));
       const checked = STATE.itemsSelected.has(i.code) ? 'checked' : '';
       const selCell = selMode
         ? `<td class="sel-col" style="text-align:center"><input type="checkbox" class="row-sel" data-sel-code="${escapeAttr(i.code)}" ${checked}></td>`
@@ -7715,13 +7724,12 @@ function renderBarChart(containerId, bars, opts){
   c.innerHTML = html;
 }
 
-/* Inline sparkline for items table */
-function renderSparkline(code){
-  const hist = STATE.history.filter(h=>h.code===code && h.price!=null && !isNaN(Number(h.price)));
-  if(hist.length<2) return '';
-  const sorted = [...hist].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+/* Inline sparkline for items table — يتلقّى صفوف {date,price} مُحسّبة مسبقاً (M5) */
+function renderSparkline(rows){
+  if(!rows || rows.length<2) return '';
+  const sorted = [...rows].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
   const ys = sorted.map(h=>Number(h.price));
-  const min = Math.min(...ys), max = Math.max(...ys);
+  let min=ys[0], max=ys[0]; for(const y of ys){ if(y<min)min=y; if(y>max)max=y; } // M6: بلا spread
   const W=60, H=20;
   const pts = ys.map((y,i)=>{
     const x = (i/(ys.length-1)) * (W-2) + 1;
@@ -8662,7 +8670,7 @@ function importCSV(file){
         const code = (row[idx.code]||'').trim();
         const name = (row[idx.name]||'').trim();
         const category = (row[idx.category]||'').trim();
-        const price = parseFloat(row[idx.price]);
+        const price = safeParsePrice(toWesternDigits(row[idx.price])); // L2: تطبيع الأرقام العربية
         const unit = (row[idx.unit]||'').trim();
         const supplier = (row[idx.supplier]||'').trim();
         const date = (row[idx.date]||'').trim();
@@ -11945,8 +11953,10 @@ async function poCloudUpsert(po){
     const {data}=await CLOUD.client.from('proc_purchase_orders').select('po_number').eq('po_number',po.po_number).maybeSingle();
     if(!data) payload.created_by=u;
   }catch(e){}
-  try{ const {error}=await CLOUD.client.from('proc_purchase_orders').upsert(payload); if(error) console.warn('[po] cloud upsert:',error.message); }
-  catch(e){ console.warn('[po] cloud upsert ex:',e.message); }
+  try{ const {error}=await CLOUD.client.from('proc_purchase_orders').upsert(payload);
+    if(error){ console.warn('[po] cloud upsert:',error.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
+    return true; }
+  catch(e){ console.warn('[po] cloud upsert ex:',e.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
 }
 async function poCloudDelete(num){
   if(!window.CLOUD||!CLOUD.enabled||!CLOUD.client) return;
