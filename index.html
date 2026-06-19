@@ -11284,8 +11284,25 @@ window.CLOUD = {
         reference: entry.reference||null, note: entry.note||null,
         created_by: currentUser
       };
-      const {error} = await CLOUD.client.from('proc_history').insert(payload);
-      if(error) throw error;
+      // C2: رقم السجل (num) مفتاح أساسي يُحسب بالعميل، فيتصادم عند إدراج متزامن من
+      // جهازين. عند تعارض المفتاح نجلب أعلى رقم من السحابة (المرجع الموثوق) ونعيد
+      // المحاولة بدل الفشل الصامت وفقدان السجل.
+      let lastErr = null;
+      for(let attempt=0; attempt<4; attempt++){
+        const {error} = await CLOUD.client.from('proc_history').insert(payload);
+        if(!error) return;
+        lastErr = error;
+        const dup = error.code==='23505' || /duplicate|already exists|23505/i.test(error.message||'');
+        if(!dup) throw error;
+        try{
+          const {data} = await CLOUD.client.from('proc_history').select('num').order('num',{ascending:false}).limit(1).maybeSingle();
+          const cloudMax = (data && Number(data.num)) || 0;
+          const localMax = Math.max(0, ...STATE.history.map(h=>Number(h.num)||0));
+          payload.num = Math.max(cloudMax, localMax) + 1;
+          entry.num = payload.num; // حدّث الكائن في الذاكرة ليطابق السحابة
+        }catch(_){ payload.num = (Number(payload.num)||0) + 1; entry.num = payload.num; }
+      }
+      throw lastErr;
     },
     async upsert(entry){
       if(!CLOUD.enabled) return;
