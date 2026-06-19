@@ -70,8 +70,11 @@ BEGIN
     'message',       v_msg,
     -- تفاصيل التعديل المطلوبة (وثائق/أقسام/ملاحظة) — تُعرض للمورد في المتابعة
     'revision',      CASE WHEN v_row.status = 'needs_revision' THEN v_rev ELSE NULL END,
-    'needs_revision', (v_row.status = 'needs_revision'),
-    'revision_token', CASE WHEN v_row.status = 'needs_revision' THEN v_row.revision_token ELSE NULL END
+    'needs_revision', (v_row.status = 'needs_revision')
+    -- أمنياً: لا نُصدر revision_token من دالة المتابعة. التحقق هنا يقبل معرّفات
+    -- عامة (سجل تجاري/رقم ضريبي) قد يعرفها منافس، فإصدار التوكن يتيح كشف PII
+    -- والاستيلاء على الطلب. المورد يستأنف التعديل عبر الرابط المُرسَل لبريده فقط
+    -- (المحمول بتوكن 128-بت)، لا بإعادة اشتقاقه من معرّفات عامة.
   );
 END;
 $$;
