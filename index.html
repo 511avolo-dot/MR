@@ -11957,6 +11957,8 @@ async function poCloudUpsert(po){
   };
   // ربط أمر الشراء بمصدره (ترسية RFQ) — يتطلب عمود source jsonb؛ يُضاف فقط عند وجوده لئلا يكسر الحفظ العادي
   if(po.source) payload.source = po.source;
+  // سجل الاستلام — يتطلب عمود receipts jsonb (ترقية db/goods-receipt.sql)؛ يُضاف فقط عند وجوده
+  if(po.receipts) payload.receipts = po.receipts;
   try{
     const {data}=await CLOUD.client.from('proc_purchase_orders').select('po_number').eq('po_number',po.po_number).maybeSingle();
     if(!data) payload.created_by=u;
@@ -12266,6 +12268,80 @@ function deletePO(num){
 }
 
 /* ============================================================
+   استلام البضاعة (Goods Receipt) + الإغلاق التلقائي
+   ============================================================ */
+// إجمالي المطلوب/المستلَم عبر بنود الأمر
+function poReceivedSum(po){
+  let ordered=0, received=0;
+  (po.items||[]).forEach(it=>{ const q=Number(it.qty)||0; ordered+=q; received+=Math.min(q, Number(it.received_qty)||0); });
+  return { ordered, received, complete: ordered>0 && received>=ordered, any: received>0 };
+}
+function poReceiveOpen(num){
+  const po=poFind(num); if(!po) return;
+  if(!requirePermission('can_edit_po','استلام البضاعة')) return;
+  if(!Array.isArray(po.items)||!po.items.length){ toast('info','لا بنود','هذا الأمر بلا بنود قابلة للاستلام'); return; }
+  if(PO_TERMINAL.includes(po.status)){ toast('info','—','الأمر في حالة نهائية (مُغلق أو مُلغى)'); return; }
+  const rows = po.items.map((it,idx)=>{
+    const q=Number(it.qty)||0, prev=Math.min(q, Number(it.received_qty)||0), remaining=Math.max(0,q-prev);
+    return `<tr style="border-bottom:1px solid var(--border,#eee)">
+      <td style="text-align:right;padding:7px 4px">${escapeHtml(it.desc||'—')}</td>
+      <td style="text-align:center">${q||'—'}</td>
+      <td style="text-align:center">${prev}</td>
+      <td style="text-align:center"><input type="number" min="0" max="${remaining}" step="any" value="${remaining}" data-rcv="${idx}" style="width:84px;padding:5px;border:1px solid var(--border,#ddd);border-radius:6px;text-align:center;font-family:inherit"></td>
+    </tr>`;
+  }).join('');
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-receive';
+  m.innerHTML=`<div class="modal" style="max-width:660px;width:96vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
+      <h3 style="margin:0;font-size:16px">📦 استلام البضاعة — ${escapeHtml(po.po_number)}</h3>
+      <button class="modal-close" onclick="poReceiveClose()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:16px 20px;max-height:70vh;overflow:auto">
+      <p style="font-size:12.5px;color:var(--muted,#777);margin:0 0 12px">أدخل الكمية المستلمة فعلياً لكل بند. عند اكتمال استلام كل البنود يُغلق الأمر تلقائياً (تسليم كامل)؛ وإلا يُسجَّل تسليم جزئي.</p>
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <thead><tr style="color:var(--muted,#888);border-bottom:1.5px solid var(--border,#ddd)"><th style="text-align:right;padding:6px 4px">الوصف</th><th>المطلوب</th><th>مستلَم سابقاً</th><th>المستلَم الآن</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <textarea id="po-receive-note" placeholder="ملاحظة الاستلام (اختياري)" rows="2" style="width:100%;margin-top:14px;padding:9px;border:1px solid var(--border,#ddd);border-radius:8px;font-family:inherit;font-size:13px"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border,#eee)">
+      <button class="btn btn-ghost btn-sm" onclick="poReceiveClose()">إلغاء</button>
+      <button class="btn btn-accent btn-sm" onclick="poReceiveSave('${escapeAttr(po.po_number)}')">حفظ الاستلام</button>
+    </div></div>`;
+  document.body.appendChild(m);
+}
+function poReceiveClose(){ const m=document.getElementById('modal-po-receive'); if(m) m.remove(); }
+function poReceiveSave(num){
+  const po=poFind(num); if(!po) return;
+  const m=document.getElementById('modal-po-receive'); if(!m) return;
+  const lines=[]; let anyReceived=false;
+  m.querySelectorAll('input[data-rcv]').forEach(inp=>{
+    const idx=Number(inp.getAttribute('data-rcv')), it=po.items[idx]; if(!it) return;
+    const q=Number(it.qty)||0, prev=Math.min(q, Number(it.received_qty)||0), remaining=Math.max(0,q-prev);
+    let now=Number(inp.value)||0; if(now<0) now=0; if(now>remaining) now=remaining; // C7: لا يتجاوز المتبقّي
+    if(now>0){ it.received_qty=prev+now; anyReceived=true; lines.push({desc:it.desc||'', qty:now}); }
+  });
+  if(!anyReceived){ toast('warn','لا كمية','أدخل كمية مستلمة واحدة على الأقل'); return; }
+  const note=(document.getElementById('po-receive-note')?.value||'').trim();
+  const by=(STATE.currentUser?STATE.currentUser.displayName:'—'), at=new Date().toISOString();
+  po.receipts=po.receipts||[];
+  po.receipts.push({ by, at, note:note||null, lines });
+  const sum=poReceivedSum(po);
+  po.status_history=po.status_history||[];
+  if(sum.complete){
+    if(!po.actual_delivery) po.actual_delivery=poToISO(new Date());
+    if(po.status!=='تسليم كامل'){ po.status_history.push({from:po.status,to:'تسليم كامل',by,at}); po.status='تسليم كامل'; }
+  } else if(po.status!=='تسليم جزئي' && !PO_TERMINAL.includes(po.status)){
+    po.status_history.push({from:po.status,to:'تسليم جزئي',by,at}); po.status='تسليم جزئي';
+  }
+  poSave(po,false,'receive');
+  logAudit('receive','po',num,{lines, complete:sum.complete, received:sum.received, ordered:sum.ordered});
+  poReceiveClose();
+  toast('success', sum.complete?'اكتمل الاستلام — أُغلق الأمر ✓':'تم تسجيل استلام جزئي', `${po.po_number} · مستلَم ${sum.received} من ${sum.ordered}`);
+  if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
+}
+
+/* ============================================================
    DRAWER
    ============================================================ */
 function openPODrawer(num){
@@ -12284,11 +12360,15 @@ function openPODrawer(num){
     ? `<div class="po-stage-age ${_stageAge>7?'warn':''}">⏱ في مرحلة «${escapeHtml(po.status)}» منذ <b>${_stageAge}</b> يوم${_stageAge>7?' — تتطلب متابعة':''}</div>` : '';
   const _nextStage = (poStatusStep(po.status)>=0) ? PO_STEPPER[poStatusStep(po.status)+1] : null;
   const kv=(k,v)=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const _rsum=poReceivedSum(po);
+  const _hasRcv=(po.items||[]).some(it=>Number(it.received_qty)>0);
   const itemsHtml=(Array.isArray(po.items)&&po.items.length)?`
-    <div class="po-drawer-sec"><h4>البنود</h4>
-      <table style="width:100%;font-size:12.5px"><thead><tr style="color:var(--muted)"><th style="text-align:right">الوصف</th><th>كمية</th><th>سعر</th><th style="text-align:left">إجمالي</th></tr></thead>
-      <tbody>${po.items.map(it=>`<tr><td>${escapeHtml(it.desc||'—')}</td><td style="text-align:center">${escapeHtml(String(it.qty||''))}</td><td style="text-align:center">${fmtPrice(it.price)}</td><td style="text-align:left">${fmtPrice((Number(it.qty)||0)*(Number(it.price)||0))}</td></tr>`).join('')}</tbody></table>
+    <div class="po-drawer-sec"><h4>البنود${_hasRcv?` <span style="font-size:11px;color:var(--muted);font-weight:400">· مستلَم ${_rsum.received}/${_rsum.ordered}</span>`:''}</h4>
+      <table style="width:100%;font-size:12.5px"><thead><tr style="color:var(--muted)"><th style="text-align:right">الوصف</th><th>كمية</th>${_hasRcv?'<th>مستلَم</th>':''}<th>سعر</th><th style="text-align:left">إجمالي</th></tr></thead>
+      <tbody>${po.items.map(it=>{const q=Number(it.qty)||0,rcv=Math.min(q,Number(it.received_qty)||0);return `<tr><td>${escapeHtml(it.desc||'—')}</td><td style="text-align:center">${escapeHtml(String(it.qty||''))}</td>${_hasRcv?`<td style="text-align:center;color:${rcv>=q&&q>0?'#15803d':'#b45309'}">${rcv}</td>`:''}<td style="text-align:center">${fmtPrice(it.price)}</td><td style="text-align:left">${fmtPrice(q*(Number(it.price)||0))}</td></tr>`;}).join('')}</tbody></table>
     </div>`:'';
+  const receiptsHtml=(Array.isArray(po.receipts)&&po.receipts.length)?`
+    <div class="po-drawer-sec"><h4>سجل الاستلام</h4>${po.receipts.slice().reverse().map(rc=>`<div class="po-timeline-item"><div class="po-tl-main">${(rc.lines||[]).map(l=>escapeHtml(l.desc)+' ×'+l.qty).join(' · ')||'استلام'}</div><div class="po-tl-meta">${escapeHtml(rc.by||'')} · ${escapeHtml(String(rc.at||'').slice(0,16).replace('T',' '))}${rc.note?' · '+escapeHtml(rc.note):''}</div></div>`).join('')}</div>`:'';
   const hist=(po.status_history||[]).slice().reverse();
   const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div></div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
   const canEdit=hasPermission('can_edit_po'), canApprove=hasPermission('can_approve_po'), canDel=hasPermission('can_delete_po');
@@ -12328,10 +12408,12 @@ function openPODrawer(num){
       ${kv('الحالة','<span class="po-status-chip '+(meta.cls||'')+'" style="cursor:default">'+escapeHtml(po.status)+'</span>')}
     </div></div>
     ${itemsHtml}
+    ${receiptsHtml}
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>
     <div class="po-drawer-actions">
       ${(_nextStage)?`<button class="btn btn-accent btn-sm" onclick="poNextStage('${n}')" title="نقل لِـ ${escapeAttr(_nextStage)}">▶ ${escapeHtml(_nextStage)}</button>`:''}
+      ${(canEdit && !PO_TERMINAL.includes(po.status) && Array.isArray(po.items) && po.items.length)?`<button class="btn btn-accent btn-sm" onclick="poReceiveOpen('${n}')" title="تسجيل استلام البضاعة">📦 استلام</button>`:''}
       ${(canEdit && !PO_TERMINAL.includes(po.status) && po.status!=='تسليم كامل')?`<button class="btn btn-ghost btn-sm" onclick="markPODelivered('${n}')">تسليم كامل ✓</button>`:''}
       ${(!PO_TERMINAL.includes(po.status))?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="changePOStatus('${n}','ملغى')">إلغاء</button>`:''}
       ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openPOModal('${n}')">تعديل</button>`:''}
