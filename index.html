@@ -10740,7 +10740,8 @@ function renderDashboardCharts(){
   const catSpend = {};
   STATE.history.forEach(h=>{
     if(!h.category || h.price==null) return;
-    catSpend[h.category] = (catSpend[h.category]||0) + Number(h.price);
+    const p = Number(h.price); if(!isFinite(p)) return; // سعر مشوّه لا يُفسد إجمالي الفئة
+    catSpend[h.category] = (catSpend[h.category]||0) + p;
   });
   const topCats = Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,6);
   renderBarChart('dash-cat-chart', topCats.map(([label,value])=>({label,value})), {width:480, height:230});
@@ -11260,7 +11261,9 @@ window.CLOUD = {
         const {data} = await CLOUD.client.from('proc_suppliers').select('id').eq('id', payload.id).maybeSingle();
         if(!data){ payload.created_by = currentUser; }
       }catch(e){}
-      const {error} = await CLOUD.client.from('proc_suppliers').upsert(payload);
+      // اسم المورد فريد (UNIQUE) — onConflict:'name' يحدّث الصف القائم بدل رمي
+      // خطأ تكرار يُبتلع صامتاً ولا يُحفظ التعديل في السحابة.
+      const {error} = await CLOUD.client.from('proc_suppliers').upsert(payload, {onConflict:'name'});
       if(error) throw error;
     },
     async delete(id){
@@ -11499,6 +11502,11 @@ async function refreshFromCloud(){
   // Apply local edits (item edits from local users)
   loadItemEdits();
   loadSupplierEdits();
+  // إعادة تطبيق قوائم «المخفي» — وإلا تعود السجلات الأساسية المحذوفة للظهور عند كل
+  // تحديث لحظي/يدوي (الحذف للسجلات الأصلية مُخزَّن محلياً كقوائم إخفاء لا في السحابة).
+  loadSupplierHidden();
+  loadItemHidden();
+  loadEntryHidden();
   recomputeItemStats();
   recomputeSupplierStats();
   updateCounts();
@@ -17221,6 +17229,7 @@ async function siCommitImport(){
     let addedItems = 0;
     let addedEntries = 0;
     let supplierAdded = false;
+    let cloudFails = 0; // عدد السجلات التي تعذّرت مزامنتها مع السحابة (لتنبيه المستخدم بدل ادعاء النجاح)
     const today = new Date().toISOString().slice(0,10);
     const supplierName = m.supplier.name;
 
@@ -17241,7 +17250,7 @@ async function siCommitImport(){
       saveUserSupplier(newSup);
       logAudit('add','supplier',newSup.name,{source:'smart_import'});
       if(window.CLOUD && CLOUD.enabled){
-        try{ await CLOUD.suppliers.upsert(newSup); }catch(e){}
+        try{ await CLOUD.suppliers.upsert(newSup); }catch(e){ cloudFails++; console.warn('[smart-import] supplier cloud upsert:', e?.message); }
       }
       supplierAdded = true;
     }
@@ -17295,7 +17304,7 @@ async function siCommitImport(){
         addedItems++;
         logAudit('add','item',itemCode,{name:row.name, source:'smart_import'});
         if(window.CLOUD && CLOUD.enabled){
-          try{ await CLOUD.items.upsert(newItem); }catch(e){}
+          try{ await CLOUD.items.upsert(newItem); }catch(e){ cloudFails++; console.warn('[smart-import] item cloud upsert:', e?.message); }
         }
       }
 
@@ -17320,7 +17329,7 @@ async function siCommitImport(){
       saveUserEntry(entry);
       addedEntries++;
       if(window.CLOUD && CLOUD.enabled){
-        try{ await CLOUD.history.upsert(entry); }catch(e){}
+        try{ await CLOUD.history.upsert(entry); }catch(e){ cloudFails++; console.warn('[smart-import] history cloud upsert:', e?.message); }
       }
     }
 
@@ -17346,8 +17355,13 @@ async function siCommitImport(){
     logAudit('import','smart',supplierName,{items:addedItems, entries:addedEntries});
 
     closeModal('modal-smart-import');
-    toast('success','تم الاستيراد بنجاح',
-      `أُضيف ${supplierAdded?'مورد جديد، ':''}${addedItems} صنف جديد، و ${addedEntries} سجل سعر`);
+    const importedSummary = `أُضيف ${supplierAdded?'مورد جديد، ':''}${addedItems} صنف جديد، و ${addedEntries} سجل سعر`;
+    if(cloudFails > 0){
+      // البيانات حُفظت محلياً لكن تعذّرت مزامنة بعضها — لا ندّعي النجاح الكامل
+      toast('warn','حُفظ محلياً — تعذّرت المزامنة', `${importedSummary}. لم تُزامَن ${cloudFails} سجل مع السحابة (لن يراها الزملاء). تحقّق من الاتصال ثم استخدم «مزامنة» لإعادة الرفع.`);
+    } else {
+      toast('success','تم الاستيراد بنجاح', importedSummary);
+    }
   } catch(e) {
     console.error('Commit error:', e);
     toast('error','فشل الحفظ', e.message || 'حدث خطأ غير متوقع');
@@ -19004,7 +19018,9 @@ async function etSendTest() {
 let _regDetailCurrent = null; // holds the open registration for button handlers
 
 async function openRegDetail(jsonStr) {
-  const r = JSON.parse(jsonStr);
+  let r;
+  try { r = JSON.parse(jsonStr); }
+  catch(e){ toast('error','تعذّر فتح الطلب','بيانات الطلب غير صالحة'); return; }
   _regDetailCurrent = r;
   const modal = document.getElementById('modal-reg-detail');
   const title = document.getElementById('reg-detail-title');
