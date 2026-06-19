@@ -129,7 +129,7 @@ export async function onRequestPost({ request, env }) {
   // اقرأ الحقول العامة فقط من سجل الطلب (لا وثائق)
   let row;
   try {
-    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,status,revision_token,review_notes';
+    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,status,revision_token,review_notes,last_notify';
     const r = await fetch(
       `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}&select=${cols}`,
       { headers });
@@ -137,12 +137,25 @@ export async function onRequestPost({ request, env }) {
     const rows = await r.json();
     row = Array.isArray(rows) ? rows[0] : null;
   } catch (_) { return json({ error: 'تعذّر الاتصال بقاعدة البيانات' }, 502); }
-  if (!row) return json({ error: 'الطلب غير موجود' }, 404);
+  // S2: حدث «الاستلام» عام (anon) — ردّ موحّد دائماً كي لا يُكشف وجود الطلب أو حالته
+  // (يمنع استخدام النقطة كأوراكل لتعداد أرقام الطلبات). أحداث الموظف تحتفظ بردّها الحقيقي.
+  if (!row) return event === 'received' ? json({ ok: true }) : json({ error: 'الطلب غير موجود' }, 404);
 
   // تحقّق من تطابق الحالة (منع الانتحال)
   const expectStatus = event === 'received' ? 'pending' : event;
   if (String(row.status) !== expectStatus) {
-    return json({ skipped: true, reason: 'status_mismatch', status: row.status });
+    return event === 'received' ? json({ ok: true }) : json({ skipped: true, reason: 'status_mismatch', status: row.status });
+  }
+
+  // S2: كبح معدّل «الاستلام» — لا نُعيد الإرسال إن أُرسل إشعار استلام خلال 5 دقائق
+  // (يمنع تضخيم البريد بإعادة الطلب لرقم طلب معروف). يستخدم عمود last_notify الموجود.
+  if (event === 'received' && row.last_notify) {
+    try {
+      const ln = typeof row.last_notify === 'string' ? JSON.parse(row.last_notify) : row.last_notify;
+      if (ln && ln.event === 'received' && ln.at && (Date.now() - new Date(ln.at).getTime()) < 5 * 60 * 1000) {
+        return json({ ok: true }); // مكبوح بهدوء
+      }
+    } catch (_) {}
   }
 
   // إشعار جرس داخلي للمراجعين بطلب تسجيل جديد (أفضل جهد — لا يُعطّل البريد إن فشل).
@@ -174,7 +187,7 @@ export async function onRequestPost({ request, env }) {
   // الأولوية لبريد مسؤول التواصل (هو من سجّل وسيتابع حالة الطلب)، ثم بريد الشركة احتياطاً
   const to = (row.contact_email || row.email || '').trim();
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
-    return json({ skipped: true, reason: 'no_recipient' });
+    return event === 'received' ? json({ ok: true }) : json({ skipped: true, reason: 'no_recipient' });
   }
 
   let origin = '';
@@ -223,7 +236,16 @@ export async function onRequestPost({ request, env }) {
     });
     if (!r.ok) {
       const t = await r.text().catch(() => '');
-      return json({ error: 'تعذّر إرسال البريد', detail: t.slice(0, 300) }, 502);
+      return event === 'received' ? json({ ok: true }) : json({ error: 'تعذّر إرسال البريد', detail: t.slice(0, 300) }, 502);
+    }
+    // S2: سجّل وقت إشعار «الاستلام» لتفعيل كبح المعدّل (للحدث العام فقط، قبل أي قرار موظف)
+    if (event === 'received') {
+      try {
+        await fetch(`${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}`, {
+          method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+          body: JSON.stringify({ last_notify: { event: 'received', sent: true, at: new Date().toISOString() } }),
+        });
+      } catch (_) {}
     }
     return json({ ok: true, sent: true });
   } catch (e) {

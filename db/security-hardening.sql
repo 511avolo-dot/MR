@@ -110,10 +110,17 @@ BEGIN
     FOR p IN SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename='proc_supplier_registrations' LOOP
       EXECUTE format('DROP POLICY IF EXISTS %I ON proc_supplier_registrations', p.policyname);
     END LOOP;
-    -- إرسال طلب جديد فقط، وبحالة pending (يمنع حقن status=approved أو قراءة الغير)
+    -- إرسال طلب جديد فقط، وبحالة pending + منع تزييف أعمدة التحكّم (S1)
     CREATE POLICY "public_insert_pending" ON proc_supplier_registrations
       FOR INSERT TO anon, authenticated
-      WITH CHECK (status = 'pending');
+      WITH CHECK (
+        status = 'pending'
+        AND revision_token IS NULL
+        AND reviewed_by   IS NULL
+        AND reviewed_at   IS NULL
+        AND review_notes  IS NULL
+        AND last_notify   IS NULL
+      );
     -- القراءة والتعديل للمصادَق عليهم فقط (فريق المشتريات)
     CREATE POLICY "auth_read"   ON proc_supplier_registrations FOR SELECT TO authenticated USING (true);
     CREATE POLICY "auth_update" ON proc_supplier_registrations FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
