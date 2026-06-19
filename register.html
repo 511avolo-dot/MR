@@ -4306,9 +4306,10 @@ function renderStatus(d){
   if(d.message){ let mm=d.message; if(typeof mm==='object') mm=JSON.stringify(mm); mm=String(mm).trim();
     if(mm && mm!=='null') adminMsg=`<div class="trk-meta"><b>${t('ملاحظة الفريق:')}</b> ${escapeHtml(mm)}</div>`; }
   let revBtn='';
-  if(d.status==='needs_revision' && d.revision_token){
-    const url='register.html?resume='+encodeURIComponent(document.getElementById('trk-id').value.trim())+'&t='+encodeURIComponent(d.revision_token);
-    revBtn=`<a href="${escapeHtml(url)}" class="btn btn-gold" style="margin-top:14px;display:inline-flex">${t('فتح الطلب وتعديله')}</a>`;
+  if(d.status==='needs_revision'){
+    // أمنياً: لا نبني رابط الاستئناف من توكن تُصدره المتابعة (يقبل معرّفات عامة).
+    // نوجّه المورد للرابط الآمن المُرسَل إلى بريده الإلكتروني.
+    revBtn=`<div class="trk-meta" style="margin-top:12px;font-weight:600;color:var(--accent-deep)">${t('لتعديل طلبك، افتح رابط «فتح الطلب وتعديله» المُرسَل إلى بريدك الإلكتروني المسجّل.')}</div>`;
   }
   // عند «يحتاج تعديل»: اعرض البنود المطلوبة بالتحديد بدل الملاحظة العامة
   const revHtml = (d.status==='needs_revision') ? renderTrkRevision(d.revision) : '';
