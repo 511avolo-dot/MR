@@ -35,8 +35,11 @@ export async function onRequestPost({ request, env }) {
   if (!cr) return json({ error: 'رقم السجل التجاري مطلوب' }, 400);
 
   try {
-    // واجهة «وثق» — معلومات السجل التجاري
-    const r = await fetch(`https://api.wathq.sa/v5/commercialregistration/info/${encodeURIComponent(cr)}`, {
+    // واجهة «وثق» — معلومات السجل التجاري. الأساس قابل للضبط عبر متغيّر البيئة
+    // WATHQ_BASE_URL (الافتراضي: بيئة الاختبار sandbox). للإنتاج اضبطه على:
+    //   https://api.wathq.sa/v5/commercialregistration
+    const base = (env.WATHQ_BASE_URL || 'https://api.wathq.sa/sandbox/commercial-registration').replace(/\/+$/, '');
+    const r = await fetch(`${base}/info/${encodeURIComponent(cr)}`, {
       headers: { apiKey: env.WATHQ_API_KEY, Accept: 'application/json' },
     });
     const data = await r.json().catch(() => ({}));

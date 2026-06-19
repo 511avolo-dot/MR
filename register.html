@@ -2407,6 +2407,8 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
         <div class="field">
           <label>رقم السجل التجاري <span class="req">*</span></label>
           <input type="text" id="f-cr" placeholder="1010xxxxxxx" dir="ltr">
+          <button type="button" id="cr-verify-btn" onclick="verifyCR()" style="margin-top:6px;font-size:12px;padding:5px 12px;border:1px solid var(--accent,#C4A265);background:transparent;color:var(--accent-deep,#8a6a30);border-radius:7px;cursor:pointer;font-family:inherit">✔ تحقّق من «واثق»</button>
+          <div id="cr-verify-out" style="font-size:11.5px;margin-top:5px"></div>
         </div>
         <div class="field">
           <label>تاريخ الإصدار</label>
@@ -2940,6 +2942,31 @@ function collectRegMetrics(){
 }
 let _existingDocPaths = {};  // doc_paths already in storage from previous submission
 let _revisionInfo = {};      // parsed review_notes from admin (fields/sections flagged)
+
+/* ── التحقق من السجل التجاري عبر «واثق» (وسيط الخادم /api/verify) ── */
+async function verifyCR(){
+  const crEl = document.getElementById('f-cr');
+  const out  = document.getElementById('cr-verify-out');
+  const btn  = document.getElementById('cr-verify-btn');
+  const cr   = (crEl && crEl.value || '').replace(/\D/g,'');
+  if(!out) return;
+  if(cr.length < 7){ out.innerHTML = '<span style="color:#b45309">'+t('أدخل رقم سجل تجاري صحيح أولاً')+'</span>'; return; }
+  if(btn) btn.disabled = true;
+  out.innerHTML = '<span style="color:var(--muted,#888)">'+t('جارٍ التحقق من «واثق»…')+'</span>';
+  try{
+    const resp = await fetch('/api/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ cr }) });
+    const j = await resp.json().catch(()=>({}));
+    if(resp.status === 503){ out.innerHTML = '<span style="color:var(--muted,#888)">'+t('خدمة التحقق غير مُفعّلة حالياً')+'</span>'; return; }
+    if(resp.status === 404){ out.innerHTML = '<span style="color:#b91c1c">'+t('لم يُعثر على سجل تجاري بهذا الرقم')+'</span>'; return; }
+    if(!resp.ok){ out.innerHTML = '<span style="color:#b91c1c">'+escapeHtml(j.error || t('تعذّر التحقق'))+'</span>'; return; }
+    out.innerHTML = '<span style="color:#15803d">✓ '+escapeHtml(j.summary || t('تم التحقق'))+'</span>';
+    // تعبئة الاسم القانوني تلقائياً إن كان فارغاً والاسم متوفّر من «واثق»
+    const nm = j.cr && (j.cr.crName || j.cr.name || (j.cr.entityName));
+    const arEl = document.getElementById('f-legal-ar');
+    if(nm && arEl && !arEl.value){ arEl.value = nm; arEl.classList.add('ai-filled'); }
+  }catch(e){ out.innerHTML = '<span style="color:#b91c1c">'+t('تعذّر الاتصال بخدمة التحقق')+'</span>'; }
+  finally{ if(btn) btn.disabled = false; }
+}
 
 /* ── Document types ── */
 const _ic = {
@@ -4305,12 +4332,9 @@ function renderStatus(d){
   let adminMsg='';
   if(d.message){ let mm=d.message; if(typeof mm==='object') mm=JSON.stringify(mm); mm=String(mm).trim();
     if(mm && mm!=='null') adminMsg=`<div class="trk-meta"><b>${t('ملاحظة الفريق:')}</b> ${escapeHtml(mm)}</div>`; }
+  // لا نعرض رابط/زر تعديل في المتابعة: رسالة «طلب التعديل» تصل المورد بالبريد
+  // ومعها رابط الاستئناف الآمن، فتكتفي المتابعة بعرض الحالة والبنود المطلوبة.
   let revBtn='';
-  if(d.status==='needs_revision'){
-    // أمنياً: لا نبني رابط الاستئناف من توكن تُصدره المتابعة (يقبل معرّفات عامة).
-    // نوجّه المورد للرابط الآمن المُرسَل إلى بريده الإلكتروني.
-    revBtn=`<div class="trk-meta" style="margin-top:12px;font-weight:600;color:var(--accent-deep)">${t('لتعديل طلبك، افتح رابط «فتح الطلب وتعديله» المُرسَل إلى بريدك الإلكتروني المسجّل.')}</div>`;
-  }
   // عند «يحتاج تعديل»: اعرض البنود المطلوبة بالتحديد بدل الملاحظة العامة
   const revHtml = (d.status==='needs_revision') ? renderTrkRevision(d.revision) : '';
   const detailHtml = revHtml || adminMsg;
