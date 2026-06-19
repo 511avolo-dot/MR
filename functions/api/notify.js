@@ -145,6 +145,32 @@ export async function onRequestPost({ request, env }) {
     return json({ skipped: true, reason: 'status_mismatch', status: row.status });
   }
 
+  // إشعار جرس داخلي للمراجعين بطلب تسجيل جديد (أفضل جهد — لا يُعطّل البريد إن فشل).
+  // البوابة العامة (anon) لا تستطيع الكتابة في proc_notifications، فننشئه هنا بصلاحية الخادم.
+  if (event === 'received') {
+    try {
+      const ur = await fetch(`${base}/rest/v1/proc_users?select=username,role,active,permissions&active=eq.true`, { headers });
+      if (ur.ok) {
+        const users = await ur.json();
+        const name = row.legal_name_ar || row.legal_name_en || id;
+        const recips = (Array.isArray(users) ? users : []).filter(
+          u => u.username && (u.role === 'admin' || !u.permissions || u.permissions.can_review_registrations !== false));
+        const notifs = recips.map(u => ({
+          id: 'ntf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + u.username,
+          recipient: u.username, type: 'system',
+          title: 'طلب تسجيل مورد جديد',
+          body: `${name} — بانتظار المراجعة (${id})`,
+          link: 'registrations', read: false,
+        }));
+        if (notifs.length) {
+          await fetch(`${base}/rest/v1/proc_notifications`, {
+            method: 'POST', headers: { ...headers, Prefer: 'return=minimal' }, body: JSON.stringify(notifs),
+          });
+        }
+      }
+    } catch (_) { /* لا يؤثر على إرسال البريد */ }
+  }
+
   // الأولوية لبريد مسؤول التواصل (هو من سجّل وسيتابع حالة الطلب)، ثم بريد الشركة احتياطاً
   const to = (row.contact_email || row.email || '').trim();
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {

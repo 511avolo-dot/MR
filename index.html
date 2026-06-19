@@ -11413,7 +11413,20 @@ window.CLOUD = {
       .on('postgres_changes', {event:'*', schema:'public', table:'proc_purchase_orders'}, payload=>{
         handleRealtimeChange('pos', payload);
       })
-      .subscribe();
+      .subscribe((status)=>{
+        // مراقبة حالة القناة: بعد انقطاع الشبكة كانت القناة تموت بصمت والواجهة تبقى
+        // «متصلة». الآن ننظّف القناة ونعيد الاشتراك بتباعد متصاعد حتى تعود.
+        if(status === 'SUBSCRIBED'){ this._rtRetry = 0; return; }
+        if((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED')
+            && this.enabled && !this.viaProxy && !this._rtReconnecting){
+          this._rtReconnecting = true;
+          try{ if(this.channel) this.client.removeChannel(this.channel); }catch(_){}
+          this.channel = null;
+          const n = (this._rtRetry = (this._rtRetry||0) + 1);
+          const wait = Math.min(30000, 2000 * Math.pow(2, Math.min(n, 4)));
+          setTimeout(()=>{ this._rtReconnecting = false; if(this.enabled && !this.channel) this.setupRealtime(); }, wait);
+        }
+      });
   }
 };
 
@@ -13521,6 +13534,7 @@ async function wfRefreshBell(){
         try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('id', nid); }catch(e){}
         const pop = document.getElementById('wf-notif-panel'); if(pop) pop.style.display='none';
         if(link === 'approvals') openApprovalsModal(wfIsApprover() ? 'inbox' : 'mine');
+        else if(link === 'registrations'){ navigate('registrations'); loadRegistrations(); }
         wfRefreshBell();
       });
     });
@@ -14238,12 +14252,14 @@ async function scComputeData(){
   const sup = {}; // name -> metrics
   const touch = n => { if(!n) return null; if(!sup[n]) sup[n]={name:n, deals:0, varSum:0, varN:0, last:null, invited:0, submitted:0}; return sup[n]; };
   (STATE.suppliers||[]).forEach(s=> touch(s.name));
+  // خريطة كود→صنف لمرة واحدة بدل بحث خطّي لكل سجل (كان O(سجل×أصناف))
+  const itemByCode = new Map((STATE.items||[]).map(i=>[i.code, i]));
   // من السجل التاريخي: عدد التعاملات + التنافسية + آخر تعامل
   (STATE.history||[]).forEach(h=>{
     const m = touch(h.supplier); if(!m) return;
     m.deals++;
     if(h.date && (!m.last || h.date>m.last)) m.last = h.date;
-    const it = (STATE.items||[]).find(i=>i.code===h.code);
+    const it = itemByCode.get(h.code);
     const ref = it ? (Number(it.avg_price)||0) : 0;
     if(ref>0 && Number(h.price)>0){ m.varSum += ((Number(h.price)-ref)/ref)*100; m.varN++; }
   });
@@ -14507,11 +14523,18 @@ function renderAnalytics(){
   }).join('');
 
   /* ── Supplier Scores ── */
+  // مجمّع لمرة واحدة بدل مسح السجل لكل مورد (كان O(موردين×سجل) مع مطابقة جزئية
+  // تُضاعف العدّ خطأً). المطابقة بالاسم الدقيق — متّسقة مع بقية المؤشرات.
+  const histBySupplier = new Map();
+  hist.forEach(h => {
+    const k = h.supplier || ''; if(!k) return;
+    let e = histBySupplier.get(k); if(!e){ e = {count:0, cats:new Set()}; histBySupplier.set(k, e); }
+    e.count++; if(h.category) e.cats.add(h.category);
+  });
   const supData = sups.map(s=>{
-    const offers = hist.filter(h=>(h.supplier||'').includes(s.name)||s.name.includes((h.supplier||'')));
-    const cats   = new Set(offers.map(h=>h.category)).size;
-    const score  = Math.min(100, (offers.length * 8) + (cats * 5) + (s.offers_count||0));
-    return {...s, score, histCount: offers.length, cats};
+    const e = histBySupplier.get(s.name) || {count:0, cats:new Set()};
+    const score = Math.min(100, (e.count * 8) + (e.cats.size * 5) + (s.offers_count||0));
+    return {...s, score, histCount: e.count, cats: e.cats.size};
   }).sort((a,b)=>b.score-a.score).slice(0,8);
   const maxScore = supData[0]?.score||1;
   document.getElementById('supplier-scores').innerHTML = supData.length ? supData.map(s=>`
