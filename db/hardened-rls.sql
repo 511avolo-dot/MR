@@ -113,8 +113,17 @@ DROP POLICY IF EXISTS "Enable update for auth" ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "public_insert"          ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "auth_read"              ON proc_supplier_registrations;
 DROP POLICY IF EXISTS "auth_update"            ON proc_supplier_registrations;
--- إرسال جديد للجميع (المورد المجهول)
-CREATE POLICY "public_insert" ON proc_supplier_registrations FOR INSERT TO anon, authenticated WITH CHECK (true);
+-- إرسال جديد للجميع (المورد المجهول) — مع منع تزييف أعمدة التحكّم (S1):
+--   الحالة pending فقط، ولا يجوز للمُرسِل المجهول تعيين توكن/مراجعة/إشعار.
+CREATE POLICY "public_insert" ON proc_supplier_registrations FOR INSERT TO anon, authenticated
+  WITH CHECK (
+    status = 'pending'
+    AND revision_token IS NULL
+    AND reviewed_by   IS NULL
+    AND reviewed_at   IS NULL
+    AND review_notes  IS NULL
+    AND last_notify   IS NULL
+  );
 -- القراءة والتعديل للمصادَق عليهم فقط (فريق المشتريات)
 CREATE POLICY "auth_read"   ON proc_supplier_registrations FOR SELECT TO authenticated USING (true);
 CREATE POLICY "auth_update" ON proc_supplier_registrations FOR UPDATE TO authenticated USING (true) WITH CHECK (true);

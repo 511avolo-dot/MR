@@ -11497,10 +11497,18 @@ function updateCloudStatus(status){
 }
 
 let REALTIME_DEBOUNCE;
+function _editingModalOpen(){ return !!document.querySelector('.modal-overlay.active'); }
 function handleRealtimeChange(table, payload){
+  // H3 — كبح صدى الكتابة الذاتية: كتابة المستخدم نفسه تصله كحدث، فلا داعي
+  // لإعادة تحميل كامل بسببها (يمنع تبديل الحالة تحت يده). للحذف (لا new) لا نكبح.
+  const me = STATE.currentUser ? STATE.currentUser.username : null;
+  const rec = payload && payload.new;
+  if(me && rec && (rec.updated_by === me || rec.created_by === me)) return;
   // Debounce re-renders
   clearTimeout(REALTIME_DEBOUNCE);
   REALTIME_DEBOUNCE = setTimeout(async ()=>{
+    // H3 — لا نبدّل الحالة أثناء فتح نافذة تحرير؛ نؤجّل حتى تُغلق
+    if(_editingModalOpen()){ REALTIME_DEBOUNCE = setTimeout(()=>handleRealtimeChange(table, {}), 3000); return; }
     updateCloudStatus('syncing');
     try{
       await refreshFromCloud();
