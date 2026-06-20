@@ -10053,21 +10053,26 @@ function executePrint(){
 <body>${content}</body>
 </html>`;
 
-  // Wait for iframe to load, then print
+  // Wait for iframe to load AND fonts to be ready (يضمن تشكيل عربي صحيح) ثم اطبع
   iframe.onload = function(){
-    setTimeout(()=>{
+    const doPrint = ()=>{
       try{
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
-        // Cleanup after print
-        setTimeout(()=>{
-          iframe.remove();
-        }, 1000);
+        setTimeout(()=>{ iframe.remove(); }, 1000);
       }catch(e){
         toast('error','فشل الطباعة', e.message);
         iframe.remove();
       }
-    }, 300); // give time for fonts/images to load
+    };
+    // انتظر جاهزية خطوط الإطار (مع مهلة احتياطية) قبل الطباعة
+    let done = false;
+    const go = ()=>{ if(done) return; done = true; doPrint(); };
+    try{
+      const fonts = iframe.contentWindow.document.fonts;
+      if(fonts && fonts.ready){ fonts.ready.then(()=>setTimeout(go, 150)); }
+    }catch(e){}
+    setTimeout(go, 1200); // مهلة احتياطية إن لم تُحسم جاهزية الخطوط
   };
 
   // Write content via srcdoc (works on all modern browsers)
@@ -10203,6 +10208,36 @@ function loadScriptOnce(url, globalCheck){
   return p;
 }
 
+// هل في الكانفاس «حبر» (محتوى غير أبيض)؟ — لاكتشاف فشل foreignObjectRendering (صفحة بيضاء/ملوّثة)
+function __canvasHasInk(canvas){
+  try{
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    if(!w || !h) return false;
+    const stepX = Math.max(1, Math.floor(w/40)), stepY = Math.max(1, Math.floor(h/60));
+    for(let y=0; y<h; y+=stepY){
+      for(let x=0; x<w; x+=stepX){
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        if(d[3] > 10 && (d[0] < 245 || d[1] < 245 || d[2] < 245)) return true;
+      }
+    }
+    return false;
+  }catch(e){ return false; } // ملوّث (صورة عابرة النطاق) = لا يمكن استخدامه لاحقاً → ارجع للاحتياطي
+}
+
+// يرسم صفحة التقرير إلى كانفاس مع تشكيل عربي صحيح:
+// المحاولة الأولى بـ foreignObjectRendering (نص أصلي يحافظ على وصل الحروف)،
+// فإن أنتجت صفحة بيضاء (قيد معروف في كروم) يُعاد بالطريقة التقليدية.
+async function __renderReportCanvas(page, scale){
+  const base = { scale, useCORS:true, backgroundColor:'#ffffff', logging:false,
+                 windowWidth:page.scrollWidth, windowHeight:page.scrollHeight };
+  try{
+    const c = await html2canvas(page, { ...base, foreignObjectRendering:true });
+    if(__canvasHasInk(c)) return c;
+  }catch(e){ /* تجاهل وارجع للاحتياطي */ }
+  return await html2canvas(page, { ...base, foreignObjectRendering:false });
+}
+
 async function executePrintAsPDF(){
   const content = document.getElementById('pp-content');
   if(!content || !content.innerHTML.trim()){
@@ -10242,6 +10277,9 @@ async function executePrintAsPDF(){
     const pdfWidth = 210;
     const pdfHeight = 297;
 
+    // انتظر تحميل الخطوط لضمان تشكيل عربي صحيح قبل الالتقاط
+    try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
+
     // دقة أعلى لنصّ أحدّ (3× أو حسب كثافة الشاشة) — مع حدّ أعلى لتفادي استهلاك الذاكرة
     const renderScale = Math.min(3, Math.max(2, Math.round((window.devicePixelRatio||1) * 2)));
     let firstPage = true;
@@ -10250,15 +10288,8 @@ async function executePrintAsPDF(){
       const page = pages[i];
       toast('info','جاري التصدير', `صفحة ${i+1} من ${pages.length}...`);
 
-      // Render this page to canvas
-      const canvas = await html2canvas(page, {
-        scale: renderScale,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        windowWidth: page.scrollWidth,
-        windowHeight: page.scrollHeight
-      });
+      // Render this page to canvas (foreignObjectRendering لتصحيح العربية + احتياطي تلقائي)
+      const canvas = await __renderReportCanvas(page, renderScale);
 
       // بكسلات لكل مم (عرض A4 = 210مم)، ومنها ارتفاع الصفحة الواحدة بالبكسل
       const pxPerMm = canvas.width / pdfWidth;
