@@ -3646,6 +3646,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
               نسخ
             </button>
+            <button class="btn btn-light btn-sm" id="btn-print-report" style="display:none" title="طباعة / تصدير التقرير بالهوية الرسمية">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+              طباعة / تصدير
+            </button>
           </div>
           <div class="report-output" id="report-output">
             <div class="report-empty">
@@ -15524,6 +15528,11 @@ function renderAIPage(){
     const text = document.getElementById('report-output').innerText;
     navigator.clipboard?.writeText(text).then(()=>toast('success','تم النسخ','يمكنك لصق التقرير في أي مكان'));
   };
+  const prtBtn = document.getElementById('btn-print-report');
+  if(prtBtn) prtBtn.onclick = ()=>{
+    if(!ANALYTICS_LAST_REPORT || !ANALYTICS_LAST_REPORT.text){ toast('info','لا يوجد','ولّد التقرير أولاً'); return; }
+    printAIReport({title:ANALYTICS_LAST_REPORT.title||'تقرير تحليلي', subtitle:'تحليل ذكي لبيانات الأصناف والأسعار'}, ANALYTICS_LAST_REPORT.text);
+  };
   // Show first tool by default
   if(!AI_ACTIVE_TOOL) switchAITool('anomaly');
 }
@@ -15745,6 +15754,7 @@ function renderRecommendations(category){
 }
 
 /* ── AI REPORT GENERATOR ── */
+let ANALYTICS_LAST_REPORT = null; // {title, text} لآخر تقرير مُولّد (للطباعة/التصدير)
 async function generateAIReport(){
   const btn = document.getElementById('btn-gen-report');
   const out = document.getElementById('report-output');
@@ -15986,7 +15996,9 @@ ${topCats.map(([c,d],idx)=>`${idx+1}. ${c} - ${d.count} صنف بقيمة إجم
 
     // Final render
     streamEl.innerHTML = formatMarkdownReport(fullText);
+    ANALYTICS_LAST_REPORT = { title: reportTypeName, text: fullText };
     document.getElementById('btn-copy-report').style.display='';
+    const _pr=document.getElementById('btn-print-report'); if(_pr) _pr.style.display='';
     toast('success','تم التوليد','التقرير جاهز');
   } catch(e) {
     let errorMsg = 'تعذر توليد التقرير.';
