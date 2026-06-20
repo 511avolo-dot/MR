@@ -10511,6 +10511,445 @@ async function printHistoryReport(fromDate, toDate, options){
 /* ============================================================
    REPORTS CENTER — مركز التقارير الموحّد
    ============================================================ */
+
+/* ---- مُساعد تحليلي مشترك لتقارير الأصناف/الأسعار ---- */
+function priceAnalytics(){
+  const items = STATE.items||[];
+  const priced = items.filter(i=>i.last_price!=null);
+  const unpriced = items.filter(i=>i.last_price==null);
+  const totalValue = priced.reduce((s,i)=>s+(Number(i.last_price)||0),0);
+  const avgPrice = priced.length? totalValue/priced.length : 0;
+  const varItems = priced.filter(i=>Number(i.avg_price)>0)
+    .map(i=>({...i, v:(Number(i.max_price)-Number(i.min_price))/Number(i.avg_price)*100}))
+    .sort((a,b)=>b.v-a.v);
+  const savItems = priced.filter(i=>Number(i.last_price)>Number(i.min_price))
+    .map(i=>({...i, save:Number(i.last_price)-Number(i.min_price), savePct:(Number(i.last_price)-Number(i.min_price))/Number(i.last_price)*100}))
+    .sort((a,b)=>b.save-a.save);
+  const totalSave = savItems.reduce((s,i)=>s+i.save,0);
+  const catMap={};
+  priced.forEach(i=>{ const c=i.category||'(بدون فئة)'; (catMap[c]=catMap[c]||{count:0,value:0}); catMap[c].count++; catMap[c].value+=Number(i.last_price)||0; });
+  const cats=Object.entries(catMap).map(([name,v])=>({name,count:v.count,value:v.value,avg:v.value/v.count})).sort((a,b)=>b.value-a.value);
+  return { items, priced, unpriced, totalValue, avgPrice, varItems, savItems, totalSave, cats };
+}
+
+/* ===== تقارير المشتريات ===== */
+function buildPOListReport(opts){
+  opts=opts||{};
+  let list=[...(STATE.purchaseOrders||[])];
+  if(opts.status) list=list.filter(o=>o.status===opts.status);
+  if(opts.sector) list=list.filter(o=>o.sector===opts.sector);
+  if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
+  if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
+  list.sort((a,b)=>(poToISO(b.issue_date)||'').localeCompare(poToISO(a.issue_date)||''));
+  const totSub=list.reduce((s,o)=>s+(Number(o.subtotal)||0),0);
+  const totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
+  const rows=list.map(o=>`<tr>
+    <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+    <td class="center">${escapeHtml(poFmtDate(o.issue_date))}</td>
+    <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(o.sector||'—')}</td>
+    <td class="num price">${fmtPrice(o.total)}</td>
+    <td class="center"><span class="print-badge ${poStatusBadgeClass(o.status)}">${escapeHtml(o.status||'—')}</span></td>
+    <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا توجد أوامر مطابقة للمرشّحات</td></tr>';
+  const filterDesc=[opts.status?('الحالة: '+opts.status):'', opts.sector?('القطاع: '+opts.sector):'', opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):''].filter(Boolean).join(' · ')||'كل الأوامر';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">عدد الأوامر</span><span class="value">${list.length}</span></div>
+      <div class="print-stat-card"><span class="label">قبل الضريبة</span><span class="value">${fmtPrice(totSub)}</span><span class="sub">ر.س</span></div>
+      <div class="print-stat-card"><span class="label">شامل الضريبة</span><span class="value">${fmtPrice(totTot)}</span><span class="sub">ر.س</span></div>
+    </div>
+    <div class="print-note-box"><span class="nb-title">المرشّحات المطبّقة</span>${escapeHtml(filterDesc)}</div>
+    <div class="print-section">
+      <div class="print-section-title">سجل أوامر الشراء</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th class="center">التاريخ</th><th>المورد</th><th>القطاع</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="4">الإجمالي (${list.length} أمر)</td><td class="num">${fmtPrice(totTot)}</td><td colspan="2"></td></tr></tfoot>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
+}
+
+function buildPOOverdueReport(){
+  const list=(STATE.purchaseOrders||[]).filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0)
+    .sort((a,b)=>(b.days_delayed||0)-(a.days_delayed||0));
+  const esc=list.filter(o=>(o.days_delayed||0)>30);
+  const totVal=list.reduce((s,o)=>s+(Number(o.total)||0),0);
+  const rows=list.map(o=>`<tr class="${(o.days_delayed||0)>30?'award-row':''}">
+    <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+    <td>${escapeHtml(o.supplier||'—')}</td>
+    <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
+    <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${o.days_delayed} يوم</span></td>
+    <td class="center">${poCurrentStageAge(o)} يوم</td>
+    <td>${escapeHtml(o.delay_reason||'غير محدد')}</td>
+    <td class="num price">${fmtPrice(o.total)}</td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#1f7a55">لا توجد أوامر متأخرة 👍</td></tr>';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">أوامر متأخرة</span><span class="value">${list.length}</span></div>
+      <div class="print-stat-card"><span class="label">تصعيد فوري (>30 يوم)</span><span class="value" style="color:#b13434">${esc.length}</span></div>
+      <div class="print-stat-card"><span class="label">قيمتها الإجمالية</span><span class="value">${fmtPrice(totVal)}</span></div>
+    </div>
+    <div class="print-note-box danger"><span class="nb-title">تنبيه التصعيد</span>الصفوف المظلّلة تجاوزت 30 يوم تأخير وتستوجب تصعيداً فورياً مع المورد أو الجهة المسؤولة.</div>
+    <div class="print-section">
+      <div class="print-section-title">الأوامر المتأخرة (الأكثر تأخيراً أولاً)</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th class="center">التسليم المتوقع</th><th class="center">التأخير</th><th class="center">عمر المرحلة</th><th>السبب</th><th class="num">القيمة</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · OVERDUE & ESCALATION', title:'تقرير المتأخرات والتصعيد', subtitle:'أوامر الشراء المتأخرة عن موعد التسليم', watermark: esc.length?'تصعيد':''}, body);
+}
+
+function buildPOFinanceReport(){
+  const fin=['تسليم للإدارة المالية','تم التحويل'];
+  const list=(STATE.purchaseOrders||[]).filter(o=>fin.includes(o.status))
+    .sort((a,b)=>(poToISO(a.expected_delivery)||'').localeCompare(poToISO(b.expected_delivery)||''));
+  const awaiting=list.filter(o=>o.status==='تسليم للإدارة المالية');
+  const transferred=list.filter(o=>o.status==='تم التحويل');
+  const totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
+  const awTot=awaiting.reduce((s,o)=>s+(Number(o.total)||0),0);
+  const rows=list.map(o=>`<tr>
+    <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+    <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(o.payment_method||'—')}</td>
+    <td class="center"><span class="print-badge ${o.status==='تم التحويل'?'ok':'warn'}">${escapeHtml(o.status)}</span></td>
+    <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
+    <td class="num price">${fmtPrice(o.total)}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="center" style="padding:16px;color:#888">لا توجد أوامر لدى الإدارة المالية</td></tr>';
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">إجمالي الأوامر المالية</span><span class="value">${list.length}</span></div>
+      <div class="print-stat-card"><span class="label">بانتظار التحويل</span><span class="value" style="color:#9A7A45">${awaiting.length}</span></div>
+      <div class="print-stat-card"><span class="label">تم التحويل</span><span class="value" style="color:#1f7a55">${transferred.length}</span></div>
+      <div class="print-stat-card"><span class="label">الإجمالي</span><span class="value">${fmtPrice(totTot)}</span></div>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">الأوامر لدى الإدارة المالية</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>طريقة الدفع</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th><th class="num">الإجمالي</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="5">الإجمالي شامل الضريبة</td><td class="num">${fmtPrice(totTot)}</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="print-total-words"><strong>بانتظار التحويل كتابةً:</strong> ${escapeHtml(tafqitSAR(awTot))}</div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:'متابعة السداد والتحويلات المالية'}, body);
+}
+
+function buildPOCycleReport(){
+  const list=(STATE.purchaseOrders||[]).filter(o=>o.status!=='ملغى');
+  if(!list.length){ toast('info','لا بيانات','لا توجد أوامر لتحليل زمن الدورة'); return; }
+  const st=poStageStats(list);
+  const rows=st.avgByStage.map(s=>`<tr>
+    <td>${escapeHtml(s.stage)}</td>
+    <td class="center">${s.count}</td>
+    <td class="num">${escapeHtml(poFmtDuration(s.avg))}</td>
+  </tr>`).join('') || '<tr><td colspan="3" class="center" style="padding:14px;color:#888">لا توجد بيانات مراحل</td></tr>';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">متوسط زمن الدورة</span><span class="value" style="font-size:11.5px">${st.avgCycle!=null?escapeHtml(poFmtDuration(st.avgCycle)):'—'}</span><span class="sub">${st.cycleN} أمر مكتمل</span></div>
+      <div class="print-stat-card"><span class="label">المرحلة الأبطأ</span><span class="value" style="font-size:11.5px">${st.bottleneck?escapeHtml(st.bottleneck.stage):'—'}</span></div>
+      <div class="print-stat-card"><span class="label">أوامر نشطة</span><span class="value">${list.length}</span></div>
+    </div>
+    <div class="print-note-box"><span class="nb-title">زمن الدورة</span>متوسط الزمن من إصدار الأمر حتى التسليم الكامل، وتفصيل متوسط البقاء في كل مرحلة لكشف الاختناقات.</div>
+    <div class="print-section">
+      <div class="print-section-title">متوسط زمن كل مرحلة (الأبطأ أولاً)</div>
+      <table class="print-table"><thead><tr><th>المرحلة</th><th class="center">عدد المرّات</th><th class="num">متوسط المدة</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · CYCLE TIME', title:'تقرير زمن الدورة والاختناقات', subtitle:'تحليل مدة مراحل أوامر الشراء'}, body);
+}
+
+/* ===== تقارير الموردين ===== */
+function buildSupplierPerformanceReport(){
+  const pos=STATE.purchaseOrders||[];
+  const rows0=(STATE.suppliers||[]).map(s=>{
+    const sp=pos.filter(o=>o.supplier===s.name && o.status!=='ملغى');
+    const value=sp.reduce((a,o)=>a+(Number(o.total)||0),0);
+    const delivered=sp.filter(o=>o.status==='تسليم كامل');
+    const onTime=delivered.filter(o=>(o.days_delayed||0)===0).length;
+    const onTimeRate=delivered.length? onTime/delivered.length*100 : null;
+    return {name:s.name, offers:s.offers_count||0, poCount:sp.length, value, onTimeRate, rating:poSupplierRating(s.name)};
+  }).filter(x=>x.poCount>0 || x.offers>0).sort((a,b)=>b.value-a.value);
+  const rows=rows0.map((x,idx)=>`<tr>
+    <td class="center">${idx+1}</td>
+    <td>${escapeHtml(x.name||'—')}</td>
+    <td class="num">${x.offers}</td>
+    <td class="num">${x.poCount}</td>
+    <td class="num price">${fmtPrice(x.value)}</td>
+    <td class="center">${x.onTimeRate!=null?`<span class="print-badge ${x.onTimeRate>=80?'ok':x.onTimeRate>=50?'warn':'danger'}">${x.onTimeRate.toFixed(0)}%</span>`:'—'}</td>
+    <td class="center">${x.rating!=null?('★ '+x.rating.toFixed(1)):'—'}</td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا توجد بيانات موردين</td></tr>';
+  const totVal=rows0.reduce((s,x)=>s+x.value,0);
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">موردون نشطون</span><span class="value">${rows0.length}</span></div>
+      <div class="print-stat-card"><span class="label">إجمالي قيمة الأوامر</span><span class="value">${fmtPrice(totVal)}</span></div>
+      <div class="print-stat-card"><span class="label">إجمالي الموردين</span><span class="value">${(STATE.suppliers||[]).length}</span></div>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">أداء الموردين (مرتّب بقيمة الأوامر)</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:30px">#</th><th>المورد</th><th class="num">العروض</th><th class="num">الأوامر</th><th class="num">قيمتها</th><th class="center">الالتزام بالموعد</th><th class="center">التقييم</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER PERFORMANCE', title:'تقرير تقييم وأداء الموردين', subtitle:'العروض، الأوامر، الالتزام بالمواعيد، والتقييم'}, body);
+}
+
+function buildSupplierDirectoryReport(){
+  const sups=[...(STATE.suppliers||[])].sort((a,b)=>(b.offers_count||0)-(a.offers_count||0));
+  const rows=sups.map((s,idx)=>`<tr>
+    <td class="center">${idx+1}</td>
+    <td>${escapeHtml(s.name||'—')}</td>
+    <td>${escapeHtml(s.contact||s.sales_name||'—')}</td>
+    <td dir="ltr" style="text-align:start">${escapeHtml(s.mobile||s.phone||'—')}</td>
+    <td dir="ltr" style="text-align:start">${escapeHtml(s.email||'—')}</td>
+    <td>${escapeHtml(s.specialty||s.specialties||'—')}</td>
+    <td class="num">${s.offers_count||0}</td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا يوجد موردون</td></tr>';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(2,1fr)">
+      <div class="print-stat-card accent"><span class="label">عدد الموردين</span><span class="value">${sups.length}</span></div>
+      <div class="print-stat-card"><span class="label">إجمالي العروض المسجّلة</span><span class="value">${sups.reduce((a,s)=>a+(s.offers_count||0),0)}</span></div>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">دليل الموردين المعتمدين</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:30px">#</th><th>المورد</th><th>جهة الاتصال</th><th>الجوال</th><th>البريد</th><th>التخصص</th><th class="num">العروض</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER DIRECTORY', title:'دليل الموردين الكامل', subtitle:'بيانات الاتصال والتخصصات وعدد العروض'}, body);
+}
+
+/* ===== تقارير الأصناف والأسعار ===== */
+function buildSavingsReport(){
+  const a=priceAnalytics();
+  const list=a.savItems.slice(0,40);
+  const rows=list.map((i,idx)=>`<tr>
+    <td class="center">${idx+1}</td>
+    <td dir="ltr" style="text-align:start">${escapeHtml(i.code)}</td>
+    <td>${escapeHtml(i.name)}</td>
+    <td class="num">${fmtPrice(i.last_price)}</td>
+    <td class="num">${fmtPrice(i.min_price)}</td>
+    <td class="num price">${fmtPrice(i.save)}</td>
+    <td class="center"><span class="print-badge ${i.savePct>=20?'danger':i.savePct>=10?'warn':'ok'}">${i.savePct.toFixed(0)}%</span></td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#1f7a55">لا توجد فجوات سعرية — كل الأصناف عند أدنى سعر مسجّل 👍</td></tr>';
+  const avgPct = a.savItems.length? (a.savItems.reduce((s,i)=>s+i.savePct,0)/a.savItems.length):0;
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">فرص التوفير</span><span class="value">${a.savItems.length}</span><span class="sub">صنف فوق أدنى سعر</span></div>
+      <div class="print-stat-card"><span class="label">التوفير المحتمل</span><span class="value">${fmtPrice(a.totalSave)}</span><span class="sub">ر.س</span></div>
+      <div class="print-stat-card"><span class="label">متوسط الفجوة</span><span class="value">${avgPct.toFixed(0)}%</span></div>
+    </div>
+    <div class="print-note-box"><span class="nb-title">طريقة الحساب</span>الفجوة = (آخر سعر − أدنى سعر مسجّل) لكل صنف، وتمثّل توفيراً محتملاً عند التفاوض للوصول لأدنى سعر سابق.</div>
+    <div class="print-section">
+      <div class="print-section-title">أعلى الأصناف فرصةً للتوفير (${list.length})</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:30px">#</th><th>الرمز</th><th>الصنف</th><th class="num">آخر سعر</th><th class="num">أدنى سعر</th><th class="num">التوفير</th><th class="center">الفجوة</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · COST SAVINGS', title:'تقرير فرص التوفير', subtitle:'تحليل الفجوات السعرية للأصناف المُسعّرة'}, body);
+}
+
+function buildVolatilityReport(){
+  const a=priceAnalytics();
+  const list=a.varItems.filter(i=>i.v>0).slice(0,40);
+  const volatileCount=a.varItems.filter(i=>i.v>20).length;
+  const rows=list.map((i,idx)=>`<tr>
+    <td class="center">${idx+1}</td>
+    <td dir="ltr" style="text-align:start">${escapeHtml(i.code)}</td>
+    <td>${escapeHtml(i.name)}</td>
+    <td class="num">${fmtPrice(i.min_price)}</td>
+    <td class="num">${fmtPrice(i.avg_price)}</td>
+    <td class="num">${fmtPrice(i.max_price)}</td>
+    <td class="center"><span class="print-badge ${i.v>20?'danger':i.v>10?'warn':'ok'}">${i.v.toFixed(0)}%</span></td>
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا توجد بيانات كافية لحساب التذبذب</td></tr>';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">عالية التذبذب</span><span class="value">${volatileCount}</span><span class="sub">تباين > 20%</span></div>
+      <div class="print-stat-card"><span class="label">أصناف مُسعّرة</span><span class="value">${a.priced.length}</span></div>
+      <div class="print-stat-card"><span class="label">أعلى تذبذب</span><span class="value">${list[0]?list[0].v.toFixed(0)+'%':'—'}</span></div>
+    </div>
+    <div class="print-note-box"><span class="nb-title">مؤشر التذبذب</span>نسبة التباين = (أعلى − أدنى) ÷ المتوسط. ارتفاعها يشير إلى تقلّب سعري يستدعي تثبيت الأسعار أو مراجعة الموردين.</div>
+    <div class="print-section">
+      <div class="print-section-title">أعلى الأصناف تذبذباً (${list.length})</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:30px">#</th><th>الرمز</th><th>الصنف</th><th class="num">أدنى</th><th class="num">متوسط</th><th class="num">أعلى</th><th class="center">التباين</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PRICE VOLATILITY', title:'تقرير تذبذب الأسعار', subtitle:'الأصناف الأكثر تقلّباً سعرياً'}, body);
+}
+
+function buildCoverageReport(){
+  const items=STATE.items||[];
+  const total=items.length;
+  const priced=items.filter(i=>i.last_price!=null).length;
+  const coverage= total? priced/total*100 : 0;
+  const byCat={};
+  items.forEach(i=>{ const c=i.category||'(بدون فئة)'; (byCat[c]=byCat[c]||{p:0,u:0}); if(i.last_price!=null) byCat[c].p++; else byCat[c].u++; });
+  const catRows=Object.entries(byCat).map(([c,v])=>({c,p:v.p,u:v.u,t:v.p+v.u,cov:(v.p+v.u)?v.p/(v.p+v.u)*100:0})).sort((a,b)=>b.t-a.t)
+    .map(x=>`<tr><td>${escapeHtml(x.c)}</td><td class="num">${x.t}</td><td class="num">${x.p}</td><td class="num">${x.u}</td><td class="center"><span class="print-badge ${x.cov>=80?'ok':x.cov>=50?'warn':'danger'}">${x.cov.toFixed(0)}%</span></td></tr>`).join('');
+  const unpriced=items.filter(i=>i.last_price==null).slice(0,50);
+  const unpRows=unpriced.map((i,idx)=>`<tr><td class="center">${idx+1}</td><td dir="ltr" style="text-align:start">${escapeHtml(i.code)}</td><td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.category||'—')}</td></tr>`).join('') || '<tr><td colspan="4" class="center" style="padding:14px;color:#1f7a55">كل الأصناف مُسعّرة 👍</td></tr>';
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">إجمالي الأصناف</span><span class="value">${total}</span></div>
+      <div class="print-stat-card"><span class="label">مُسعّرة</span><span class="value" style="color:#1f7a55">${priced}</span></div>
+      <div class="print-stat-card"><span class="label">بدون سعر</span><span class="value" style="color:#b13434">${total-priced}</span></div>
+      <div class="print-stat-card"><span class="label">نسبة التغطية</span><span class="value">${coverage.toFixed(0)}%</span></div>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">التغطية حسب الفئة</div>
+      <table class="print-table"><thead><tr><th>الفئة</th><th class="num">الكل</th><th class="num">مُسعّر</th><th class="num">بدون سعر</th><th class="center">التغطية</th></tr></thead><tbody>${catRows}</tbody></table>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">أصناف بحاجة لتسعير ${(total-priced)>unpriced.length?`(أول ${unpriced.length} من ${total-priced})`:`(${unpriced.length})`}</div>
+      <table class="print-table"><thead><tr><th class="center" style="width:30px">#</th><th>الرمز</th><th>الصنف</th><th>الفئة</th></tr></thead><tbody>${unpRows}</tbody></table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PRICING COVERAGE', title:'تقرير تغطية التسعير', subtitle:'نسبة الأصناف المُسعّرة ومناطق النقص'}, body);
+}
+
+function buildCategoryReport(){
+  const a=priceAnalytics();
+  const rows=a.cats.map((c,idx)=>`<tr>
+    <td class="center">${idx+1}</td>
+    <td>${escapeHtml(c.name)}</td>
+    <td class="num">${c.count}</td>
+    <td class="num price">${fmtPrice(c.value)}</td>
+    <td class="num">${fmtPrice(c.avg)}</td>
+    <td class="center">${a.totalValue? (c.value/a.totalValue*100).toFixed(1):0}%</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="center" style="padding:16px;color:#888">لا توجد أصناف مُسعّرة</td></tr>';
+  const body=`
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card accent"><span class="label">عدد الفئات</span><span class="value">${a.cats.length}</span></div>
+      <div class="print-stat-card"><span class="label">إجمالي القيمة</span><span class="value">${fmtPrice(a.totalValue)}</span><span class="sub">ر.س (آخر الأسعار)</span></div>
+      <div class="print-stat-card"><span class="label">متوسط الصنف</span><span class="value">${fmtPrice(a.avgPrice)}</span></div>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">توزيع القيمة حسب الفئة</div>
+      <table class="print-table"><thead><tr><th class="center" style="width:30px">#</th><th>الفئة</th><th class="num">عدد الأصناف</th><th class="num">إجمالي القيمة</th><th class="num">متوسط السعر</th><th class="center">الحصة</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · CATEGORY ANALYSIS', title:'تقرير تحليل الفئات', subtitle:'توزيع القيمة والأعداد على فئات الأصناف'}, body);
+}
+
+/* ===== تقارير سحابية: طلبات التسعير / التسجيلات ===== */
+async function buildRFQStatusReport(){
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)){ toast('info','يتطلب السحابة','تقرير طلبات التسعير يحتاج اتصالاً سحابياً'); return; }
+  const list=await rfqList();
+  if(!list.length){ toast('info','لا بيانات','لا توجد طلبات تسعير'); return; }
+  const SM={open:{l:'مفتوح',c:'info'}, closed:{l:'مغلق',c:'neutral'}, awarded:{l:'مُرسى',c:'ok'}, cancelled:{l:'ملغى',c:'danger'}};
+  const counts={};
+  list.forEach(r=>{ counts[r.status]=(counts[r.status]||0)+1; });
+  const rows=list.map(r=>{
+    const m=SM[r.status]||{l:r.status||'—',c:'neutral'};
+    const linesN=Array.isArray(r.lines)?r.lines.length:0;
+    const supsN=Array.isArray(r.suppliers)?r.suppliers.length:0;
+    return `<tr>
+      <td>${escapeHtml(r.title||'—')}</td>
+      <td class="center"><span class="print-badge ${m.c}">${escapeHtml(m.l)}</span></td>
+      <td class="num">${supsN}</td>
+      <td class="num">${linesN}</td>
+      <td class="num price">${r.budget?fmtPrice(r.budget):'—'}</td>
+      <td>${escapeHtml(r.awarded_to||'—')}</td>
+      <td class="center">${escapeHtml(r.deadline||'—')}</td>
+    </tr>`;
+  }).join('');
+  const summary=Object.entries(counts).map(([k,v])=>{const m=SM[k]||{l:k,c:'neutral'};return `<div class="print-stat-card"><span class="label">${escapeHtml(m.l)}</span><span class="value">${v}</span></div>`;}).join('');
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">إجمالي الطلبات</span><span class="value">${list.length}</span></div>
+      ${summary}
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">طلبات عروض الأسعار</div>
+      <table class="print-table">
+        <thead><tr><th>العنوان</th><th class="center">الحالة</th><th class="num">الموردون</th><th class="num">البنود</th><th class="num">الميزانية</th><th>المُرسى عليه</th><th class="center">الموعد</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · RFQ STATUS', title:'تقرير حالة طلبات التسعير', subtitle:'متابعة طلبات عروض الأسعار والترسيات'}, body);
+}
+
+async function buildRegistrationsReport(opts){
+  opts=opts||{};
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)){ toast('info','يتطلب السحابة','تقرير التسجيلات يحتاج اتصالاً سحابياً'); return; }
+  let q=CLOUD.client.from(REG_TABLE).select('*').order('submitted_at',{ascending:false}).limit(200);
+  if(opts.status && opts.status!=='all') q=q.eq('status',opts.status);
+  const {data,error}=await q;
+  if(error){ toast('error','تعذّر الجلب', error.message); return; }
+  const list=data||[];
+  if(!list.length){ toast('info','لا بيانات','لا توجد طلبات تسجيل مطابقة'); return; }
+  const ST={pending:{l:'قيد المراجعة',c:'warn'},approved:{l:'مقبول',c:'ok'},rejected:{l:'مرفوض',c:'danger'},needs_revision:{l:'يحتاج تعديل',c:'info'}};
+  const counts={};
+  list.forEach(r=>{counts[r.status]=(counts[r.status]||0)+1;});
+  const rows=list.map((r,idx)=>{
+    const m=ST[r.status]||{l:r.status||'—',c:'neutral'};
+    return `<tr>
+      <td class="center">${idx+1}</td>
+      <td>${escapeHtml(r.legal_name_ar||r.trade_name||'—')}</td>
+      <td class="center"><span class="print-badge ${m.c}">${escapeHtml(m.l)}</span></td>
+      <td>${escapeHtml(r.city||'—')}</td>
+      <td>${escapeHtml(r.contact_name||'—')}</td>
+      <td dir="ltr" style="text-align:start">${escapeHtml(r.contact_mobile||r.phone||'—')}</td>
+      <td class="center">${escapeHtml((r.submitted_at||'').slice(0,10)||'—')}</td>
+    </tr>`;
+  }).join('');
+  const summary=['pending','approved','needs_revision','rejected'].map(k=>`<div class="print-stat-card"><span class="label">${ST[k].l}</span><span class="value">${counts[k]||0}</span></div>`).join('');
+  const body=`
+    <div class="print-grid-stats">${summary}</div>
+    <div class="print-section">
+      <div class="print-section-title">طلبات تسجيل الموردين (${list.length})</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:30px">#</th><th>الاسم النظامي</th><th class="center">الحالة</th><th>المدينة</th><th>جهة الاتصال</th><th>الجوال</th><th class="center">تاريخ التقديم</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER REGISTRATIONS', title:'تقرير طلبات تسجيل الموردين', subtitle:'حالة طلبات الانضمام للموردين'}, body);
+}
+
+/* ===== تقرير سجل التدقيق ===== */
+function buildAuditReport(opts){
+  opts=opts||{};
+  let list=loadAudit();
+  if(opts.action) list=list.filter(e=>e.action===opts.action);
+  if(opts.type)   list=list.filter(e=>e.type===opts.type);
+  if(opts.from){ const f=new Date(opts.from).getTime(); list=list.filter(e=>e.ts>=f); }
+  if(opts.to){   const t=new Date(opts.to).getTime()+86400000; list=list.filter(e=>e.ts<=t); }
+  if(!list.length){ toast('info','لا بيانات','لا توجد سجلات تدقيق مطابقة على هذا الجهاز'); return; }
+  const ACT={add:'إضافة',edit:'تعديل',delete:'حذف',login:'دخول',logout:'خروج',login_failed:'دخول فاشل',approve:'اعتماد',award:'ترسية',anomaly:'شذوذ سعري'};
+  const TYP={item:'صنف',supplier:'مورد',entry:'سعر',auth:'دخول',cloud:'سحابة',user:'مستخدم',po:'أمر شراء',rfq:'طلب تسعير'};
+  const show=list.slice(0,200);
+  const rows=show.map(e=>`<tr>
+    <td class="center" dir="ltr">${escapeHtml(new Date(e.ts).toLocaleString('en-GB'))}</td>
+    <td>${escapeHtml(e.user||'—')}</td>
+    <td class="center">${escapeHtml(ACT[e.action]||e.action||'—')}</td>
+    <td class="center">${escapeHtml(TYP[e.type]||e.type||'—')}</td>
+    <td dir="ltr" style="text-align:start">${escapeHtml(String(e.target||'—'))}</td>
+  </tr>`).join('');
+  const counts={};
+  list.forEach(e=>{counts[e.action]=(counts[e.action]||0)+1;});
+  const topActions=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,4)
+    .map(([k,v])=>`<div class="print-stat-card"><span class="label">${escapeHtml(ACT[k]||k)}</span><span class="value">${v}</span></div>`).join('');
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">إجمالي السجلات</span><span class="value">${list.length}</span></div>
+      ${topActions}
+    </div>
+    <div class="print-note-box"><span class="nb-title">ملاحظة</span>يعرض هذا التقرير سجل التدقيق المحلي على هذا الجهاز (حتى 500 إجراء أخير)${show.length<list.length?` — معروض أول ${show.length}`:''}.</div>
+    <div class="print-section">
+      <div class="print-section-title">سجل الإجراءات</div>
+      <table class="print-table">
+        <thead><tr><th class="center">الوقت</th><th>المستخدم</th><th class="center">الإجراء</th><th class="center">النوع</th><th>الهدف</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({eyebrow:'AL-DEYABI GROUP · AUDIT TRAIL', title:'تقرير سجل التدقيق', subtitle:'سجل إجراءات المستخدمين على النظام'}, body);
+}
+
 // تعريف التقارير: كل تقرير يصف حقوله ودالة تشغيله. الكل يمرّ عبر معاينة الطباعة الموحّدة.
 function reportsCatalog(){
   const cats = [...new Set(STATE.items.map(i=>i.category).filter(Boolean))].sort();
@@ -10520,8 +10959,14 @@ function reportsCatalog(){
   const supOptsPick = ['<option value="">— اختر مورداً —</option>'].concat(sups.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
   const today = new Date().toISOString().slice(0,10);
   const monthAgo = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const poStatusOpts = ['<option value="">كل الحالات</option>'].concat(PO_ENUMS.status.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  const poSectorOpts = ['<option value="">كل القطاعات</option>'].concat(PO_ENUMS.sector.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  const regStatusOpts = [['all','كل الحالات'],['pending','قيد المراجعة'],['approved','مقبول'],['needs_revision','يحتاج تعديل'],['rejected','مرفوض']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+  const auditActOpts = [['','كل الإجراءات'],['add','إضافة'],['edit','تعديل'],['delete','حذف'],['login','دخول'],['approve','اعتماد'],['award','ترسية']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+  const auditTypeOpts = [['','كل الأنواع'],['item','صنف'],['supplier','مورد'],['entry','سعر'],['po','أمر شراء'],['rfq','طلب تسعير'],['user','مستخدم'],['auth','دخول']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
 
   return [
+    /* ===== المشتريات ===== */
     { group:'المشتريات', perm:null, icon:'<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>',
       title:'تقرير لوحة المشتريات', desc:'ملخص إداري: مؤشرات الأداء، التوزيع حسب القطاع، أعلى الموردين، وأبرز المتأخرات.',
       fields:[], run:()=>poPrintDashboard() },
@@ -10530,6 +10975,45 @@ function reportsCatalog(){
       title:'التقرير الإداري الذكي', desc:'تحليل تنفيذي مولّد بالذكاء الاصطناعي لحالة أوامر الشراء وجذور التأخير والتوصيات.',
       fields:[], run:()=>poGenerateAIReport() },
 
+    { group:'المشتريات', perm:null, icon:'<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>',
+      title:'سجل أوامر الشراء التفصيلي', desc:'قائمة أوامر الشراء مع إجمالياتها — قابلة للتصفية بالحالة والقطاع والفترة.',
+      fields:[
+        {type:'select', key:'status', label:'الحالة', html:poStatusOpts},
+        {type:'select', key:'sector', label:'القطاع', html:poSectorOpts},
+        {type:'date', key:'from', label:'من تاريخ'},
+        {type:'date', key:'to', label:'إلى تاريخ'},
+      ],
+      run:(v)=>buildPOListReport({status:v.status||'', sector:v.sector||'', from:v.from||'', to:v.to||''}) },
+
+    { group:'المشتريات', perm:null, icon:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+      title:'تقرير المتأخرات والتصعيد', desc:'الأوامر المتأخرة عن موعد التسليم مرتّبة بالأكثر تأخيراً، مع إبراز ما يستوجب التصعيد.',
+      fields:[], run:()=>buildPOOverdueReport() },
+
+    { group:'المشتريات', perm:null, icon:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+      title:'الأوامر لدى الإدارة المالية', desc:'متابعة أوامر الشراء بانتظار التحويل أو المُحوّلة مع طريقة الدفع والإجماليات.',
+      fields:[], run:()=>buildPOFinanceReport() },
+
+    { group:'المشتريات', perm:null, icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      title:'زمن الدورة والاختناقات', desc:'متوسط زمن دورة أمر الشراء وتفصيل مدة كل مرحلة لكشف نقاط التعثّر.',
+      fields:[], run:()=>buildPOCycleReport() },
+
+    /* ===== الموردون ===== */
+    { group:'الموردون', perm:'can_export', icon:'<path d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m0 0a4 4 0 110-8 4 4 0 010 8zm10 0a4 4 0 110-8 4 4 0 010 8z"/>',
+      title:'تقرير مورد', desc:'بطاقة مورد تفصيلية: الإحصاءات، الأصناف المُورَّدة، وسجل العروض.',
+      fields:[
+        {type:'select', key:'supplier', label:'المورد', html:supOptsPick, required:true},
+      ],
+      run:(v)=>{ if(!v.supplier){ toast('info','اختر مورداً','حدّد المورد أولاً'); return; } printSupplierReport(v.supplier); } },
+
+    { group:'الموردون', perm:'can_export', icon:'<path d="M18 20V10M12 20V4M6 20v-6"/>',
+      title:'تقييم وأداء الموردين', desc:'لكل مورد: عدد العروض، أوامر الشراء وقيمتها، نسبة الالتزام بالموعد، والتقييم.',
+      fields:[], run:()=>buildSupplierPerformanceReport() },
+
+    { group:'الموردون', perm:'can_export', icon:'<path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',
+      title:'دليل الموردين الكامل', desc:'دليل بيانات الاتصال والتخصصات لكل الموردين المعتمدين.',
+      fields:[], run:()=>buildSupplierDirectoryReport() },
+
+    /* ===== الأصناف والأسعار ===== */
     { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>',
       title:'كتالوج قائمة الأسعار', desc:'قائمة الأصناف المُسعّرة مع آخر سعر معتمد — قابلة للتصفية حسب الفئة والمورد.',
       fields:[
@@ -10548,12 +11032,45 @@ function reportsCatalog(){
       ],
       run:(v)=>printHistoryReport(v.from||'', v.to||'', {supplier:v.supplier||'', category:v.category||''}) },
 
-    { group:'الموردون', perm:'can_export', icon:'<path d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m0 0a4 4 0 110-8 4 4 0 010 8zm10 0a4 4 0 110-8 4 4 0 010 8z"/>',
-      title:'تقرير مورد', desc:'بطاقة مورد تفصيلية: الإحصاءات، الأصناف المُورَّدة، وسجل العروض.',
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
+      title:'تقرير فرص التوفير', desc:'الأصناف التي يفوق آخر سعرها أدنى سعر مسجّل — مع التوفير المحتمل لكلٍّ والإجمالي.',
+      fields:[], run:()=>buildSavingsReport() },
+
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+      title:'تقرير تذبذب الأسعار', desc:'الأصناف الأكثر تقلّباً سعرياً بحسب نسبة التباين بين الأدنى والأعلى.',
+      fields:[], run:()=>buildVolatilityReport() },
+
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
+      title:'تقرير تغطية التسعير', desc:'نسبة الأصناف المُسعّرة مقابل غير المُسعّرة لكل فئة، وقائمة ما يحتاج تسعيراً.',
+      fields:[], run:()=>buildCoverageReport() },
+
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
+      title:'تقرير تحليل الفئات', desc:'توزيع القيمة وعدد الأصناف ومتوسط السعر والحصة لكل فئة.',
+      fields:[], run:()=>buildCategoryReport() },
+
+    /* ===== طلبات التسعير ===== */
+    { group:'طلبات التسعير', perm:'can_manage_rfq', icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8M16 17H8"/>',
+      title:'تقرير حالة طلبات التسعير', desc:'قائمة طلبات عروض الأسعار وحالاتها وميزانياتها والترسيات (يتطلب اتصالاً سحابياً).',
+      fields:[], run:()=>buildRFQStatusReport() },
+
+    /* ===== التسجيلات ===== */
+    { group:'التسجيلات', perm:'can_review_registrations', icon:'<path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>',
+      title:'تقرير طلبات تسجيل الموردين', desc:'طلبات انضمام الموردين وحالاتها وبيانات التواصل (يتطلب اتصالاً سحابياً).',
       fields:[
-        {type:'select', key:'supplier', label:'المورد', html:supOptsPick, required:true},
+        {type:'select', key:'status', label:'الحالة', html:regStatusOpts},
       ],
-      run:(v)=>{ if(!v.supplier){ toast('info','اختر مورداً','حدّد المورد أولاً'); return; } printSupplierReport(v.supplier); } },
+      run:(v)=>buildRegistrationsReport({status:v.status||'all'}) },
+
+    /* ===== النظام والتدقيق ===== */
+    { group:'النظام والتدقيق', perm:'can_view_audit', icon:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
+      title:'تقرير سجل التدقيق', desc:'سجل إجراءات المستخدمين المحلي على هذا الجهاز، قابل للتصفية بالإجراء والنوع والفترة.',
+      fields:[
+        {type:'select', key:'action', label:'الإجراء', html:auditActOpts},
+        {type:'select', key:'type', label:'النوع', html:auditTypeOpts},
+        {type:'date', key:'from', label:'من تاريخ'},
+        {type:'date', key:'to', label:'إلى تاريخ'},
+      ],
+      run:(v)=>buildAuditReport({action:v.action||'', type:v.type||'', from:v.from||'', to:v.to||''}) },
   ];
 }
 
@@ -10596,16 +11113,20 @@ function renderReportsCenter(){
   }).join('');
 }
 
-// يجمع قيم الحقول للبطاقة ويشغّل التقرير
-function reportRun(idx){
+// يجمع قيم الحقول للبطاقة ويشغّل التقرير (يدعم التقارير المتزامنة وغير المتزامنة)
+async function reportRun(idx){
   const def = __REPORTS_DEFS[idx];
   if(!def) return;
   if(def.perm && !requirePermission(def.perm, def.title)) return;
   const card = document.querySelector(`.rep-card[data-rep-idx="${idx}"]`);
   const vals = {};
   if(card) card.querySelectorAll('[data-rep-field]').forEach(el=>{ vals[el.getAttribute('data-rep-field')] = el.value; });
-  try{ def.run(vals); }
-  catch(e){ toast('error','تعذّر إنشاء التقرير', e.message||'خطأ غير متوقع'); }
+  const btn = card ? card.querySelector('.rep-card-foot .btn') : null;
+  const orig = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ جارٍ التحضير...'; }
+  try{ await def.run(vals); }
+  catch(e){ console.error('[reportRun]', e); toast('error','تعذّر إنشاء التقرير', e.message||'خطأ غير متوقع'); }
+  finally{ if(btn){ btn.disabled = false; btn.innerHTML = orig; } }
 }
 
 /* ============================================================ */
