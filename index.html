@@ -4670,13 +4670,13 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
       <span style="margin-inline-start:6px">معاينة التقرير</span>
     </div>
-    <button class="btn btn-light btn-sm" id="pp-print-btn">
+    <button class="btn btn-accent btn-sm" id="pp-print-btn" title="اطبع أو احفظ كـ PDF عبر المتصفح — نص قابل للتحديد وأعلى جودة (موصى به)">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
-      طباعة
+      طباعة / حفظ PDF
     </button>
-    <button class="btn btn-light btn-sm" id="pp-pdf-btn" title="تصدير ملف PDF حقيقي">
+    <button class="btn btn-light btn-sm" id="pp-pdf-btn" title="تصدير ملف PDF كصورة (للأرشفة) — للنص القابل للتحديد استخدم زر الطباعة">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h6"/></svg>
-      تصدير PDF
+      PDF (صورة)
     </button>
     <button class="btn btn-light btn-sm" id="pp-word-btn" title="تصدير ملف Word قابل للتعديل">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13l2 5 2-7 2 7 2-5"/></svg>
@@ -10169,13 +10169,17 @@ async function executePrintAsPDF(){
     const pdfWidth = 210;
     const pdfHeight = 297;
 
+    // دقة أعلى لنصّ أحدّ (3× أو حسب كثافة الشاشة) — مع حدّ أعلى لتفادي استهلاك الذاكرة
+    const renderScale = Math.min(3, Math.max(2, Math.round((window.devicePixelRatio||1) * 2)));
+    let firstPage = true;
+
     for(let i = 0; i < pages.length; i++){
       const page = pages[i];
       toast('info','جاري التصدير', `صفحة ${i+1} من ${pages.length}...`);
 
       // Render this page to canvas
       const canvas = await html2canvas(page, {
-        scale: 2, // high quality
+        scale: renderScale,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
@@ -10183,32 +10187,39 @@ async function executePrintAsPDF(){
         windowHeight: page.scrollHeight
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      // بكسلات لكل مم (عرض A4 = 210مم)، ومنها ارتفاع الصفحة الواحدة بالبكسل
+      const pxPerMm = canvas.width / pdfWidth;
+      const pageHeightPx = Math.floor(pdfHeight * pxPerMm);
 
-      if(i > 0) pdf.addPage();
-
-      // If image is taller than page, split it
-      if(imgHeight <= pdfHeight){
-        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+      if(canvas.height <= pageHeightPx + 2){
+        // يتسع في صفحة واحدة
+        if(!firstPage) pdf.addPage();
+        firstPage = false;
+        const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfWidth, imgHeight, undefined, 'FAST');
       } else {
-        // Multi-page: slice the image
-        let heightLeft = imgHeight;
-        let position = 0;
-        let firstSlice = true;
-        while(heightLeft > 0){
-          if(!firstSlice) pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-          heightLeft -= pdfHeight;
-          position -= pdfHeight;
-          firstSlice = false;
+        // تقطيع نظيف: كل صفحة شريحة مستقلة من الكانفاس المصدر (لا إعادة رسم للصورة كاملة)
+        let sy = 0;
+        while(sy < canvas.height){
+          const sliceHeightPx = Math.min(pageHeightPx, canvas.height - sy);
+          const slice = document.createElement('canvas');
+          slice.width = canvas.width;
+          slice.height = sliceHeightPx;
+          const ctx = slice.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, slice.width, slice.height);
+          ctx.drawImage(canvas, 0, sy, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
+          if(!firstPage) pdf.addPage();
+          firstPage = false;
+          const sliceHeightMm = sliceHeightPx / pxPerMm;
+          pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfWidth, sliceHeightMm, undefined, 'FAST');
+          sy += sliceHeightPx;
         }
       }
     }
 
     // Generate filename based on first page title
-    const titleEl = content.querySelector('.report-title, .doc-title, h1, h2');
+    const titleEl = content.querySelector('.print-doc-title, .report-title, .doc-title, h1, h2');
     const titleText = titleEl ? titleEl.textContent.trim().slice(0, 40) : 'تقرير';
     const safeTitle = titleText.replace(/[\/\\:*?"<>|]/g, '_');
     const dateStr = new Date().toISOString().slice(0,10);
