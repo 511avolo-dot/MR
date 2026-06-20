@@ -1089,7 +1089,7 @@ body.print-preview-active .print-document{display:block}
    so these @media print rules only need to handle the screen-level page hiding
    for the legacy ctrl+P case */
 @media print {
-  body{background:white !important;font-family:'Cairo','Tajawal',sans-serif !important}
+  body{background:white !important;font-family:'NeoSansArabic','Segoe UI',Tahoma,sans-serif !important}
   .sidebar, .topbar, .compare-bar, .cmd-overlay, .toast-container,
   .mobile-toggle, .modal-close, .modal-footer, [data-close-modal],
   .ai-fab, .ai-panel, .print-preview-overlay { display:none !important }
@@ -1101,13 +1101,12 @@ body.print-preview-active .print-document{display:block}
 .print-document{
   background:white;
   color:#000;
-  font-family:'Cairo','Tajawal','IBM Plex Sans Arabic',sans-serif;
+  font-family:'NeoSansArabic','Segoe UI',Tahoma,sans-serif;
   padding:18mm 16mm;
   font-size:12px;
   line-height:1.6;
   width:210mm;
   margin:0 auto;
-  min-height:280mm;
   box-sizing:border-box;
   position:relative;
 }
@@ -1117,6 +1116,11 @@ body.print-preview-active .print-document{display:block}
   border-bottom:3px solid #C4A265;padding-bottom:16px;margin-bottom:20px;
   background:linear-gradient(to left,#f9f6f0,#fff);border-radius:6px 6px 0 0;
   padding:14px 16px 16px;
+}
+/* ترويسة مختصرة (أوراق داخلية): شعار + بيانات المستند فقط */
+.print-header.compact{
+  grid-template-columns:auto auto;justify-content:space-between;
+  padding:10px 16px 12px;margin-bottom:14px;
 }
 .print-logo{
   width:180px;min-height:70px;
@@ -1159,7 +1163,7 @@ body.print-preview-active .print-document{display:block}
 }
 .print-section{margin-bottom:14px}
 .print-section-title{
-  font-family:'Fraunces','Cairo',serif;font-size:13px;font-weight:600;
+  font-family:'Fraunces','NeoSansArabic',serif;font-size:13px;font-weight:600;
   color:#231F20;border-bottom:1px solid #c5b994;padding-bottom:4px;margin-bottom:8px;
 }
 .print-info-grid{
@@ -1181,7 +1185,7 @@ body.print-preview-active .print-document{display:block}
 .print-table thead th{
   background:#231F20;color:#fff7e8;text-align:start;padding:7px 9px;
   font-weight:600;font-size:10.5px;border:1px solid #231F20;
-  font-family:'Cairo',sans-serif;
+  font-family:'NeoSansArabic','Segoe UI',Tahoma,sans-serif;
 }
 .print-table tbody td{
   padding:5px 9px;border:1px solid #d8d2bd;color:#222;
@@ -1200,13 +1204,14 @@ body.print-preview-active .print-document{display:block}
   padding:7px 9px;text-align:center;
 }
 .print-stat-card .label{font-size:9.5px;color:#666;display:block;margin-bottom:2px}
-.print-stat-card .value{font-size:13px;font-weight:700;color:#231F20;font-family:'Fraunces',serif}
+.print-stat-card .value{font-size:13px;font-weight:700;color:#231F20;font-family:'Fraunces','NeoSansArabic',serif}
 .print-grid-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
 .print-footer{
-  margin-top:20px;padding-top:12px;
+  margin-top:14px;padding-top:12px;
   border-top:1.5px solid #c5b994;
   display:flex;justify-content:space-between;align-items:flex-end;gap:20px;
   font-size:10px;color:#666;
+  page-break-inside:avoid;
 }
 .print-signature-box{
   border-top:1px solid #555;padding-top:6px;text-align:center;
@@ -1234,7 +1239,7 @@ body.print-preview-active .print-document{display:block}
 .print-doc-eyebrow{
   text-align:center;font-size:10px;font-weight:600;letter-spacing:0.18em;
   color:#9A7A45;text-transform:uppercase;margin-bottom:2px;
-  font-family:'Fraunces','Cairo',serif;
+  font-family:'Fraunces','NeoSansArabic',serif;
 }
 .print-doc-title{position:relative;z-index:1}
 /* Status / classification badges */
@@ -1292,7 +1297,7 @@ body.print-preview-active .print-document{display:block}
 /* AI report rendered sections */
 .print-ai-body{font-size:11.5px;line-height:1.95;color:#2a2a2a}
 .print-ai-body h3{
-  font-family:'Fraunces','Cairo',serif;font-size:13px;color:#231F20;font-weight:700;
+  font-family:'Fraunces','NeoSansArabic',serif;font-size:13px;color:#231F20;font-weight:700;
   border-inline-start:3px solid #C4A265;padding-inline-start:9px;margin:16px 0 7px;
 }
 .print-ai-body ul{margin:4px 0 10px;padding-inline-start:20px}
@@ -1302,12 +1307,12 @@ body.print-preview-active .print-document{display:block}
 /* Confidential / draft watermark */
 .print-watermark{
   position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);
-  font-family:'Fraunces','Cairo',serif;font-size:88px;font-weight:800;letter-spacing:0.05em;
+  font-family:'Fraunces','NeoSansArabic',serif;font-size:88px;font-weight:800;letter-spacing:0.05em;
   color:rgba(196,162,101,0.10);pointer-events:none;z-index:0;white-space:nowrap;user-select:none;
 }
 .print-document > *:not(.print-watermark){position:relative;z-index:1}
 /* Footer page meta refinement */
-.print-footer .pf-brand{font-family:'Fraunces',serif;color:#9A7A45;font-weight:600;font-size:10.5px}
+.print-footer .pf-brand{font-family:'Fraunces','NeoSansArabic',serif;color:#9A7A45;font-weight:600;font-size:10.5px}
 
 /* Print preview modal */
 .print-preview-overlay{
@@ -1336,6 +1341,7 @@ body.print-preview-active .print-document{display:block}
 .print-preview-content .print-document{
   display:block;
   background:white;width:210mm;max-width:100%;
+  min-height:280mm;
   box-shadow:0 12px 40px rgba(0,0,0,0.5);
   margin-bottom:30px;
 }
@@ -9334,6 +9340,21 @@ function buildPrintHeader(company, options){
     logoHtml = `<div class="print-logo-fallback">${PRINT_LOGO_MARK}</div>`;
   }
 
+  // ترويسة مختصرة للأوراق الداخلية: الشعار + رقم المستند + التاريخ فقط (بلا معلومات الشركة)
+  if(options.compactHeader){
+    return `
+    <div class="print-header compact">
+      <div class="print-logo">${logoHtml}</div>
+      <div class="print-doc-info">
+        <div class="print-doc-info-row"><strong>رقم المستند:</strong></div>
+        <div style="text-align:end;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#231F20;font-weight:600;margin-bottom:4px">${escapeHtml(docNumber)}</div>
+        <div class="print-doc-info-row"><strong>التاريخ:</strong></div>
+        <div style="text-align:end;font-size:10px">${docDate}</div>
+        <div style="text-align:end;font-size:9.5px;color:#888" dir="ltr">${docDateGreg}</div>
+      </div>
+    </div>`;
+  }
+
   // Build company meta lines
   const metaLines = [];
   if(company.cr) metaLines.push(`<strong>س.ت:</strong> <span dir="ltr">${escapeHtml(company.cr)}</span>`);
@@ -10040,7 +10061,7 @@ function executePrint(){
   <style>
     ${styles}
     /* Override: ensure print-document is fully visible in iframe */
-    body{margin:0;padding:0;background:white;font-family:'Cairo','Tajawal','IBM Plex Sans Arabic',sans-serif}
+    body{margin:0;padding:0;background:white;font-family:'NeoSansArabic','Segoe UI',Tahoma,sans-serif}
     .print-document{display:block !important;width:auto;max-width:none;margin:0;padding:18mm 16mm;box-shadow:none;page-break-after:always}
     .print-document:last-child{page-break-after:auto}
     @page{size:A4;margin:0}
@@ -10616,7 +10637,7 @@ function buildPOListReport(opts){
         <tfoot><tr><td colspan="4">الإجمالي (${list.length} أمر)</td><td class="num">${fmtPrice(totTot)}</td><td colspan="2"></td></tr></tfoot>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
 }
 
 function buildPOOverdueReport(){
@@ -10647,7 +10668,7 @@ function buildPOOverdueReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · OVERDUE & ESCALATION', title:'تقرير المتأخرات والتصعيد', subtitle:'أوامر الشراء المتأخرة عن موعد التسليم', watermark: esc.length?'تصعيد':''}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · OVERDUE & ESCALATION', title:'تقرير المتأخرات والتصعيد', subtitle:'أوامر الشراء المتأخرة عن موعد التسليم', watermark: esc.length?'تصعيد':''}, body);
 }
 
 function buildPOFinanceReport(){
@@ -10682,7 +10703,7 @@ function buildPOFinanceReport(){
       </table>
     </div>
     <div class="print-total-words"><strong>بانتظار التحويل كتابةً:</strong> ${escapeHtml(tafqitSAR(awTot))}</div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:'متابعة السداد والتحويلات المالية'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:'متابعة السداد والتحويلات المالية'}, body);
 }
 
 function buildPOCycleReport(){
@@ -10705,7 +10726,7 @@ function buildPOCycleReport(){
       <div class="print-section-title">متوسط زمن كل مرحلة (الأبطأ أولاً)</div>
       <table class="print-table"><thead><tr><th>المرحلة</th><th class="center">عدد المرّات</th><th class="num">متوسط المدة</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · CYCLE TIME', title:'تقرير زمن الدورة والاختناقات', subtitle:'تحليل مدة مراحل أوامر الشراء'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · CYCLE TIME', title:'تقرير زمن الدورة والاختناقات', subtitle:'تحليل مدة مراحل أوامر الشراء'}, body);
 }
 
 /* ===== تقارير الموردين ===== */
@@ -10742,7 +10763,7 @@ function buildSupplierPerformanceReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER PERFORMANCE', title:'تقرير تقييم وأداء الموردين', subtitle:'العروض، الأوامر، الالتزام بالمواعيد، والتقييم'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · SUPPLIER PERFORMANCE', title:'تقرير تقييم وأداء الموردين', subtitle:'العروض، الأوامر، الالتزام بالمواعيد، والتقييم'}, body);
 }
 
 function buildSupplierDirectoryReport(){
@@ -10768,7 +10789,7 @@ function buildSupplierDirectoryReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER DIRECTORY', title:'دليل الموردين الكامل', subtitle:'بيانات الاتصال والتخصصات وعدد العروض'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · SUPPLIER DIRECTORY', title:'دليل الموردين الكامل', subtitle:'بيانات الاتصال والتخصصات وعدد العروض'}, body);
 }
 
 /* ===== تقارير الأصناف والأسعار ===== */
@@ -10799,7 +10820,7 @@ function buildSavingsReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · COST SAVINGS', title:'تقرير فرص التوفير', subtitle:'تحليل الفجوات السعرية للأصناف المُسعّرة'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · COST SAVINGS', title:'تقرير فرص التوفير', subtitle:'تحليل الفجوات السعرية للأصناف المُسعّرة'}, body);
 }
 
 function buildVolatilityReport(){
@@ -10829,7 +10850,7 @@ function buildVolatilityReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PRICE VOLATILITY', title:'تقرير تذبذب الأسعار', subtitle:'الأصناف الأكثر تقلّباً سعرياً'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PRICE VOLATILITY', title:'تقرير تذبذب الأسعار', subtitle:'الأصناف الأكثر تقلّباً سعرياً'}, body);
 }
 
 function buildCoverageReport(){
@@ -10858,7 +10879,7 @@ function buildCoverageReport(){
       <div class="print-section-title">أصناف بحاجة لتسعير ${(total-priced)>unpriced.length?`(أول ${unpriced.length} من ${total-priced})`:`(${unpriced.length})`}</div>
       <table class="print-table"><thead><tr><th class="center" style="width:30px">#</th><th>الرمز</th><th>الصنف</th><th>الفئة</th></tr></thead><tbody>${unpRows}</tbody></table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · PRICING COVERAGE', title:'تقرير تغطية التسعير', subtitle:'نسبة الأصناف المُسعّرة ومناطق النقص'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PRICING COVERAGE', title:'تقرير تغطية التسعير', subtitle:'نسبة الأصناف المُسعّرة ومناطق النقص'}, body);
 }
 
 function buildCategoryReport(){
@@ -10881,7 +10902,7 @@ function buildCategoryReport(){
       <div class="print-section-title">توزيع القيمة حسب الفئة</div>
       <table class="print-table"><thead><tr><th class="center" style="width:30px">#</th><th>الفئة</th><th class="num">عدد الأصناف</th><th class="num">إجمالي القيمة</th><th class="num">متوسط السعر</th><th class="center">الحصة</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · CATEGORY ANALYSIS', title:'تقرير تحليل الفئات', subtitle:'توزيع القيمة والأعداد على فئات الأصناف'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · CATEGORY ANALYSIS', title:'تقرير تحليل الفئات', subtitle:'توزيع القيمة والأعداد على فئات الأصناف'}, body);
 }
 
 /* ===== تقارير سحابية: طلبات التسعير / التسجيلات ===== */
@@ -10919,7 +10940,7 @@ async function buildRFQStatusReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · RFQ STATUS', title:'تقرير حالة طلبات التسعير', subtitle:'متابعة طلبات عروض الأسعار والترسيات'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · RFQ STATUS', title:'تقرير حالة طلبات التسعير', subtitle:'متابعة طلبات عروض الأسعار والترسيات'}, body);
 }
 
 async function buildRegistrationsReport(opts){
@@ -10956,7 +10977,7 @@ async function buildRegistrationsReport(opts){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · SUPPLIER REGISTRATIONS', title:'تقرير طلبات تسجيل الموردين', subtitle:'حالة طلبات الانضمام للموردين'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · SUPPLIER REGISTRATIONS', title:'تقرير طلبات تسجيل الموردين', subtitle:'حالة طلبات الانضمام للموردين'}, body);
 }
 
 /* ===== تقرير سجل التدقيق ===== */
@@ -10995,7 +11016,7 @@ function buildAuditReport(opts){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({eyebrow:'AL-DEYABI GROUP · AUDIT TRAIL', title:'تقرير سجل التدقيق', subtitle:'سجل إجراءات المستخدمين على النظام'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · AUDIT TRAIL', title:'تقرير سجل التدقيق', subtitle:'سجل إجراءات المستخدمين على النظام'}, body);
 }
 
 // تعريف التقارير: كل تقرير يصف حقوله ودالة تشغيله. الكل يمرّ عبر معاينة الطباعة الموحّدة.
@@ -13694,6 +13715,7 @@ function poPrintDashboard(){
     </div>`;
 
   printDocOpen({
+    compactHeader:true, signature:false,
     eyebrow:'AL-DEYABI GROUP · MANAGEMENT REPORT',
     title:'تقرير لوحة تحكم المشتريات',
     subtitle:'ملخص إداري لحالة أوامر الشراء',
@@ -13880,6 +13902,7 @@ function printUrgentMemo(){
     </table>
     <div class="print-total-words" style="margin-top:12px"><strong>المطلوب:</strong> تنفيذ السداد العاجل لعدد ${list.length} أمر بإجمالي ${escapeHtml(tafqitSAR(totTot))} (شامل الضريبة).</div>`;
   printDocOpen({
+    compactHeader:true, signature:false,
     eyebrow:'AL-DEYABI GROUP · FINANCE MEMO',
     title:'مذكرة استعجال تحويل أوامر شراء',
     subtitle:'مرفوعة إلى الإدارة المالية',
@@ -15079,6 +15102,7 @@ function rfqPrint(rfq, lines, sups, qmap, totals){
     ${summary}`;
 
   printDocOpen({
+    compactHeader:true, signature:false,
     eyebrow:'AL-DEYABI GROUP · RFQ COMPARISON',
     title:'مقارنة عروض الأسعار',
     subtitle:rfq.title||'',
@@ -16829,6 +16853,7 @@ function formatMarkdownForPrint(text){
 function printAIReport(opts, text){
   const body = `<div class="print-ai-body">${formatMarkdownForPrint(text || '')}</div>`;
   return printDocOpen(Object.assign({
+    compactHeader:true, signature:false,
     eyebrow:'AL-DEYABI GROUP · AI INSIGHTS',
     note:'تقرير مُولّد بمساعدة الذكاء الاصطناعي — للاسترشاد قبل اعتماد القرار.'
   }, opts || {}), body);
