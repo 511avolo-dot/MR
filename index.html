@@ -12876,10 +12876,92 @@ function renderPODashboard(){
     </div>`;
 }
 function poPrintDashboard(){
-  const el=document.getElementById('po-dashboard'); if(!el) return;
-  const clone=el.cloneNode(true);
-  clone.querySelectorAll('button,.po-rep-note,.po-ai-summary').forEach(n=>n.remove());
-  poPrintWindow('لوحة تحكم المشتريات — مجموعة الذيابي','<h1>لوحة تحكم المشتريات</h1>'+clone.innerHTML);
+  const all=STATE.purchaseOrders||[];
+  if(!all.length){ toast('info','لا بيانات','لا توجد أوامر شراء لإصدار التقرير'); return; }
+  const snap=poStateSnapshot();
+  const fmtSAR=v=>fmtPrice(v)+' ر.س';
+
+  // تجميع حسب القطاع
+  const bySector=PO_ENUMS.sector.map(s=>{
+    const rows=all.filter(o=>o.sector===s && o.status!=='ملغى');
+    const val=rows.reduce((a,o)=>a+(Number(o.total)||0),0);
+    const late=rows.filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0).length;
+    return {s,count:rows.length,val,late};
+  }).filter(x=>x.count>0).sort((a,b)=>b.val-a.val);
+  const sectorRows=bySector.map(x=>`<tr>
+      <td>${escapeHtml(x.s)}</td>
+      <td class="num">${x.count}</td>
+      <td class="num price">${fmtSAR(x.val)}</td>
+      <td class="center">${x.late?`<span class="print-badge danger">${x.late}</span>`:'<span class="print-badge ok">0</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="center" style="color:#888;padding:14px">—</td></tr>';
+
+  // أعلى الموردين قيمةً
+  const supMap={};
+  all.filter(o=>o.status!=='ملغى').forEach(o=>{ const s=o.supplier||'—'; supMap[s]=(supMap[s]||0)+(Number(o.total)||0); });
+  const topSup=Object.entries(supMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const supRows=topSup.map(([s,v],i)=>{
+    const r=poSupplierRating(s);
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td>${escapeHtml(s)}</td>
+      <td class="num price">${fmtSAR(v)}</td>
+      <td class="center">${r!=null?('★ '+r.toFixed(1)):'—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="center" style="color:#888;padding:14px">—</td></tr>';
+
+  // أبرز المتأخرات
+  const lateList=all.filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0)
+    .sort((a,b)=>(b.days_delayed||0)-(a.days_delayed||0)).slice(0,10);
+  const lateRows=lateList.map(o=>`<tr>
+      <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+      <td>${escapeHtml(o.supplier||'—')}</td>
+      <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${o.days_delayed} يوم</span></td>
+      <td>${escapeHtml(o.delay_reason||'غير محدد')}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="center" style="color:#1f7a55;padding:14px">لا توجد أوامر متأخرة 👍</td></tr>';
+
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">إجمالي الأوامر</span><span class="value">${snap.total}</span></div>
+      <div class="print-stat-card"><span class="label">القيمة النشطة</span><span class="value">${fmtPrice(snap.value)}</span><span class="sub">ر.س شامل الضريبة</span></div>
+      <div class="print-stat-card"><span class="label">تم تسليمها</span><span class="value">${snap.delivered}</span></div>
+      <div class="print-stat-card"><span class="label">مؤشر الصحة</span><span class="value" style="color:${snap.health>=70?'#1f7a55':snap.health>=50?'#9A7A45':'#b13434'}">${snap.health}%</span></div>
+    </div>
+    <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-stat-card"><span class="label">متأخرة</span><span class="value" style="color:#b13434">${snap.late}</span></div>
+      <div class="print-stat-card"><span class="label">لدى الإدارة المالية</span><span class="value">${snap.awaiting_finance}</span></div>
+      <div class="print-stat-card"><span class="label">قاربت على التأخير</span><span class="value" style="color:#9A7A45">${snap.near_due}</span></div>
+    </div>
+
+    <div class="print-section">
+      <div class="print-section-title">التوزيع حسب القطاع</div>
+      <table class="print-table">
+        <thead><tr><th>القطاع</th><th class="num">عدد الأوامر</th><th class="num">القيمة</th><th class="center">متأخرة</th></tr></thead>
+        <tbody>${sectorRows}</tbody>
+      </table>
+    </div>
+
+    <div class="print-section">
+      <div class="print-section-title">أعلى الموردين قيمةً</div>
+      <table class="print-table">
+        <thead><tr><th class="center" style="width:34px">#</th><th>المورد</th><th class="num">إجمالي القيمة</th><th class="center">التقييم</th></tr></thead>
+        <tbody>${supRows}</tbody>
+      </table>
+    </div>
+
+    <div class="print-section">
+      <div class="print-section-title">أبرز الأوامر المتأخرة</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th class="center">التأخير</th><th>السبب</th></tr></thead>
+        <tbody>${lateRows}</tbody>
+      </table>
+    </div>`;
+
+  printDocOpen({
+    eyebrow:'AL-DEYABI GROUP · MANAGEMENT REPORT',
+    title:'تقرير لوحة تحكم المشتريات',
+    subtitle:'ملخص إداري لحالة أوامر الشراء',
+    note:'تقرير آلي مُولّد من نظام المشتريات.'
+  }, body);
 }
 
 /* ============================================================
@@ -12933,34 +13015,139 @@ function poAlertJump(seg,statusFilter){
 }
 
 /* ============================================================
-   PRINT (urgent memo + single PO)
+   PRINT (urgent memo + single PO) — موحّدة عبر printDocOpen
    ============================================================ */
-function poPrintWindow(title,bodyHtml){
-  const w=window.open('','_blank'); if(!w){ toast('error','الطباعة','اسمح بالنوافذ المنبثقة'); return; }
-  w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-    <style>body{font-family:'Segoe UI',Tahoma,sans-serif;padding:30px;color:#231F20}h1{font-size:20px}h2{font-size:15px;color:#9A7A45}
-    table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #ccc;padding:7px 9px;font-size:12.5px;text-align:right}
-    th{background:#f0ece2}tfoot td{font-weight:bold;background:#faf7f0}.muted{color:#777;font-size:11px}</style></head><body>${bodyHtml}
-    <p class="muted" style="margin-top:24px">مجموعة الذيابي · نظام المشتريات · ${new Date().toLocaleDateString('en-CA')}</p>
-    <script>window.onload=function(){window.print()}<\/script></body></html>`);
-  w.document.close();
+// شارة حالة أمر الشراء → فئة .print-badge
+function poStatusBadgeClass(status){
+  if(status==='تسليم كامل') return 'ok';
+  if(status==='ملغى') return 'danger';
+  if(status==='قيد التوريد'||status==='تسليم جزئي') return 'info';
+  if(status==='تسليم للإدارة المالية'||status==='تم التحويل') return 'warn';
+  return 'neutral';
 }
 function printPO(num){
   const po=poFind(num); if(!po) return;
-  const rows=[['رقم الأمر',po.po_number],['التاريخ',poFmtDate(po.issue_date)],['المورد',po.supplier||'—'],['القطاع',po.sector||'—'],['المشروع/الموقع',po.project||'—'],['قبل الضريبة',fmtPrice(po.subtotal)+' ر.س'],['ضريبة 15%',fmtPrice(po.vat)+' ر.س'],['الإجمالي شامل الضريبة',fmtPrice(po.total)+' ر.س'],['طريقة الدفع',po.payment_method||'—'],['التسليم المتوقع',poFmtDate(po.expected_delivery)],['الحالة',po.status]];
-  const body=`<h1>أمر شراء — ${escapeHtml(po.po_number)}</h1><table>${rows.map(r=>`<tr><th style="width:200px">${escapeHtml(r[0])}</th><td>${escapeHtml(String(r[1]))}</td></tr>`).join('')}</table>`;
-  poPrintWindow('أمر شراء '+po.po_number,body);
+  const hasItems = Array.isArray(po.items) && po.items.length;
+  const hasRcv = hasItems && po.items.some(it=>Number(it.received_qty)>0);
+  const subtotal = Number(po.subtotal)||0;
+  const vat = (po.vat!=null) ? Number(po.vat) : subtotal*0.15;
+  const total = (po.total!=null) ? Number(po.total) : subtotal+vat;
+
+  const itemsRows = hasItems ? po.items.map((it,i)=>{
+    const q=Number(it.qty)||0, price=Number(it.price)||0, rcv=Math.min(q,Number(it.received_qty)||0);
+    return `<tr>
+      <td class="center">${i+1}</td>
+      <td>${escapeHtml(it.desc||'—')}</td>
+      <td class="center">${escapeHtml(String(it.unit||po.unit||'—'))}</td>
+      <td class="num">${escapeHtml(String(it.qty??'—'))}</td>
+      ${hasRcv?`<td class="center" style="color:${rcv>=q&&q>0?'#1f7a55':'#9A7A45'};font-weight:600">${rcv}</td>`:''}
+      <td class="num price">${fmtPrice(price)}</td>
+      <td class="num price">${fmtPrice(q*price)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="${hasRcv?7:6}" class="center" style="padding:18px;color:#888">لا توجد بنود تفصيلية لهذا الأمر</td></tr>`;
+
+  const itemsTable = `
+    <div class="print-section">
+      <div class="print-section-title">بنود أمر الشراء</div>
+      <table class="print-table">
+        <thead><tr>
+          <th class="center" style="width:32px">#</th>
+          <th>الوصف</th>
+          <th class="center" style="width:56px">الوحدة</th>
+          <th class="num" style="width:56px">الكمية</th>
+          ${hasRcv?'<th class="center" style="width:60px">المستلَم</th>':''}
+          <th class="num" style="width:80px">سعر الوحدة</th>
+          <th class="num" style="width:92px">الإجمالي</th>
+        </tr></thead>
+        <tbody>${itemsRows}</tbody>
+      </table>
+    </div>`;
+
+  const body = `
+    <div class="print-parties">
+      <div class="print-party">
+        <div class="print-party-label">المورد</div>
+        <div class="print-party-name">${escapeHtml(po.supplier||'—')}</div>
+        <div class="print-party-meta"><strong>طريقة الدفع:</strong> ${escapeHtml(po.payment_method||'—')}</div>
+        ${po.project?`<div class="print-party-meta"><strong>المشروع/الموقع:</strong> ${escapeHtml(po.project)}</div>`:''}
+      </div>
+      <div class="print-party buyer">
+        <div class="print-party-label">تفاصيل الأمر</div>
+        <div class="print-party-meta"><strong>القطاع:</strong> ${escapeHtml(po.sector||'—')}</div>
+        <div class="print-party-meta"><strong>مسؤول المشتريات:</strong> ${escapeHtml(po.officer||'—')}</div>
+        <div class="print-party-meta"><strong>التسليم المتوقع:</strong> ${escapeHtml(poFmtDate(po.expected_delivery))}</div>
+        <div class="print-party-meta"><strong>الحالة:</strong> <span class="print-badge ${poStatusBadgeClass(po.status)}">${escapeHtml(po.status||'—')}</span></div>
+      </div>
+    </div>
+
+    ${itemsTable}
+
+    <div class="print-quote-totals">
+      <div class="row"><span>الإجمالي قبل الضريبة</span><span>${fmtPrice(subtotal)} ر.س</span></div>
+      <div class="row"><span>ضريبة القيمة المضافة (15%)</span><span>${fmtPrice(vat)} ر.س</span></div>
+      <div class="row total"><span>الإجمالي شامل الضريبة</span><span>${fmtPrice(total)} ر.س</span></div>
+    </div>
+    <div class="print-total-words"><strong>المبلغ كتابةً:</strong> ${escapeHtml(tafqitSAR(total))}</div>
+
+    ${po.notes?`<div class="print-note-box" style="margin-top:14px"><span class="nb-title">ملاحظات</span>${escapeHtml(po.notes)}</div>`:''}
+
+    <div class="print-section" style="margin-top:14px">
+      <div class="print-section-title">الشروط والأحكام</div>
+      <ol class="print-terms">
+        <li>يلتزم المورد بالتوريد وفق المواصفات والكميات المتفق عليها أعلاه.</li>
+        <li>يُعدّ تاريخ التسليم المتوقع مُلزماً، وأي تأخير يخضع لشروط التعاقد.</li>
+        <li>تُصرف المستحقات بعد استلام البضاعة ومطابقتها وفق طريقة الدفع المحددة.</li>
+        <li>هذا الأمر صادر إلكترونياً من نظام المشتريات ويُعتمد بالتوقيع أدناه.</li>
+      </ol>
+    </div>
+
+    <div class="print-signatures">
+      <div class="print-sign"><span class="who">أعدّه — المشتريات</span><div class="line">الاسم والتوقيع</div></div>
+      <div class="print-sign"><span class="who">اعتماد — مدير الشراء</span><div class="line">الاسم والتوقيع</div></div>
+      <div class="print-sign"><span class="who">المورد</span><div class="line">الاسم والتوقيع والختم</div></div>
+    </div>`;
+
+  printDocOpen({
+    eyebrow:'AL-DEYABI GROUP · PURCHASE ORDER',
+    title:'أمر شراء',
+    subtitle:'مستند رسمي صادر عن إدارة المشتريات',
+    docNumber:po.po_number,
+    date:poFmtDate(po.issue_date)!=='—'?poFmtDate(po.issue_date):undefined,
+    signature:false
+  }, body);
 }
 function printUrgentMemo(){
   const list=STATE.purchaseOrders.filter(o=>o.status==='تسليم للإدارة المالية');
   if(!list.length){ toast('warn','لا يوجد','لا توجد أوامر لدى الإدارة المالية بانتظار التحويل'); return; }
   const totSub=list.reduce((s,o)=>s+(Number(o.subtotal)||0),0), totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
-  const body=`<h1>طلب استعجال تحويل أوامر شراء لدى الإدارة المالية</h1><h2>مرفوع إلى الإدارة المالية — للتنفيذ العاجل · ${new Date().toLocaleDateString('en-CA')}</h2>
-    <table><thead><tr><th>#</th><th>رقم الأمر</th><th>المورد</th><th>قبل الضريبة</th><th>الإجمالي (شامل)</th><th>التسليم المتوقع</th></tr></thead>
-    <tbody>${list.map((o,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(o.po_number)}</td><td>${escapeHtml(o.supplier||'—')}</td><td>${fmtPrice(o.subtotal)}</td><td>${fmtPrice(o.total)}</td><td>${poFmtDate(o.expected_delivery)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="3">الإجمالي</td><td>${fmtPrice(totSub)}</td><td>${fmtPrice(totTot)}</td><td></td></tr></tfoot></table>
-    <p style="margin-top:16px;font-size:12.5px">المطلوب تنفيذ السداد بصورة عاجلة لعدد ${list.length} أمر بإجمالي ${fmtPrice(totTot)} ر.س (شامل الضريبة) قبل تواريخ التسليم المتفق عليها.</p>`;
-  poPrintWindow('مذكرة الطلبات العاجلة',body);
+  const rows=list.map((o,i)=>`<tr>
+      <td class="center">${i+1}</td>
+      <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+      <td>${escapeHtml(o.supplier||'—')}</td>
+      <td class="num">${fmtPrice(o.subtotal)}</td>
+      <td class="num price">${fmtPrice(o.total)}</td>
+      <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
+    </tr>`).join('');
+  const body=`
+    <div class="print-note-box danger">
+      <span class="nb-title">⚠ للتنفيذ العاجل</span>
+      مرفوع إلى الإدارة المالية لاستعجال السداد قبل تواريخ التسليم المتفق عليها.
+    </div>
+    <table class="print-table">
+      <thead><tr>
+        <th class="center" style="width:34px">#</th><th>رقم الأمر</th><th>المورد</th>
+        <th class="num">قبل الضريبة</th><th class="num">الإجمالي (شامل)</th><th class="center">التسليم المتوقع</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="3">الإجمالي</td><td class="num">${fmtPrice(totSub)}</td><td class="num">${fmtPrice(totTot)}</td><td></td></tr></tfoot>
+    </table>
+    <div class="print-total-words" style="margin-top:12px"><strong>المطلوب:</strong> تنفيذ السداد العاجل لعدد ${list.length} أمر بإجمالي ${escapeHtml(tafqitSAR(totTot))} (شامل الضريبة).</div>`;
+  printDocOpen({
+    eyebrow:'AL-DEYABI GROUP · FINANCE MEMO',
+    title:'مذكرة استعجال تحويل أوامر شراء',
+    subtitle:'مرفوعة إلى الإدارة المالية',
+    note:'يُرجى الإفادة باعتماد الصرف.'
+  }, body);
 }
 
 /* ============================================================
@@ -12992,8 +13179,8 @@ async function poGenerateAIReport(){
   try{
     const snap=poStateSnapshot();
     const sectors=PO_ENUMS.sector.map(s=>({s,v:STATE.purchaseOrders.filter(o=>o.sector===s&&o.status!=='ملغى').reduce((a,o)=>a+(Number(o.total)||0),0)})).filter(x=>x.v>0);
-    const text=await aiComplete({feature:'po_report',system:'أنت مدير مشتريات. اكتب تقريراً إدارياً احترافياً بالعربية: ملخص تنفيذي، تحليل التأخير وجذوره، توصيات. منسّق بعناوين قصيرة.',prompt:'المؤشرات: '+JSON.stringify(snap)+'\nالقطاعات: '+JSON.stringify(sectors),maxTokens:1200,temperature:0.5});
-    poPrintWindow('التقرير الإداري للمشتريات','<h1>التقرير الإداري للمشتريات</h1><div style="white-space:pre-wrap;font-size:13px;line-height:1.9">'+escapeHtml(text)+'</div>');
+    const text=await aiComplete({feature:'po_report',system:'أنت مدير مشتريات. اكتب تقريراً إدارياً احترافياً بالعربية بصيغة Markdown: استخدم ## للعناوين الرئيسية. أقسام: ملخص تنفيذي، تحليل التأخير وجذوره، توصيات. منسّق بعناوين قصيرة.',prompt:'المؤشرات: '+JSON.stringify(snap)+'\nالقطاعات: '+JSON.stringify(sectors),maxTokens:1200,temperature:0.5});
+    printAIReport({title:'التقرير الإداري للمشتريات', subtitle:'تحليل تنفيذي لحالة أوامر الشراء'}, text);
   }catch(e){ toast('error','تعذّر',e.message||'الذكاء الاصطناعي غير مُعدّ'); }
 }
 
@@ -14096,16 +14283,71 @@ async function rfqFeedHistory(rfq, quotes, awardsMap){
 // طباعة/تصدير مقارنة العروض
 function rfqPrint(rfq, lines, sups, qmap, totals){
   if(!requirePermission('can_export','طباعة المقارنة')) return;
-  const w = window.open('', '_blank'); if(!w){ toast('error','منع','اسمح بالنوافذ المنبثقة'); return; }
-  let h = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>مقارنة عروض — ${escapeHtml(rfq.title)}</title>
-    <style>body{font-family:Arial,Tahoma;padding:24px;color:#222}h2{margin:0 0 4px}table{border-collapse:collapse;width:100%;margin-top:12px}
-    th,td{border:1px solid #999;padding:6px 8px;text-align:center;font-size:12px}th{background:#f0ece2}tfoot td{font-weight:bold;background:#faf7f0}</style></head><body>`;
-  h += `<h2>مقارنة عروض الأسعار</h2><div>${escapeHtml(rfq.title)} · رقم ${escapeHtml(rfq.id)} · ${new Date().toLocaleDateString('ar-SA-u-nu-latn')}</div>`;
-  h += `<table><thead><tr><th>البند</th><th>الكمية</th><th>مرجعي</th>${sups.map(s=>`<th>${escapeHtml(s)}</th>`).join('')}</tr></thead><tbody>`;
-  lines.forEach(line=>{ h += `<tr><td style="text-align:right">${escapeHtml(line.desc)}</td><td>${line.qty||1} ${escapeHtml(line.unit||'')}</td><td>${line.baseline?fmtPrice(line.baseline):'—'}</td>${sups.map(s=>{ const v=(qmap[s]||{})[line.id]; return `<td>${v!=null?fmtPrice(v):'—'}</td>`; }).join('')}</tr>`; });
-  h += `</tbody><tfoot><tr><td colspan="3">الإجمالي</td>${sups.map(s=>`<td>${totals[s]?fmtPrice(totals[s]):'—'}</td>`).join('')}</tr></tfoot></table>`;
-  h += `<p style="margin-top:18px;font-size:11px;color:#777">AL-DEYABI GROUP · نظام المشتريات</p></body></html>`;
-  w.document.write(h); w.document.close(); setTimeout(()=>{ try{ w.print(); }catch(e){} }, 300);
+
+  // أفضل إجمالي (أقل قيمة) لإبراز المورد الفائز
+  const valid=sups.filter(s=>Number(totals[s])>0);
+  const bestTotal=valid.length?Math.min(...valid.map(s=>Number(totals[s]))):null;
+  const bestTotalSup=valid.find(s=>Number(totals[s])===bestTotal);
+  const awarded=rfq.awarded_to||null;
+
+  const headCols=sups.map(s=>{
+    const tag=(s===awarded)?' <span class="print-badge ok" style="font-size:8px">مُرسى</span>':'';
+    return `<th class="center"${s===awarded?' style="background:#1f5c40"':''}>${escapeHtml(s)}${tag}</th>`;
+  }).join('');
+
+  const bodyRows=lines.map(line=>{
+    // أقل سعر للبند
+    const prices=sups.map(s=>(qmap[s]||{})[line.id]).filter(v=>Number(v)>0);
+    const minP=prices.length?Math.min(...prices.map(Number)):null;
+    const cells=sups.map(s=>{
+      const v=(qmap[s]||{})[line.id];
+      const isBest=(v!=null && Number(v)===minP && minP!=null);
+      return `<td class="num${isBest?' best':''}">${v!=null?fmtPrice(v):'—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="text-align:start">${escapeHtml(line.desc)}</td>
+      <td class="center">${line.qty||1} ${escapeHtml(line.unit||'')}</td>
+      <td class="num">${line.baseline?fmtPrice(line.baseline):'—'}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  const footCells=sups.map(s=>{
+    const isBest=(Number(totals[s])===bestTotal && bestTotal!=null);
+    return `<td class="num${isBest?' best':''}">${totals[s]?fmtPrice(totals[s]):'—'}</td>`;
+  }).join('');
+
+  const winner = awarded || bestTotalSup;
+  const summary = winner ? `
+    <div class="print-note-box" style="margin-top:14px">
+      <span class="nb-title">ملخّص الترسية / التوصية</span>
+      ${awarded ? `تمت الترسية على المورد <strong>${escapeHtml(awarded)}</strong>${totals[awarded]?` بإجمالي <strong>${fmtPrice(totals[awarded])} ر.س</strong>`:''}.`
+                : `أوفر عرض إجمالي مقدّم من <strong>${escapeHtml(bestTotalSup)}</strong> بقيمة <strong>${fmtPrice(bestTotal)} ر.س</strong> (توصية مبدئية قبل الاعتماد).`}
+    </div>` : '';
+
+  const body=`
+    <div class="print-info-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="print-info-item"><div class="print-info-label">عنوان الطلب</div><div class="print-info-value">${escapeHtml(rfq.title||'—')}</div></div>
+      <div class="print-info-item"><div class="print-info-label">رقم الطلب</div><div class="print-info-value" dir="ltr">${escapeHtml(rfq.id||'—')}</div></div>
+      <div class="print-info-item"><div class="print-info-label">عدد الموردين</div><div class="print-info-value">${sups.length}</div></div>
+    </div>
+    <div class="print-section" style="margin-top:14px">
+      <div class="print-section-title">مصفوفة مقارنة الأسعار <span style="font-weight:400;font-size:10px;color:#888">(★ = أوفر سعر للبند)</span></div>
+      <table class="print-table">
+        <thead><tr><th>البند</th><th class="center">الكمية</th><th class="num">مرجعي</th>${headCols}</tr></thead>
+        <tbody>${bodyRows}</tbody>
+        <tfoot><tr><td colspan="3">الإجمالي</td>${footCells}</tr></tfoot>
+      </table>
+    </div>
+    ${summary}`;
+
+  printDocOpen({
+    eyebrow:'AL-DEYABI GROUP · RFQ COMPARISON',
+    title:'مقارنة عروض الأسعار',
+    subtitle:rfq.title||'',
+    docNumber:rfq.id,
+    note:'مقارنة مبنية على العروض المستلمة حتى تاريخه.'
+  }, body);
 }
 
 // استيراد عرض مورد من صورة عبر الذكاء الاصطناعي (Gemini) — يملأ عمود المورد
@@ -15815,6 +16057,36 @@ function formatMarkdownReport(text){
     html += '</p>';
   }
   return html;
+}
+
+/* Markdown → HTML for the print document (clean, styled via .print-ai-body) */
+function formatMarkdownForPrint(text){
+  if(!text) return '';
+  let html = escapeHtml(text);
+  html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^##\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^#\s+(.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  html = html.replace(/^[\-•]\s+(.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li data-num="$1">$2</li>');
+  html = html.replace(/(<li[^>]*>.*?<\/li>(\s*\n?)+)+/g, m => {
+    const tag = /data-num=/.test(m) ? 'ol' : 'ul';
+    return `<${tag}>${m}</${tag}>`;
+  });
+  html = html.replace(/\n\n+/g, '</p><p>');
+  if(!html.match(/^<(h\d|ul|ol|p|div|table)/)) html = '<p>' + html + '</p>';
+  if(html.includes('</p>') && !html.endsWith('</p>')) html += '</p>';
+  return html;
+}
+
+/* يبني مستند تقرير ذكاء اصطناعي مُبرنَد ويعرضه في معاينة الطباعة */
+function printAIReport(opts, text){
+  const body = `<div class="print-ai-body">${formatMarkdownForPrint(text || '')}</div>`;
+  return printDocOpen(Object.assign({
+    eyebrow:'AL-DEYABI GROUP · AI INSIGHTS',
+    note:'تقرير مُولّد بمساعدة الذكاء الاصطناعي — للاسترشاد قبل اعتماد القرار.'
+  }, opts || {}), body);
 }
 
 /* ============================================================
