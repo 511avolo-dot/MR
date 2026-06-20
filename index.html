@@ -10351,7 +10351,7 @@ async function executeExportWord(){
     });
 
     const blob = await Packer.toBlob(doc);
-    const titleEl = content.querySelector('.report-title, .doc-title, h1, h2');
+    const titleEl = content.querySelector('.print-doc-title, .report-title, .doc-title, h1, h2');
     const titleText = titleEl ? titleEl.textContent.trim().slice(0, 40) : 'تقرير';
     const safeTitle = titleText.replace(/[\/\\:*?"<>|]/g, '_');
     const dateStr = new Date().toISOString().slice(0,10);
