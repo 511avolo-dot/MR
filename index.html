@@ -1228,6 +1228,87 @@ body.print-preview-active .print-document{display:block}
 .print-page{position:relative;page-break-after:always}
 .print-page:last-child{page-break-after:auto}
 
+/* ===== ELEVATED PRINT SYSTEM (v2) — refinements, fully backward compatible ===== */
+.print-document{z-index:0}
+/* Eyebrow above document title */
+.print-doc-eyebrow{
+  text-align:center;font-size:10px;font-weight:600;letter-spacing:0.18em;
+  color:#9A7A45;text-transform:uppercase;margin-bottom:2px;
+  font-family:'Fraunces','Cairo',serif;
+}
+.print-doc-title{position:relative;z-index:1}
+/* Status / classification badges */
+.print-badge{
+  display:inline-block;padding:2px 11px;border-radius:20px;font-size:10px;font-weight:700;
+  border:1px solid transparent;vertical-align:middle;line-height:1.7;
+}
+.print-badge.ok{background:#e6f4ec;color:#1f7a55;border-color:#bfe2cf}
+.print-badge.warn{background:#fdf3e1;color:#9A7A45;border-color:#ecd9af}
+.print-badge.danger{background:#fbeaea;color:#b13434;border-color:#f0c9c9}
+.print-badge.info{background:#eaf0fb;color:#3a4f86;border-color:#cdd9f0}
+.print-badge.neutral{background:#efece4;color:#5a5346;border-color:#ddd6c5}
+/* Two-party blocks (supplier / buyer) */
+.print-parties{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.print-party{
+  border:1px solid #e3dcc6;border-radius:8px;padding:11px 13px;background:#fff;
+  position:relative;overflow:hidden;
+}
+.print-party::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:#C4A265}
+.print-party.buyer::before{background:#231F20}
+.print-party-label{font-size:9.5px;font-weight:700;color:#9A7A45;letter-spacing:0.06em;margin-bottom:5px;text-transform:uppercase}
+.print-party-name{font-size:13px;font-weight:700;color:#231F20;margin-bottom:3px;font-family:'NeoSansArabic','Cairo',sans-serif}
+.print-party-meta{font-size:10px;color:#555;line-height:1.7}
+.print-party-meta strong{color:#231F20;font-weight:600}
+/* Total in words */
+.print-total-words{
+  margin-top:8px;padding:9px 13px;background:#fbf9f3;border:1px dashed #c5b994;border-radius:6px;
+  font-size:11px;color:#231F20;line-height:1.7;
+}
+.print-total-words strong{color:#9A7A45;font-weight:700}
+/* KPI accent (extends .print-stat-card) */
+.print-stat-card.accent{background:#231F20;border-color:#231F20}
+.print-stat-card.accent .label{color:#cbb888}
+.print-stat-card.accent .value{color:#fff7e8}
+.print-stat-card .sub{display:block;font-size:8.5px;color:#999;margin-top:2px}
+/* Generic note / callout box */
+.print-note-box{
+  border-inline-start:3px solid #C4A265;background:#fbf9f3;border-radius:0 6px 6px 0;
+  padding:9px 13px;font-size:11px;color:#333;line-height:1.8;margin-bottom:12px;
+}
+.print-note-box.danger{border-inline-start-color:#b13434;background:#fbeaea}
+.print-note-box .nb-title{font-weight:700;color:#231F20;margin-bottom:3px;display:block}
+/* Terms list */
+.print-terms{margin:0;padding-inline-start:18px;font-size:10.5px;color:#333;line-height:1.9}
+.print-terms li{margin-bottom:3px}
+/* Multi-signature row */
+.print-signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:34px}
+.print-sign{text-align:center;font-size:10.5px}
+.print-sign .who{color:#231F20;font-weight:600;margin-bottom:36px;display:block}
+.print-sign .line{border-top:1px solid #555;padding-top:5px;color:#666}
+/* Best-value highlight (RFQ) */
+.print-table td.best{background:#e6f4ec !important;color:#1f7a55;font-weight:700;position:relative}
+.print-table td.best::after{content:'★';font-size:8px;margin-inline-start:3px;vertical-align:super;color:#1f9d63}
+.print-table tbody tr.award-row{background:#fbf6ea}
+/* AI report rendered sections */
+.print-ai-body{font-size:11.5px;line-height:1.95;color:#2a2a2a}
+.print-ai-body h3{
+  font-family:'Fraunces','Cairo',serif;font-size:13px;color:#231F20;font-weight:700;
+  border-inline-start:3px solid #C4A265;padding-inline-start:9px;margin:16px 0 7px;
+}
+.print-ai-body ul{margin:4px 0 10px;padding-inline-start:20px}
+.print-ai-body li{margin-bottom:3px}
+.print-ai-body p{margin:0 0 8px}
+.print-ai-body strong{color:#231F20}
+/* Confidential / draft watermark */
+.print-watermark{
+  position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);
+  font-family:'Fraunces','Cairo',serif;font-size:88px;font-weight:800;letter-spacing:0.05em;
+  color:rgba(196,162,101,0.10);pointer-events:none;z-index:0;white-space:nowrap;user-select:none;
+}
+.print-document > *:not(.print-watermark){position:relative;z-index:1}
+/* Footer page meta refinement */
+.print-footer .pf-brand{font-family:'Fraunces',serif;color:#9A7A45;font-weight:600;font-size:10.5px}
+
 /* Print preview modal */
 .print-preview-overlay{
   position:fixed;inset:0;background:#3a352d;z-index:1000;
@@ -9237,7 +9318,7 @@ function buildPrintFooter(company, options){
         ${note ? `<div style="margin-bottom:8px;font-size:11px;color:#444"><strong>ملاحظة:</strong> ${escapeHtml(note)}</div>` : ''}
         <div>طُبع بواسطة: ${escapeHtml(STATE.currentUser?.displayName || STATE.currentUser?.username || '—')}</div>
         <div>التاريخ: ${new Date().toLocaleString('ar-SA-u-nu-latn')}</div>
-        ${company.website ? `<div style="margin-top:4px" dir="ltr">${escapeHtml(company.website)}</div>` : ''}
+        <div class="pf-brand" style="margin-top:4px">${escapeHtml(company.name_ar || 'مجموعة الذيابي')}${company.website ? ` · <span dir="ltr">${escapeHtml(company.website)}</span>` : ''}</div>
       </div>
       ${showSignature ? `
         <div class="print-signature-box">
@@ -9247,6 +9328,89 @@ function buildPrintFooter(company, options){
       ` : ''}
     </div>
   `;
+}
+
+/* ============================================================
+   UNIFIED PRINT DOCUMENT BUILDER
+   كل المخرجات تمرّ عبر هذا المُساعد لضمان ترويسة/تذييل/هوية موحّدة
+   ============================================================ */
+// يبني مستند .print-document كامل (ترويسة الشركة + عنوان + المحتوى + تذييل)
+function buildPrintDoc(company, opts, bodyHtml){
+  opts = opts || {};
+  const eyebrow = opts.eyebrow ? `<div class="print-doc-eyebrow">${escapeHtml(opts.eyebrow)}</div>` : '';
+  const title = opts.title ? `<div class="print-doc-title">${escapeHtml(opts.title)}</div>` : '';
+  const subtitle = opts.subtitle ? `<div class="print-doc-subtitle">${escapeHtml(opts.subtitle)}</div>` : '';
+  const watermark = opts.watermark ? `<div class="print-watermark">${escapeHtml(opts.watermark)}</div>` : '';
+  return `
+    <div class="print-document">
+      ${watermark}
+      ${buildPrintHeader(company, opts)}
+      ${eyebrow}${title}${subtitle}
+      ${bodyHtml}
+      ${buildPrintFooter(company, opts)}
+    </div>`;
+}
+
+// يبني المستند ويعرضه في معاينة الطباعة دفعةً واحدة (نقطة الدخول الموحّدة)
+async function printDocOpen(opts, bodyHtml){
+  try{
+    const company = await loadCompanyInfo();
+    await showPrintPreview(buildPrintDoc(company, opts || {}, bodyHtml || ''));
+  }catch(e){
+    console.error('[printDocOpen]', e);
+    toast('error','تعذّر تجهيز المستند', e.message || 'حدث خطأ غير متوقع');
+  }
+}
+
+// ─── تفقيط: تحويل مبلغ بالريال إلى كلمات عربية (للأوامر والمستندات المالية) ───
+function tafqitSAR(amount){
+  const n = Math.round((Number(amount)||0) * 100) / 100;
+  const riyals = Math.floor(n);
+  const halalas = Math.round((n - riyals) * 100);
+  let words = tafqitInt(riyals);
+  let out = words ? (words + ' ريال') : 'صفر ريال';
+  if(halalas > 0) out += ' و' + tafqitInt(halalas) + ' هللة';
+  return out + ' لا غير';
+}
+function tafqitInt(num){
+  num = Math.floor(Math.abs(Number(num)||0));
+  if(num === 0) return '';
+  const ones = ['','واحد','اثنان','ثلاثة','أربعة','خمسة','ستة','سبعة','ثمانية','تسعة','عشرة',
+    'أحد عشر','اثنا عشر','ثلاثة عشر','أربعة عشر','خمسة عشر','ستة عشر','سبعة عشر','ثمانية عشر','تسعة عشر'];
+  const tens = ['','','عشرون','ثلاثون','أربعون','خمسون','ستون','سبعون','ثمانون','تسعون'];
+  const hundreds = ['','مئة','مئتان','ثلاثمئة','أربعمئة','خمسمئة','ستمئة','سبعمئة','ثمانمئة','تسعمئة'];
+  function below1000(x){
+    let parts = [];
+    const h = Math.floor(x/100), rem = x%100;
+    if(h) parts.push(hundreds[h]);
+    if(rem){
+      if(rem < 20) parts.push(ones[rem]);
+      else{
+        const t = Math.floor(rem/10), o = rem%10;
+        if(o) parts.push(ones[o] + ' و' + tens[t]);
+        else parts.push(tens[t]);
+      }
+    }
+    return parts.join(' و');
+  }
+  const scales = [
+    {v:1000000000, one:'مليار', two:'ملياران', many:'مليارات'},
+    {v:1000000, one:'مليون', two:'مليونان', many:'ملايين'},
+    {v:1000, one:'ألف', two:'ألفان', many:'آلاف'}
+  ];
+  let parts = [];
+  let rest = num;
+  for(const sc of scales){
+    const c = Math.floor(rest / sc.v);
+    rest = rest % sc.v;
+    if(c === 0) continue;
+    if(c === 1) parts.push(sc.one);
+    else if(c === 2) parts.push(sc.two);
+    else if(c >= 3 && c <= 10) parts.push(below1000(c) + ' ' + sc.many);
+    else parts.push(below1000(c) + ' ' + sc.one);
+  }
+  if(rest) parts.push(below1000(rest));
+  return parts.join(' و');
 }
 
 /* TEMPLATE 1: Item Detail Report */
