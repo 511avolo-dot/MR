@@ -1393,6 +1393,42 @@ body.print-preview-active .print-document{display:block}
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99}
 .overlay.active{display:block}
 
+/* ============ REPORTS CENTER ============ */
+.rep-group{margin-bottom:30px}
+.rep-group-title{
+  font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--ink);
+  display:flex;align-items:center;gap:9px;margin-bottom:14px;
+  padding-bottom:8px;border-bottom:1px solid var(--border);
+}
+.rep-group-title .rg-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2)}
+.rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.rep-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;display:flex;flex-direction:column;gap:12px;transition:all var(--transition);
+  position:relative;overflow:hidden;
+}
+.rep-card:hover{border-color:var(--accent-2);box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.rep-card::before{content:'';position:absolute;top:0;inset-inline-start:0;width:100%;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.rep-card-head{display:flex;align-items:flex-start;gap:11px}
+.rep-card-icon{
+  width:40px;height:40px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;
+  background:linear-gradient(135deg,rgba(196,162,101,0.16),rgba(154,122,69,0.10));color:var(--accent-2);
+}
+.rep-card-icon svg{width:20px;height:20px;stroke-width:1.8}
+.rep-card-title{font-weight:700;font-size:14px;color:var(--ink);margin-bottom:2px}
+.rep-card-desc{font-size:11.5px;color:var(--muted);line-height:1.6}
+.rep-card-fields{display:grid;gap:8px}
+.rep-card-fields.two{grid-template-columns:1fr 1fr}
+.rep-field label{display:block;font-size:10.5px;color:var(--muted);margin-bottom:3px}
+.rep-field .input,.rep-field .select{width:100%;font-size:12.5px;padding:7px 9px}
+.rep-card-foot{margin-top:auto;display:flex;gap:8px;align-items:center}
+.rep-card-foot .btn{flex:1;justify-content:center}
+.rep-badge-ai{
+  font-size:9px;background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#74c69d;
+  padding:2px 7px;border-radius:8px;font-weight:700;
+}
+.rep-locked{opacity:0.55;pointer-events:none;filter:grayscale(0.4)}
+
 /* Naming methodology */
 .method-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:20px}
 .method-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
@@ -2561,6 +2597,12 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         أوامر الشراء
         <span class="nav-count" id="count-po">0</span>
       </a>
+      <div class="nav-label">التقارير</div>
+      <a class="nav-item" data-page="reports">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
+        مركز التقارير
+        <span style="margin-inline-start:auto;font-size:9px;background:linear-gradient(135deg,#C4A265,#9A7A45);color:#231F20;padding:2px 6px;border-radius:8px;font-weight:700;letter-spacing:0.05em">جديد</span>
+      </a>
       <div class="nav-label">ذكاء اصطناعي</div>
       <a class="nav-item" data-page="analytics">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
@@ -3196,6 +3238,16 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <div id="po-view-board" style="display:none"><div class="po-board" id="po-board"></div></div>
         <div id="po-view-analytics" style="display:none"><div id="po-dashboard"></div></div>
         <div id="po-view-alerts" style="display:none"><div id="po-alerts"></div></div>
+      </section>
+
+      <!-- REPORTS CENTER -->
+      <section class="page" id="page-reports">
+        <div class="page-header">
+          <div class="page-eyebrow">مركز موحّد</div>
+          <h1 class="page-title">مركز التقارير</h1>
+          <p class="page-subtitle">كل تقارير المنظومة في مكان واحد — بهوية رسمية موحّدة. اختر التقرير، حدّد الفترة والمرشّحات، ثم عاين وصدّر (طباعة / PDF / Word).</p>
+        </div>
+        <div id="reports-center"></div>
       </section>
 
       <!-- REFERENCE -->
@@ -5849,6 +5901,7 @@ function navigate(page){
   if(page==='analytics')renderAnalytics();
   if(page==='ai')renderAIPage();
   if(page==='purchase-orders')renderPurchaseOrders();
+  if(page==='reports')renderReportsCenter();
 }
 
 /* ========== DASHBOARD ========== */
@@ -10453,6 +10506,106 @@ async function printHistoryReport(fromDate, toDate, options){
     const html = await buildHistoryReport(fromDate, toDate, options);
     showPrintPreview(html);
   }catch(e){ toast('error', 'فشل الإنشاء', e.message); }
+}
+
+/* ============================================================
+   REPORTS CENTER — مركز التقارير الموحّد
+   ============================================================ */
+// تعريف التقارير: كل تقرير يصف حقوله ودالة تشغيله. الكل يمرّ عبر معاينة الطباعة الموحّدة.
+function reportsCatalog(){
+  const cats = [...new Set(STATE.items.map(i=>i.category).filter(Boolean))].sort();
+  const sups = [...STATE.suppliers].map(s=>s.name).filter(Boolean).sort((a,b)=>a.localeCompare(b,'ar'));
+  const catOpts = ['<option value="">كل الفئات</option>'].concat(cats.map(c=>`<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`)).join('');
+  const supOptsAll = ['<option value="">كل الموردين</option>'].concat(sups.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  const supOptsPick = ['<option value="">— اختر مورداً —</option>'].concat(sups.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  const today = new Date().toISOString().slice(0,10);
+  const monthAgo = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+
+  return [
+    { group:'المشتريات', perm:null, icon:'<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>',
+      title:'تقرير لوحة المشتريات', desc:'ملخص إداري: مؤشرات الأداء، التوزيع حسب القطاع، أعلى الموردين، وأبرز المتأخرات.',
+      fields:[], run:()=>poPrintDashboard() },
+
+    { group:'المشتريات', perm:'can_use_ai', ai:true, icon:'<path d="M12 2a10 10 0 0110 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>',
+      title:'التقرير الإداري الذكي', desc:'تحليل تنفيذي مولّد بالذكاء الاصطناعي لحالة أوامر الشراء وجذور التأخير والتوصيات.',
+      fields:[], run:()=>poGenerateAIReport() },
+
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/>',
+      title:'كتالوج قائمة الأسعار', desc:'قائمة الأصناف المُسعّرة مع آخر سعر معتمد — قابلة للتصفية حسب الفئة والمورد.',
+      fields:[
+        {type:'select', key:'category', label:'الفئة', html:catOpts},
+        {type:'select', key:'supplier', label:'المورد', html:supOptsAll},
+      ],
+      run:(v)=>printPriceCatalog({category:v.category||'', supplier:v.supplier||''}) },
+
+    { group:'الأصناف والأسعار', perm:'can_export', icon:'<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+      title:'السجل التاريخي للأسعار', desc:'كل سجلات الأسعار خلال فترة محددة، مع تصفية بالمورد والفئة.',
+      fields:[
+        {type:'date', key:'from', label:'من تاريخ', value:monthAgo},
+        {type:'date', key:'to', label:'إلى تاريخ', value:today},
+        {type:'select', key:'supplier', label:'المورد', html:supOptsAll},
+        {type:'select', key:'category', label:'الفئة', html:catOpts},
+      ],
+      run:(v)=>printHistoryReport(v.from||'', v.to||'', {supplier:v.supplier||'', category:v.category||''}) },
+
+    { group:'الموردون', perm:'can_export', icon:'<path d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m0 0a4 4 0 110-8 4 4 0 010 8zm10 0a4 4 0 110-8 4 4 0 010 8z"/>',
+      title:'تقرير مورد', desc:'بطاقة مورد تفصيلية: الإحصاءات، الأصناف المُورَّدة، وسجل العروض.',
+      fields:[
+        {type:'select', key:'supplier', label:'المورد', html:supOptsPick, required:true},
+      ],
+      run:(v)=>{ if(!v.supplier){ toast('info','اختر مورداً','حدّد المورد أولاً'); return; } printSupplierReport(v.supplier); } },
+  ];
+}
+
+let __REPORTS_DEFS = [];
+function renderReportsCenter(){
+  const host = document.getElementById('reports-center');
+  if(!host) return;
+  __REPORTS_DEFS = reportsCatalog();
+  const groups = [...new Set(__REPORTS_DEFS.map(d=>d.group))];
+  host.innerHTML = groups.map(g=>{
+    const cards = __REPORTS_DEFS.map((d,i)=>({d,i})).filter(x=>x.d.group===g).map(({d,i})=>{
+      const locked = d.perm && !hasPermission(d.perm);
+      const fieldsHtml = (d.fields||[]).map(f=>{
+        if(f.type==='date') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label><input type="date" class="input" data-rep-field="${f.key}" value="${f.value||''}"></div>`;
+        if(f.type==='select') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label><select class="select" data-rep-field="${f.key}">${f.html||''}</select></div>`;
+        return '';
+      }).join('');
+      const twoCol = (d.fields||[]).length>=2 ? ' two' : '';
+      return `
+        <div class="rep-card${locked?' rep-locked':''}" data-rep-idx="${i}">
+          <div class="rep-card-head">
+            <div class="rep-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">${d.icon}</svg></div>
+            <div>
+              <div class="rep-card-title">${escapeHtml(d.title)}${d.ai?' <span class="rep-badge-ai">AI</span>':''}</div>
+              <div class="rep-card-desc">${escapeHtml(d.desc)}</div>
+            </div>
+          </div>
+          ${fieldsHtml?`<div class="rep-card-fields${twoCol}">${fieldsHtml}</div>`:''}
+          <div class="rep-card-foot">
+            ${locked
+              ? `<button class="btn btn-ghost btn-sm" disabled>🔒 صلاحية مطلوبة</button>`
+              : `<button class="btn btn-accent btn-sm" onclick="reportRun(${i})">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+                  معاينة وتصدير
+                </button>`}
+          </div>
+        </div>`;
+    }).join('');
+    return `<div class="rep-group"><div class="rep-group-title"><span class="rg-dot"></span>${escapeHtml(g)}</div><div class="rep-grid">${cards}</div></div>`;
+  }).join('');
+}
+
+// يجمع قيم الحقول للبطاقة ويشغّل التقرير
+function reportRun(idx){
+  const def = __REPORTS_DEFS[idx];
+  if(!def) return;
+  if(def.perm && !requirePermission(def.perm, def.title)) return;
+  const card = document.querySelector(`.rep-card[data-rep-idx="${idx}"]`);
+  const vals = {};
+  if(card) card.querySelectorAll('[data-rep-field]').forEach(el=>{ vals[el.getAttribute('data-rep-field')] = el.value; });
+  try{ def.run(vals); }
+  catch(e){ toast('error','تعذّر إنشاء التقرير', e.message||'خطأ غير متوقع'); }
 }
 
 /* ============================================================ */
