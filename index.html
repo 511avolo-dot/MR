@@ -10077,12 +10077,28 @@ function executePrint(){
 /* ============================================================
    EXPORT TO PDF (real PDF file via html2canvas + jsPDF)
    ============================================================ */
-const PDF_CDN_URLS = {
-  jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',
-  html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
-};
-const DOCX_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min.js';
-const FILESAVER_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js';
+// مصادر متعددة لكل مكتبة (cdnjs ← jsdelivr ← unpkg) — يعالج حجب شبكة الشركة لمصدرٍ بعينه.
+// ملاحظة: لدعم العمل دون إنترنت كلياً، يمكن وضع الملفات في /lib وإضافة المسار المحلي أول القائمة.
+const JSPDF_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+  'https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js'
+];
+const HTML2CANVAS_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+  'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'
+];
+const DOCX_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.min.js',
+  'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js',
+  'https://unpkg.com/docx@8.5.0/build/index.umd.js'
+];
+const FILESAVER_CDNS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js',
+  'https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js',
+  'https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js'
+];
 
 const _scriptLoadPromises = {};
 
@@ -10204,9 +10220,9 @@ async function executePrintAsPDF(){
   const progressToast = toast('info','جاري التصدير','تحميل مكتبة PDF...');
 
   try{
-    // Load libraries
-    await loadScriptOnce(PDF_CDN_URLS.html2canvas, ()=>typeof html2canvas !== 'undefined');
-    await loadScriptOnce(PDF_CDN_URLS.jspdf, ()=>typeof window.jspdf !== 'undefined');
+    // Load libraries (multi-source fallback: cdnjs ← jsdelivr ← unpkg)
+    await loadLib(HTML2CANVAS_CDNS, ()=>typeof html2canvas !== 'undefined', 'html2canvas');
+    await loadLib(JSPDF_CDNS, ()=>typeof window.jspdf !== 'undefined', 'jsPDF');
 
     if(typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined'){
       throw new Error('فشل تحميل المكتبات. حاول مرة أخرى.');
@@ -10286,7 +10302,8 @@ async function executePrintAsPDF(){
     toast('success','تم الحفظ', `تم تصدير ${pages.length} صفحة بصيغة PDF`);
   }catch(e){
     console.error('PDF export error:', e);
-    toast('error','فشل التصدير', e.message || 'حدث خطأ غير متوقع');
+    // أغلب الأسباب: حجب الشبكة لمكتبة PDF. البديل المضمون: زر «طباعة / حفظ PDF» (يعمل بلا إنترنت وبجودة أعلى ونص قابل للتحديد).
+    toast('error','تعذّر تصدير PDF كصورة', 'تعذّر تحميل مكتبة PDF (قد تحجبها الشبكة). استخدم زر «طباعة / حفظ PDF» الذهبي بالأعلى ثم اختر «حفظ كـ PDF» — يعمل دون إنترنت وبجودة أعلى.');
   }
 }
 
@@ -10303,8 +10320,8 @@ async function executeExportWord(){
   toast('info','جاري التصدير','تحميل مكتبة Word...');
 
   try{
-    await loadScriptOnce(DOCX_CDN_URL, ()=>typeof docx !== 'undefined');
-    await loadScriptOnce(FILESAVER_CDN_URL, ()=>typeof saveAs !== 'undefined');
+    await loadLib(DOCX_CDNS, ()=>typeof docx !== 'undefined', 'Word (docx)');
+    await loadLib(FILESAVER_CDNS, ()=>typeof saveAs !== 'undefined', 'FileSaver');
 
     if(typeof docx === 'undefined' || typeof saveAs === 'undefined'){
       throw new Error('فشل تحميل المكتبات. حاول مرة أخرى.');
