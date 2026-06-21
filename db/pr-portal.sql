@@ -67,6 +67,9 @@ CREATE INDEX IF NOT EXISTS idx_pr_status     ON proc_purchase_requests(status);
 CREATE INDEX IF NOT EXISTS idx_pr_requester  ON proc_purchase_requests(requester);
 CREATE INDEX IF NOT EXISTS idx_pr_dept       ON proc_purchase_requests(department_id);
 CREATE INDEX IF NOT EXISTS idx_pr_created    ON proc_purchase_requests(created_at DESC);
+-- بيانات مُقدّم الطلب من البوابة الخارجية (الدخول بحساب مخصّص)
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS requester_name   TEXT;  -- الاسم المُدخَل
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS requester_mobile TEXT;  -- الجوال للتواصل
 ALTER TABLE proc_purchase_requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "auth_all" ON proc_purchase_requests;
 CREATE POLICY "auth_all" ON proc_purchase_requests FOR ALL TO authenticated USING (true) WITH CHECK (true);
