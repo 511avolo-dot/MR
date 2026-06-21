@@ -1646,13 +1646,13 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
 }
 .proc-spin {
   position: relative;
-  width: 64px; height: 64px;
+  width: 92px; height: 92px;
   margin: 0 auto var(--sp-6);
   display: grid; place-items: center;
 }
 .proc-spinner {
-  width: 64px; height: 64px;
-  border: 2px solid var(--line-strong);
+  width: 92px; height: 92px;
+  border: 3px solid var(--line-strong);
   border-top-color: var(--accent);
   border-right-color: var(--accent-2);
   border-radius: var(--r-full);
@@ -1661,15 +1661,14 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
 }
 .proc-spinner::after {
   content: '';
-  position: absolute; inset: 6px;
+  position: absolute; inset: 7px;
   border-radius: var(--r-full);
   border: 1px solid var(--line-gold-soft);
 }
 .proc-logo {
   position: absolute;
-  width: 34px; height: 34px;
+  width: 56px; height: 56px;
   object-fit: contain;
-  border-radius: 6px;
 }
 .proc-title {
   font-family: var(--font-display);
@@ -2255,7 +2254,7 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
   <div class="proc-card">
     <div class="proc-spin">
       <div class="proc-spinner"></div>
-      <img class="proc-logo" src="logo.png" alt="" onerror="this.style.display='none'">
+      <img class="proc-logo" src="logo-mark.png" alt="" onerror="this.style.display='none'">
     </div>
     <div class="proc-title" id="proc-title">جارٍ المعالجة...</div>
     <div class="proc-sub" id="proc-sub"></div>
