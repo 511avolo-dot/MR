@@ -1444,6 +1444,7 @@ body.print-preview-active .print-document{display:block}
 }
 .pr-tab:hover{color:var(--ink);border-color:var(--accent-2)}
 .pr-tab.active{background:var(--accent-2);color:#231F20;border-color:var(--accent-2)}
+.pr-tab-count{display:inline-block;min-width:18px;padding:0 5px;margin-inline-start:4px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;text-align:center}
 .pr-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
 .pr-badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid transparent}
 .pr-badge.ok{background:rgba(45,106,79,0.12);color:#1f7a55;border-color:rgba(45,106,79,0.25)}
@@ -5116,6 +5117,7 @@ const PERMISSION_DEFS = [
   { key:'can_manage_rfq',           label:'طلبات عروض الأسعار (RFQ)',       short:'عروض أسعار',    cat:'الموردون',   userDefault:true  },
   { key:'can_approve_l1',           label:'اعتماد الشراء (مدير المشتريات)', short:'اعتماد 1',      cat:'الاعتمادات', userDefault:false },
   { key:'can_approve_l2',           label:'اعتماد الشراء (المدير العام)',   short:'اعتماد 2',      cat:'الاعتمادات', userDefault:false },
+  { key:'can_verify_stock',         label:'تدقيق المستودع (طلبات الشراء)',  short:'تدقيق مستودع',  cat:'الاعتمادات', userDefault:false },
   { key:'can_create_po',            label:'إنشاء أمر شراء',                short:'إنشاء أمر',     cat:'أوامر الشراء', userDefault:true  },
   { key:'can_edit_po',              label:'تعديل أمر شراء',                short:'تعديل أمر',     cat:'أوامر الشراء', userDefault:true  },
   { key:'can_approve_po',           label:'اعتماد أمر شراء',               short:'اعتماد أمر',    cat:'أوامر الشراء', userDefault:false },
@@ -10754,6 +10756,79 @@ async function prBuildChain(pr){
   return stages.length;
 }
 
+/* ---------- P2: أفعال الاعتماد والصلاحيات ---------- */
+// المرحلة المعلّقة الحالية (أقل seq لم يُبتّ فيها)
+function prCurrentStage(pr){
+  if(pr.status!=='in_review') return null;
+  return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0] || null;
+}
+// هل يحقّ للمستخدم الحالي البتّ في المرحلة الحالية؟ يعيد صفّ المرحلة أو null
+function prCanActOn(pr){
+  const stage = prCurrentStage(pr);
+  if(!stage) return null;
+  const me = STATE.currentUser?.username;
+  if(!me) return null;
+  if(pr.requester === me) return null; // فصل المهام: لا يعتمد المُقدِّم طلبه
+  let ok=false;
+  if(stage.resolver==='dept_manager'){
+    const d=(STATE.departments||[]).find(x=>x.id===pr.department_id);
+    ok = (d && d.manager_user===me) || hasPermission('can_approve_l2'); // المدير الأعلى يستطيع التجاوز
+  } else if(stage.resolver==='user_manager'){
+    ok = stage.approver ? (stage.approver===me) : hasPermission('can_approve_l1');
+  } else { // role
+    ok = !!stage.role_key && hasPermission(stage.role_key);
+  }
+  return ok ? stage : null;
+}
+// صندوق «بانتظار اعتمادي»
+function prInbox(){
+  return (STATE.purchaseRequests||[]).filter(p=>p.status==='in_review' && prCanActOn(p));
+}
+// تنفيذ قرار على المرحلة الحالية
+async function prAct(prId, action, comment){
+  if(!prCloudReady()){ toast('error','غير متصل','يجب الاتصال بالسحابة'); return; }
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===prId);
+  if(!pr){ toast('error','غير موجود','الطلب غير موجود'); return; }
+  const stage=prCanActOn(pr);
+  if(!stage){ toast('error','غير مصرّح','لست المعتمِد لهذه المرحلة، أو الطلب ليس قيد اعتمادك'); return; }
+  if((action==='reject'||action==='return') && !((comment||'').trim())){
+    toast('error','سبب مطلوب','اكتب سبب '+(action==='reject'?'الرفض':'الإرجاع')); return;
+  }
+  const me=STATE.currentUser?.username||null;
+  const now=new Date().toISOString();
+  const decision = action==='approve'?'approved' : action==='reject'?'rejected' : 'returned';
+  // حدّد الحالة الجديدة للطلب
+  const pending = (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0));
+  const isLast = pending.length<=1; // هذه آخر مرحلة معلّقة
+  let newStatus = pr.status, newSeq = pr.current_seq;
+  if(action==='approve'){
+    if(isLast){ newStatus='approved'; }
+    else { const next=pending[1]; newSeq=next.seq; }
+  } else if(action==='reject'){ newStatus='rejected'; }
+  else { newStatus='returned'; newSeq=0; }
+  try{
+    // 1) تحديث صفّ المرحلة
+    const {error:e1}=await CLOUD.client.from('proc_pr_approvals')
+      .update({decision, approver:me, comment:comment||null, acted_at:now})
+      .eq('pr_id',prId).eq('seq',stage.seq);
+    if(e1) throw e1;
+    // 2) تحديث رأس الطلب
+    const {error:e2}=await CLOUD.client.from('proc_purchase_requests')
+      .update({status:newStatus, current_seq:newSeq, updated_at:now, updated_by:me})
+      .eq('id',prId);
+    if(e2) throw e2;
+    try{ pushAuditToCloud && pushAuditToCloud({username:me, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:(action==='approve'?'approve':action==='reject'?'reject':'return'), entity_type:'pr', entity_id:prId, old_value:{status:pr.status}, new_value:{status:newStatus, stage:stage.stage_label}, meta:{comment:comment||null}}); }catch(_){}
+    const msg = action==='approve' ? (isLast?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
+    toast('success','تم', msg);
+    if(action==='approve' && isLast){
+      // P4 لاحقاً: التحويل التلقائي إلى RFQ. الآن: الطلب «معتمد» جاهز للتحويل.
+    }
+    __prLoaded=false;
+    await prLoadAll();
+    renderPRPortal();
+  }catch(e){ toast('error','تعذّر التنفيذ', e.message||'خطأ غير متوقع'); }
+}
+
 /* ---------- العرض ---------- */
 async function renderPRPortal(){
   const host=document.getElementById('pr-root'); if(!host) return;
@@ -10764,15 +10839,19 @@ async function renderPRPortal(){
   host.innerHTML = `<div class="empty">⏳ يحمّل طلبات الشراء...</div>`;
   await prLoadAll();
   const view = STATE.prView || 'list';
+  const inboxN = prInbox().length;
+  const inboxLabel = `📥 بانتظار اعتمادي${inboxN?` <span class="pr-tab-count">${inboxN}</span>`:''}`;
   const tabs = `
     <div class="pr-tabs">
       ${prTab('list','📋 الطلبات', view==='list')}
+      ${prTab('inbox', inboxLabel, view==='inbox')}
       ${prTab('create','➕ طلب جديد', view==='create')}
       <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="__prLoaded=false;renderPRPortal()">↻ تحديث</button>
     </div>`;
   let body='';
   if(view==='create')      body = prBuilderHTML();
   else if(view==='track')  body = prTrackingHTML(STATE.prTrackId);
+  else if(view==='inbox')  body = prInboxHTML();
   else                     body = prListHTML();
   host.innerHTML = tabs + body;
   if(view==='create'){ if(!__prDraftItems.length) prAddDraftItem(); prRenderItems(); prRecalcTotal(); }
@@ -10809,6 +10888,41 @@ function prListHTML(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+function prInboxHTML(){
+  const list = prInbox();
+  if(!list.length){
+    return `<div class="empty"><div class="empty-icon">📥</div><div class="empty-title">لا طلبات بانتظار اعتمادك</div><div class="empty-text">ستظهر هنا الطلبات التي تقع مرحلتها الحالية ضمن صلاحيتك.</div></div>`;
+  }
+  const rows = list.map(p=>{
+    const stage = prCurrentStage(p);
+    return `<tr>
+      <td dir="ltr" style="text-align:start"><a style="cursor:pointer;color:var(--accent-2);font-weight:600" onclick="prGoView('track','${escapeAttr(p.id)}')">${escapeHtml(p.id)}</a></td>
+      <td>${escapeHtml(p.title||'—')}</td>
+      <td>${escapeHtml(p.department||p.department_id||'—')}</td>
+      <td>${escapeHtml(p.requester||'—')}</td>
+      <td class="num">${fmtPrice(p.est_total)}</td>
+      <td>${escapeHtml(stage?stage.stage_label:'—')}</td>
+      <td class="center" style="white-space:nowrap">
+        <button class="btn btn-primary btn-sm" onclick="prActPrompt('${escapeAttr(p.id)}','approve')">اعتماد</button>
+        <button class="btn btn-ghost btn-sm" onclick="prActPrompt('${escapeAttr(p.id)}','return')">إرجاع</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prActPrompt('${escapeAttr(p.id)}','reject')">رفض</button>
+      </td>
+    </tr>`;
+  }).join('');
+  return `<div class="pr-card"><table class="data-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th>مرحلتك</th><th class="center">القرار</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+// نافذة تأكيد بسيطة للقرار مع سبب (للرفض/الإرجاع)
+function prActPrompt(prId, action){
+  let comment='';
+  if(action==='reject' || action==='return'){
+    comment = prompt(action==='reject'?'سبب الرفض:':'سبب الإرجاع للتعديل:', '');
+    if(comment===null) return; // أُلغي
+  } else {
+    comment = prompt('ملاحظة الاعتماد (اختياري):', '') || '';
+  }
+  prAct(prId, action, comment);
 }
 
 function prBuilderHTML(){
@@ -10944,6 +11058,17 @@ function prTrackingHTML(id){
     </div>`;
   }).join('') || '<div class="empty-text" style="padding:14px">لا توجد سلسلة اعتماد بعد (مسودة).</div>';
   const itemsRows=(pr.items||[]).map((it,i)=>`<tr><td class="center">${i+1}</td><td>${escapeHtml(it.description)}</td><td class="center">${escapeHtml(it.unit||'—')}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td></tr>`).join('');
+  const actStage = prCanActOn(pr);
+  const actionPanel = actStage ? `
+    <div class="pr-card" style="margin-top:12px;border-color:var(--accent-2)">
+      <div class="pr-section-title">قرارك — مرحلة «${escapeHtml(actStage.stage_label||'')}»</div>
+      <textarea class="input" id="pr-act-comment" rows="2" placeholder="ملاحظة / سبب (مطلوب للرفض والإرجاع)" style="width:100%;margin-bottom:10px"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="prAct('${escapeAttr(pr.id)}','approve',document.getElementById('pr-act-comment').value)">✓ اعتماد</button>
+        <button class="btn btn-ghost" onclick="prAct('${escapeAttr(pr.id)}','return',document.getElementById('pr-act-comment').value)">↩ إرجاع للتعديل</button>
+        <button class="btn btn-ghost" style="color:var(--danger)" onclick="prAct('${escapeAttr(pr.id)}','reject',document.getElementById('pr-act-comment').value)">✕ رفض</button>
+      </div>
+    </div>` : '';
   return `
     <button class="btn btn-ghost btn-sm" onclick="prGoView('list')">← رجوع للقائمة</button>
     <div class="pr-card" style="margin-top:12px">
@@ -10960,6 +11085,7 @@ function prTrackingHTML(id){
         <span>الطالب: <b>${escapeHtml(pr.requester||'—')}</b></span>
       </div>
     </div>
+    ${actionPanel}
     <div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">سلسلة الاعتماد</div>
       <div class="pr-stepper">${stepper}</div>
