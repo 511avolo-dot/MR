@@ -10876,6 +10876,112 @@ async function prConvertManual(prId){
   await prLoadAll(); renderPRPortal();
 }
 
+/* ---------- P5: تقرير الطلبات + إدارة الأقسام + مؤشّر التأخّر ---------- */
+let __prUsers = [];
+function prAgeDays(pr){
+  const t = Date.parse(pr.updated_at||pr.created_at||''); if(isNaN(t)) return 0;
+  return Math.max(0, Math.floor((Date.now()-t)/86400000));
+}
+function prAgeBadge(pr){
+  if(pr.status!=='in_review') return '';
+  const d = prAgeDays(pr);
+  if(d < 3) return '';
+  return ` <span class="pr-badge ${d>7?'danger':'warn'}" title="منذ آخر تحديث">${d} يوم</span>`;
+}
+
+// تقرير طلبات الشراء (مركز التقارير)
+async function buildPRReport(opts){
+  opts=opts||{};
+  __prLoaded=false; await prLoadAll();
+  let list=[...(STATE.purchaseRequests||[])];
+  if(opts.status) list=list.filter(p=>p.status===opts.status);
+  if(opts.from)   list=list.filter(p=>String(p.request_date||p.created_at||'').slice(0,10)>=opts.from);
+  if(opts.to)     list=list.filter(p=>String(p.request_date||p.created_at||'').slice(0,10)<=opts.to);
+  list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const total=list.reduce((s,p)=>s+(Number(p.est_total)||0),0);
+  const byStatus={}; list.forEach(p=>{byStatus[p.status]=(byStatus[p.status]||0)+1;});
+  const bcls=(s)=>({approved:'ok',rejected:'danger',in_review:'warn',returned:'info',rfq_issued:'info',converted_to_po:'ok',draft:'neutral',cancelled:'danger'})[s]||'neutral';
+  const lbl=(s)=>(PR_STATUS_META[s]||{}).label||s||'—';
+  const rows=list.map(p=>{
+    const stage=(p.approvals||[]).find(a=>a.decision==='pending');
+    return `<tr>
+      <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
+      <td>${escapeHtml(p.title||'—')}</td>
+      <td>${escapeHtml(p.department||p.department_id||'—')}</td>
+      <td>${escapeHtml(p.requester||'—')}</td>
+      <td class="num price">${fmtPrice(p.est_total)}</td>
+      <td class="center"><span class="print-badge ${bcls(p.status)}">${escapeHtml(lbl(p.status))}</span></td>
+      <td>${stage?escapeHtml(stage.stage_label):'—'}</td>
+      <td class="center">${escapeHtml(String(p.request_date||p.created_at||'').slice(0,10))}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#888">لا توجد طلبات مطابقة</td></tr>';
+  const summary=Object.entries(byStatus).map(([k,v])=>`<div class="print-stat-card"><span class="label">${escapeHtml(lbl(k))}</span><span class="value">${v}</span></div>`).join('');
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">عدد الطلبات</span><span class="value">${list.length}</span></div>
+      <div class="print-stat-card"><span class="label">إجمالي القيمة</span><span class="value">${fmtPrice(total)}</span><span class="sub">ر.س</span></div>
+      ${summary}
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">طلبات الشراء</div>
+      <table class="print-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th>المرحلة</th><th class="center">التاريخ</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PURCHASE REQUESTS', title:'تقرير طلبات الشراء', subtitle:'حالة الطلبات عبر سلسلة الاعتماد'}, body);
+}
+
+// إدارة الأقسام (داخل البوابة — لمن يملك can_manage_users)
+function prDeptsHTML(){
+  const userOpts = (u)=> ['<option value="">— بلا —</option>'].concat((__prUsers||[]).map(x=>`<option value="${escapeAttr(x.username)}"${u===x.username?' selected':''}>${escapeHtml(x.display_name||x.username)}</option>`)).join('');
+  const sectorOpts = (s)=> ['<option value="">—</option>'].concat((PO_ENUMS?.sector||[]).map(x=>`<option value="${escapeAttr(x)}"${s===x?' selected':''}>${escapeHtml(x)}</option>`)).join('');
+  const rows=(STATE.departments||[]).map(d=>`<tr>
+      <td dir="ltr" style="text-align:start">${escapeHtml(d.id)}</td>
+      <td>${escapeHtml(d.name_ar||'—')}</td>
+      <td>${escapeHtml(d.sector||'—')}</td>
+      <td>${escapeHtml(d.cost_center||'—')}</td>
+      <td><select class="select" style="min-width:150px" onchange="prDeptSetManager('${escapeAttr(d.id)}',this.value)">${userOpts(d.manager_user)}</select></td>
+      <td class="center"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prDeptDelete('${escapeAttr(d.id)}')">حذف</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="center" style="padding:14px;color:#888">لا توجد أقسام — أضف أول قسم أدناه</td></tr>';
+  return `
+    <div class="pr-card">
+      <div class="pr-section-title">الأقسام والمدراء</div>
+      <table class="data-table"><thead><tr><th>المعرّف</th><th>القسم</th><th>القطاع</th><th>مركز التكلفة</th><th>المدير (المعتمِد)</th><th class="center"></th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="pr-card">
+      <div class="pr-section-title">إضافة قسم</div>
+      <div class="pr-form-grid">
+        <div class="rep-field"><label>المعرّف <span style="color:var(--danger)">*</span></label><input class="input" id="prd-id" placeholder="DEP-OPS"></div>
+        <div class="rep-field"><label>اسم القسم <span style="color:var(--danger)">*</span></label><input class="input" id="prd-name" placeholder="الإدارة العامة"></div>
+        <div class="rep-field"><label>القطاع</label><select class="select" id="prd-sector">${sectorOpts('')}</select></div>
+        <div class="rep-field"><label>مركز التكلفة</label><input class="input" id="prd-cc" placeholder="اختياري"></div>
+        <div class="rep-field"><label>المدير (المعتمِد)</label><select class="select" id="prd-mgr">${userOpts('')}</select></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="prDeptAdd()">➕ إضافة القسم</button>
+    </div>`;
+}
+async function prDeptAdd(){
+  const id=(document.getElementById('prd-id')?.value||'').trim();
+  const name=(document.getElementById('prd-name')?.value||'').trim();
+  if(!id||!name){ toast('error','بيانات ناقصة','المعرّف واسم القسم مطلوبان'); return; }
+  const row={ id, name_ar:name, sector:document.getElementById('prd-sector')?.value||null, cost_center:document.getElementById('prd-cc')?.value||null, manager_user:document.getElementById('prd-mgr')?.value||null };
+  try{
+    const {error}=await CLOUD.client.from('proc_departments').upsert(row); if(error) throw error;
+    toast('success','تمت الإضافة','أُضيف القسم');
+    __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ toast('error','تعذّر', e.message||'فشل الحفظ'); }
+}
+async function prDeptSetManager(id, mgr){
+  try{ const {error}=await CLOUD.client.from('proc_departments').update({manager_user:mgr||null}).eq('id',id); if(error) throw error;
+    const d=(STATE.departments||[]).find(x=>x.id===id); if(d) d.manager_user=mgr||null;
+    toast('success','تم','حُدّث مدير القسم');
+  }catch(e){ toast('error','تعذّر', e.message); }
+}
+async function prDeptDelete(id){
+  if(!confirm('حذف القسم «'+id+'»؟')) return;
+  try{ const {error}=await CLOUD.client.from('proc_departments').delete().eq('id',id); if(error) throw error;
+    toast('success','تم الحذف','حُذف القسم'); __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ toast('error','تعذّر', e.message); }
+}
+
 /* ---------- العرض ---------- */
 async function renderPRPortal(){
   const host=document.getElementById('pr-root'); if(!host) return;
@@ -10886,19 +10992,23 @@ async function renderPRPortal(){
   host.innerHTML = `<div class="empty">⏳ يحمّل طلبات الشراء...</div>`;
   await prLoadAll();
   const view = STATE.prView || 'list';
+  if(view==='depts'){ try{ __prUsers = await fetchCloudUsers() || []; }catch(_){ __prUsers=[]; } }
   const inboxN = prInbox().length;
   const inboxLabel = `📥 بانتظار اعتمادي${inboxN?` <span class="pr-tab-count">${inboxN}</span>`:''}`;
+  const canAdmin = hasPermission('can_manage_users');
   const tabs = `
     <div class="pr-tabs">
       ${prTab('list','📋 الطلبات', view==='list')}
       ${prTab('inbox', inboxLabel, view==='inbox')}
       ${prTab('create','➕ طلب جديد', view==='create')}
+      ${canAdmin ? prTab('depts','🏢 الأقسام', view==='depts') : ''}
       <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="__prLoaded=false;renderPRPortal()">↻ تحديث</button>
     </div>`;
   let body='';
   if(view==='create')      body = prBuilderHTML();
   else if(view==='track')  body = prTrackingHTML(STATE.prTrackId);
   else if(view==='inbox')  body = prInboxHTML();
+  else if(view==='depts')  body = canAdmin ? prDeptsHTML() : prListHTML();
   else                     body = prListHTML();
   host.innerHTML = tabs + body;
   if(view==='create'){ if(!__prDraftItems.length) prAddDraftItem(); prRenderItems(); prRecalcTotal(); }
@@ -10923,7 +11033,7 @@ function prListHTML(){
       <td>${escapeHtml(p.title||'—')}</td>
       <td>${escapeHtml(p.department||p.department_id||'—')}</td>
       <td class="num">${fmtPrice(p.est_total)}</td>
-      <td class="center">${prStatusBadge(p.status)}</td>
+      <td class="center">${prStatusBadge(p.status)}${prAgeBadge(p)}</td>
       <td>${stageTxt}</td>
       <td class="center">${escapeHtml((p.request_date||p.created_at||'').toString().slice(0,10))}</td>
     </tr>`;
@@ -11673,6 +11783,7 @@ function reportsCatalog(){
   const regStatusOpts = [['all','كل الحالات'],['pending','قيد المراجعة'],['approved','مقبول'],['needs_revision','يحتاج تعديل'],['rejected','مرفوض']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditActOpts = [['','كل الإجراءات'],['add','إضافة'],['edit','تعديل'],['delete','حذف'],['login','دخول'],['approve','اعتماد'],['award','ترسية']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditTypeOpts = [['','كل الأنواع'],['item','صنف'],['supplier','مورد'],['entry','سعر'],['po','أمر شراء'],['rfq','طلب تسعير'],['user','مستخدم'],['auth','دخول']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+  const prStatusOpts = ['<option value="">كل الحالات</option>'].concat(Object.entries(PR_STATUS_META).map(([k,m])=>`<option value="${escapeAttr(k)}">${escapeHtml(m.label)}</option>`)).join('');
 
   return [
     /* ===== المشتريات ===== */
@@ -11705,6 +11816,15 @@ function reportsCatalog(){
     { group:'المشتريات', perm:null, icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       title:'زمن الدورة والاختناقات', desc:'متوسط زمن دورة أمر الشراء وتفصيل مدة كل مرحلة لكشف نقاط التعثّر.',
       fields:[], run:()=>buildPOCycleReport() },
+
+    { group:'المشتريات', perm:null, icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/>',
+      title:'تقرير طلبات الشراء', desc:'حالة طلبات الشراء عبر سلسلة الاعتماد — قابلة للتصفية بالحالة والفترة.',
+      fields:[
+        {type:'select', key:'status', label:'الحالة', html:prStatusOpts},
+        {type:'date', key:'from', label:'من تاريخ'},
+        {type:'date', key:'to', label:'إلى تاريخ'},
+      ],
+      run:(v)=>buildPRReport({status:v.status||'', from:v.from||'', to:v.to||''}) },
 
     /* ===== الموردون ===== */
     { group:'الموردون', perm:'can_export', icon:'<path d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m0 0a4 4 0 110-8 4 4 0 010 8zm10 0a4 4 0 110-8 4 4 0 010 8z"/>',
