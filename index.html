@@ -12107,25 +12107,36 @@ window.CLOUD = {
     if(!this.enabled) return null;
     updateCloudStatus('syncing');
     try{
-      const [itemsRes, supRes, histRes] = await Promise.all([
-        this.client.from('proc_items').select('*').order('updated_at',{ascending:false}),
-        this.client.from('proc_suppliers').select('*').order('updated_at',{ascending:false}),
-        this.client.from('proc_history').select('*').order('date',{ascending:false}).limit(5000)
+      // جلب كل الصفوف عبر الترقيم — Supabase يقصّ افتراضياً عند 1000 صف بلا range/limit
+      const fetchAll = async (table, orderCol, ascending)=>{
+        const PAGE = 1000; let from = 0; let out = [];
+        while(true){
+          let q = this.client.from(table).select('*').order(orderCol,{ascending:!!ascending});
+          const { data, error } = await q.range(from, from+PAGE-1);
+          if(error) throw error;
+          if(!data || !data.length) break;
+          out = out.concat(data);
+          if(data.length < PAGE) break;
+          from += PAGE;
+          if(from > 200000) break; // سقف أمان
+        }
+        return out;
+      };
+      const [items, suppliers, history] = await Promise.all([
+        fetchAll('proc_items','updated_at',false),
+        fetchAll('proc_suppliers','updated_at',false),
+        fetchAll('proc_history','date',false)
       ]);
-      if(itemsRes.error) throw itemsRes.error;
-      if(supRes.error) throw supRes.error;
-      if(histRes.error) throw histRes.error;
       // أوامر الشراء — جلب مرن: غياب الجدول (قبل تنفيذ السكربت) لا يكسر المزامنة
       let pos = [];
       try{
-        const posRes = await this.client.from('proc_purchase_orders').select('*').order('issue_date',{ascending:false}).limit(5000);
-        if(!posRes.error) pos = posRes.data || [];
+        pos = await fetchAll('proc_purchase_orders','issue_date',false);
       }catch(e){ /* الجدول غير موجود بعد — تجاهل */ }
       updateCloudStatus('connected');
       return {
-        items: itemsRes.data || [],
-        suppliers: supRes.data || [],
-        history: histRes.data || [],
+        items: items || [],
+        suppliers: suppliers || [],
+        history: history || [],
         purchaseOrders: pos
       };
     } catch(e){
