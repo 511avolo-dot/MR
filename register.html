@@ -3038,7 +3038,7 @@ async function init() {
 
 async function connectSupabase(url, key) {
   try {
-    showProc('جارٍ الاتصال...', 'الاتصال بقاعدة البيانات');
+    showProc('جارٍ التهيئة...', 'يرجى الانتظار لحظات');
     await loadSupabaseLib();
     SB = await sbCreateClient(url, key);
     // اسم النموذج فقط من الإعدادات — المفتاح لا يُجلب للمتصفح إطلاقاً.
@@ -4158,7 +4158,7 @@ const DICT = {
   'من لوحة Supabase → Settings → API → Project URL':'From Supabase → Settings → API → Project URL',
   'من Supabase → Settings → API → anon public key':'From Supabase → Settings → API → anon public key',
   'يرجى إدخال بيانات الاتصال بقاعدة البيانات (هذه الخطوة للمسؤول فقط)':'Please enter the database connection details (administrator only)',
-  'الاتصال بقاعدة البيانات':'Connecting to database','اختبار الاتصال...':'Testing connection...',
+  'جارٍ التهيئة...':'Initializing...','يرجى الانتظار لحظات':'Please wait a moment','اختبار الاتصال...':'Testing connection...',
   'فشل الاتصال:':'Connection failed:','فشل تحميل بيانات الطلب:':'Failed to load application data:',
   'رابط التعديل غير صالح':'Invalid edit link','هذا الطلب لا يحتاج إلى تعديل':'This application does not require revision',
   'رابط التعديل غير صالح أو منتهي الصلاحية — تواصل مع المشتريات للحصول على رابط جديد':'The edit link is invalid or expired — please contact procurement for a new link.',
