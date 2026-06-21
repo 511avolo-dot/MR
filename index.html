@@ -1452,6 +1452,8 @@ body.print-preview-active .print-document{display:block}
 .pr-badge.danger{background:rgba(155,44,44,0.1);color:#b13434;border-color:rgba(155,44,44,0.25)}
 .pr-badge.info{background:rgba(58,79,134,0.1);color:#3a4f86;border-color:rgba(58,79,134,0.22)}
 .pr-badge.neutral{background:var(--surface-2,#f0ece2);color:#5a5346;border-color:var(--border)}
+.pr-parse-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:16px;background:linear-gradient(135deg,rgba(196,162,101,0.1),rgba(154,122,69,0.05));border:1px dashed var(--accent-2);border-radius:10px}
+.pr-parse-hint{font-size:11.5px;color:var(--muted);flex:1;min-width:200px}
 .pr-form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:18px}
 .pr-section-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--ink);margin:6px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .data-table{width:100%;border-collapse:collapse;font-size:13px}
@@ -10970,6 +10972,61 @@ function prActPrompt(prId, action){
   prAct(prId, action, comment);
 }
 
+/* ---------- P3: قراءة النموذج بالذكاء (OCR/AI) ---------- */
+function prNormDate(v){
+  if(!v) return ''; const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+  m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/); if(m) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+  return '';
+}
+function prApplyParsed(obj){
+  const setV=(id,v)=>{ const el=document.getElementById(id); if(el && v!=null && String(v)!=='') el.value=v; };
+  setV('pr-title', obj.title);
+  setV('pr-project', obj.project);
+  setV('pr-needed', prNormDate(obj.needed_by));
+  setV('pr-from', prNormDate(obj.period_from));
+  setV('pr-to', prNormDate(obj.period_to));
+  if(obj.sector){ const sel=document.getElementById('pr-sector'); if(sel && [...sel.options].some(o=>o.value===obj.sector)) sel.value=obj.sector; }
+  if(obj.department){ const d=(STATE.departments||[]).find(x=>(x.name_ar||'').trim()===String(obj.department).trim()); const sel=document.getElementById('pr-dept'); if(d&&sel) sel.value=d.id; }
+  const items=Array.isArray(obj.items)?obj.items:[];
+  const clean=items.filter(it=>(it.description||'').toString().trim());
+  if(clean.length){
+    __prDraftItems = clean.map(it=>({
+      description:String(it.description||'').trim(), unit:it.unit||'',
+      contract_qty:(it.contract_qty==null?'':it.contract_qty), stock_balance:(it.stock_balance==null?'':it.stock_balance),
+      requested_qty:(it.requested_qty==null?'':it.requested_qty), unit_price:(it.unit_price==null?'':it.unit_price)
+    }));
+    prRenderItems(); prRecalcTotal();
+  }
+  toast('success','تمت القراءة', `استُخرج ${clean.length} بند — راجع البيانات قبل الإرسال`);
+}
+async function prParseForm(){
+  if(!requirePermission('can_use_ai','قراءة النموذج بالذكاء')) return;
+  const cfg = await loadAIConfig();
+  if(!cfg || !cfg.enabled){ toast('error','غير مُتاح','لم يُضبط الذكاء الاصطناعي (مفتاح/وسيط)'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf';
+  inp.onchange = async ()=>{
+    const f=inp.files[0]; if(!f) return;
+    toast('info','جارٍ القراءة','يستخرج الذكاء بيانات النموذج…');
+    try{
+      const b64 = await new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=()=>res(String(rd.result).split(',')[1]); rd.onerror=rej; rd.readAsDataURL(f); });
+      const prompt = 'هذا «نموذج طلب شراء مواد» لمجموعة الذيابي. استخرج بياناته وأعد JSON فقط (بلا أي شرح أو نص خارج الأقواس) بهذا الشكل:\n'
+        + '{"title":"فئة/نوع المواد المذكورة بعد عبارة (تأمين المواد الآتية)","department":"الإدارة","sector":"القطاع إن وُجد","project":"المشروع/الموقع إن وُجد","request_date":"YYYY-MM-DD أو null","needed_by":"تاريخ التوريد المطلوب YYYY-MM-DD أو null","period_from":"YYYY-MM-DD أو null","period_to":"YYYY-MM-DD أو null","items":[{"description":"إسم الصنف","unit":"الوحدة","contract_qty":رقم أو null,"stock_balance":رقم أو null,"requested_qty":رقم,"unit_price":رقم أو null}]}\n'
+        + 'أعمدة جدول النموذج بالترتيب: م | إسم الصنف | الوحدة | كمية العقد | رصيد مستودعى | الكمية المطلوبة | سعر الوحدة | إجمالي السعر. خذ requested_qty من عمود «الكمية المطلوبة». تجاهل صف الإجمالي وصفوف التواقيع. أعد الأرقام مجرّدة بلا فواصل آلاف ولا عملة.';
+      const body = { contents:[{role:'user', parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg', data:b64}}]}], generationConfig:{temperature:0.1, maxOutputTokens:4096, thinkingConfig:{thinkingBudget:0}} };
+      const model = AI_FALLBACK_MODELS.includes(cfg.model) ? cfg.model : AI_DEFAULT_MODEL;
+      const resp = await aiFetch(model, 'generateContent', body, cfg);
+      const data = await resp.json();
+      let txt = (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '';
+      txt = txt.replace(/```(?:json)?/gi,'').trim();
+      const a=txt.indexOf('{'), z=txt.lastIndexOf('}'); if(a<0||z<0) throw new Error('لم يُفهم رد الذكاء');
+      const obj = JSON.parse(txt.slice(a,z+1));
+      prApplyParsed(obj);
+    }catch(e){ toast('error','فشل القراءة', e.message||'حاول بصورة أوضح للنموذج'); }
+  };
+  inp.click();
+}
+
 function prBuilderHTML(){
   const cats = [...new Set((STATE.items||[]).map(i=>i.category).filter(Boolean))].sort();
   const sectorOpts = ['<option value=""></option>'].concat((PO_ENUMS?.sector||[]).map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
@@ -10979,6 +11036,13 @@ function prBuilderHTML(){
   return `
     ${itemDatalist}
     <div class="pr-card">
+      <div class="pr-parse-bar">
+        <button class="btn btn-accent btn-sm" onclick="prParseForm()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6M9 15l3 3 3-3"/></svg>
+          رفع النموذج وقراءته آلياً
+        </button>
+        <span class="pr-parse-hint">ارفع صورة أو PDF لنموذج «طلب شراء مواد» لتعبئة الحقول والبنود تلقائياً بالذكاء — راجعها ثم أرسل.</span>
+      </div>
       <div class="pr-form-grid">
         <div class="rep-field"><label>نوع/فئة المواد <span style="color:var(--danger)">*</span></label><input class="input" id="pr-title" list="pr-cats" placeholder="مثل: البوفية، أغراض معيشة"></div>
         <datalist id="pr-cats">${cats.map(c=>`<option value="${escapeAttr(c)}">`).join('')}</datalist>
