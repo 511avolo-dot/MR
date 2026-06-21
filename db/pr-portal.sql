@@ -169,10 +169,21 @@ SELECT 'مشتريات صغيرة (≤ 1000)', 10, 0, 1000,
 WHERE NOT EXISTS (SELECT 1 FROM proc_approval_rules WHERE name='مشتريات صغيرة (≤ 1000)');
 
 -- ════════════════════════════════════════════════════════════════════════
---  التحديث اللحظي (Realtime) لتتبّع حالة الطلب لحظة بلحظة في بوابة الأقسام:
---    ALTER PUBLICATION supabase_realtime ADD TABLE proc_purchase_requests;
---    ALTER PUBLICATION supabase_realtime ADD TABLE proc_pr_approvals;
---  (نفّذها إن لم تكن الجداول منشورة مسبقاً.)
+--  التحديث اللحظي (Realtime) — يُفعَّل تلقائياً وبأمان (idempotent) بعد إنشاء الجداول.
+--  ملاحظة: لا تُشغّل أوامر ALTER PUBLICATION منفصلةً قبل إنشاء الجداول — هذا الملف
+--  يتكفّل بالترتيب الصحيح، وآمن لإعادة التشغيل أكثر من مرة.
+-- ════════════════════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='proc_purchase_requests') THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE proc_purchase_requests;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='proc_pr_approvals') THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE proc_pr_approvals;
+    END IF;
+  END IF;
+END $$;
 -- ════════════════════════════════════════════════════════════════════════
 --  ملاحظة أمنية (مرحلة لاحقة اختيارية): يمكن تحصين انتقالات الاعتماد بدوال
 --  Postgres RPC (SECURITY DEFINER) تفرض «المعتمِد الصحيح + فصل المهام» على
