@@ -10818,15 +10818,60 @@ async function prAct(prId, action, comment){
       .eq('id',prId);
     if(e2) throw e2;
     try{ pushAuditToCloud && pushAuditToCloud({username:me, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:(action==='approve'?'approve':action==='reject'?'reject':'return'), entity_type:'pr', entity_id:prId, old_value:{status:pr.status}, new_value:{status:newStatus, stage:stage.stage_label}, meta:{comment:comment||null}}); }catch(_){}
-    const msg = action==='approve' ? (isLast?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
+    const msg = action==='approve' ? (isLast?'اعتُمد الطلب نهائياً — يُحوّل لطلب تسعير...':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
     toast('success','تم', msg);
+    // P4: التحويل التلقائي إلى RFQ عند الاعتماد النهائي
     if(action==='approve' && isLast){
-      // P4 لاحقاً: التحويل التلقائي إلى RFQ. الآن: الطلب «معتمد» جاهز للتحويل.
+      try{ await prToRFQ(Object.assign({}, pr, {status:'approved'})); }catch(e){ console.warn('[pr->rfq]', e?.message); }
     }
     __prLoaded=false;
     await prLoadAll();
     renderPRPortal();
   }catch(e){ toast('error','تعذّر التنفيذ', e.message||'خطأ غير متوقع'); }
+}
+
+/* ---------- P4: التحويل التلقائي إلى طلب تسعير (RFQ) ---------- */
+function prItemBaseline(it){
+  if(it.unit_price!=null && it.unit_price!=='') return Number(it.unit_price)||0;
+  if(it.item_code){ const c=(STATE.items||[]).find(x=>x.code===it.item_code); if(c && c.last_price!=null) return Number(c.last_price)||0; }
+  const n=(STATE.items||[]).find(x=>x.name===it.description); if(n && n.last_price!=null) return Number(n.last_price)||0;
+  return 0;
+}
+async function prToRFQ(pr){
+  if(!pr){ return {ok:false}; }
+  if(!prCloudReady()){ toast('error','غير متصل','يجب الاتصال بالسحابة'); return {ok:false}; }
+  if(pr.rfq_id){ toast('info','مُحوّل مسبقاً','هذا الطلب مرتبط بطلب تسعيرّ'); return {ok:false, id:pr.rfq_id}; }
+  const items = pr.items||[];
+  if(!items.length){ toast('error','لا بنود','لا يمكن تحويل طلب بلا بنود'); return {ok:false}; }
+  const lines = items.map((it,i)=>({ id:'L'+(i+1), code:it.item_code||null, desc:it.description, qty:num0(it.requested_qty)||1, unit:it.unit||'', baseline: prItemBaseline(it) }));
+  // اختيار الموردين: اقتراح ذكي بالفئة/السجل، وإلا أعلى الموردين نشاطاً
+  let suppliers=[];
+  try{ suppliers = rfqSuggestSuppliers(lines)||[]; }catch(_){}
+  if(!suppliers.length){
+    suppliers = [...(STATE.suppliers||[])].sort((a,b)=>(b.offers_count||0)-(a.offers_count||0)).slice(0,5).map(s=>s.name).filter(Boolean);
+  }
+  suppliers = suppliers.slice(0,6);
+  const res = await rfqCreate({ title:'طلب تسعير — '+pr.title+' ('+pr.id+')', lines, suppliers, notes:'مُولّد تلقائياً من طلب الشراء '+pr.id });
+  if(!res || !res.ok) return {ok:false};
+  // توليد روابط بوابة الموردين (أفضل جهد)
+  for(const s of suppliers){ try{ await rfqEnsureToken(res.id, s); }catch(_){} }
+  // ربط الطلب وتحديث حالته
+  try{
+    await CLOUD.client.from('proc_purchase_requests')
+      .update({ rfq_id:res.id, status:'rfq_issued', updated_at:new Date().toISOString(), updated_by:STATE.currentUser?.username||null })
+      .eq('id', pr.id);
+  }catch(_){}
+  try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'convert', entity_type:'pr', entity_id:pr.id, old_value:{status:'approved'}, new_value:{status:'rfq_issued', rfq_id:res.id}, meta:{suppliers:suppliers.length}}); }catch(_){}
+  toast('success','تحوّل إلى طلب تسعير', `أُنشئ طلب تسعير ودُعي ${suppliers.length} مورد`);
+  __prLoaded=false;
+  return {ok:true, id:res.id};
+}
+// زرّ التحويل اليدوي (للطلبات المعتمدة غير المحوّلة)
+async function prConvertManual(prId){
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===prId); if(!pr) return;
+  if(!requirePermission('can_manage_rfq','تحويل إلى طلب تسعير')) return;
+  await prToRFQ(pr);
+  await prLoadAll(); renderPRPortal();
 }
 
 /* ---------- العرض ---------- */
@@ -11086,6 +11131,18 @@ function prTrackingHTML(id){
       </div>
     </div>
     ${actionPanel}
+    ${(pr.status==='approved' && !pr.rfq_id) ? `
+    <div class="pr-card" style="margin-top:12px;border-color:var(--accent-2)">
+      <div class="pr-section-title">جاهز للتحويل</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">الطلب معتمد. حوّله إلى طلب تسعير ودعوة الموردين.</div>
+      <button class="btn btn-accent" onclick="prConvertManual('${escapeAttr(pr.id)}')">🔄 تحويل إلى طلب تسعير</button>
+    </div>` : ''}
+    ${pr.rfq_id ? `
+    <div class="pr-card" style="margin-top:12px">
+      <div class="pr-section-title">طلب التسعير المرتبط</div>
+      <div style="font-size:13px">رقم: <b dir="ltr">${escapeHtml(pr.rfq_id)}</b>
+        <button class="btn btn-ghost btn-sm" style="margin-inline-start:10px" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح للمقارنة والترسية ←</button></div>
+    </div>` : ''}
     <div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">سلسلة الاعتماد</div>
       <div class="pr-stepper">${stepper}</div>
