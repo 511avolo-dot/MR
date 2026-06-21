@@ -1194,7 +1194,6 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
 .doc-card:hover {
   background: var(--surface);
   border-color: var(--line-gold);
-  transform: translateY(-3px);
   box-shadow: var(--shadow-md);
 }
 .doc-card:hover::before {
@@ -1645,21 +1644,32 @@ input[type="date"]:focus::-webkit-calendar-picker-indicator { opacity: 0.8; }
   from { transform: translateY(20px) scale(0.94); opacity: 0; }
   to   { transform: translateY(0) scale(1); opacity: 1; }
 }
+.proc-spin {
+  position: relative;
+  width: 64px; height: 64px;
+  margin: 0 auto var(--sp-6);
+  display: grid; place-items: center;
+}
 .proc-spinner {
-  width: 52px; height: 52px;
+  width: 64px; height: 64px;
   border: 2px solid var(--line-strong);
   border-top-color: var(--accent);
   border-right-color: var(--accent-2);
   border-radius: var(--r-full);
   animation: spin 1s linear infinite;
-  margin: 0 auto var(--sp-6);
-  position: relative;
+  position: absolute; inset: 0;
 }
 .proc-spinner::after {
   content: '';
   position: absolute; inset: 6px;
   border-radius: var(--r-full);
   border: 1px solid var(--line-gold-soft);
+}
+.proc-logo {
+  position: absolute;
+  width: 34px; height: 34px;
+  object-fit: contain;
+  border-radius: 6px;
 }
 .proc-title {
   font-family: var(--font-display);
@@ -2243,7 +2253,10 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
 <!-- ══ PROCESSING OVERLAY ══ -->
 <div id="proc-overlay" class="hidden">
   <div class="proc-card">
-    <div class="proc-spinner"></div>
+    <div class="proc-spin">
+      <div class="proc-spinner"></div>
+      <img class="proc-logo" src="logo.png" alt="" onerror="this.style.display='none'">
+    </div>
     <div class="proc-title" id="proc-title">جارٍ المعالجة...</div>
     <div class="proc-sub" id="proc-sub"></div>
   </div>
