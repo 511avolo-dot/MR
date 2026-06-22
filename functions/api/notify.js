@@ -47,6 +47,10 @@ const emailToUsername = (email) => {
   for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
   return e.split('@')[0];
 };
+const usernameToEmail = (u) => {
+  const k = String(u || '').trim().toLowerCase();
+  return AUTH_EMAIL_MAP[k] || (k + '@aldeyabi.com');
+};
 // تحقّق أن المستدعي موظف نشط (جلسة Supabase صالحة + سجل في proc_users).
 // يُعيد بريد الموظف عند النجاح (يُستخدم كمستقبِل للبريد التجريبي)، وإلا null.
 async function verifyStaff(env, base, jwt) {
@@ -77,6 +81,61 @@ export async function onRequestPost({ request, env }) {
 
   let payload;
   try { payload = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
+
+  // ════ إشعارات بوابة طلبات الشراء (kind:'pr') ════
+  // المستقبِل يُحدَّد على الخادم من حالة الطلب (لا عنوان من العميل) + يُقيَّد بنطاق الشركة.
+  if (payload && payload.kind === 'pr') {
+    const base = env.SUPABASE_URL;
+    const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
+    if (!(await verifyStaff(env, base, jwt))) return json({ error: 'غير مصرّح' }, 403);
+    const prId = String(payload.pr_id || '').trim();
+    const ev = String(payload.event || '').trim();
+    if (!prId || !['pending', 'approved', 'rejected', 'returned', 'submitted'].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
+    const headers = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' };
+    let pr = null;
+    try {
+      const r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(prId)}&select=id,title,department,department_id,requester,requester_name,status,est_total`, { headers });
+      const rows = await r.json(); pr = Array.isArray(rows) ? rows[0] : null;
+    } catch (_) {}
+    if (!pr) return json({ error: 'الطلب غير موجود' }, 404);
+    let recips = [];
+    if (ev === 'pending') {
+      let stage = null;
+      try {
+        const ar = await fetch(`${base}/rest/v1/proc_pr_approvals?pr_id=eq.${encodeURIComponent(prId)}&decision=eq.pending&order=seq.asc&select=seq,resolver,role_key,approver&limit=1`, { headers });
+        const rows = await ar.json(); stage = Array.isArray(rows) ? rows[0] : null;
+      } catch (_) {}
+      if (stage) {
+        if (stage.approver) recips = [stage.approver];
+        else if (stage.resolver === 'dept_manager' && pr.department_id) {
+          try { const dr = await fetch(`${base}/rest/v1/proc_departments?id=eq.${encodeURIComponent(pr.department_id)}&select=manager_user`, { headers }); const rows = await dr.json(); if (rows && rows[0] && rows[0].manager_user) recips = [rows[0].manager_user]; } catch (_) {}
+        } else if (stage.role_key) {
+          try {
+            const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions`, { headers });
+            const users = await ur.json();
+            const explicit = (users || []).filter(u => u.permissions && u.permissions[stage.role_key] === true).map(u => u.username);
+            recips = explicit.length ? explicit : (users || []).filter(u => u.role === 'admin').map(u => u.username);
+          } catch (_) {}
+        }
+      }
+    } else {
+      recips = [pr.requester];
+    }
+    const toList = [...new Set(recips.filter(Boolean).map(usernameToEmail))].filter(e => /@aldeyabi\.com$/i.test(e));
+    if (!toList.length) return json({ skipped: true, reason: 'no_recipient' });
+    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+    const { subject, html } = buildPREmail(ev, pr, origin, payload);
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: env.NOTIFY_FROM, to: toList, subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
+      });
+      if (!r.ok) { const t = await r.text().catch(() => ''); return json({ error: 'تعذّر إرسال البريد', detail: t.slice(0, 300) }, 502); }
+      return json({ ok: true, sent: true, to: toList.length });
+    } catch (e) { return json({ error: 'تعذّر إرسال البريد' }, 502); }
+  }
+
   const id = String(payload?.id || '').trim();
   const event = String(payload?.event || '').trim();
 
@@ -405,5 +464,65 @@ function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, o
   </table>
 </body></html>`;
 
+  return { subject, html };
+}
+
+/* ── قالب بريد بوابة طلبات الشراء (عربي، بهوية الذيابي) ── */
+function buildPREmail(event, pr, origin, payload) {
+  const B = BRAND;
+  const META = {
+    pending:   ['طلب بانتظار اعتمادك', '#d97706', '✎'],
+    approved:  ['اعتُمد الطلب نهائياً', '#16a34a', '✓'],
+    rejected:  ['تم رفض الطلب', '#dc2626', '✕'],
+    returned:  ['أُعيد الطلب للتعديل', '#2563eb', '↩'],
+    submitted: ['تم استلام طلبك', '#2563eb', '⏳'],
+  };
+  const m = META[event] || META.submitted;
+  const title = pr.title || 'طلب شراء';
+  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const comment = payload && payload.comment ? String(payload.comment) : '';
+  const LINES = {
+    pending:   `لديك طلب شراء بانتظار اعتمادك ضمن سلسلة الموافقات. افتح البوابة لمراجعة التفاصيل واتخاذ القرار (اعتماد / إرجاع / رفض).`,
+    approved:  `تم اعتماد طلبك «${title}» نهائياً عبر كامل سلسلة الموافقات، وسيُحوَّل إلى المشتريات لبدء عروض الأسعار والتوريد.`,
+    rejected:  `نأسف لإبلاغك بأن طلبك «${title}» قد رُفض.`,
+    returned:  `أُعيد طلبك «${title}» إليك للتعديل. يرجى مراجعته وتحديث المطلوب ثم إعادة إرساله.`,
+    submitted: `تم استلام طلبك «${title}» بنجاح، وبدأ مساره في سلسلة الاعتماد. ستصلك التحديثات تلقائياً.`,
+  };
+  const subject = `${m[0]} — طلب ${pr.id} | مجموعة الذيابي`;
+  const heroBg = m[1] + '14';
+  const cmt = comment ? `<div dir="rtl" style="text-align:right;background:${B.wash};border:1px solid ${B.line};border-right:4px solid ${m[1]};border-radius:12px;padding:12px 16px;margin:14px 0;font-size:13.5px;color:${B.ink}"><b>ملاحظة:</b> ${esc(comment)}</div>` : '';
+  const btn = portalUrl
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>`
+    : '';
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:${B.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${B.ink}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${B.wash};padding:22px 12px"><tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 40px -16px rgba(11,27,54,.35)">
+      <tr><td style="background:linear-gradient(135deg,${B.navy},#16315c);padding:22px 30px" align="center">
+        <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">AL-DEYABI GROUP · مجموعة الذيابي</div>
+        <div style="color:#fff;font-size:19px;font-weight:800;margin-top:8px">بوابة طلبات الشراء</div>
+      </td></tr>
+      <tr><td style="height:3px;background:${B.gold}"></td></tr>
+      <tr><td style="background:${heroBg};padding:22px 30px" align="center">
+        <div style="width:58px;height:58px;border-radius:50%;background:${m[1]};color:#fff;font-size:28px;line-height:58px;margin:0 auto;font-weight:700">${m[2]}</div>
+        <div style="font-size:20px;font-weight:800;color:${m[1]};margin-top:10px">${esc(m[0])}</div>
+      </td></tr>
+      <tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
+        <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc(LINES[event] || LINES.submitted)}</p>
+        ${cmt}${btn}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 6px"><tr>
+          <td style="background:${B.wash};border:1px solid ${B.line};border-radius:12px;padding:12px 16px" align="center">
+            <span style="font-size:12px;color:${B.soft}">رقم الطلب</span><br>
+            <span dir="ltr" style="font-size:17px;font-weight:800;color:${B.navy};letter-spacing:.05em">${esc(pr.id)}</span>
+            <div style="font-size:12px;color:${B.soft};margin-top:6px">القسم: ${esc(pr.department || '—')}${pr.requester_name ? ' · الطالب: ' + esc(pr.requester_name) : ''}</div>
+          </td></tr></table>
+      </td></tr>
+      <tr><td style="background:${B.navy};padding:16px 30px" align="center">
+        <div style="color:#fff;font-size:12px;opacity:.9">مجموعة الذيابي · بوابة طلبات الشراء</div>
+        <div style="color:#fff;opacity:.5;font-size:10.5px;margin-top:6px">رسالة آلية — لا يلزم الرد</div>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
   return { subject, html };
 }
