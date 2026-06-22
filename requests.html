@@ -82,6 +82,20 @@
   .toast.ok{background:#1f5c40}.toast.err{background:#7c1d1d}
   .row-act{display:flex;gap:6px;flex-wrap:wrap}
   .ocr-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:16px;background:linear-gradient(135deg,rgba(196,162,101,.1),rgba(154,122,69,.05));border:1px dashed var(--gold);border-radius:10px}
+  /* dashboard */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+  .kpi .kv{font-size:26px;font-weight:800;line-height:1}
+  .kpi .kl{font-size:11.5px;color:var(--muted);margin-top:5px}
+  .bar-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .bar-row:last-child{border-bottom:none}
+  .bar-row .bl{flex:1;min-width:120px}
+  .bar-row .bw{flex:2;height:8px;background:var(--cream);border-radius:5px;overflow:hidden}
+  .bar-row .bf{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-2))}
+  .now-bar{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;background:rgba(196,162,101,.12);border:1px solid var(--line);color:var(--ink)}
+  .now-bar.ok{background:rgba(31,122,85,.1);border-color:rgba(31,122,85,.3)}
+  .now-bar.rej{background:rgba(155,44,44,.08);border-color:rgba(155,44,44,.25)}
+  .now-bar.ret{background:rgba(58,79,134,.08);border-color:rgba(58,79,134,.22)}
   /* settings */
   .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:10px}
   .subtab{background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
@@ -313,6 +327,7 @@ function render(){
   const inbox = MYREQS.filter(p=>p.status==='in_review' && canActOn(p));
   const tabs=[['create','➕ رفع طلب'],['mine','📋 طلباتي']];
   if(isApprover()) tabs.push(['inbox','📥 بانتظار اعتمادي'+(inbox.length?` <span class="cnt">${inbox.length}</span>`:'')]);
+  if(isApprover()) tabs.push(['dash','📊 لوحة المعلومات']);
   if(isPortalAdmin()) tabs.push(['settings','⚙️ لوحة التحكّم']);
   $('tabs').innerHTML = tabs.map(([k,l])=>`<button class="tab${VIEW===k?' active':''}" onclick="go('${k}')">${l}</button>`).join('')
     + `<button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="refresh()">↻ تحديث</button>`;
@@ -320,8 +335,40 @@ function render(){
   if(VIEW==='create') v.innerHTML=builderHTML(), initBuilder();
   else if(VIEW==='track') v.innerHTML=trackHTML(TRACK_ID);
   else if(VIEW==='inbox') v.innerHTML=inboxHTML(inbox);
+  else if(VIEW==='dash') v.innerHTML=dashHTML();
   else if(VIEW==='settings') v.innerHTML=settingsHTML();
   else v.innerHTML=mineHTML();
+}
+/* ════════════ التتبّع المتقدّم ولوحة المعلومات ════════════ */
+function ageDays(pr){ const t=Date.parse(pr.updated_at||pr.created_at||''); return isNaN(t)?0:Math.max(0,Math.floor((Date.now()-t)/86400000)); }
+function holderOf(pr){
+  const st=currentStage(pr); if(!st) return '—';
+  if(st.approver) return st.approver;
+  if(st.resolver==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); return d&&d.manager_user?d.manager_user:'مدير القسم'; }
+  const rk=(ROLE_KEYS.find(r=>r[0]===st.role_key)||[])[1]||st.role_key||'—';
+  return 'حملة صلاحية: '+rk;
+}
+function dashHTML(){
+  const all=MYREQS, by={}; all.forEach(p=>by[p.status]=(by[p.status]||0)+1);
+  const inrev=all.filter(p=>p.status==='in_review'), sla=num0(PSET.sla_days)||3;
+  const overdue=inrev.filter(p=>ageDays(p)>sla);
+  const bn={}; inrev.forEach(p=>{const st=currentStage(p);const k=st?st.stage_label:'—';bn[k]=(bn[k]||0)+1;});
+  const wh={}; inrev.forEach(p=>{const h=holderOf(p);wh[h]=(wh[h]||0)+1;});
+  const kpi=(l,v,c)=>`<div class="kpi"><div class="kv" style="${c?`color:${c}`:''}">${v}</div><div class="kl">${esc(l)}</div></div>`;
+  const barList=(obj)=>{const e=Object.entries(obj).sort((a,b)=>b[1]-a[1]);if(!e.length)return '<div class="muted">—</div>';const max=e[0][1]||1;return e.map(([k,v])=>`<div class="bar-row"><span class="bl">${esc(k)}</span><div class="bw"><div class="bf" style="width:${Math.round(v/max*100)}%"></div></div><b>${v}</b></div>`).join('');};
+  const odRows=overdue.sort((a,b)=>ageDays(b)-ageDays(a)).slice(0,15).map(p=>`<div class="bar-row"><a class="bl" style="cursor:pointer;color:var(--gold-2)" onclick="goLoad('track','${esc(p.id)}')">${esc(p.id)} · ${esc(p.title||'')}</a><span class="badge ${ageDays(p)>sla*2?'danger':'warn'}">${ageDays(p)} يوم · ${esc(holderOf(p))}</span></div>`).join('')||'<div class="muted">لا متأخرات 👍</div>';
+  return `
+    <div class="kpis">
+      ${kpi('إجمالي الطلبات',all.length)}
+      ${kpi('قيد الاعتماد',inrev.length,'#9A7A45')}
+      ${kpi('معتمد/تسعير',(by.approved||0)+(by.rfq_issued||0)+(by.converted_to_po||0),'#1f7a55')}
+      ${kpi('مرفوض',by.rejected||0,'#b13434')}
+      ${kpi('مُعاد للتعديل',by.returned||0,'#3a4f86')}
+      ${kpi('متأخّر >'+sla+'ي',overdue.length,overdue.length?'#b13434':'#1f7a55')}
+    </div>
+    <div class="card"><div class="sec-title">🔧 الاختناقات — أين تتكدّس الطلبات</div>${barList(bn)}</div>
+    <div class="card"><div class="sec-title">👤 على مَن تقف الطلبات الآن</div>${barList(wh)}</div>
+    <div class="card"><div class="sec-title">⏱️ الطلبات المتأخّرة (الأطول انتظاراً)</div>${odRows}</div>`;
 }
 async function refresh(){ await loadMyReqs(); render(); }
 function go(view,id){ VIEW=view; TRACK_ID=id||null; if(view==='create')DRAFT=[]; render(); if(view!=='create'&&view!=='track'){} }
@@ -469,6 +516,10 @@ function trackHTML(id){
       <span>القسم: <b>${esc(pr.department||'—')}</b></span><span>الطالب: <b>${esc(pr.requester_name||pr.requester||'—')}</b></span>
       <span>الجوال: <b dir="ltr">${esc(pr.requester_mobile||'—')}</b></span><span>التوريد المطلوب: <b>${esc(pr.needed_by||'—')}</b></span>
     </div>
+    ${pr.status==='in_review'?`<div class="now-bar">⏳ <b>الموقف الحالي:</b> بانتظار «${esc(holderOf(pr))}» · منذ ${ageDays(pr)} يوم</div>`:''}
+    ${pr.status==='approved'?`<div class="now-bar ok">✅ اعتُمد نهائياً — جاهز لتحويله إلى عروض أسعار في المشتريات.</div>`:''}
+    ${pr.status==='rejected'?`<div class="now-bar rej">✕ مرفوض.</div>`:''}
+    ${pr.status==='returned'?`<div class="now-bar ret">↩ مُعاد للتعديل — يرجى مراجعة الملاحظات وإعادة الإرسال.</div>`:''}
   </div>
   ${actPanel}
   <div class="card"><div class="sec-title">سلسلة الاعتماد</div><div class="stepper">${steps}</div></div>
