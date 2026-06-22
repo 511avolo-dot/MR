@@ -329,6 +329,12 @@ async function goLoad(view,id){ VIEW=view; TRACK_ID=id||null; await loadMyReqs()
 
 function statusBadge(s){const m=STATUS_META[s]||{l:s,c:'neutral'};return `<span class="badge ${m.c}">${esc(m.l)}</span>`;}
 
+/* إشعار بريد (أفضل جهد، غير حاجب) — المستقبِل يُحدَّد على الخادم من حالة الطلب */
+async function notifyPR(event, prId, comment){
+  if(PSET && PSET.email_on===false) return;
+  try{ await fetch('/api/notify',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({kind:'pr',pr_id:prId,event,comment:comment||null})}); }catch(e){}
+}
+
 /* ── رفع طلب ── */
 function builderHTML(){
   const deptOpts=['<option value="">— اختر القسم —</option>'].concat(DEPTS.map(d=>`<option value="${esc(d.id)}">${esc(d.name_ar||d.id)}</option>`)).join('');
@@ -414,6 +420,8 @@ async function submitReq(){
       await SB.from('proc_pr_approvals').insert(ar);
     }
     toast('تم إرسال الطلب رقم '+id,'ok');
+    notifyPR('submitted', id);
+    notifyPR('pending', id);
     DRAFT=[];
     await goLoad('track',id);
   }catch(e){ toast('تعذّر الإرسال: '+(e.message||''),'err'); }
@@ -501,6 +509,9 @@ async function act(id,action,comment){
     let e=(await SB.from('proc_pr_approvals').update({decision,approver:ME.username,comment:comment||null,acted_at:now}).eq('pr_id',id).eq('seq',stage.seq)).error; if(e)throw e;
     e=(await SB.from('proc_purchase_requests').update({status:newStatus,current_seq:newSeq,updated_at:now,updated_by:ME.username}).eq('id',id)).error; if(e)throw e;
     toast(action==='approve'?(isLast?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك'):action==='reject'?'رُفض الطلب':'أُعيد للتعديل','ok');
+    if(action==='approve'){ if(isLast) notifyPR('approved',id); else notifyPR('pending',id); }
+    else if(action==='reject') notifyPR('rejected',id,comment);
+    else notifyPR('returned',id,comment);
     await goLoad('inbox');
   }catch(err){ toast('تعذّر التنفيذ: '+(err.message||''),'err'); }
 }
