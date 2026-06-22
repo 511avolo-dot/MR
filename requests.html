@@ -96,6 +96,31 @@
   .now-bar.ok{background:rgba(31,122,85,.1);border-color:rgba(31,122,85,.3)}
   .now-bar.rej{background:rgba(155,44,44,.08);border-color:rgba(155,44,44,.25)}
   .now-bar.ret{background:rgba(58,79,134,.08);border-color:rgba(58,79,134,.22)}
+  /* vertical workflow builder */
+  .wf{margin:6px auto;max-width:560px}
+  .wf-node{border-radius:12px;padding:13px 16px;text-align:center;font-weight:700;font-size:13.5px}
+  .wf-node.start{background:var(--navy);color:#fff7e8}
+  .wf-node.end{background:rgba(31,122,85,.1);border:1.5px solid var(--ok);color:var(--ok)}
+  .wf-conn{width:3px;height:18px;background:var(--gold);margin:0 auto;border-radius:2px}
+  .wf-step{background:var(--surface);border:1.5px solid var(--gold);border-radius:14px;padding:13px;box-shadow:0 4px 14px -10px rgba(196,162,101,.6)}
+  .wf-step-top{display:flex;align-items:center;gap:8px}
+  .wf-num{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-2));color:var(--navy);display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0}
+  .wf-label{flex:1;font-weight:600}
+  .wf-ctrls{display:flex;gap:3px;flex-shrink:0}
+  .wf-ctrls .ic{width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;font-size:14px;line-height:1}
+  .wf-ctrls .ic:disabled{opacity:.3;cursor:default}
+  .wf-ctrls .ic.del{color:var(--danger);border-color:rgba(155,44,44,.3)}
+  .wf-approver{display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap}
+  .wf-ap-lbl{font-size:12.5px;color:var(--muted);font-weight:700}
+  .wf-approver .select{flex:1;min-width:150px}
+  .wf-addrow{text-align:center}
+  .wf-rule{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .wf-rule:last-child{border-bottom:none}
+  /* new-user modal */
+  .nu-overlay{position:fixed;inset:0;background:rgba(11,27,54,.55);display:none;align-items:center;justify-content:center;z-index:200;padding:16px}
+  .nu-overlay.show{display:flex}
+  .nu-card{background:#fff;border-radius:18px;padding:24px;width:100%;max-width:390px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+  .nu-title{font-size:18px;font-weight:800;margin-bottom:4px}
   /* settings */
   .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:10px}
   .subtab{background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
@@ -145,6 +170,19 @@
   </div>
 </div>
 
+<!-- ════ NEW USER MODAL (من داخل باني سير العمل) ════ -->
+<div class="nu-overlay" id="nu-modal">
+  <div class="nu-card">
+    <div class="nu-title">＋ مستخدم معتمِد جديد</div>
+    <div class="muted" style="margin-bottom:12px;font-size:12px">يُنشأ حساب الدخول تلقائياً ويُسنَد للخطوة فوراً — لا حاجة لأي خطوة في Supabase.</div>
+    <div class="field"><label>الاسم الكامل</label><input class="input" id="nu-name" placeholder="مثال: علي حسن"></div>
+    <div class="field"><label>اسم الدخول</label><input class="input" id="nu-login" dir="ltr" placeholder="ali" oninput="nuLoginHint()"><div class="muted" id="nu-hint" style="font-size:11px;margin-top:3px"></div></div>
+    <div class="field"><label>كلمة المرور</label><input class="input" id="nu-pass" type="text" dir="ltr" placeholder="6 أحرف على الأقل"></div>
+    <div class="err" id="nu-err"></div>
+    <div style="display:flex;gap:10px;margin-top:6px"><button class="btn btn-primary" id="nu-create" onclick="wfCreateNU()">إنشاء وإسناد</button><button class="btn btn-ghost" onclick="wfCloseNU()">إلغاء</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -160,7 +198,7 @@ const STATUS_META={draft:{l:'مسودة',c:'neutral'},in_review:{l:'قيد ال�
 const SECTORS=['المقاولات العامة','البنية التحتية','الإنشاءات','الصيانة والتشغيل','النقليات','الإدارة العامة'];
 
 let SB=null, ME=null, DEPTS=[], RULES=[], VIEW='create', TRACK_ID=null, DRAFT=[], MYREQS=[];
-let USERS=[], PSET={}, SET_TAB='workflow', RULE_DRAFT=null;
+let USERS=[], PSET={}, SET_TAB='workflow', RULE_DRAFT=null, NU_STEP=null;
 const PERM_DEFS=[
   {k:'can_verify_stock',l:'تدقيق المستودع'},
   {k:'can_approve_l1',l:'اعتماد مدير القسم/القطاع'},
@@ -621,7 +659,7 @@ function settingsHTML(){
   if(SET_TAB==='depts') body=deptsHTML();
   else if(SET_TAB==='users') body=usersHTML();
   else if(SET_TAB==='general') body=generalHTML();
-  else body=RULE_DRAFT?ruleEditHTML():workflowHTML();
+  else body=workflowHTML();
   return bar+body;
 }
 
@@ -640,87 +678,126 @@ function flowchart(stages){
   const end='<div class="fc-arrow">→</div><div class="fc-node end">✅ معتمَد نهائياً</div>';
   return `<div class="flowchart">${start}${nodes}${end}</div>`;
 }
-function workflowHTML(){
-  const rows=RULES.slice().sort((a,b)=>(a.priority??100)-(b.priority??100)).map(r=>{
-    const cond=[r.department_id?('قسم: '+r.department_id):'',r.category?('فئة: '+r.category):'',`القيمة: ${fmt(r.min_total||0)}${r.max_total!=null?' – '+fmt(r.max_total):'+'}`].filter(Boolean).join(' · ');
-    return `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div><b>${esc(r.name||'قاعدة')}</b> <span class="badge neutral">أولوية ${r.priority??100}</span></div>
-        <div class="row-act"><button class="btn btn-ghost btn-sm" onclick="ruleEdit(${r.id})">تعديل</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ruleDel(${r.id})">حذف</button></div>
-      </div>
-      <div class="muted" style="margin:6px 0 10px">${esc(cond)}</div>
-      ${flowchart(Array.isArray(r.stages)?r.stages:[])}
-    </div>`;
-  }).join('')||`<div class="empty">لا قواعد بعد.</div>`;
-  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="muted">القاعدة الأعلى أولوية (الأصغر رقماً) تُطبَّق أولاً.</div><button class="btn btn-primary btn-sm" onclick="ruleNew()">➕ قاعدة جديدة</button></div>${rows}`;
+/* مسار افتراضي = قاعدة بلا شروط */
+function wfLoadDefault(){
+  const def=RULES.find(r=>!r.department_id && !r.category && (!r.min_total||num0(r.min_total)===0) && (r.max_total==null));
+  if(def) RULE_DRAFT={id:def.id,name:def.name||'مسار الاعتماد',priority:def.priority??100,department_id:'',category:'',min_total:0,max_total:'',stages:JSON.parse(JSON.stringify(Array.isArray(def.stages)?def.stages:[]))};
+  else RULE_DRAFT={id:null,name:'مسار الاعتماد',priority:100,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'اعتماد مدير القسم',mode:'dept_manager',approver:''}]};
 }
-function ruleNew(){ RULE_DRAFT={id:null,name:'مسار الاعتماد',priority:50,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'اعتماد مدير القسم',mode:'dept_manager',approver:''}]}; render(); }
-function ruleEdit(id){ const r=RULES.find(x=>x.id===id); if(!r)return; RULE_DRAFT=JSON.parse(JSON.stringify({id:r.id,name:r.name||'',priority:r.priority??50,department_id:r.department_id||'',category:r.category||'',min_total:r.min_total||0,max_total:r.max_total==null?'':r.max_total,stages:Array.isArray(r.stages)?r.stages:[]})); render(); }
-function ruleEditHTML(){
-  const d=RULE_DRAFT;
-  const deptOpts=['<option value="">كل الأقسام</option>'].concat(DEPTS.map(x=>`<option value="${esc(x.id)}" ${d.department_id===x.id?'selected':''}>${esc(x.name_ar||x.id)}</option>`)).join('');
-  const apOpts=(s)=>{
-    const isDept=(s.mode==='dept_manager')||(!s.approver && !s.role_key);
-    return `<option value="__dept__" ${isDept?'selected':''}>— مدير القسم (تلقائياً) —</option>`
-      + USERS.map(u=>`<option value="${esc(u.username)}" ${s.approver===u.username?'selected':''}>${esc(u.display_name||u.username)}</option>`).join('');
-  };
-  const stageRows=(d.stages||[]).map((s,i)=>`<tr>
-    <td class="center">${i+1}</td>
-    <td><input class="input" data-s="label" value="${esc(s.label||'')}" placeholder="اسم الخطوة (مثل: اعتماد المدير)"></td>
-    <td><select class="select" data-s="who" onchange="ruleSync()">${apOpts(s)}</select></td>
-    <td class="center"><button class="btn btn-ghost btn-sm" onclick="ruleDelStage(${i})">✕</button></td></tr>`).join('');
-  const advOpen = (d.department_id||d.category||num0(d.min_total)>0||d.max_total!=='');
-  return `<div class="card">
-    <div class="sec-title">${d.id?'تعديل المسار':'مسار اعتماد جديد'}</div>
-    <div class="muted" style="margin-bottom:12px">حدّد خطوات الاعتماد بالترتيب، واختر <b>الشخص المعتمِد</b> لكل خطوة من القائمة. لإضافة شخص جديد: تبويب «المستخدمون».</div>
-    <div class="grid">
-      <div><label>اسم المسار <span class="req">*</span></label><input class="input" id="r-name" value="${esc(d.name)}"></div>
-      <div><label>الأولوية (الأصغر يُطبَّق أولاً)</label><input class="input num" id="r-prio" value="${esc(d.priority)}"></div>
+function wfApproverSelect(s){
+  const isDept=(s.mode==='dept_manager')||(!s.approver && !s.role_key);
+  return `<option value="__dept__" ${isDept?'selected':''}>👔 مدير القسم (تلقائياً)</option>`
+    + USERS.map(u=>`<option value="${esc(u.username)}" ${s.approver===u.username?'selected':''}>👤 ${esc(u.display_name||u.username)}</option>`).join('');
+}
+function wfStepCard(s,i,n){
+  return `<div class="wf-conn"></div>
+  <div class="wf-step" data-step="${i}">
+    <div class="wf-step-top"><span class="wf-num">${i+1}</span>
+      <input class="input wf-label" data-wf="label" value="${esc(s.label||'')}" placeholder="اسم خطوة الموافقة (مثل: اعتماد المدير المباشر)">
+      <span class="wf-ctrls">
+        <button class="ic" title="أعلى" ${i===0?'disabled':''} onclick="wfMove(${i},-1)">↑</button>
+        <button class="ic" title="أسفل" ${i===n-1?'disabled':''} onclick="wfMove(${i},1)">↓</button>
+        <button class="ic del" title="حذف الخطوة" onclick="wfDelStep(${i})">🗑</button>
+      </span>
     </div>
-    <div class="sec-title">خطوات الاعتماد (بالترتيب)</div>
-    <table><thead><tr><th style="width:28px">#</th><th>اسم الخطوة</th><th style="width:230px">المعتمِد (الشخص)</th><th style="width:34px"></th></tr></thead><tbody id="r-stages">${stageRows}</tbody></table>
-    <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ruleAddStage()">➕ إضافة خطوة</button>
-    <div class="sec-title" style="margin-top:14px">معاينة المسار</div>
-    <div id="r-preview">${flowchart((d.stages||[]).map((s,i)=>({...s,seq:i+1})))}</div>
-    <details ${advOpen?'open':''} style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">شروط متقدّمة (اختياري) — تطبيق المسار على قسم/قيمة محددة</summary>
-      <div class="grid" style="margin-top:10px">
-        <div><label>خاص بقسم (فارغ=كل الأقسام)</label><select class="select" id="r-dept">${deptOpts}</select></div>
-        <div><label>خاص بفئة (اختياري)</label><input class="input" id="r-cat" value="${esc(d.category)}" placeholder="أي فئة"></div>
-        <div><label>أدنى قيمة</label><input class="input num" id="r-min" value="${esc(d.min_total)}"></div>
-        <div><label>أعلى قيمة (فارغ=بلا حد)</label><input class="input num" id="r-max" value="${esc(d.max_total)}"></div>
-      </div></details>
-    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-primary" onclick="ruleSave()">💾 حفظ المسار</button><button class="btn btn-ghost" onclick="setGo('workflow')">إلغاء</button></div>
+    <div class="wf-approver"><span class="wf-ap-lbl">المعتمِد:</span>
+      <select class="select" data-wf="who" onchange="wfSync()">${wfApproverSelect(s)}</select>
+      <button class="btn btn-ghost btn-sm" onclick="wfNewUser(${i})">＋ مستخدم جديد</button>
+    </div>
   </div>`;
 }
-function ruleCollect(){
-  const d=RULE_DRAFT; if(!d)return;
-  d.name=val('r-name'); d.priority=num0(val('r-prio')); d.department_id=val('r-dept'); d.category=val('r-cat');
-  d.min_total=num0(val('r-min')); d.max_total=($('r-max')?$('r-max').value:'');
-  const body=$('r-stages'); if(body){ const st=[]; body.querySelectorAll('tr').forEach((tr,i)=>{
-    const label=(tr.querySelector('[data-s="label"]')||{}).value||'';
-    const who=(tr.querySelector('[data-s="who"]')||{}).value||'__dept__';
-    const o={seq:i+1,label};
-    if(who==='__dept__'){ o.mode='dept_manager'; o.approver=''; } else { o.mode='user'; o.approver=who; }
-    st.push(o);
-  }); d.stages=st; }
+function workflowHTML(){
+  if(!RULE_DRAFT) wfLoadDefault();
+  const d=RULE_DRAFT, n=(d.stages||[]).length;
+  const steps=(d.stages||[]).map((s,i)=>wfStepCard(s,i,n)).join('');
+  const advRules=RULES.filter(r=>r.id!==d.id && (r.department_id||r.category||num0(r.min_total)>0||r.max_total!=null));
+  const advList=advRules.map(r=>{
+    const cond=[r.department_id?('قسم: '+r.department_id):'',r.category?('فئة: '+r.category):'',(num0(r.min_total)>0||r.max_total!=null)?`قيمة: ${fmt(r.min_total||0)}${r.max_total!=null?'–'+fmt(r.max_total):'+'}`:''].filter(Boolean).join(' · ');
+    return `<div class="wf-rule"><div><b>${esc(r.name||'مسار')}</b> <span class="muted">${esc(cond)}</span></div>
+      <div class="row-act"><button class="btn btn-ghost btn-sm" onclick="wfEdit(${r.id})">تعديل</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ruleDel(${r.id})">حذف</button></div></div>`;
+  }).join('');
+  const isCond=(d.department_id||d.category||num0(d.min_total)>0||(d.max_total!==''&&d.max_total!=null));
+  const deptOpts=['<option value="">كل الأقسام</option>'].concat(DEPTS.map(x=>`<option value="${esc(x.id)}" ${d.department_id===x.id?'selected':''}>${esc(x.name_ar||x.id)}</option>`)).join('');
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <input class="input" id="wf-name" value="${esc(d.name||'مسار الاعتماد')}" style="max-width:280px;font-weight:700">
+      ${d.id?'<span class="badge ok">محفوظ</span>':'<span class="badge warn">غير محفوظ</span>'}
+    </div>
+    <div class="muted" style="margin:8px 0 14px">صمّم خطوات الموافقة بالترتيب من الأعلى للأسفل. الطلب يمرّ عبرها واحدةً تلو الأخرى. أضِف/احذف/رتّب أي خطوة بسهولة، واختر المعتمِد لكل خطوة.</div>
+    <div class="wf">
+      <div class="wf-node start">📝 مُقدّم الطلب — يرفع الطلب</div>
+      ${steps}
+      <div class="wf-conn"></div>
+      <div class="wf-addrow"><button class="btn btn-primary btn-sm" onclick="wfAddStep()">＋ إضافة خطوة موافقة</button></div>
+      <div class="wf-conn"></div>
+      <div class="wf-node end">✅ معتمَد نهائياً — يُحوَّل إلى المشتريات</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="wfSave()">💾 حفظ المسار</button>
+      <button class="btn btn-ghost" onclick="RULE_DRAFT=null;render()">↩ المسار الافتراضي</button>
+      <button class="btn btn-ghost" onclick="wfNewRule()">➕ مسار مشروط (لقسم/قيمة)</button>
+    </div>
+    <details ${isCond?'open':''} style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">⚙️ شروط تطبيق هذا المسار (اختياري — للمسارات الخاصة بقسم أو قيمة معيّنة)</summary>
+      <div class="grid" style="margin-top:10px">
+        <div><label>خاص بقسم</label><select class="select" id="wf-dept">${deptOpts}</select></div>
+        <div><label>خاص بفئة</label><input class="input" id="wf-cat" value="${esc(d.category)}" placeholder="أي فئة"></div>
+        <div><label>أدنى قيمة (ر.س)</label><input class="input num" id="wf-min" value="${esc(d.min_total)}"></div>
+        <div><label>أعلى قيمة (فارغ=بلا حد)</label><input class="input num" id="wf-max" value="${esc(d.max_total)}"></div>
+      </div></details>
+  </div>
+  ${advList?`<div class="card"><div class="sec-title">مسارات مشروطة إضافية</div><div class="muted" style="margin-bottom:8px">تُطبَّق قبل المسار الافتراضي حسب شروطها (قسم/قيمة).</div>${advList}</div>`:''}`;
 }
-function ruleSync(){ ruleCollect(); const p=$('r-preview'); if(p)p.innerHTML=flowchart((RULE_DRAFT.stages||[]).map((s,i)=>({...s,seq:i+1}))); }
-function ruleAddStage(){ ruleCollect(); RULE_DRAFT.stages.push({label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}); render(); }
-function ruleDelStage(i){ ruleCollect(); RULE_DRAFT.stages.splice(i,1); render(); }
-async function ruleSave(){
-  ruleCollect(); const d=RULE_DRAFT;
-  if(!d.name){ toast('أدخل اسم المسار','err'); return; }
+function wfCollect(){
+  const d=RULE_DRAFT; if(!d)return;
+  if($('wf-name')) d.name=$('wf-name').value||'مسار الاعتماد';
+  if($('wf-dept')) d.department_id=$('wf-dept').value;
+  if($('wf-cat'))  d.category=$('wf-cat').value;
+  if($('wf-min'))  d.min_total=num0($('wf-min').value);
+  if($('wf-max'))  d.max_total=$('wf-max').value;
+  const cards=document.querySelectorAll('.wf-step'); const st=[];
+  cards.forEach((c,i)=>{
+    const label=(c.querySelector('[data-wf="label"]')||{}).value||'';
+    const who=(c.querySelector('[data-wf="who"]')||{}).value||'__dept__';
+    const o={seq:i+1,label}; if(who==='__dept__'){o.mode='dept_manager';o.approver='';}else{o.mode='user';o.approver=who;}
+    st.push(o);
+  });
+  d.stages=st;
+}
+function wfSync(){ wfCollect(); }
+function wfAddStep(){ wfCollect(); RULE_DRAFT.stages.push({label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}); render(); }
+function wfDelStep(i){ wfCollect(); RULE_DRAFT.stages.splice(i,1); render(); }
+function wfMove(i,dir){ wfCollect(); const a=RULE_DRAFT.stages,j=i+dir; if(j<0||j>=a.length)return; const t=a[i];a[i]=a[j];a[j]=t; render(); }
+function wfEdit(id){ const r=RULES.find(x=>x.id===id); if(!r)return; RULE_DRAFT={id:r.id,name:r.name||'مسار',priority:r.priority??50,department_id:r.department_id||'',category:r.category||'',min_total:r.min_total||0,max_total:r.max_total==null?'':r.max_total,stages:JSON.parse(JSON.stringify(Array.isArray(r.stages)?r.stages:[]))}; render(); }
+function wfNewRule(){ wfCollect(); RULE_DRAFT={id:null,name:'مسار مشروط',priority:10,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}]}; render(); }
+async function wfSave(){
+  wfCollect(); const d=RULE_DRAFT;
   if(!(d.stages||[]).length){ toast('أضف خطوة واحدة على الأقل','err'); return; }
-  for(const s of d.stages){ if(!String(s.label||'').trim()){ toast('اكتب اسم كل خطوة','err'); return; } }
-  const row={ name:d.name, priority:num0(d.priority), active:true,
+  for(const s of d.stages){ if(!String(s.label||'').trim()){ toast('اكتب اسم كل خطوة موافقة','err'); return; } }
+  const row={ name:d.name||'مسار الاعتماد', priority:num0(d.priority)||100, active:true,
     department_id:d.department_id||null, category:d.category||null,
-    min_total:num0(d.min_total), max_total:(d.max_total===''?null:num0(d.max_total)),
-    stages:(d.stages||[]).map((s,i)=>({seq:i+1,label:s.label,mode:s.mode||(s.approver?'user':'dept_manager'),approver:s.approver||null})) };
+    min_total:num0(d.min_total), max_total:(d.max_total===''||d.max_total==null?null:num0(d.max_total)),
+    stages:d.stages.map((s,i)=>({seq:i+1,label:s.label,mode:s.mode||(s.approver?'user':'dept_manager'),approver:s.approver||null})) };
   try{
     if(d.id){ const e=(await SB.from('proc_approval_rules').update(row).eq('id',d.id)).error; if(e)throw e; }
-    else { const e=(await SB.from('proc_approval_rules').insert(row)).error; if(e)throw e; }
-    toast('حُفظت القاعدة','ok'); RULE_DRAFT=null; await loadRefs(); render();
+    else{ const r=await SB.from('proc_approval_rules').insert(row).select('id'); if(r.error)throw r.error; if(r.data&&r.data[0])d.id=r.data[0].id; }
+    toast('حُفظ المسار ✅','ok'); await loadRefs(); RULE_DRAFT=null; render();
   }catch(e){ toast('تعذّر الحفظ: '+(e.message||''),'err'); }
+}
+/* إنشاء مستخدم معتمِد جديد من داخل الباني (يُنشئ حساب الدخول تلقائياً) */
+function wfNewUser(stepIdx){ wfCollect(); NU_STEP=stepIdx; const m=$('nu-modal'); if(m){ m.classList.add('show'); $('nu-name').value='';$('nu-login').value='';$('nu-pass').value='';$('nu-err').textContent=''; setTimeout(()=>$('nu-name').focus(),50); } }
+function wfCloseNU(){ const m=$('nu-modal'); if(m)m.classList.remove('show'); NU_STEP=null; }
+function nuLoginHint(){ const e=$('nu-hint'); if(e) e.textContent = val('nu-login') ? ('بريد الدخول: '+val('nu-login').toLowerCase().replace(/\s+/g,'')+'@aldeyabi.com') : ''; }
+async function wfCreateNU(){
+  const name=val('nu-name'), login=val('nu-login').toLowerCase().replace(/\s+/g,''), pass=val('nu-pass');
+  if(!name||!login||pass.length<6){ $('nu-err').textContent='أكمل: الاسم، اسم الدخول، وكلمة مرور (6 أحرف على الأقل)'; return; }
+  const btn=$('nu-create'); btn.disabled=true; btn.textContent='جارٍ الإنشاء...';
+  try{
+    await adminApi({action:'create',username:login,displayName:name,password:pass,role:'user',permissions:{},active:true});
+    await loadAdminData();
+    if(NU_STEP!=null && RULE_DRAFT && RULE_DRAFT.stages[NU_STEP]){ RULE_DRAFT.stages[NU_STEP].mode='user'; RULE_DRAFT.stages[NU_STEP].approver=login; }
+    wfCloseNU(); toast('أُنشئ المستخدم وأُسنِد للخطوة ✅','ok'); render();
+  }catch(e){ $('nu-err').textContent='تعذّر: '+(e.message||''); }
+  finally{ btn.disabled=false; btn.textContent='إنشاء وإسناد'; }
 }
 async function ruleDel(id){ if(!confirm('حذف هذه القاعدة؟'))return; try{ const e=(await SB.from('proc_approval_rules').delete().eq('id',id)).error; if(e)throw e; toast('حُذفت','ok'); await loadRefs(); render(); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); } }
 
