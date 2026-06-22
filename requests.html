@@ -152,6 +152,8 @@
 const SUPABASE_URL='https://yofcaxvstjcrmbgciwym.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
 const AUTH_EMAIL_DOMAIN='aldeyabi.com';
+// خريطة معرّفات الدخول الخاصة (تطابق النظام الأساسي) — لبعض الحسابات بريد مختلف عن username@aldeyabi.com
+const AUTH_EMAIL_MAP={ abdullah:'abdullah@aldeyabi.com', mostafa:'supply@aldeyabi.com', mahmoud:'mahmoud@aldeyabi.com' };
 const SUPA_CDNS=['/lib/supabase.min.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js','https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js'];
 const PRIORITIES=['عاجل','عالي','متوسط','منخفض'];
 const STATUS_META={draft:{l:'مسودة',c:'neutral'},in_review:{l:'قيد الاعتماد',c:'warn'},returned:{l:'مُعاد للتعديل',c:'info'},approved:{l:'معتمد',c:'ok'},rejected:{l:'مرفوض',c:'danger'},rfq_issued:{l:'طلب تسعير صادر',c:'info'},converted_to_po:{l:'تحوّل لأمر شراء',c:'ok'},cancelled:{l:'ملغى',c:'danger'}};
@@ -175,7 +177,8 @@ const val=id=>($(id)?$(id).value.trim():'');
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function num0(v){const n=Number(v);return isNaN(n)?0:n;}
 function fmt(n){return n==null||isNaN(n)?'—':Number(n).toLocaleString('en-US',{maximumFractionDigits:2});}
-function usernameToEmail(u){return String(u||'').trim().toLowerCase()+'@'+AUTH_EMAIL_DOMAIN;}
+function usernameToEmail(u){const k=String(u||'').trim().toLowerCase();return AUTH_EMAIL_MAP[k]||(k+'@'+AUTH_EMAIL_DOMAIN);}
+function emailToUsername(email){const e=String(email||'').toLowerCase();for(const k in AUTH_EMAIL_MAP){if(AUTH_EMAIL_MAP[k].toLowerCase()===e)return k;}return e.split('@')[0];}
 let _tt;
 function toast(m,type){const t=$('toast');t.textContent=m;t.className='toast show '+(type||'');clearTimeout(_tt);_tt=setTimeout(()=>t.className='toast',2600);}
 function can(key){return !!ME && (ME.role==='admin' || (ME.permissions||{})[key]===true);}
@@ -225,7 +228,11 @@ async function doLogin(){
 }
 async function loadProfile(username){
   let prof=null;
-  try{ const {data}=await SB.from('proc_users').select('*').eq('username',username).maybeSingle(); prof=data; }catch(e){}
+  try{
+    // مطابقة غير حسّاسة لحالة الأحرف (يطابق نمط النظام الأساسي)
+    const {data}=await SB.from('proc_users').select('*').ilike('username',username);
+    prof=(data||[]).find(x=>String(x.username).toLowerCase()===String(username).toLowerCase()) || (data&&data[0]) || null;
+  }catch(e){}
   ME = prof || {username, display_name:username, role:'user', permissions:{}};
   if(typeof ME.permissions==='string'){ try{ME.permissions=JSON.parse(ME.permissions);}catch(e){ME.permissions={};} }
 }
@@ -261,7 +268,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     const {data}=await SB.auth.getSession();
     if(data && data.session){
       const email=data.session.user.email||'';
-      const username=email.split('@')[0];
+      const username=emailToUsername(email);
       await loadProfile(username);
       await afterLogin();
     }
