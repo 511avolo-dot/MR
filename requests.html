@@ -81,6 +81,7 @@
   .toast.show{opacity:1}
   .toast.ok{background:#1f5c40}.toast.err{background:#7c1d1d}
   .row-act{display:flex;gap:6px;flex-wrap:wrap}
+  .ocr-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:16px;background:linear-gradient(135deg,rgba(196,162,101,.1),rgba(154,122,69,.05));border:1px dashed var(--gold);border-radius:10px}
   /* settings */
   .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:10px}
   .subtab{background:transparent;border:1px solid transparent;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
@@ -335,6 +336,10 @@ function builderHTML(){
   const prio=PRIORITIES.map(p=>`<option ${p==='متوسط'?'selected':''}>${p}</option>`).join('');
   return `
   <div class="card">
+    <div class="ocr-bar">
+      <button class="btn btn-primary btn-sm" onclick="ocrParse()">📄 رفع النموذج وقراءته آلياً</button>
+      <span class="muted">ارفع صورة/PDF لنموذج «طلب شراء مواد» لتعبئة الحقول والبنود تلقائياً بالذكاء — راجعها ثم أرسل.</span>
+    </div>
     <div class="sec-title">بيانات الطلب</div>
     <div class="grid">
       <div><label>اسم مُقدّم الطلب <span class="req">*</span></label><input class="input" id="f-name" value="${esc(ME.display_name||'')}"></div>
@@ -498,6 +503,41 @@ async function act(id,action,comment){
     toast(action==='approve'?(isLast?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك'):action==='reject'?'رُفض الطلب':'أُعيد للتعديل','ok');
     await goLoad('inbox');
   }catch(err){ toast('تعذّر التنفيذ: '+(err.message||''),'err'); }
+}
+
+/* ════════════════════ OCR — قراءة النموذج بالذكاء (عبر /api/ai) ════════════════════ */
+const OCR_MODEL='gemini-2.5-flash';
+function normDate(v){ if(!v)return''; const s=String(v).trim(); let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m)return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/); if(m)return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`; return ''; }
+async function ocrParse(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf';
+  inp.onchange=async()=>{
+    const f=inp.files[0]; if(!f)return;
+    toast('جارٍ قراءة النموذج بالذكاء…');
+    try{
+      const b64=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(',')[1]);rd.onerror=rej;rd.readAsDataURL(f);});
+      const prompt='هذا «نموذج طلب شراء مواد» لمجموعة الذيابي. استخرج بياناته وأعد JSON فقط (بلا أي شرح خارج الأقواس) بهذا الشكل:\n'
+        +'{"requester_name":"اسم مُقدّم الطلب إن ظهر","title":"فئة/نوع المواد بعد عبارة (تأمين المواد الآتية)","department":"الإدارة","sector":"القطاع إن وُجد","project":"المشروع/الموقع إن وُجد","needed_by":"تاريخ التوريد المطلوب YYYY-MM-DD أو null","items":[{"description":"إسم الصنف","unit":"الوحدة","stock_balance":رقم أو null,"requested_qty":رقم}]}\n'
+        +'أعمدة جدول النموذج: م | إسم الصنف | الوحدة | كمية العقد | رصيد مستودعى | الكمية المطلوبة | سعر الوحدة | إجمالي السعر. خذ requested_qty من عمود «الكمية المطلوبة». تجاهل صف الإجمالي وصفوف التواقيع. أرقام مجرّدة بلا فواصل آلاف.';
+      const body={contents:[{role:'user',parts:[{text:prompt},{inline_data:{mime_type:f.type||'image/jpeg',data:b64}}]}],generationConfig:{temperature:0.1,maxOutputTokens:4096,thinkingConfig:{thinkingBudget:0}}};
+      const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:OCR_MODEL,action:'generateContent',body})});
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error((data&&data.error&&data.error.message)||'تعذّر تشغيل الذكاء (تأكّد من ضبط GEMINI_API_KEY على الخادم)');
+      let txt=(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||'';
+      txt=txt.replace(/```(?:json)?/gi,'').trim();
+      const a=txt.indexOf('{'),z=txt.lastIndexOf('}'); if(a<0||z<0) throw new Error('لم يُفهم رد الذكاء');
+      ocrApply(JSON.parse(txt.slice(a,z+1)));
+    }catch(e){ toast('فشل القراءة: '+(e.message||''),'err'); }
+  };
+  inp.click();
+}
+function ocrApply(o){
+  const set=(id,v)=>{const el=$(id);if(el&&v!=null&&String(v)!=='')el.value=v;};
+  set('f-name',o.requester_name); set('f-title',o.title); set('f-project',o.project); set('f-needed',normDate(o.needed_by));
+  if(o.sector){const s=$('f-sector'); if(s&&[...s.options].some(x=>x.value===o.sector))s.value=o.sector;}
+  if(o.department){const d=DEPTS.find(x=>(x.name_ar||'').trim()===String(o.department).trim()); const s=$('f-dept'); if(d&&s)s.value=d.id;}
+  const items=Array.isArray(o.items)?o.items:[]; const clean=items.filter(it=>(it.description||'').toString().trim());
+  if(clean.length){ DRAFT=clean.map(it=>({description:String(it.description||'').trim(),unit:it.unit||'',stock_balance:(it.stock_balance==null?'':it.stock_balance),requested_qty:(it.requested_qty==null?'':it.requested_qty)})); renderItems(); }
+  toast('استُخرج '+clean.length+' بند — راجع البيانات قبل الإرسال','ok');
 }
 
 /* ════════════════════ لوحة التحكّم والإعدادات ════════════════════ */
