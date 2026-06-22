@@ -316,7 +316,8 @@ function matchRule(pr){
   })||null;
 }
 function resolveApprover(pr,stage){
-  if(stage.resolver==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); return d?(d.manager_user||null):null; }
+  if(stage.approver) return stage.approver;                       // شخص مُحدَّد بالاسم
+  if(stage.resolver==='dept_manager'||stage.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); return d?(d.manager_user||null):null; }
   return null;
 }
 function currentStage(pr){ if(pr.status!=='in_review')return null; return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0]||null; }
@@ -324,8 +325,10 @@ function canActOn(pr){
   const st=currentStage(pr); if(!st) return null;
   if(pr.requester===ME.username) return null; // فصل المهام
   let ok=false;
-  if(st.resolver==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); ok=(d&&d.manager_user===ME.username)||can('can_approve_l2'); }
-  else { ok=!!st.role_key && can(st.role_key); }
+  if(st.approver){ ok = (st.approver===ME.username); }                                  // الشخص المُحدَّد لهذه المرحلة
+  else if(st.resolver==='dept_manager'||st.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); ok=(d&&d.manager_user===ME.username); }
+  else if(st.role_key){ ok = can(st.role_key); }                                          // توافق خلفي (قواعد قديمة)
+  ok = ok || ME.role==='admin' || can('can_approve_l2');                                  // تجاوز المدير الأعلى/الأدمن
   return ok?st:null;
 }
 
@@ -622,16 +625,19 @@ function settingsHTML(){
   return bar+body;
 }
 
-/* ── سير الموافقات (مخطّط بصري + باني) ── */
+/* ── سير الموافقات (مخطّط بصري + باني بسيط بالأسماء) ── */
+function userName(u){ if(!u) return ''; const x=USERS.find(y=>y.username===u); return x?(x.display_name||x.username):u; }
+function stageWho(s){
+  if(s.approver) return userName(s.approver);
+  if(s.mode==='dept_manager'||s.resolver==='dept_manager') return 'مدير القسم (تلقائي)';
+  if(s.role_key) return (ROLE_KEYS.find(r=>r[0]===s.role_key)||[])[1]||s.role_key;
+  return 'غير محدّد';
+}
 function flowchart(stages){
-  if(!stages||!stages.length) return '<div class="muted">لا مراحل</div>';
+  if(!stages||!stages.length) return '<div class="muted">لا مراحل بعد — أضف خطوة.</div>';
   const start='<div class="fc-node start">📝 مُقدّم الطلب</div>';
-  const nodes=stages.sort((a,b)=>(a.seq||0)-(b.seq||0)).map(s=>{
-    const rv=(RESOLVERS.find(r=>r[0]===s.resolver)||[])[1]||s.resolver;
-    const rk=(ROLE_KEYS.find(r=>r[0]===s.role_key)||[])[1]||s.role_key||'';
-    return `<div class="fc-arrow">→</div><div class="fc-node"><div class="fc-t">${esc(s.label||'')}</div><div class="fc-s">${esc(s.resolver==='role'?rk:rv)}</div></div>`;
-  }).join('');
-  const end='<div class="fc-arrow">→</div><div class="fc-node end">✅ معتمَد</div>';
+  const nodes=stages.slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(s=>`<div class="fc-arrow">→</div><div class="fc-node"><div class="fc-t">${esc(s.label||'مرحلة')}</div><div class="fc-s">👤 ${esc(stageWho(s))}</div></div>`).join('');
+  const end='<div class="fc-arrow">→</div><div class="fc-node end">✅ معتمَد نهائياً</div>';
   return `<div class="flowchart">${start}${nodes}${end}</div>`;
 }
 function workflowHTML(){
@@ -648,52 +654,68 @@ function workflowHTML(){
   }).join('')||`<div class="empty">لا قواعد بعد.</div>`;
   return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="muted">القاعدة الأعلى أولوية (الأصغر رقماً) تُطبَّق أولاً.</div><button class="btn btn-primary btn-sm" onclick="ruleNew()">➕ قاعدة جديدة</button></div>${rows}`;
 }
-function ruleNew(){ RULE_DRAFT={id:null,name:'',priority:50,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'',resolver:'dept_manager',role_key:'can_approve_l1'}]}; render(); }
+function ruleNew(){ RULE_DRAFT={id:null,name:'مسار الاعتماد',priority:50,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'اعتماد مدير القسم',mode:'dept_manager',approver:''}]}; render(); }
 function ruleEdit(id){ const r=RULES.find(x=>x.id===id); if(!r)return; RULE_DRAFT=JSON.parse(JSON.stringify({id:r.id,name:r.name||'',priority:r.priority??50,department_id:r.department_id||'',category:r.category||'',min_total:r.min_total||0,max_total:r.max_total==null?'':r.max_total,stages:Array.isArray(r.stages)?r.stages:[]})); render(); }
 function ruleEditHTML(){
   const d=RULE_DRAFT;
   const deptOpts=['<option value="">كل الأقسام</option>'].concat(DEPTS.map(x=>`<option value="${esc(x.id)}" ${d.department_id===x.id?'selected':''}>${esc(x.name_ar||x.id)}</option>`)).join('');
+  const apOpts=(s)=>{
+    const isDept=(s.mode==='dept_manager')||(!s.approver && !s.role_key);
+    return `<option value="__dept__" ${isDept?'selected':''}>— مدير القسم (تلقائياً) —</option>`
+      + USERS.map(u=>`<option value="${esc(u.username)}" ${s.approver===u.username?'selected':''}>${esc(u.display_name||u.username)}</option>`).join('');
+  };
   const stageRows=(d.stages||[]).map((s,i)=>`<tr>
     <td class="center">${i+1}</td>
-    <td><input class="input" data-s="label" data-i="${i}" value="${esc(s.label||'')}" placeholder="اسم المرحلة"></td>
-    <td><select class="select" data-s="resolver" data-i="${i}" onchange="ruleSync()">${RESOLVERS.map(r=>`<option value="${r[0]}" ${s.resolver===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select></td>
-    <td><select class="select" data-s="role_key" data-i="${i}">${ROLE_KEYS.map(r=>`<option value="${r[0]}" ${s.role_key===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select></td>
+    <td><input class="input" data-s="label" value="${esc(s.label||'')}" placeholder="اسم الخطوة (مثل: اعتماد المدير)"></td>
+    <td><select class="select" data-s="who" onchange="ruleSync()">${apOpts(s)}</select></td>
     <td class="center"><button class="btn btn-ghost btn-sm" onclick="ruleDelStage(${i})">✕</button></td></tr>`).join('');
+  const advOpen = (d.department_id||d.category||num0(d.min_total)>0||d.max_total!=='');
   return `<div class="card">
-    <div class="sec-title">${d.id?'تعديل قاعدة':'قاعدة جديدة'}</div>
+    <div class="sec-title">${d.id?'تعديل المسار':'مسار اعتماد جديد'}</div>
+    <div class="muted" style="margin-bottom:12px">حدّد خطوات الاعتماد بالترتيب، واختر <b>الشخص المعتمِد</b> لكل خطوة من القائمة. لإضافة شخص جديد: تبويب «المستخدمون».</div>
     <div class="grid">
-      <div><label>اسم القاعدة <span class="req">*</span></label><input class="input" id="r-name" value="${esc(d.name)}"></div>
-      <div><label>الأولوية (الأصغر أولاً)</label><input class="input num" id="r-prio" value="${esc(d.priority)}"></div>
-      <div><label>القسم (شرط)</label><select class="select" id="r-dept">${deptOpts}</select></div>
-      <div><label>الفئة (شرط، اختياري)</label><input class="input" id="r-cat" value="${esc(d.category)}" placeholder="أي فئة"></div>
-      <div><label>أدنى قيمة</label><input class="input num" id="r-min" value="${esc(d.min_total)}"></div>
-      <div><label>أعلى قيمة (فارغ=بلا حد)</label><input class="input num" id="r-max" value="${esc(d.max_total)}"></div>
+      <div><label>اسم المسار <span class="req">*</span></label><input class="input" id="r-name" value="${esc(d.name)}"></div>
+      <div><label>الأولوية (الأصغر يُطبَّق أولاً)</label><input class="input num" id="r-prio" value="${esc(d.priority)}"></div>
     </div>
-    <div class="sec-title">المراحل (بالترتيب)</div>
-    <table><thead><tr><th style="width:28px">#</th><th>المرحلة</th><th style="width:170px">المعتمِد</th><th style="width:150px">الصلاحية</th><th style="width:34px"></th></tr></thead><tbody id="r-stages">${stageRows}</tbody></table>
-    <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ruleAddStage()">➕ مرحلة</button>
-    <div class="sec-title" style="margin-top:14px">معاينة المخطّط</div>
+    <div class="sec-title">خطوات الاعتماد (بالترتيب)</div>
+    <table><thead><tr><th style="width:28px">#</th><th>اسم الخطوة</th><th style="width:230px">المعتمِد (الشخص)</th><th style="width:34px"></th></tr></thead><tbody id="r-stages">${stageRows}</tbody></table>
+    <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="ruleAddStage()">➕ إضافة خطوة</button>
+    <div class="sec-title" style="margin-top:14px">معاينة المسار</div>
     <div id="r-preview">${flowchart((d.stages||[]).map((s,i)=>({...s,seq:i+1})))}</div>
-    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-primary" onclick="ruleSave()">💾 حفظ</button><button class="btn btn-ghost" onclick="setGo('workflow')">إلغاء</button></div>
+    <details ${advOpen?'open':''} style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">شروط متقدّمة (اختياري) — تطبيق المسار على قسم/قيمة محددة</summary>
+      <div class="grid" style="margin-top:10px">
+        <div><label>خاص بقسم (فارغ=كل الأقسام)</label><select class="select" id="r-dept">${deptOpts}</select></div>
+        <div><label>خاص بفئة (اختياري)</label><input class="input" id="r-cat" value="${esc(d.category)}" placeholder="أي فئة"></div>
+        <div><label>أدنى قيمة</label><input class="input num" id="r-min" value="${esc(d.min_total)}"></div>
+        <div><label>أعلى قيمة (فارغ=بلا حد)</label><input class="input num" id="r-max" value="${esc(d.max_total)}"></div>
+      </div></details>
+    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-primary" onclick="ruleSave()">💾 حفظ المسار</button><button class="btn btn-ghost" onclick="setGo('workflow')">إلغاء</button></div>
   </div>`;
 }
 function ruleCollect(){
   const d=RULE_DRAFT; if(!d)return;
   d.name=val('r-name'); d.priority=num0(val('r-prio')); d.department_id=val('r-dept'); d.category=val('r-cat');
-  d.min_total=num0(val('r-min')); d.max_total=val('r-max');
-  const body=$('r-stages'); if(body){ const st=[]; body.querySelectorAll('tr').forEach((tr,i)=>{ const o={seq:i+1}; tr.querySelectorAll('[data-s]').forEach(el=>o[el.getAttribute('data-s')]=el.value); st.push(o); }); d.stages=st; }
+  d.min_total=num0(val('r-min')); d.max_total=($('r-max')?$('r-max').value:'');
+  const body=$('r-stages'); if(body){ const st=[]; body.querySelectorAll('tr').forEach((tr,i)=>{
+    const label=(tr.querySelector('[data-s="label"]')||{}).value||'';
+    const who=(tr.querySelector('[data-s="who"]')||{}).value||'__dept__';
+    const o={seq:i+1,label};
+    if(who==='__dept__'){ o.mode='dept_manager'; o.approver=''; } else { o.mode='user'; o.approver=who; }
+    st.push(o);
+  }); d.stages=st; }
 }
 function ruleSync(){ ruleCollect(); const p=$('r-preview'); if(p)p.innerHTML=flowchart((RULE_DRAFT.stages||[]).map((s,i)=>({...s,seq:i+1}))); }
-function ruleAddStage(){ ruleCollect(); RULE_DRAFT.stages.push({label:'',resolver:'role',role_key:'can_manage_rfq'}); render(); }
+function ruleAddStage(){ ruleCollect(); RULE_DRAFT.stages.push({label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}); render(); }
 function ruleDelStage(i){ ruleCollect(); RULE_DRAFT.stages.splice(i,1); render(); }
 async function ruleSave(){
   ruleCollect(); const d=RULE_DRAFT;
-  if(!d.name){ toast('أدخل اسم القاعدة','err'); return; }
-  if(!(d.stages||[]).length){ toast('أضف مرحلة واحدة على الأقل','err'); return; }
+  if(!d.name){ toast('أدخل اسم المسار','err'); return; }
+  if(!(d.stages||[]).length){ toast('أضف خطوة واحدة على الأقل','err'); return; }
+  for(const s of d.stages){ if(!String(s.label||'').trim()){ toast('اكتب اسم كل خطوة','err'); return; } }
   const row={ name:d.name, priority:num0(d.priority), active:true,
     department_id:d.department_id||null, category:d.category||null,
     min_total:num0(d.min_total), max_total:(d.max_total===''?null:num0(d.max_total)),
-    stages:(d.stages||[]).map((s,i)=>({seq:i+1,label:s.label,resolver:s.resolver,role_key:s.role_key})) };
+    stages:(d.stages||[]).map((s,i)=>({seq:i+1,label:s.label,mode:s.mode||(s.approver?'user':'dept_manager'),approver:s.approver||null})) };
   try{
     if(d.id){ const e=(await SB.from('proc_approval_rules').update(row).eq('id',d.id)).error; if(e)throw e; }
     else { const e=(await SB.from('proc_approval_rules').insert(row)).error; if(e)throw e; }
