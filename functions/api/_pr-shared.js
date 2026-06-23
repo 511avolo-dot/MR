@@ -253,7 +253,7 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   if (!approvers.length) return { skipped: true, reason: 'no_approver' };
   let sent = 0;
   for (const uname of approvers) {
-    const email = usernameToEmail(uname);
+    const email = await userEmail(env, base, uname);
     if (!/@aldeyabi\.com$/i.test(email)) continue;
     let html;
     if (origin) {
@@ -270,9 +270,21 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   return { ok: true, sent };
 }
 
+// بريد المستخدم: يفضّل البريد الحقيقي المخزَّن في proc_users.email على الاشتقاق من الاسم.
+export async function userEmail(env, base, username) {
+  if (!username) return '';
+  try {
+    const r = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=email`, { headers: svcHeaders(env) });
+    const rows = await r.json();
+    const e = rows && rows[0] && rows[0].email ? String(rows[0].email).trim() : '';
+    if (e && /@aldeyabi\.com$/i.test(e)) return e.toLowerCase();
+  } catch (_) {}
+  return usernameToEmail(username);
+}
+
 // إشعار نتيجة لمُقدّم الطلب.
 export async function notifyResult(env, base, pr, event, origin, comment) {
-  const email = usernameToEmail(pr.requester);
+  const email = await userEmail(env, base, pr.requester);
   const html = buildResultEmail(event, pr, origin, comment);
   return sendResend(env, [email], subjectFor(event, pr), html);
 }
@@ -299,13 +311,15 @@ export function buildProcurementEmail(pr, origin) {
 export async function notifyProcurement(env, base, pr, origin) {
   let recips = [];
   try {
-    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions`, { headers: svcHeaders(env) });
+    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
     const users = await ur.json();
-    recips = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true).map((u) => u.username);
-    if (!recips.length) recips = (users || []).filter((u) => u.role === 'admin').map((u) => u.username);
+    let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+    if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
+    // البريد الحقيقي المخزَّن إن وُجد، وإلا الاشتقاق.
+    recips = pick.filter((u) => u.username !== pr.requester)
+      .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));
   } catch (_) {}
-  // لا تُكرّر بريد الطالب إن كان هو نفسه ضمن المشتريات.
-  const toList = [...new Set(recips.filter((u) => u && u !== pr.requester).map(usernameToEmail))];
+  const toList = [...new Set(recips)];
   if (!toList.length) return { skipped: true, reason: 'no_procurement' };
   const html = buildProcurementEmail(pr, origin);
   return sendResend(env, toList, `طلب معتمد جاهز للمشتريات — طلب ${pr.id} | مجموعة الذيابي`, html);
