@@ -212,8 +212,156 @@ BEGIN
   END IF;
 END $$;
 -- ════════════════════════════════════════════════════════════════════════
---  ملاحظة أمنية (مرحلة لاحقة اختيارية): يمكن تحصين انتقالات الاعتماد بدوال
---  Postgres RPC (SECURITY DEFINER) تفرض «المعتمِد الصحيح + فصل المهام» على
---  الخادم، تماماً كطبقة hardened-rls.sql الاختيارية. حالياً يُفرض ذلك في التطبيق
---  اتساقاً مع نمط النظام القائم (PO/RFQ).
+--  8) آلة الحالة على الخادم — تحصين سلسلة الاعتماد (Phase 2)
+-- ════════════════════════════════════════════════════════════════════════
+--  الفكرة (تحصين متوازن لا يكسر شيئاً):
+--   • القرار (اعتماد/رفض/إرجاع) لا يُكتب مباشرةً من العميل بعد الآن؛ يمرّ حصراً
+--     عبر الدالة pr_transition (SECURITY DEFINER) التي تتحقّق على الخادم من:
+--       - هوية المُعتمِد (من JWT) = المُعتمِد المُحلّ لهذه المرحلة، أو أدمن،
+--       - فصل المهام (الطالب ≠ المُعتمِد)،
+--       - أن الطلب قيد المراجعة وأن المرحلة هي المعلّقة الحالية.
+--   • محرّسان (triggers) يمنعان أي عميل من:
+--       - قلب proc_pr_approvals.decision إلى قرار مباشرةً،
+--       - أو دفع proc_purchase_requests.status إلى approved/rejected/returned مباشرةً،
+--     إلا عبر الدالة الموثوقة (التي تضبط علامة الجلسة) أو دور الخادم service_role
+--     (مسار البريد) أو أدمن. بقية الحقول/الحالات (مسودة/مراجعة/تسعير…) تبقى كما هي.
+--   ⇒ حتى لو سُرّبت بيانات دخول بوابة (مستخدم عادي) لا يمكن اعتماد أي طلب أو
+--     تجاوز السلسلة؛ نطاق الضرر محصور تماماً.
+--  آمن لإعادة التشغيل (CREATE OR REPLACE / DROP TRIGGER IF EXISTS).
+
+-- اسم المستخدم الحالي من JWT (يطابق خريطة البريد في التطبيق) — يؤكّد وجود مستخدم نشط.
+CREATE OR REPLACE FUNCTION pr_username() RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_email text := lower(coalesce(auth.jwt() ->> 'email','')); v_uname text;
+BEGIN
+  IF v_email = '' THEN RETURN NULL; END IF;
+  v_uname := CASE v_email
+    WHEN 'supply@aldeyabi.com'   THEN 'mostafa'
+    WHEN 'abdullah@aldeyabi.com' THEN 'abdullah'
+    WHEN 'mahmoud@aldeyabi.com'  THEN 'mahmoud'
+    ELSE split_part(v_email,'@',1) END;
+  RETURN (SELECT username FROM proc_users
+            WHERE lower(username)=lower(v_uname) AND coalesce(active,true) LIMIT 1);
+END $fn$;
+
+CREATE OR REPLACE FUNCTION pr_is_admin() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT EXISTS(SELECT 1 FROM proc_users
+                WHERE lower(username)=lower(pr_username()) AND role='admin' AND coalesce(active,true));
+$fn$;
+
+-- هل الطلب صادر من دور الخادم (service_role)؟ مسار البريد يعتمد عليه ويُسمح له.
+CREATE OR REPLACE FUNCTION pr_is_service() RETURNS boolean
+LANGUAGE sql STABLE AS $fn$
+  SELECT coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb ->> 'role','') = 'service_role';
+$fn$;
+
+-- محرس صفوف الاعتماد: يمنع كتابة قرار مباشرةً (إلا الدالة الموثوقة/الخادم/أدمن).
+CREATE OR REPLACE FUNCTION pr_guard_approval() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF pr_is_service() THEN RETURN NEW; END IF;
+  IF current_setting('app.pr_transition', true) = '1' THEN RETURN NEW; END IF;
+  IF NEW.decision IS NOT NULL AND NEW.decision <> 'pending' THEN
+    IF NOT pr_is_admin() THEN
+      RAISE EXCEPTION 'تُتخذ قرارات الاعتماد عبر سلسلة الموافقات فقط';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+-- محرس رأس الطلب: يمنع بلوغ حالات القرار (approved/rejected/returned) مباشرةً.
+CREATE OR REPLACE FUNCTION pr_guard_status() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF pr_is_service() THEN RETURN NEW; END IF;
+  IF current_setting('app.pr_transition', true) = '1' THEN RETURN NEW; END IF;
+  IF NEW.status IN ('approved','rejected','returned')
+     AND (TG_OP='INSERT' OR NEW.status IS DISTINCT FROM OLD.status) THEN
+    IF NOT pr_is_admin() THEN
+      RAISE EXCEPTION 'حالة الاعتماد تُحدَّث عبر سلسلة الموافقات فقط';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_pr_guard_approval ON proc_pr_approvals;
+CREATE TRIGGER trg_pr_guard_approval BEFORE INSERT OR UPDATE ON proc_pr_approvals
+  FOR EACH ROW EXECUTE FUNCTION pr_guard_approval();
+DROP TRIGGER IF EXISTS trg_pr_guard_status ON proc_purchase_requests;
+CREATE TRIGGER trg_pr_guard_status BEFORE INSERT OR UPDATE ON proc_purchase_requests
+  FOR EACH ROW EXECUTE FUNCTION pr_guard_status();
+
+-- الدالة الموثوقة: تنفيذ قرار على المرحلة المعلّقة الحالية (تحقّق كامل على الخادم).
+CREATE OR REPLACE FUNCTION pr_transition(p_pr_id text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text := pr_username();
+  v_pr proc_purchase_requests%ROWTYPE;
+  v_stage proc_pr_approvals%ROWTYPE;
+  v_pending int; v_next int; v_decision text; v_status text; v_seq int;
+  v_ok boolean := false; v_mgr text; v_perm boolean;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+
+  SELECT * INTO v_pr FROM proc_purchase_requests WHERE id = p_pr_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_pr.status <> 'in_review' THEN RAISE EXCEPTION 'الطلب ليس قيد المراجعة'; END IF;
+
+  SELECT * INTO v_stage FROM proc_pr_approvals
+    WHERE pr_id = p_pr_id AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'لا توجد مرحلة معلّقة'; END IF;
+
+  IF v_pr.requester = v_me THEN RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)'; END IF;
+
+  -- تخويل: المُعتمِد المُحلّ لهذه المرحلة، أو أدمن.
+  IF v_stage.approver IS NOT NULL THEN
+    v_ok := (v_stage.approver = v_me);
+  ELSIF v_stage.resolver = 'dept_manager' THEN
+    SELECT manager_user INTO v_mgr FROM proc_departments WHERE id = v_pr.department_id;
+    v_ok := (v_mgr = v_me);
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    SELECT coalesce((permissions->>v_stage.role_key)::boolean,false) INTO v_perm
+      FROM proc_users WHERE lower(username)=lower(v_me) LIMIT 1;
+    v_ok := coalesce(v_perm,false);
+  END IF;
+  IF NOT v_ok AND NOT pr_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
+
+  IF p_action IN ('reject','return') AND coalesce(btrim(p_comment),'') = '' THEN
+    RAISE EXCEPTION 'السبب مطلوب';
+  END IF;
+
+  v_decision := CASE p_action WHEN 'approve' THEN 'approved'
+                              WHEN 'reject'  THEN 'rejected' ELSE 'returned' END;
+  SELECT count(*) INTO v_pending FROM proc_pr_approvals WHERE pr_id=p_pr_id AND decision='pending';
+  v_status := v_pr.status; v_seq := v_pr.current_seq;
+  IF p_action='approve' THEN
+    IF v_pending <= 1 THEN v_status := 'approved';
+    ELSE
+      SELECT seq INTO v_next FROM proc_pr_approvals
+        WHERE pr_id=p_pr_id AND decision='pending' AND seq > v_stage.seq ORDER BY seq ASC LIMIT 1;
+      v_seq := coalesce(v_next, v_pr.current_seq);
+    END IF;
+  ELSIF p_action='reject' THEN v_status := 'rejected';
+  ELSE v_status := 'returned'; v_seq := 0; END IF;
+
+  PERFORM set_config('app.pr_transition','1', true);  -- علامة جلسة محلية للمعاملة (تسمح للمحرّسين)
+
+  UPDATE proc_pr_approvals
+     SET decision=v_decision, approver=v_me, comment=p_comment, acted_at=now(), channel='portal'
+     WHERE pr_id=p_pr_id AND seq=v_stage.seq;
+  UPDATE proc_purchase_requests
+     SET status=v_status, current_seq=v_seq, updated_at=now(), updated_by=v_me
+     WHERE id=p_pr_id;
+
+  RETURN jsonb_build_object('ok',true,'action',p_action,'decision',v_decision,
+           'status',v_status,'finalized', v_status <> 'in_review','seq', v_stage.seq);
+END $fn$;
+
+GRANT EXECUTE ON FUNCTION pr_username()                       TO authenticated;
+GRANT EXECUTE ON FUNCTION pr_is_admin()                       TO authenticated;
+GRANT EXECUTE ON FUNCTION pr_is_service()                     TO authenticated;
+GRANT EXECUTE ON FUNCTION pr_transition(text, text, text)     TO authenticated;
 -- ════════════════════════════════════════════════════════════════════════
