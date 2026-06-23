@@ -278,7 +278,7 @@ export async function notifyResult(env, base, pr, event, origin, comment) {
 }
 
 // بريد المشتريات عند الاعتماد النهائي — طلب جاهز للمعالجة (توريد/تسعير داخل النظام أو خارجه).
-function buildProcurementEmail(pr, origin) {
+export function buildProcurementEmail(pr, origin) {
   const B = BRAND;
   const portalUrl = origin ? `${origin}/requests.html` : '';
   const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
