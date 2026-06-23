@@ -538,7 +538,12 @@ function statusBadge(s){const m=STATUS_META[s]||{l:s,c:'neutral'};return `<span 
 /* إشعار بريد (أفضل جهد، غير حاجب) — المستقبِل يُحدَّد على الخادم من حالة الطلب */
 async function notifyPR(event, prId, comment){
   if(PSET && PSET.email_on===false) return;
-  try{ await fetch('/api/notify',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({kind:'pr',pr_id:prId,event,comment:comment||null})}); }catch(e){}
+  try{
+    const r=await fetch('/api/notify',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({kind:'pr',pr_id:prId,event,comment:comment||null})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok || d.error){ console.warn('[notifyPR] لم يُرسَل البريد:', d.error||r.status, d.detail||''); toast('تنبيه: لم يُرسَل بريد الإشعار ('+(d.error||r.status)+') — جرّب «تشخيص البريد» في الإعدادات','err'); }
+    else if(d.skipped){ console.warn('[notifyPR] تخطّى البريد:', d.reason); if(d.reason==='no_recipient'||d.reason==='no_approver') toast('تنبيه: لم يُحدَّد مستلِم لهذا الإشعار — تحقّق من معتمِد المرحلة','err'); }
+  }catch(e){ console.warn('[notifyPR]', e); }
 }
 
 /* ── رفع طلب ── */
@@ -1086,7 +1091,34 @@ function generalHTML(){
     </div>
     <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveGeneral()">💾 حفظ</button>
     <div class="muted" style="margin-top:10px">رابط البوابة: <b dir="ltr">/requests.html</b> · وزّعه على الموظفين والمعتمِدين.</div>
+  </div>
+  <div class="card"><div class="sec-title">🔧 تشخيص البريد</div>
+    <div class="muted" style="margin-bottom:10px">يرسل رسالة تجريبية إلى بريدك أنت (<b dir="ltr">${esc(usernameToEmail(ME.username))}</b>) ويكشف أي خلل في خط الإرسال فوراً.</div>
+    <button class="btn btn-primary btn-sm" onclick="emailDiag()">✉️ اختبار إرسال البريد الآن</button>
+    <div id="diag-out" style="margin-top:12px"></div>
   </div>`;
+}
+async function emailDiag(){
+  const out=$('diag-out'); if(out) out.innerHTML='<div class="muted">جارٍ الفحص…</div>';
+  const line=(ok,t)=>`<div style="padding:4px 0">${ok?'✅':'❌'} ${esc(t)}</div>`;
+  let html='';
+  // 1) هل البريد مُهيّأ على الخادم؟
+  try{
+    const g=await fetch('/api/notify'); const gd=await g.json().catch(()=>({}));
+    if(gd.ok){ html+=line(true,'إعدادات البريد على الخادم: مضبوطة (RESEND_API_KEY / NOTIFY_FROM / مفتاح الخدمة).'); }
+    else{ html+=line(false,'إعدادات البريد غير مكتملة على Cloudflare — أضِف: RESEND_API_KEY و NOTIFY_FROM و SUPABASE_SERVICE_ROLE_KEY و SUPABASE_URL.'); if(out)out.innerHTML=html; return; }
+  }catch(e){ html+=line(false,'تعذّر الوصول إلى /api/notify — تحقّق من النشر.'); if(out)out.innerHTML=html; return; }
+  // 2) إرسال رسالة تجريبية فعلية إلى بريد المستخدم الحالي
+  try{
+    const r=await fetch('/api/notify',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({event:'test',status:'received'})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.sent){ html+=line(true,'تم إرسال رسالة تجريبية إلى '+(d.to||usernameToEmail(ME.username))+' — افحص بريدك (وصندوق المهملات).'); }
+    else if(d.error){ html+=line(false,'رفض الخادم الإرسال: '+(d.error)+(d.detail?(' — '+d.detail):'')); html+=`<div class="muted" style="margin-top:6px">إن ذُكر «domain» أو «not verified»: فعّل نطاق <b>aldeyabi.com</b> في Resend (DNS) واجعل <b>NOTIFY_FROM</b> من نفس النطاق.</div>`; }
+    else if(d.skipped){ html+=line(false,'تخطّى الإرسال — السبب: '+(d.reason||'غير معروف')); }
+    else if(r.status===403){ html+=line(false,'غير مصرّح — حسابك ليس مُفعّلاً كموظف في proc_users، أو لا يُطابق البريد.'); }
+    else{ html+=line(false,'رد غير متوقّع ('+r.status+').'); }
+  }catch(e){ html+=line(false,'فشل الاتصال: '+(e.message||'')); }
+  if(out) out.innerHTML=html;
 }
 async function saveGeneral(){
   PSET=Object.assign({},PSET,{org_name:val('g-name'),sla_days:num0(val('g-sla')),email_on:$('g-em')?$('g-em').checked:true});
