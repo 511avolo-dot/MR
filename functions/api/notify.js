@@ -64,10 +64,20 @@ async function verifyStaff(env, base, jwt) {
     const email = String(u.email).toLowerCase();
     const uname = emailToUsername(email);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
-    // طابِق بالبريد الحقيقي المخزَّن أولاً (لمستخدمي التسجيل الذاتي)، ثم باسم المستخدم المشتقّ.
-    const pr = await fetch(`${base}/rest/v1/proc_users?or=(email.eq.${encodeURIComponent(email)},username.eq.${encodeURIComponent(uname)})&select=username,role,active,email`, { headers: svc });
-    if (!pr.ok) return null;
-    const rows = await pr.json();
+    const enc = encodeURIComponent;
+    let rows = null;
+    // أفضّل المطابقة بالبريد المخزَّن (لمستخدمي التسجيل الذاتي) — تتطلب وجود عمود email.
+    try {
+      const a = await fetch(`${base}/rest/v1/proc_users?or=(email.eq.${enc(email)},username.eq.${enc(uname)})&select=username,role,active,email`, { headers: svc });
+      if (a.ok) rows = await a.json();
+    } catch (_) {}
+    // احتياط (قبل ترقية المخطّط/عمود email): المطابقة باسم المستخدم فقط — كي لا تتعطّل الإشعارات.
+    if (!Array.isArray(rows)) {
+      const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
+      const b = await fetch(`${base}/rest/v1/proc_users?username=ilike.${enc(safe)}&select=username,role,active`, { headers: svc });
+      if (!b.ok) return null;
+      rows = await b.json();
+    }
     const prof = (rows || []).find((x) => String(x.email || '').toLowerCase() === email)
       || (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
     return (prof && prof.active !== false) ? String(u.email) : null;
