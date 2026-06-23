@@ -61,13 +61,15 @@ async function verifyStaff(env, base, jwt) {
     if (!r.ok) return null;
     const u = await r.json();
     if (!u || !u.email) return null;
-    const uname = emailToUsername(u.email);
-    const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
+    const email = String(u.email).toLowerCase();
+    const uname = emailToUsername(email);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
-    const pr = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`, { headers: svc });
+    // طابِق بالبريد الحقيقي المخزَّن أولاً (لمستخدمي التسجيل الذاتي)، ثم باسم المستخدم المشتقّ.
+    const pr = await fetch(`${base}/rest/v1/proc_users?or=(email.eq.${encodeURIComponent(email)},username.eq.${encodeURIComponent(uname)})&select=username,role,active,email`, { headers: svc });
     if (!pr.ok) return null;
     const rows = await pr.json();
-    const prof = (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
+    const prof = (rows || []).find((x) => String(x.email || '').toLowerCase() === email)
+      || (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
     return (prof && prof.active !== false) ? String(u.email) : null;
   } catch (_) { return null; }
 }

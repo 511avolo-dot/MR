@@ -205,11 +205,32 @@
     <div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"></div>
     <div class="login-title">بوابة طلبات الشراء</div>
     <div class="login-sub">مجموعة الذيابي · ادخل بحسابك المخصّص</div>
-    <div class="field"><label>اسم المستخدم</label><input class="input" id="lg-user" autocomplete="username" placeholder="اسم المستخدم"></div>
+    <div class="field"><label>البريد الإلكتروني أو اسم المستخدم</label><input class="input" id="lg-user" autocomplete="username" placeholder="name@aldeyabi.com"></div>
     <div class="field"><label>كلمة المرور</label><input class="input" id="lg-pass" type="password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" id="lg-btn" style="width:100%" onclick="doLogin()">دخول</button>
     <div class="err" id="lg-err"></div>
-    <div class="muted" style="text-align:center;margin-top:14px;font-size:11.5px">للحصول على حساب، تواصل مع إدارة المشتريات.</div>
+    <div class="muted" style="text-align:center;margin-top:14px;font-size:11.5px">ليس لديك حساب؟ <a onclick="showSignup('')" style="cursor:pointer;color:var(--gold-2);font-weight:600">إنشاء حساب جديد</a></div>
+  </div>
+</div>
+
+<!-- ════ SIGNUP (تسجيل ذاتي عبر رابط دعوة) ════ -->
+<div id="signup" class="hidden">
+  <div class="login-card">
+    <div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"></div>
+    <div class="login-title">إنشاء حساب — بوابة الطلبات</div>
+    <div class="login-sub">مجموعة الذيابي · للموظفين</div>
+    <div class="field"><label>الاسم الكامل</label><input class="input" id="su-name" placeholder="مثال: علي أحمد"></div>
+    <div class="field"><label>البريد الإلكتروني (نطاق الشركة)</label><input class="input" id="su-email" dir="ltr" autocomplete="email" placeholder="name@aldeyabi.com"></div>
+    <div class="field"><label>كلمة المرور</label><input class="input" id="su-pass" type="password" placeholder="8 أحرف على الأقل"></div>
+    <div class="field"><label>تأكيد كلمة المرور</label><input class="input" id="su-pass2" type="password" placeholder="••••••••"></div>
+    <div class="field"><label>نوع الحساب المطلوب</label>
+      <label class="pchk" style="display:block;margin:4px 0"><input type="radio" name="su-role" value="employee" checked> موظف (مقدّم طلبات)</label>
+      <label class="pchk" style="display:block;margin:4px 0"><input type="radio" name="su-role" value="approver"> أرغب بصلاحية اعتماد <span class="muted" style="font-size:11px">(يفعّلها الأدمن)</span></label>
+    </div>
+    <div class="field"><label>رمز الدعوة</label><input class="input" id="su-code" dir="ltr" placeholder="الرمز الذي زوّدتك به الإدارة"></div>
+    <button class="btn btn-primary" id="su-btn" style="width:100%" onclick="doSignup()">إنشاء الحساب</button>
+    <div class="err" id="su-err"></div>
+    <div class="muted" style="text-align:center;margin-top:12px;font-size:11.5px"><a onclick="showLogin()" style="cursor:pointer;color:var(--gold-2);font-weight:600">← لديّ حساب — تسجيل الدخول</a></div>
   </div>
 </div>
 
@@ -311,27 +332,56 @@ function loadLib(){
 async function doLogin(){
   const u=val('lg-user'), p=val('lg-pass');
   $('lg-err').textContent='';
-  if(!u||!p){$('lg-err').textContent='أدخل اسم المستخدم وكلمة المرور';return;}
+  if(!u||!p){$('lg-err').textContent='أدخل البريد أو اسم المستخدم وكلمة المرور';return;}
   const btn=$('lg-btn'); btn.disabled=true; btn.textContent='جارٍ الدخول...';
   try{
     await loadLib();
     if(!SB) SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
-    const {error}=await SB.auth.signInWithPassword({email:usernameToEmail(u),password:p});
+    // الدخول بالبريد الكامل (يحوي @) أو باسم المستخدم (يُشتقّ منه البريد)
+    const loginEmail = u.includes('@') ? u.trim().toLowerCase() : usernameToEmail(u);
+    const {error}=await SB.auth.signInWithPassword({email:loginEmail,password:p});
     if(error) throw new Error('بيانات الدخول غير صحيحة');
-    await loadProfile(u.trim().toLowerCase());
+    await loadProfile(u.includes('@') ? loginEmail : u.trim().toLowerCase());
+    if(ME && ME.active===false){ await SB.auth.signOut(); ME=null; throw new Error('حسابك قيد المراجعة — بانتظار تفعيل الإدارة.'); }
     await afterLogin();
   }catch(e){ $('lg-err').textContent=e.message||'تعذّر الدخول'; }
   finally{ btn.disabled=false; btn.textContent='دخول'; }
 }
-async function loadProfile(username){
-  let prof=null;
+// يقبل المُعرّف بريداً (يطابق عمود email) أو اسم مستخدم
+async function loadProfile(idOrEmail){
+  const key=String(idOrEmail||'').trim().toLowerCase(); let prof=null;
   try{
-    // مطابقة غير حسّاسة لحالة الأحرف (يطابق نمط النظام الأساسي)
-    const {data}=await SB.from('proc_users').select('*').ilike('username',username);
-    prof=(data||[]).find(x=>String(x.username).toLowerCase()===String(username).toLowerCase()) || (data&&data[0]) || null;
+    if(key.includes('@')){
+      const {data}=await SB.from('proc_users').select('*').eq('email',key);
+      prof=(data||[])[0]||null;
+      if(!prof){ const un=emailToUsername(key); const {data:d2}=await SB.from('proc_users').select('*').ilike('username',un); prof=(d2||[]).find(x=>String(x.username).toLowerCase()===un)||(d2&&d2[0])||null; }
+    } else {
+      const {data}=await SB.from('proc_users').select('*').ilike('username',key);
+      prof=(data||[]).find(x=>String(x.username).toLowerCase()===key)||(data&&data[0])||null;
+    }
   }catch(e){}
-  ME = prof || {username, display_name:username, role:'user', permissions:{}};
+  ME = prof || {username:emailToUsername(key), display_name:key, role:'user', permissions:{}};
   if(typeof ME.permissions==='string'){ try{ME.permissions=JSON.parse(ME.permissions);}catch(e){ME.permissions={};} }
+}
+/* ── التسجيل الذاتي ── */
+function showSignup(code){ $('login').classList.add('hidden'); $('app').classList.add('hidden'); const s=$('signup'); if(s){ s.classList.remove('hidden'); if(code&&$('su-code'))$('su-code').value=code; } }
+function showLogin(){ const s=$('signup'); if(s)s.classList.add('hidden'); $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+async function doSignup(){
+  const name=val('su-name').trim(), email=val('su-email').trim().toLowerCase(), p=val('su-pass'), p2=val('su-pass2'), code=val('su-code').trim();
+  const role=(document.querySelector('input[name=su-role]:checked')||{}).value||'employee';
+  $('su-err').textContent='';
+  if(name.length<3){$('su-err').textContent='أدخل الاسم الكامل';return;}
+  if(!/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){$('su-err').textContent='يجب أن يكون البريد ضمن نطاق @aldeyabi.com';return;}
+  if(p.length<8){$('su-err').textContent='كلمة المرور 8 أحرف على الأقل';return;}
+  if(p!==p2){$('su-err').textContent='كلمتا المرور غير متطابقتين';return;}
+  if(!code){$('su-err').textContent='أدخل رمز الدعوة';return;}
+  const btn=$('su-btn'); btn.disabled=true; btn.textContent='جارٍ الإنشاء...';
+  try{
+    const r=await fetch('/api/portal-signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password:p,requested_role:role,invite_code:code})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    $('signup').innerHTML='<div class="login-card" style="text-align:center"><div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display=\'none\'"></div><div class="login-title">تم إنشاء حسابك ✓</div><div class="login-sub" style="margin-top:10px;line-height:1.8">حسابك الآن <b>بانتظار تفعيل الإدارة</b>.<br>ستتمكّن من الدخول بعد التفعيل بـ<b dir="ltr">'+esc(email)+'</b>.</div><button class="btn btn-primary" style="width:100%;margin-top:18px" onclick="location.href=location.pathname">حسناً</button></div>';
+  }catch(e){ $('su-err').textContent=e.message||'تعذّر إنشاء الحساب'; btn.disabled=false; btn.textContent='إنشاء الحساب'; }
 }
 async function loadRefs(){
   try{
@@ -350,23 +400,25 @@ async function afterLogin(){
 }
 async function loadAdminData(){
   try{
-    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active,delegate_to,is_away').order('username');
+    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active,delegate_to,is_away,email,requested_role').order('username');
     USERS=(u.data||[]).map(x=>{ if(typeof x.permissions==='string'){try{x.permissions=JSON.parse(x.permissions);}catch(e){x.permissions={};}} return x; });
   }catch(e){ USERS=[]; }
   try{ const s=await SB.from('proc_settings').select('value').eq('key','portal_settings').maybeSingle(); PSET=(s.data&&s.data.value)?(typeof s.data.value==='string'?JSON.parse(s.data.value):s.data.value):{}; }catch(e){ PSET={}; }
 }
 async function doLogout(){ try{ await SB.auth.signOut(); }catch(e){} location.reload(); }
 
-/* استعادة الجلسة عند إعادة الفتح */
+/* استعادة الجلسة عند إعادة الفتح + توجيه رابط التسجيل */
 window.addEventListener('DOMContentLoaded', async ()=>{
+  const params=new URLSearchParams(location.search);
+  if(params.has('signup')){ showSignup(params.get('signup')||''); return; }  // رابط الدعوة → شاشة التسجيل
   try{
     await loadLib();
     SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
     const {data}=await SB.auth.getSession();
     if(data && data.session){
       const email=data.session.user.email||'';
-      const username=emailToUsername(email);
-      await loadProfile(username);
+      await loadProfile(email);
+      if(ME && ME.active===false){ await SB.auth.signOut(); return; }  // حساب بانتظار التفعيل
       await afterLogin();
     }
   }catch(e){ /* ابقَ على شاشة الدخول */ }
@@ -1023,31 +1075,43 @@ async function deptDel(id){ if(!confirm('حذف القسم؟'))return; try{ awai
 /* ── المستخدمون ── */
 function usersHTML(){
   const delegOpt=(sel,selfU)=>['<option value="">— بلا —</option>'].concat(USERS.filter(x=>x.username!==selfU).map(x=>`<option value="${esc(x.username)}" ${sel===x.username?'selected':''}>${esc(x.display_name||x.username)}</option>`)).join('');
-  const rows=USERS.map(u=>{
+  const reqBadge=(u)=> u.requested_role==='approver' ? '<span class="badge info">طلب: صلاحية اعتماد</span>' : (u.requested_role==='employee'?'<span class="badge neutral">طلب: موظف</span>':'');
+  const card=(u)=>{
     const perms=PERM_DEFS.map(p=>`<label class="pchk"><input type="checkbox" ${u.role==='admin'||((u.permissions||{})[p.k]===true)?'checked':''} ${u.role==='admin'?'disabled':''} onchange="userPerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`).join('');
-    return `<div class="card">
+    const pending=u.active===false;
+    return `<div class="card"${pending?' style="border-color:var(--gold)"':''}>
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
-        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">أدمن</span>':''} ${u.active===false?'<span class="badge danger">معطّل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''}</div>
-        <div class="row-act"><button class="btn btn-ghost btn-sm" onclick="userReset('${esc(u.username)}')">كلمة مرور</button><button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',${u.active===false})">${u.active===false?'تفعيل':'تعطيل'}</button></div>
+        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">أدمن</span>':''} ${pending?'<span class="badge warn">بانتظار التفعيل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''} ${pending?reqBadge(u):''}</div>
+        <div class="row-act">${pending?`<button class="btn btn-primary btn-sm" onclick="userActive('${esc(u.username)}',true)">✓ تفعيل</button>`:''}<button class="btn btn-ghost btn-sm" onclick="userReset('${esc(u.username)}')">كلمة مرور</button>${pending?'':`<button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',false)">تعطيل</button>`}</div>
       </div>
       <div class="perms">${perms}</div>
       <div class="grid" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+        <div><label>البريد الإلكتروني</label><input class="input" dir="ltr" value="${esc(u.email||'')}" placeholder="name@aldeyabi.com" onchange="userSetEmail('${esc(u.username)}',this.value)"></div>
         <div><label>المفوَّض عند الغياب</label><select class="select" onchange="userDeleg('${esc(u.username)}',this.value)">${delegOpt(u.delegate_to,u.username)}</select></div>
         <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل الموافقات للمفوَّض)</label></div>
       </div>
     </div>`;
-  }).join('')||`<div class="empty">لا مستخدمون</div>`;
-  return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="userAddForm()">➕ مستخدم جديد</button></div>
+  };
+  const pending=USERS.filter(u=>u.active===false), activeU=USERS.filter(u=>u.active!==false);
+  let html='';
+  if(pending.length){
+    html+=`<div class="card" style="border-color:var(--gold);background:rgba(184,146,61,.06)"><div class="sec-title">⏳ بانتظار التفعيل (${pending.length})</div><div class="muted" style="font-size:12.5px">حسابات سجّلت ذاتياً عبر رابط الدعوة. راجعها، امنح صلاحيات الاعتماد للمطلوب منها، ثم اضغط «تفعيل».</div></div>`;
+    html+=pending.map(card).join('');
+  }
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px"><div class="sec-title" style="margin:0">المستخدمون النشطون (${activeU.length})</div><button class="btn btn-primary btn-sm" onclick="userAddForm()">➕ مستخدم جديد</button></div>
     <div class="card hidden" id="u-form">
       <div class="sec-title">مستخدم جديد</div>
       <div class="grid">
         <div><label>اسم المستخدم <span class="req">*</span></label><input class="input" id="u-user" dir="ltr"></div>
         <div><label>الاسم الظاهر <span class="req">*</span></label><input class="input" id="u-name"></div>
+        <div><label>البريد الإلكتروني</label><input class="input" id="u-email" dir="ltr" placeholder="name@aldeyabi.com"></div>
         <div><label>كلمة المرور <span class="req">*</span></label><input class="input" id="u-pass" dir="ltr"></div>
       </div>
       <div class="perms" id="u-perms">${PERM_DEFS.map(p=>`<label class="pchk"><input type="checkbox" data-pk="${p.k}"> ${esc(p.l)}</label>`).join('')}</div>
       <div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="userAdd()">إنشاء الحساب</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('u-form').classList.add('hidden')">إلغاء</button></div>
-    </div>${rows}`;
+    </div>`;
+  html+=activeU.map(card).join('')||`<div class="empty">لا مستخدمون نشطون</div>`;
+  return html;
 }
 function userAddForm(){ const f=$('u-form'); if(f)f.classList.remove('hidden'); }
 async function adminApi(payload){
@@ -1055,11 +1119,19 @@ async function adminApi(payload){
   const d=await r.json().catch(()=>({})); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); return d;
 }
 async function userAdd(){
-  const username=val('u-user'), displayName=val('u-name'), password=val('u-pass');
+  const username=val('u-user'), displayName=val('u-name'), password=val('u-pass'), email=val('u-email').trim().toLowerCase();
   if(!username||!displayName||password.length<6){ toast('أكمل الحقول (كلمة مرور 6+)','err'); return; }
+  if(email && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){ toast('البريد يجب أن يكون ضمن @aldeyabi.com','err'); return; }
   const permissions={}; document.querySelectorAll('#u-perms [data-pk]').forEach(c=>{ if(c.checked)permissions[c.getAttribute('data-pk')]=true; });
-  try{ await adminApi({action:'create',username,displayName,password,role:'user',permissions,active:true}); toast('أُنشئ الحساب','ok'); await loadAdminData(); render(); }
+  try{ await adminApi({action:'create',username,displayName,password,email:email||undefined,role:'user',permissions,active:true}); toast('أُنشئ الحساب','ok'); await loadAdminData(); render(); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
+}
+async function userSetEmail(username,email){
+  const e=String(email||'').trim().toLowerCase();
+  if(e && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(e)){ toast('البريد يجب أن يكون ضمن @aldeyabi.com','err'); return; }
+  const u=USERS.find(x=>x.username===username);
+  try{ const er=(await SB.from('proc_users').update({email:e||null}).eq('username',username)).error; if(er)throw er; if(u)u.email=e||null; toast('حُدّث البريد','ok'); }
+  catch(err){ toast('تعذّر: '+(err.message||''),'err'); }
 }
 async function userPerm(username,key,on){
   const u=USERS.find(x=>x.username===username); if(!u)return; u.permissions=u.permissions||{}; u.permissions[key]=on;
@@ -1093,6 +1165,15 @@ function generalHTML(){
     <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveGeneral()">💾 حفظ</button>
     <div class="muted" style="margin-top:10px">رابط البوابة: <b dir="ltr">/requests.html</b> · وزّعه على الموظفين والمعتمِدين.</div>
   </div>
+  <div class="card"><div class="sec-title">🔗 التسجيل الذاتي للموظفين</div>
+    <div class="muted" style="margin-bottom:10px;font-size:12.5px">اضبط رمز دعوة سرّياً ثم وزّع رابط الدعوة. يسجّل الموظف بنفسه (ببريد <b>@aldeyabi.com</b>) ويظهر لك في «المستخدمون ▸ بانتظار التفعيل» لتفعيله ومنح صلاحياته.</div>
+    <div class="grid">
+      <div><label>رمز دعوة التسجيل</label><input class="input" id="g-invite" dir="ltr" value="${esc(PSET.invite_code||'')}" placeholder="رمز سرّي"></div>
+      <div style="display:flex;align-items:flex-end;gap:8px"><button class="btn btn-ghost btn-sm" onclick="genInvite()">🎲 توليد رمز</button></div>
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="saveGeneral()">💾 حفظ الرمز</button>
+    ${PSET.invite_code?`<div style="margin-top:12px;background:var(--wash,#f6f4ee);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div class="muted" style="font-size:11.5px;margin-bottom:4px">رابط الدعوة (انسخه وأرسله للموظفين):</div><div dir="ltr" style="font-size:12px;word-break:break-all;color:var(--gold-2);font-weight:600" id="invite-link">${esc(location.origin)}/requests.html?signup=${encodeURIComponent(PSET.invite_code)}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyInvite()">📋 نسخ الرابط</button></div>`:''}
+  </div>
   <div class="card"><div class="sec-title">🔧 تشخيص البريد</div>
     <div class="muted" style="margin-bottom:10px">يرسل رسالة تجريبية إلى بريدك أنت (<b dir="ltr">${esc(usernameToEmail(ME.username))}</b>) ويكشف أي خلل في خط الإرسال فوراً.</div>
     <button class="btn btn-primary btn-sm" onclick="emailDiag()">✉️ اختبار إرسال البريد الآن</button>
@@ -1122,10 +1203,17 @@ async function emailDiag(){
   if(out) out.innerHTML=html;
 }
 async function saveGeneral(){
-  PSET=Object.assign({},PSET,{org_name:val('g-name'),sla_days:num0(val('g-sla')),email_on:$('g-em')?$('g-em').checked:true});
-  try{ const e=(await SB.from('proc_settings').upsert({key:'portal_settings',value:PSET,description:'إعدادات بوابة الطلبات',updated_by:ME.username,updated_at:new Date().toISOString()},{onConflict:'key'})).error; if(e)throw e; toast('حُفظت الإعدادات','ok'); }
+  const patch={};
+  if($('g-name')) patch.org_name=val('g-name');
+  if($('g-sla')) patch.sla_days=num0(val('g-sla'));
+  if($('g-em')) patch.email_on=$('g-em').checked;
+  if($('g-invite')) patch.invite_code=val('g-invite').trim();
+  PSET=Object.assign({},PSET,patch);
+  try{ const e=(await SB.from('proc_settings').upsert({key:'portal_settings',value:PSET,description:'إعدادات بوابة الطلبات',updated_by:ME.username,updated_at:new Date().toISOString()},{onConflict:'key'})).error; if(e)throw e; toast('حُفظت الإعدادات','ok'); render(); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
+function genInvite(){ const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<10;i++)s+=a[Math.floor(Math.random()*a.length)]; const el=$('g-invite'); if(el)el.value=s; }
+function copyInvite(){ const el=$('invite-link'); if(!el)return; const t=el.textContent; navigator.clipboard?.writeText(t).then(()=>toast('نُسخ الرابط','ok'),()=>toast('انسخه يدوياً','err')); }
 </script>
 </body>
 </html>

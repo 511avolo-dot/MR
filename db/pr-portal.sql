@@ -576,3 +576,12 @@ ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS proc_started_at     
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS quotes_collected_by TEXT;
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS quotes_collected_at TIMESTAMPTZ;
 -- ════════════════════════════════════════════════════════════════════════
+--  12) التسجيل الذاتي للبوابة — بريد حقيقي لكل مستخدم + طلب الدور (Phase 5)
+-- ════════════════════════════════════════════════════════════════════════
+--  email: بريد الشركة الحقيقي للمستخدم (يُفضَّل في توجيه الإشعارات على الاشتقاق).
+--  requested_role: تلميح اختاره المستخدم عند التسجيل (employee | approver) — يظهر
+--  للأدمن فقط؛ لا يمنح أي صلاحية (الصلاحيات والتفعيل بيد الأدمن حصراً).
+ALTER TABLE proc_users ADD COLUMN IF NOT EXISTS email          TEXT;
+ALTER TABLE proc_users ADD COLUMN IF NOT EXISTS requested_role TEXT;
+CREATE INDEX IF NOT EXISTS idx_proc_users_email ON proc_users(email);
+-- ════════════════════════════════════════════════════════════════════════

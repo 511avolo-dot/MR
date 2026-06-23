@@ -68,12 +68,18 @@ function sb(env) {
       // مطابقة غير حسّاسة لحالة الأحرف (البريد lowercase وusername قد يكون Abdullah)،
       // مع تهريب أحرف البدل في ILIKE (% _ \) لمنع مطابقة أوسع تُطابق مستخدماً آخر.
       const safe = String(username).replace(/[\\%_]/g, c => '\\' + c);
-      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`, { headers });
+      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active,email`, { headers });
       if (!r.ok) return null;
       const rows = await r.json();
       // تأكيد المطابقة الدقيقة (بلا حساسية حالة) دفاعياً
       const u = String(username).toLowerCase();
       return (rows || []).find(x => String(x.username).toLowerCase() === u) || null;
+    },
+    // البريد الحقيقي المخزَّن للمستخدم (لإيجاد حساب Auth الصحيح)، وإلا المشتقّ من الاسم.
+    async resolveEmail(username) {
+      const r = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=email`, { headers });
+      if (r.ok) { const rows = await r.json(); const e = rows && rows[0] && rows[0].email; if (e) return String(e).toLowerCase(); }
+      return usernameToEmail(username);
     },
     async findAuthUserByEmail(email) {
       // قائمة المستخدمين (فريق داخلي صغير — صفحة واحدة تكفي)
@@ -143,16 +149,19 @@ export async function onRequestPost({ request, env }) {
   const action = payload && payload.action;
 
   if (action === 'create') {
-    const { username, password, displayName, role, permissions, active } = payload;
+    const { username, password, displayName, role, permissions, active, email } = payload;
     if (!username || !password || !displayName) return json({ error: 'حقول ناقصة' }, 400);
     if (!/^[A-Za-z0-9_]{2,30}$/.test(username)) return json({ error: 'اسم مستخدم غير صالح' }, 400);
     if (String(password).length < 6) return json({ error: 'كلمة السر 6 أحرف على الأقل' }, 400);
-    const r = await api.createAuthUser(usernameToEmail(username), password, { username, role });
+    // البريد الحقيقي (إن أُدخل) أو المشتقّ — يجب أن يكون ضمن نطاق الشركة.
+    const realEmail = (email && /^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(String(email).trim()))
+      ? String(email).trim().toLowerCase() : usernameToEmail(username);
+    const r = await api.createAuthUser(realEmail, password, { username, role });
     if (!r.ok && !/already|exists|registered/i.test(JSON.stringify(r.data))) {
       return json({ error: 'تعذّر إنشاء حساب الدخول: ' + (r.data.msg || r.data.message || '') }, 400);
     }
     const prof = await api.restWrite('POST', 'proc_users', {
-      username, display_name: displayName,
+      username, display_name: displayName, email: realEmail,
       password_hash: 'managed_by_supabase_auth',
       role: role === 'admin' ? 'admin' : 'user',
       permissions: permissions || {}, active: active !== false,
@@ -165,7 +174,7 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setPassword') {
     const { username, password } = payload;
     if (!username || String(password || '').length < 6) return json({ error: 'بيانات غير صالحة' }, 400);
-    const u = await api.findAuthUserByEmail(usernameToEmail(username));
+    const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (!u) return json({ error: 'لا يوجد حساب دخول لهذا المستخدم' }, 404);
     const r = await api.updateAuthUser(u.id, { password });
     if (!r.ok) return json({ error: 'تعذّر تغيير كلمة المرور' }, 400);
@@ -175,7 +184,7 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setActive') {
     const { username, active } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
-    const u = await api.findAuthUserByEmail(usernameToEmail(username));
+    const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (u) {
       // حظر/فك حظر على مستوى Auth (يمنع إصدار JWT جديد للمعطّل)
       await api.updateAuthUser(u.id, { ban_duration: active ? 'none' : '876000h' });
@@ -188,7 +197,7 @@ export async function onRequestPost({ request, env }) {
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
     if (username === callerUsername) return json({ error: 'لا يمكنك حذف حسابك' }, 400);
-    const u = await api.findAuthUserByEmail(usernameToEmail(username));
+    const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (u) await api.deleteAuthUser(u.id);
     await api.restWrite('DELETE', `proc_users?username=eq.${encodeURIComponent(username)}`);
     return json({ ok: true });
