@@ -73,15 +73,31 @@ export function currentPendingStage(approvals) {
   return (approvals || []).filter((a) => a.decision === 'pending').sort((a, b) => (a.seq || 0) - (b.seq || 0))[0] || null;
 }
 
+// عند غياب المُعتمِد (is_away) يُوجَّه إلى مفوَّضه (delegate_to).
+async function applyDelegation(env, base, names) {
+  const out = [];
+  for (const n of names) {
+    if (!n) continue;
+    try {
+      const safe = String(n).replace(/[\\%_,]/g, '');
+      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,is_away,delegate_to`, { headers: svcHeaders(env) });
+      const rows = await r.json();
+      const u = (rows || []).find((x) => String(x.username).toLowerCase() === String(n).toLowerCase());
+      out.push(u && u.is_away && u.delegate_to ? u.delegate_to : n);
+    } catch (_) { out.push(n); }
+  }
+  return [...new Set(out.filter(Boolean))];
+}
+
 // ── تحليل معتمِدي مرحلة (قد يكونون أكثر من واحد لقاعدة بصلاحية role) ──
 export async function resolveStageApprovers(env, base, pr, stage) {
   if (!stage) return [];
-  if (stage.approver) return [stage.approver];
+  if (stage.approver) return applyDelegation(env, base, [stage.approver]);
   if (stage.resolver === 'dept_manager' && pr.department_id) {
     try {
       const dr = await fetch(`${base}/rest/v1/proc_departments?id=eq.${encodeURIComponent(pr.department_id)}&select=manager_user`, { headers: svcHeaders(env) });
       const rows = await dr.json();
-      if (rows && rows[0] && rows[0].manager_user) return [rows[0].manager_user];
+      if (rows && rows[0] && rows[0].manager_user) return applyDelegation(env, base, [rows[0].manager_user]);
     } catch (_) {}
     return [];
   }

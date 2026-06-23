@@ -10765,6 +10765,7 @@ function prCurrentStage(pr){
   return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0] || null;
 }
 // هل يحقّ للمستخدم الحالي البتّ في المرحلة الحالية؟ يعيد صفّ المرحلة أو null
+function prDelegOf(username){ const u=(STATE.users||[]).find(x=>x.username===username); return (u&&u.is_away&&u.delegate_to)?u.delegate_to:null; }
 function prCanActOn(pr){
   const stage = prCurrentStage(pr);
   if(!stage) return null;
@@ -10774,9 +10775,10 @@ function prCanActOn(pr){
   let ok=false;
   if(stage.resolver==='dept_manager'){
     const d=(STATE.departments||[]).find(x=>x.id===pr.department_id);
-    ok = (d && d.manager_user===me) || hasPermission('can_approve_l2'); // المدير الأعلى يستطيع التجاوز
+    const m=d&&d.manager_user;
+    ok = (m===me) || (!!m&&prDelegOf(m)===me) || hasPermission('can_approve_l2'); // المدير الأعلى/المفوَّض
   } else if(stage.resolver==='user_manager'){
-    ok = stage.approver ? (stage.approver===me) : hasPermission('can_approve_l1');
+    ok = stage.approver ? (stage.approver===me || prDelegOf(stage.approver)===me) : hasPermission('can_approve_l1');
   } else { // role
     ok = !!stage.role_key && hasPermission(stage.role_key);
   }
