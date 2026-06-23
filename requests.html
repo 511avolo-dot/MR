@@ -138,6 +138,63 @@
   .fc-node.start .fc-t,.fc-node.end .fc-t{font-size:12.5px}
   .fc-arrow{color:var(--gold-2);font-weight:800;padding:0 7px;font-size:17px}
   @media(max-width:640px){ .who{display:none} thead th,tbody td{padding:6px 6px;font-size:11.5px} }
+
+  /* ════════ ELEVATION (v2) — premium polish ════════ */
+  *{-webkit-font-smoothing:antialiased}
+  body{background:linear-gradient(180deg,#f6f1e6,#efe9dc)}
+  svg.i{width:18px;height:18px;flex-shrink:0;vertical-align:-3px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#d7cdb4;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#c4a265}
+  /* topbar */
+  .topbar{background:linear-gradient(120deg,#1a1718,#231F20 55%,#2c2622);box-shadow:0 6px 22px -10px rgba(0,0,0,.55);gap:14px}
+  .topbar .brand{display:flex;align-items:center;gap:11px}
+  .topbar .brand img{height:38px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+  .topbar .ttl{font-weight:800;font-size:15.5px;letter-spacing:-.2px;line-height:1.1}
+  .topbar .ttl-sub{font-size:10.5px;color:var(--gold);letter-spacing:.12em;margin-top:2px;font-weight:600}
+  .top-actions{margin-inline-start:auto;display:flex;align-items:center;gap:12px}
+  .top-actions .who{margin:0;color:#e8d9bb;font-weight:600}
+  .logout{color:#fff7e8;border-color:rgba(255,247,232,.25);background:rgba(255,255,255,.06);display:inline-flex;align-items:center;gap:6px}
+  .logout:hover{background:rgba(255,255,255,.13);border-color:var(--gold)}
+  .bell{position:relative;width:40px;height:40px;border-radius:11px;border:1px solid rgba(255,247,232,.18);background:rgba(255,255,255,.06);color:#fff7e8;cursor:pointer;display:grid;place-items:center;transition:.18s}
+  .bell:hover{background:rgba(196,162,101,.25);border-color:var(--gold)}
+  .bell svg{width:19px;height:19px}
+  .bell-dot{position:absolute;top:-5px;inset-inline-end:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#e23b3b;color:#fff;font-size:10.5px;font-weight:800;display:grid;place-items:center;border:2px solid #231F20;animation:bpop .3s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes bpop{from{transform:scale(0)}to{transform:scale(1)}}
+  /* tabs */
+  .tabs{gap:7px}
+  .tab{display:inline-flex;align-items:center;gap:7px;border-radius:11px;border:1px solid var(--line);background:var(--surface);transition:.18s;box-shadow:0 1px 2px rgba(35,31,32,.04)}
+  .tab:hover{border-color:var(--gold);color:var(--ink);transform:translateY(-1px)}
+  .tab.active{background:linear-gradient(135deg,var(--gold),var(--gold-2));color:var(--navy);border-color:transparent;box-shadow:0 8px 18px -8px rgba(196,162,101,.7)}
+  .tab .i{width:16px;height:16px}
+  .tab-refresh{padding:8px 10px}
+  .cnt{background:#e23b3b;color:#fff;border-radius:9px;min-width:18px;padding:0 5px;font-size:10px;font-weight:800;display:inline-grid;place-items:center}
+  .tab.active .cnt{background:var(--navy);color:var(--gold)}
+  /* cards + animation */
+  #view>.card,#view>.kpis,#view .card{animation:fade .35s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .card{border-radius:16px;box-shadow:0 2px 10px -4px rgba(35,31,32,.1),0 1px 0 rgba(255,255,255,.6) inset}
+  .sec-title{display:flex;align-items:center;gap:8px}
+  /* buttons */
+  .btn{transition:.16s;display:inline-flex;align-items:center;gap:6px;justify-content:center}
+  .btn-primary{box-shadow:0 8px 18px -8px rgba(196,162,101,.7)}
+  .btn-primary:hover{transform:translateY(-1px);filter:brightness(1.06)}
+  .btn-ghost:hover{transform:translateY(-1px)}
+  /* badges with dot */
+  .badge{display:inline-flex;align-items:center;gap:5px}
+  .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+  .badge.neutral::before{display:none}
+  /* KPIs */
+  .kpi{transition:.18s;border-radius:14px}
+  .kpi:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(35,31,32,.4);border-color:var(--gold)}
+  /* login premium */
+  #login{background:radial-gradient(1100px 520px at 50% -8%,rgba(196,162,101,.22),transparent),linear-gradient(180deg,#f6f1e6,#e7ddc9)}
+  .login-card{border-radius:22px;box-shadow:0 30px 70px -24px rgba(35,31,32,.5),0 1px 0 rgba(255,255,255,.7) inset}
+  .login-logo{box-shadow:0 12px 30px -8px rgba(196,162,101,.8)}
+  .login-logo img{filter:drop-shadow(0 2px 4px rgba(0,0,0,.2))}
+  .btn-primary, .tab.active{will-change:transform}
+  /* step cards pop */
+  .wf-step{animation:fade .3s ease both}
 </style>
 </head>
 <body>
@@ -159,10 +216,12 @@
 <!-- ════ APP ════ -->
 <div id="app" class="hidden">
   <div class="topbar">
-    <img src="logo-mark.png" alt="" onerror="this.style.display='none'">
-    <span class="ttl">بوابة طلبات الشراء</span>
-    <span class="who" id="who"></span>
-    <button class="btn btn-ghost btn-sm" style="color:#fff7e8;border-color:rgba(255,247,232,.3)" onclick="doLogout()">خروج</button>
+    <div class="brand"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"><div><div class="ttl">بوابة طلبات الشراء</div><div class="ttl-sub">مجموعة الذيابي</div></div></div>
+    <div class="top-actions">
+      <button class="bell" id="bell" onclick="go('inbox')" title="بانتظار اعتمادك"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bell-dot hidden" id="bell-dot">0</span></button>
+      <span class="who" id="who"></span>
+      <button class="btn btn-ghost btn-sm logout" onclick="doLogout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>خروج</button>
+    </div>
   </div>
   <div class="wrap">
     <div class="tabs" id="tabs"></div>
@@ -371,14 +430,36 @@ function canActOn(pr){
 }
 
 /* ════════════ العرض ════════════ */
+/* ════════ أيقونات SVG فخمة ════════ */
+const ICON={
+  create:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M12 18v-6 M9 15h6',
+  mine:'M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01',
+  inbox:'M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+  dash:'M3 3v18h18 M18 17V9 M13 17V5 M8 17v-3',
+  settings:'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  refresh:'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5',
+  person:'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  check:'M20 6 9 17l-5-5',
+  x:'M18 6 6 18 M6 6l12 12',
+  undo:'M3 7v6h6 M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13',
+  plus:'M12 5v14 M5 12h14',
+  trash:'M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+  up:'M12 19V5 M5 12l7-7 7 7',
+  down:'M12 5v14 M19 12l-7 7-7-7',
+  userplus:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M19 8v6 M22 11h-6'
+};
+function ic(n,sz){return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${sz?` style="width:${sz}px;height:${sz}px"`:''}>${(ICON[n]||'').split(' M').map((p,i)=>`<path d="${i?'M'+p:p}"/>`).join('')}</svg>`;}
 function render(){
   const inbox = MYREQS.filter(p=>p.status==='in_review' && canActOn(p));
-  const tabs=[['create','➕ رفع طلب'],['mine','📋 طلباتي']];
-  if(isApprover()) tabs.push(['inbox','📥 بانتظار اعتمادي'+(inbox.length?` <span class="cnt">${inbox.length}</span>`:'')]);
-  if(isApprover()) tabs.push(['dash','📊 لوحة المعلومات']);
-  if(isPortalAdmin()) tabs.push(['settings','⚙️ لوحة التحكّم']);
-  $('tabs').innerHTML = tabs.map(([k,l])=>`<button class="tab${VIEW===k?' active':''}" onclick="go('${k}')">${l}</button>`).join('')
-    + `<button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="refresh()">↻ تحديث</button>`;
+  // جرس الإشعارات
+  const bell=$('bell'),bd=$('bell-dot');
+  if(bell){ if(isApprover()){ bell.style.display=''; if(bd){ if(inbox.length){bd.textContent=inbox.length;bd.classList.remove('hidden');}else bd.classList.add('hidden'); } } else bell.style.display='none'; }
+  const tabs=[['create','create','رفع طلب'],['mine','mine','طلباتي']];
+  if(isApprover()) tabs.push(['inbox','inbox','بانتظار اعتمادي'+(inbox.length?` <span class="cnt">${inbox.length}</span>`:'')]);
+  if(isApprover()) tabs.push(['dash','dash','لوحة المعلومات']);
+  if(isPortalAdmin()) tabs.push(['settings','settings','لوحة التحكّم']);
+  $('tabs').innerHTML = tabs.map(([k,icn,l])=>`<button class="tab${VIEW===k?' active':''}" onclick="go('${k}')">${ic(icn,16)}<span>${l}</span></button>`).join('')
+    + `<button class="tab tab-refresh" style="margin-inline-start:auto" onclick="refresh()" title="تحديث">${ic('refresh',15)}</button>`;
   const v=$('view');
   if(VIEW==='create') v.innerHTML=builderHTML(), initBuilder();
   else if(VIEW==='track') v.innerHTML=trackHTML(TRACK_ID);
@@ -551,9 +632,9 @@ function trackHTML(id){
     <div class="sec-title">قرارك — «${esc(act.stage_label||'')}»</div>
     <textarea id="act-c" rows="2" placeholder="ملاحظة / سبب (مطلوب للرفض والإرجاع)" style="margin-bottom:10px"></textarea>
     <div class="row-act">
-      <button class="btn btn-primary" onclick="act('${esc(pr.id)}','approve')">✓ اعتماد</button>
-      <button class="btn btn-ghost" onclick="act('${esc(pr.id)}','return')">↩ إرجاع</button>
-      <button class="btn btn-ghost" style="color:var(--danger)" onclick="act('${esc(pr.id)}','reject')">✕ رفض</button>
+      <button class="btn btn-primary" onclick="act('${esc(pr.id)}','approve')">${ic('check',15)} اعتماد</button>
+      <button class="btn btn-ghost" onclick="act('${esc(pr.id)}','return')">${ic('undo',15)} إرجاع</button>
+      <button class="btn btn-ghost" style="color:var(--danger)" onclick="act('${esc(pr.id)}','reject')">${ic('x',15)} رفض</button>
     </div></div>`:'';
   return `<button class="btn btn-ghost btn-sm" onclick="goLoad('${isApprover()&&pr.requester!==ME.username?'inbox':'mine'}')">← رجوع</button>
   <div class="card" style="margin-top:12px">
@@ -695,14 +776,14 @@ function wfStepCard(s,i,n){
     <div class="wf-step-top"><span class="wf-num">${i+1}</span>
       <input class="input wf-label" data-wf="label" value="${esc(s.label||'')}" placeholder="اسم خطوة الموافقة (مثل: اعتماد المدير المباشر)">
       <span class="wf-ctrls">
-        <button class="ic" title="أعلى" ${i===0?'disabled':''} onclick="wfMove(${i},-1)">↑</button>
-        <button class="ic" title="أسفل" ${i===n-1?'disabled':''} onclick="wfMove(${i},1)">↓</button>
-        <button class="ic del" title="حذف الخطوة" onclick="wfDelStep(${i})">🗑</button>
+        <button class="ic" title="أعلى" ${i===0?'disabled':''} onclick="wfMove(${i},-1)">${ic('up',15)}</button>
+        <button class="ic" title="أسفل" ${i===n-1?'disabled':''} onclick="wfMove(${i},1)">${ic('down',15)}</button>
+        <button class="ic del" title="حذف الخطوة" onclick="wfDelStep(${i})">${ic('trash',15)}</button>
       </span>
     </div>
     <div class="wf-approver"><span class="wf-ap-lbl">المعتمِد:</span>
       <select class="select" data-wf="who" onchange="wfSync()">${wfApproverSelect(s)}</select>
-      <button class="btn btn-ghost btn-sm" onclick="wfNewUser(${i})">＋ مستخدم جديد</button>
+      <button class="btn btn-ghost btn-sm" onclick="wfNewUser(${i})">${ic('userplus',15)} مستخدم جديد</button>
     </div>
   </div>`;
 }
@@ -725,12 +806,12 @@ function workflowHTML(){
     </div>
     <div class="muted" style="margin:8px 0 14px">صمّم خطوات الموافقة بالترتيب من الأعلى للأسفل. الطلب يمرّ عبرها واحدةً تلو الأخرى. أضِف/احذف/رتّب أي خطوة بسهولة، واختر المعتمِد لكل خطوة.</div>
     <div class="wf">
-      <div class="wf-node start">📝 مُقدّم الطلب — يرفع الطلب</div>
+      <div class="wf-node start">${ic('person',17)} مُقدّم الطلب — يرفع الطلب</div>
       ${steps}
       <div class="wf-conn"></div>
-      <div class="wf-addrow"><button class="btn btn-primary btn-sm" onclick="wfAddStep()">＋ إضافة خطوة موافقة</button></div>
+      <div class="wf-addrow"><button class="btn btn-primary btn-sm" onclick="wfAddStep()">${ic('plus',15)} إضافة خطوة موافقة</button></div>
       <div class="wf-conn"></div>
-      <div class="wf-node end">✅ معتمَد نهائياً — يُحوَّل إلى المشتريات</div>
+      <div class="wf-node end">${ic('check',17)} معتمَد نهائياً — يُحوَّل إلى المشتريات</div>
     </div>
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="wfSave()">💾 حفظ المسار</button>
