@@ -3683,6 +3683,8 @@ function parseAiJson(text) {
   if (start !== -1 && end !== -1) {
     try { return JSON.parse(s.slice(start, end + 1)); } catch(e) {}
   }
+  // فشل التحليل: سجّل المقتطف للتشخيص (يبدو وكأن «لم يُقرأ» بينما السبب رد غير صالح)
+  console.warn('[parseAiJson] تعذّر تحليل رد الذكاء كـJSON:', String(s).slice(0, 200));
   return {};
 }
 
@@ -3796,8 +3798,10 @@ async function _step1NextImpl() {
     toast('warn', msg);
     return;
   }
-  // Skip AI extraction in resume mode — form is already pre-filled from saved data
-  if (_resumeId) { goStep(2); return; }
+  // في وضع التعديل: الحقول مُعبّأة مسبقاً من البيانات المحفوظة. لا نُعيد القراءة إلا إذا
+  // رُفعت وثائق جديدة (لتحديث الحقول الفارغة منها) — والبيانات المحفوظة تبقى محميّة
+  // لأنها غير مُعلّمة ai-filled (fillFromAI لا يكتب فوق ما أدخله/حفظه المستخدم).
+  if (_resumeId && !Object.values(uploadedDocs).some(d => d && d.file)) { goStep(2); return; }
   showProc('جارٍ قراءة وثائقك...', 'يرجى الانتظار — نحلل المستندات لتعبئة النموذج تلقائياً');
   let filled = 0;
   try {
@@ -3897,7 +3901,7 @@ function renderSummary() {
     ['الشخص الرئيسي للتواصل', v('f-con-name')],
     ['جوال الشخص الرئيسي', v('f-con-mobile')],
     ['وصف النشاط', (v('f-biz-desc') || '').slice(0, 80) + (v('f-biz-desc').length > 80 ? '...' : '')],
-    ['الوثائق المرفوعة', Object.keys(uploadedDocs).map(k =>
+    ['الوثائق المرفوعة', [...new Set([...Object.keys(uploadedDocs), ...Object.keys(_existingDocPaths || {})])].map(k =>
       [...REQUIRED_DOCS,...OPTIONAL_DOCS].find(d=>d.id===k)?.name || k
     ).join('، ') || '—'],
   ];
@@ -3934,6 +3938,7 @@ async function submitForm() {
     const ALLOWED_EXTS  = ['pdf','jpg','jpeg','png'];
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     const docEntries = Object.entries(uploadedDocs);
+    const uploadFailures = [];   // أسماء الوثائق التي تعذّر رفعها (لعرض ملخّص واضح)
     for (let i = 0; i < docEntries.length; i++) {
       const [docId, docData] = docEntries[i];
       showProc(`رفع الوثائق... (${i+1}/${docEntries.length})`, docData.name);
@@ -3941,23 +3946,28 @@ async function submitForm() {
       const ext = docData.name.split('.').pop().toLowerCase();
       if (!ALLOWED_EXTS.includes(ext) || !ALLOWED_TYPES.includes(docData.file.type)) {
         toast('warn', `"${docData.name}" — نوع الملف غير مقبول. المسموح: PDF, JPG, PNG فقط`);
-        continue;
+        uploadFailures.push(docData.name); continue;
       }
       if (docData.file.size > MAX_FILE_SIZE) {
         toast('warn', `"${docData.name}" — حجم الملف يتجاوز 10 ميجابايت`);
-        continue;
+        uploadFailures.push(docData.name); continue;
       }
       // فحص التوقيع الفعلي للملف (Magic bytes) — يمنع تمرير ملف خطير بامتداد/نوع مزيّف
       const realType = await sniffFileSignature(docData.file);
       if (!realType || !ALLOWED_TYPES.includes(realType)) {
         toast('warn', `"${docData.name}" — محتوى الملف لا يطابق نوعًا مسموحًا (PDF/JPG/PNG). رُفض لأسباب أمنية.`);
-        continue;
+        uploadFailures.push(docData.name); continue;
       }
       try {
-        // In resume mode: delete old file if it exists
-        if (_resumeId && _existingDocPaths[docId]) {
-          await SB.storage.from(BUCKET).remove([_existingDocPaths[docId]]).catch(()=>{});
-        }
+        // نظّف أي ملفات سابقة لنفس الوثيقة (إعادة إرسال/استبدال) لتفادي تراكم ملفات يتيمة.
+        // يقتصر على وثائق رُفعت حديثاً فقط؛ وثائق وضع التعديل غير المعدَّلة لا تُمسّ.
+        try {
+          const folder = `${regId}/${docId}`;
+          const { data: existing } = await SB.storage.from(BUCKET).list(folder);
+          if (existing && existing.length) {
+            await SB.storage.from(BUCKET).remove(existing.map(f => `${folder}/${f.name}`)).catch(()=>{});
+          }
+        } catch(_) {}
         const path = `${regId}/${docId}/${Date.now()}.${ext}`;
         const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
           contentType: realType,   // النوع المُتحقَّق من التوقيع الفعلي، لا المُعلَن
@@ -3971,7 +3981,13 @@ async function submitForm() {
           ? `تعذر رفع "${docData.name}" — مخزن الملفات غير مُعدّ. سيتم إرسال الطلب بدون هذا الملف.`
           : `تعذر رفع "${docData.name}" — ${e.message}`;
         toast('warn', msg);
+        uploadFailures.push(docData.name);
       }
+    }
+    // ملخّص واضح إن فشل رفع أي وثيقة (لا تختفي الأخطاء بين التنبيهات العابرة)
+    if (uploadFailures.length) {
+      hideProc();
+      toast('warn', `تعذّر رفع ${uploadFailures.length} وثيقة: ${uploadFailures.join('، ')} — يرجى إعادة المحاولة أو تصحيح الملفات.`);
     }
 
     // Abort if required docs are missing: in resume mode flagged docs MUST be re-uploaded
