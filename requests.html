@@ -503,7 +503,35 @@ function dashHTML(){
 }
 async function refresh(){ await loadMyReqs(); render(); }
 function go(view,id){ VIEW=view; TRACK_ID=id||null; if(view==='create')DRAFT=[]; render(); if(view!=='create'&&view!=='track'){} }
-async function goLoad(view,id){ VIEW=view; TRACK_ID=id||null; await loadMyReqs(); render(); }
+async function goLoad(view,id){ VIEW=view; TRACK_ID=id||null; await loadMyReqs(); render(); if(view==='track'&&TRACK_ID) loadTimeline(TRACK_ID); }
+
+/* ── الخط الزمني الموحّد (سجلّ التدقيق proc_pr_audit) ── */
+const TL_META={
+  created:['📝','أُنشئ الطلب','wait'], submitted:['📨','أُرسل للاعتماد','active'], in_review:['📨','أُرسل للاعتماد','active'],
+  stage_approved:['✓','اعتماد مرحلة','done'], stage_rejected:['✕','رفض مرحلة','rej'], stage_returned:['↩','إرجاع للتعديل','ret'],
+  approved:['✅','اعتُمد نهائياً','done'], rejected:['⛔','مرفوض','rej'], returned:['↩','أُعيد للتعديل','ret'],
+  escalated:['⏰','تصعيد لتجاوز المهلة','ret'], rfq_issued:['📤','حُوّل لعروض أسعار','wait'],
+  converted_to_po:['🧾','أمر شراء','done'], cancelled:['🚫','أُلغي','rej']
+};
+const CH_LBL={portal:'من البوابة',email:'من البريد',system:'تلقائي'};
+async function loadTimeline(id){
+  const el=document.getElementById('timeline'); if(!el) return;
+  try{
+    const {data}=await SB.from('proc_pr_audit').select('event,actor,channel,detail,created_at,seq').eq('pr_id',id).order('created_at',{ascending:true}).order('id',{ascending:true});
+    el.innerHTML=renderTimeline(data||[]);
+  }catch(e){ el.innerHTML='<div class="muted">تعذّر تحميل السجلّ.</div>'; }
+}
+function renderTimeline(rows){
+  if(!rows.length) return '<div class="muted">لا أحداث بعد.</div>';
+  return rows.map(r=>{
+    const m=TL_META[r.event]||['•',r.event,'wait']; const d=r.detail||{};
+    const lbl=(r.event.indexOf('stage_')===0&&d.stage_label)?(m[1]+' — '+d.stage_label):m[1];
+    const who=r.actor?esc(r.actor):''; const when=r.created_at?String(r.created_at).slice(0,16).replace('T',' '):'';
+    const ch=r.channel&&CH_LBL[r.channel]?(' · '+CH_LBL[r.channel]):'';
+    const note=d.comment?(' · «'+esc(d.comment)+'»'):'';
+    return `<div class="step ${m[2]}"><div class="dot">${m[0]}</div><div><div class="lbl">${esc(lbl)}</div><div class="sub">${who}${who&&when?' · ':''}${when}${ch}${note}</div></div></div>`;
+  }).join('');
+}
 
 function statusBadge(s){const m=STATUS_META[s]||{l:s,c:'neutral'};return `<span class="badge ${m.c}">${esc(m.l)}</span>`;}
 
@@ -648,13 +676,14 @@ function trackHTML(id){
       <span>الجوال: <b dir="ltr">${esc(pr.requester_mobile||'—')}</b></span><span>التوريد المطلوب: <b>${esc(pr.needed_by||'—')}</b></span>
     </div>
     ${pr.status==='in_review'?`<div class="now-bar">⏳ <b>الموقف الحالي:</b> بانتظار «${esc(holderOf(pr))}» · منذ ${ageDays(pr)} يوم</div>`:''}
-    ${pr.status==='approved'?`<div class="now-bar ok">✅ اعتُمد نهائياً — جاهز لتحويله إلى عروض أسعار في المشتريات.</div>`:''}
+    ${pr.status==='approved'?`<div class="now-bar ok">✅ اعتُمد نهائياً — جاهز للتوريد/التعميد (داخل النظام أو خارجه).</div>`:''}
     ${pr.status==='rejected'?`<div class="now-bar rej">✕ مرفوض.</div>`:''}
     ${pr.status==='returned'?`<div class="now-bar ret">↩ مُعاد للتعديل — يرجى مراجعة الملاحظات وإعادة الإرسال.</div>`:''}
   </div>
   ${actPanel}
   <div class="card"><div class="sec-title">سلسلة الاعتماد</div><div class="stepper">${steps}</div></div>
-  <div class="card"><div class="sec-title">البنود (${(pr.items||[]).length})</div><table><thead><tr><th style="width:28px">م</th><th>الصنف</th><th class="center">الوحدة</th><th class="num">المطلوبة</th></tr></thead><tbody>${items}</tbody></table></div>`;
+  <div class="card"><div class="sec-title">البنود (${(pr.items||[]).length})</div><table><thead><tr><th style="width:28px">م</th><th>الصنف</th><th class="center">الوحدة</th><th class="num">المطلوبة</th></tr></thead><tbody>${items}</tbody></table></div>
+  <div class="card"><div class="sec-title">سجلّ الأحداث</div><div class="stepper" id="timeline"><div class="muted">جارٍ تحميل السجل…</div></div></div>`;
 }
 
 /* ── صندوق الاعتماد ── */

@@ -471,6 +471,9 @@ BEGIN
            escalated_at = coalesce(escalated_at, now()),
            last_escalation_at = now()
        WHERE id = v_pr.id;
+    INSERT INTO proc_pr_audit(pr_id, seq, event, actor, channel, detail)
+      VALUES(v_pr.id, v_stage.seq, 'escalated', NULL, 'system',
+             jsonb_build_object('intended', v_intended, 'stage_label', v_stage.stage_label));
     v_n := v_n + 1;
   END LOOP;
   RETURN v_n;
@@ -490,4 +493,68 @@ BEGIN
     PERFORM cron.schedule('pr-sla', '*/30 * * * *', 'SELECT pr_run_sla();');
   END IF;
 END $$;
+
+-- ════════════════════════════════════════════════════════════════════════
+--  10) سجلّ التدقيق + الخط الزمني الموحّد للطلب (Phase 4)
+-- ════════════════════════════════════════════════════════════════════════
+--  سجلّ «لا يُعدَّل» يلتقط كل حدث في دورة حياة الطلب (إنشاء/إرسال/اعتماد كل
+--  مرحلة/رفض/إرجاع/تصعيد/اعتماد نهائي…) آلياً عبر المحرّسات — مهما كان المصدر
+--  (بوابة/بريد/نظام أساسي). نطاق النظام = ضبط الطلبات؛ أحداث ما بعد الاعتماد
+--  (عروض الأسعار/الترسية/أمر الشراء) تُسجَّل كمراجع اختيارية فقط إن تمّت داخل النظام.
+--  • RLS: القراءة متاحة للمصادَق عليهم؛ لا سياسات كتابة للعميل ⇒ يُكتب حصراً عبر
+--    المحرّسات (SECURITY DEFINER) ولا يُعدَّل/يُحذف من أي عميل (سجلّ تدقيق نزيه).
+CREATE TABLE IF NOT EXISTS proc_pr_audit (
+  id         BIGSERIAL PRIMARY KEY,
+  pr_id      TEXT NOT NULL REFERENCES proc_purchase_requests(id) ON DELETE CASCADE,
+  seq        INT,
+  event      TEXT NOT NULL,                  -- created|submitted|stage_approved|stage_rejected|stage_returned|approved|rejected|returned|escalated|rfq_issued|converted_to_po|cancelled
+  actor      TEXT,                            -- منفّذ الحدث (username)
+  channel    TEXT,                            -- portal|email|system
+  detail     JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_praudit_pr ON proc_pr_audit(pr_id, created_at);
+ALTER TABLE proc_pr_audit ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "audit_read" ON proc_pr_audit;
+CREATE POLICY "audit_read" ON proc_pr_audit FOR SELECT TO authenticated USING (true);
+-- لا سياسات INSERT/UPDATE/DELETE عمداً: الكتابة عبر المحرّسات فقط، والسجل غير قابل للتعديل/الحذف من العميل.
+
+-- محرس رأس الطلب: يسجّل الإنشاء/الإرسال وكل تغيّر حالة.
+CREATE OR REPLACE FUNCTION pr_audit_status() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    INSERT INTO proc_pr_audit(pr_id, seq, event, actor, channel, detail)
+      VALUES(NEW.id, NEW.current_seq,
+             CASE WHEN NEW.status='in_review' THEN 'submitted' ELSE 'created' END,
+             coalesce(NEW.created_by, NEW.requester), 'portal',
+             jsonb_build_object('status', NEW.status, 'title', NEW.title));
+    RETURN NEW;
+  END IF;
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    INSERT INTO proc_pr_audit(pr_id, seq, event, actor, channel, detail)
+      VALUES(NEW.id, NEW.current_seq, NEW.status, coalesce(NEW.updated_by, OLD.updated_by), NULL,
+             jsonb_build_object('from', OLD.status, 'to', NEW.status));
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+-- محرس صفوف الاعتماد: يسجّل قرار كل مرحلة (اعتماد/رفض/إرجاع) مع الملاحظة والقناة.
+CREATE OR REPLACE FUNCTION pr_audit_approval() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NEW.decision IS DISTINCT FROM OLD.decision AND NEW.decision <> 'pending' THEN
+    INSERT INTO proc_pr_audit(pr_id, seq, event, actor, channel, detail)
+      VALUES(NEW.pr_id, NEW.seq, 'stage_'||NEW.decision, NEW.approver, NEW.channel,
+             jsonb_build_object('stage_label', NEW.stage_label, 'comment', NEW.comment));
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_pr_audit_status ON proc_purchase_requests;
+CREATE TRIGGER trg_pr_audit_status AFTER INSERT OR UPDATE ON proc_purchase_requests
+  FOR EACH ROW EXECUTE FUNCTION pr_audit_status();
+DROP TRIGGER IF EXISTS trg_pr_audit_approval ON proc_pr_approvals;
+CREATE TRIGGER trg_pr_audit_approval AFTER UPDATE ON proc_pr_approvals
+  FOR EACH ROW EXECUTE FUNCTION pr_audit_approval();
 -- ════════════════════════════════════════════════════════════════════════
