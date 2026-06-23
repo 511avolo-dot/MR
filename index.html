@@ -10993,12 +10993,14 @@ async function renderPRPortal(){
   if(view==='depts'){ try{ __prUsers = await fetchCloudUsers() || []; }catch(_){ __prUsers=[]; } }
   const inboxN = prInbox().length;
   const inboxLabel = `📥 بانتظار اعتمادي${inboxN?` <span class="pr-tab-count">${inboxN}</span>`:''}`;
+  const incomingN = prIncoming().length;
+  const incomingLabel = `📦 الوارد للمشتريات${incomingN?` <span class="pr-tab-count">${incomingN}</span>`:''}`;
   const canAdmin = hasPermission('can_manage_users');
   const tabs = `
     <div class="pr-tabs">
       ${prTab('list','📋 الطلبات', view==='list')}
       ${prTab('inbox', inboxLabel, view==='inbox')}
-      ${prTab('create','➕ طلب جديد', view==='create')}
+      ${prTab('incoming', incomingLabel, view==='incoming')}
       ${canAdmin ? prTab('depts','🏢 الأقسام', view==='depts') : ''}
       <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="__prLoaded=false;renderPRPortal()">↻ تحديث</button>
     </div>`;
@@ -11006,6 +11008,7 @@ async function renderPRPortal(){
   if(view==='create')      body = prBuilderHTML();
   else if(view==='track')  body = prTrackingHTML(STATE.prTrackId);
   else if(view==='inbox')  body = prInboxHTML();
+  else if(view==='incoming') body = prIncomingHTML();
   else if(view==='depts')  body = canAdmin ? prDeptsHTML() : prListHTML();
   else                     body = prListHTML();
   host.innerHTML = tabs + body;
@@ -11043,6 +11046,75 @@ function prListHTML(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+/* ---------- استلام ومعالجة المشتريات (الطلبات المعتمدة الواردة) ---------- */
+function prIsProcurement(){ return hasPermission('can_manage_rfq') || STATE.currentUser?.role==='admin'; }
+function prIncoming(){ return (STATE.purchaseRequests||[]).filter(p=>p.status==='approved' && (p.proc_status||'')!=='completed'); }
+function procStatusBadge(pr){
+  const s=pr.proc_status||'received';
+  const M={ received:['وارد جديد','warn'], in_progress:['قيد التنفيذ','info'], quotes_collected:['تم جمع العروض','ok'], completed:['مكتمل','ok'] };
+  const m=M[s]||M.received; return `<span class="pr-badge ${m[1]}">${m[0]}</span>`;
+}
+function prIncomingHTML(){
+  if(!prIsProcurement()){ return `<div class="empty"><div class="empty-icon">🔒</div><div class="empty-title">خاص بفريق المشتريات</div><div class="empty-text">تحتاج صلاحية «إدارة عروض الأسعار» لعرض الوارد.</div></div>`; }
+  const list = prIncoming().sort((a,b)=>String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')));
+  if(!list.length){ return `<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">لا طلبات واردة</div><div class="empty-text">الطلبات المعتمدة من البوابة تظهر هنا للبدء بمعالجتها.</div></div>`; }
+  const rows = list.map(p=>{
+    const who = p.proc_started_by ? `${escapeHtml(p.proc_started_by)} · ${(p.proc_started_at||'').toString().slice(0,10)}` : '—';
+    return `<tr onclick="prGoView('track','${escapeAttr(p.id)}')" style="cursor:pointer">
+      <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
+      <td>${escapeHtml(p.title||'—')}</td>
+      <td>${escapeHtml(p.department||p.department_id||'—')}</td>
+      <td class="num">${fmtPrice(p.est_total)}</td>
+      <td class="center">${procStatusBadge(p)}</td>
+      <td>${who}</td>
+      <td class="center">${escapeHtml((p.updated_at||p.created_at||'').toString().slice(0,10))}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="pr-card">
+      <div class="pr-section-title">📦 الطلبات المعتمدة الواردة (${list.length})</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">افتح أي طلب للطباعة وبدء العمل عليه وتسجيل جمع العروض.</div>
+      <table class="data-table pr-table">
+        <thead><tr><th>رقم الطلب</th><th>النوع</th><th>الإدارة</th><th class="num">الإجمالي</th><th class="center">حالة المعالجة</th><th>بدأ العمل</th><th class="center">آخر تحديث</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+async function prStart(id){
+  const me = STATE.currentUser?.username||null; const now = new Date().toISOString();
+  try{
+    const {error}=await CLOUD.client.from('proc_purchase_requests')
+      .update({ proc_status:'in_progress', proc_started_by:me, proc_started_at:now, updated_by:me, updated_at:now }).eq('id',id);
+    if(error) throw error;
+    toast('success','بدأ العمل', 'سُجّل أنك بدأت العمل على الطلب');
+    __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ toast('error','تعذّر', e.message||''); }
+}
+async function prQuotesDone(id){
+  const me = STATE.currentUser?.username||null; const now = new Date().toISOString();
+  try{
+    const {error}=await CLOUD.client.from('proc_purchase_requests')
+      .update({ proc_status:'quotes_collected', quotes_collected_by:me, quotes_collected_at:now, updated_by:me, updated_at:now }).eq('id',id);
+    if(error) throw error;
+    toast('success','تم جمع العروض', 'سُجّل إتمام جمع عروض الأسعار');
+    __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ toast('error','تعذّر', e.message||''); }
+}
+async function prPrint(id){
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id); if(!pr){ toast('error','غير موجود',''); return; }
+  const items=(pr.items||[]).map((it,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${escapeHtml(it.description||'')}</td><td style="text-align:center">${escapeHtml(it.unit||'—')}</td><td style="text-align:center">${escapeHtml(String(it.requested_qty??'—'))}</td><td style="text-align:center">${escapeHtml(String(it.stock_balance??'—'))}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#888">لا بنود</td></tr>';
+  const info=[['نوع/فئة المواد',pr.title],['الإدارة',pr.department||pr.department_id],['القطاع',pr.sector],['المشروع/الموقع',pr.project],['الطالب',pr.requester_name||pr.requester],['الجوال',pr.requester_mobile],['تاريخ الطلب',(pr.request_date||pr.created_at||'').toString().slice(0,10)],['التوريد المطلوب',pr.needed_by]]
+    .map(([k,v])=>`<tr><td style="font-weight:600;background:#faf8f3;width:35%">${k}</td><td>${escapeHtml(v||'—')}</td></tr>`).join('');
+  const body=`
+    <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:12px" border="1">${info}</table>
+    <div style="font-weight:700;margin:12px 0 6px;color:#0B1B36">البنود المطلوبة</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px" border="1">
+      <thead><tr style="background:#0B1B36;color:#fff"><th>م</th><th>الصنف</th><th>الوحدة</th><th>المطلوبة</th><th>رصيد مستودعي</th></tr></thead>
+      <tbody>${items}</tbody>
+    </table>`;
+  await printDocOpen({ compactHeader:true, docNumber:pr.id, eyebrow:'مجموعة الذيابي · المشتريات', title:'طلب شراء مواد', subtitle:pr.title||'' , signature:true }, body);
 }
 
 function prInboxHTML(){
@@ -11303,11 +11375,17 @@ function prTrackingHTML(id){
       </div>
     </div>
     ${actionPanel}
-    ${(pr.status==='approved' && !pr.rfq_id) ? `
+    ${(pr.status==='approved' && prIsProcurement()) ? `
     <div class="pr-card" style="margin-top:12px;border-color:var(--accent-2)">
-      <div class="pr-section-title">جاهز للتحويل</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">الطلب معتمد. حوّله إلى طلب تسعير ودعوة الموردين.</div>
-      <button class="btn btn-accent" onclick="prConvertManual('${escapeAttr(pr.id)}')">🔄 تحويل إلى طلب تسعير</button>
+      <div class="pr-section-title">معالجة المشتريات ${procStatusBadge(pr)}</div>
+      ${pr.proc_started_by ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">▶ بدأ العمل: <b>${escapeHtml(pr.proc_started_by)}</b> · ${(pr.proc_started_at||'').toString().slice(0,10)}</div>`:''}
+      ${pr.quotes_collected_by ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">✓ تم جمع العروض: <b>${escapeHtml(pr.quotes_collected_by)}</b> · ${(pr.quotes_collected_at||'').toString().slice(0,10)}</div>`:''}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-ghost" onclick="prPrint('${escapeAttr(pr.id)}')">🖨️ طباعة الطلب</button>
+        ${(pr.proc_status||'received')==='received' ? `<button class="btn btn-primary" onclick="prStart('${escapeAttr(pr.id)}')">▶ بدأت العمل عليه</button>`:''}
+        ${(pr.proc_status==='in_progress') ? `<button class="btn btn-accent" onclick="prQuotesDone('${escapeAttr(pr.id)}')">✓ تم جمع العروض</button>`:''}
+        <button class="btn btn-ghost" onclick="prConvertManual('${escapeAttr(pr.id)}')" title="اختياري">🔄 تحويل إلى طلب تسعير</button>
+      </div>
     </div>` : ''}
     ${pr.rfq_id ? `
     <div class="pr-card" style="margin-top:12px">

@@ -536,6 +536,12 @@ BEGIN
       VALUES(NEW.id, NEW.current_seq, NEW.status, coalesce(NEW.updated_by, OLD.updated_by), NULL,
              jsonb_build_object('from', OLD.status, 'to', NEW.status));
   END IF;
+  -- مراحل معالجة المشتريات (بدء العمل / إتمام جمع العروض) — تُسجَّل في الخط الزمني.
+  IF NEW.proc_status IS DISTINCT FROM OLD.proc_status AND NEW.proc_status IS NOT NULL THEN
+    INSERT INTO proc_pr_audit(pr_id, seq, event, actor, channel, detail)
+      VALUES(NEW.id, NEW.current_seq, 'proc_'||NEW.proc_status, coalesce(NEW.updated_by, OLD.updated_by), 'procurement',
+             jsonb_build_object('proc_status', NEW.proc_status));
+  END IF;
   RETURN NEW;
 END $fn$;
 
@@ -557,4 +563,16 @@ CREATE TRIGGER trg_pr_audit_status AFTER INSERT OR UPDATE ON proc_purchase_reque
 DROP TRIGGER IF EXISTS trg_pr_audit_approval ON proc_pr_approvals;
 CREATE TRIGGER trg_pr_audit_approval AFTER UPDATE ON proc_pr_approvals
   FOR EACH ROW EXECUTE FUNCTION pr_audit_approval();
+
+-- ════════════════════════════════════════════════════════════════════════
+--  11) معالجة المشتريات بعد الاعتماد (استلام / بدء العمل / جمع العروض)
+-- ════════════════════════════════════════════════════════════════════════
+--  نطاق خفيف: النظام يستلم الطلب المعتمد ويتتبّع تنفيذه دون فرض آلية شراء.
+--  proc_status: (فارغ=وارد) → in_progress (بدأ العمل) → quotes_collected (تم جمع العروض).
+--  تُسجَّل التحوّلات آلياً في الخط الزمني عبر محرس pr_audit_status (أعلاه).
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS proc_status         TEXT;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS proc_started_by     TEXT;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS proc_started_at     TIMESTAMPTZ;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS quotes_collected_by TEXT;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS quotes_collected_at TIMESTAMPTZ;
 -- ════════════════════════════════════════════════════════════════════════
