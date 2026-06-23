@@ -3374,15 +3374,16 @@ function docCard(d, required) {
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         اسحب أو انقر للرفع
       </div>
-      <input type="file" id="fi-${d.id}" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.webp"
+      <input type="file" id="fi-${d.id}" style="display:none" accept=".pdf,.jpg,.jpeg,.png"
              onchange="handleDocFile(event,'${d.id}')">
     </div>`;
 }
 
 function docDragOver(event, docId) {
   event.preventDefault();
-  if (uploadedDocs[docId]) return;
-  document.getElementById('dc-' + docId).classList.add('drag-over');
+  const card = document.getElementById('dc-' + docId);
+  if (card?.getAttribute('data-locked')) return;
+  card.classList.add('drag-over');
 }
 
 function docDragLeave(event, docId) {
@@ -3393,40 +3394,39 @@ function docDrop(event, docId) {
   event.preventDefault();
   const card = document.getElementById('dc-' + docId);
   card.classList.remove('drag-over');
-  if (uploadedDocs[docId]) return;
+  if (card?.getAttribute('data-locked')) return;
   const file = event.dataTransfer?.files?.[0];
   if (!file) return;
+  _setDocFile(docId, file);   // يسمح بالاستبدال (لا حاجة لحذف القديم أولاً)
+}
+
+// يضبط/يستبدل ملف وثيقة — idempotent: لا يكرّر زر الحذف، ويزيل حالات «مرفوع مسبقاً/يحتاج تعديل».
+function _setDocFile(docId, file) {
   uploadedDocs[docId] = {file, name: file.name, size: file.size, path: null};
+  const card = document.getElementById('dc-' + docId);
+  card.classList.remove('already-uploaded', 'revision-needed');
   card.classList.add('uploaded');
-  const removeBtn = document.createElement('button');
-  removeBtn.className = 'doc-remove'; removeBtn.title = 'حذف'; removeBtn.textContent = '×';
-  removeBtn.onclick = (e) => { e.stopPropagation(); removeDoc(docId); };
-  card.appendChild(removeBtn);
+  if (!card.querySelector('.doc-remove')) {
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'doc-remove'; removeBtn.title = 'حذف'; removeBtn.textContent = '×';
+    removeBtn.onclick = (e) => { e.stopPropagation(); removeDoc(docId); };
+    card.appendChild(removeBtn);
+  }
   const kb = Math.round(file.size / 1024);
   document.getElementById('dcs-' + docId).textContent = `✓ ${file.name} (${kb} KB)`;
 }
 
 function triggerUpload(docId) {
-  if (uploadedDocs[docId]) return;
   const card = document.getElementById('dc-' + docId);
-  if (card?.getAttribute('data-locked')) return; // non-flagged existing doc — no accidental replacement
-  document.getElementById('fi-' + docId).click();
+  if (card?.getAttribute('data-locked')) return; // وثيقة سابقة غير مطلوب تعديلها — لا استبدال عرضي
+  document.getElementById('fi-' + docId).click();  // النقر يفتح المنتقي ويستبدل الملف الحالي
 }
 
 async function handleDocFile(event, docId) {
   const file = event.target.files[0];
   if (!file) return;
-  uploadedDocs[docId] = {file, name: file.name, size: file.size, path: null};
-  const card = document.getElementById('dc-' + docId);
-  const status = document.getElementById('dcs-' + docId);
-  card.classList.add('uploaded');
-  const removeBtn = document.createElement('button');
-  removeBtn.className = 'doc-remove'; removeBtn.title = 'حذف'; removeBtn.textContent = '×';
-  removeBtn.onclick = (e) => { e.stopPropagation(); removeDoc(docId); };
-  card.appendChild(removeBtn);
-  const kb = Math.round(file.size / 1024);
-  status.textContent = `✓ ${file.name} (${kb} KB)`;
-  event.target.value = '';
+  _setDocFile(docId, file);
+  event.target.value = '';   // يتيح إعادة اختيار نفس الملف لاحقاً
 }
 
 function removeDoc(docId) {
@@ -3483,6 +3483,18 @@ function normalizeExtracted(data){
 // أنماط للتعرّف على الجهات الحكومية المُصدِرة (لإسقاط بياناتها من حقول الشركة)
 const AUTHORITY_DOMAIN_RE = /\b[a-z0-9.-]*\.gov\.sa\b|zatca|gosi\.gov|saudichambers|mc\.gov\.sa|\bgazt\b/i;
 const AUTHORITY_NAME_RE = /هيئة\s*الزكاة|الزكاة\s*والضريبة|الضريبة\s*والجمارك|المؤسسة\s*العامة\s*للتأمينات|التأمينات\s*الاجتماعية|وزارة\s*التجارة|ZATCA|GOSI|General\s*Authority\s*of\s*Zakat|General\s*Organization\s*for\s*Social\s*Insurance/i;
+// المستند المختصّ (المرجعي) لكل حقل — يتجاوز قراءةً خاطئة من مستند آخر عند الدمج.
+const FIELD_AUTHORITY = {
+  vat_number:/زكاة|ضريب|vat|zatca|ضريبة/i, zakat_number:/زكاة|ضريب|zatca|ضريبة/i,
+  gosi_number:/تأمين|gosi/i,
+  chamber:/غرفة|chamber/i, chamber_membership:/غرفة|chamber/i, chamber_expiry:/غرفة|chamber/i,
+  address:/عنوان|وطني|national|address/i, district:/عنوان|وطني|national|address/i,
+  postal_code:/عنوان|وطني|national|address/i, po_box:/عنوان|وطني|national|address/i,
+  commercial_reg:/سجل|تجاري|commercial/i, legal_name_ar:/سجل|تجاري|commercial/i,
+  legal_name_en:/سجل|تجاري|commercial/i, entity_type:/سجل|تجاري|commercial/i,
+  cr_issue_date:/سجل|تجاري|commercial/i, cr_expiry_date:/سجل|تجاري|commercial/i,
+  established_date:/سجل|تجاري|commercial/i
+};
 
 async function extractAllDocs() {
   if (!AI_AVAILABLE) { return {}; }
@@ -3506,7 +3518,10 @@ async function extractAllDocs() {
       // من وثائق الجهات الحكومية: لا نأخذ بيانات تواصل/عنوان (تخص الهيئة لا الشركة)
       if (isAuthorityDoc(docName)) CONTACT_FIELDS.forEach(f => { delete result[f]; });
       Object.keys(result).forEach(k => {
-        if (result[k] && !merged[k]) merged[k] = result[k];
+        // الأصل «أول قيمة تفوز»، لكن المستند المختصّ بالحقل (مثل شهادة الضريبة لرقم الضريبة،
+        // أو العنوان الوطني للعنوان) يتجاوز قيمةً قد تكون قُرئت خطأً من مستند آخر.
+        const authoritative = FIELD_AUTHORITY[k] && FIELD_AUTHORITY[k].test(docName);
+        if (result[k] && (!merged[k] || authoritative)) merged[k] = result[k];
       });
     } catch(e) {
       console.warn('AI extraction failed for', docId, e);
@@ -3716,19 +3731,24 @@ function fillFromAI(data) {
   for (const [id, val] of Object.entries(map)) {
     if (val && val !== 'null') {
       const el = document.getElementById(id);
-      if (el && !el.value) { el.value = val; el.classList.add('ai-filled'); filled++; AI_USED = true; }
+      // املأ الحقل الفارغ، أو الحقل الذي ملأه الذكاء سابقاً (ai-filled) — مع الحفاظ على ما عدّله المستخدم يدوياً.
+      if (el && (!el.value || el.classList.contains('ai-filled'))) { el.value = val; el.classList.add('ai-filled'); filled++; AI_USED = true; }
     }
   }
-  // Entity type radio
+  // Entity type radio — مطابقة تامّة (القيم تُطبَّع للنص الكامل؛ تجنّب التطابق بأول كلمة «شركة» لكليهما)
   if (data.entity_type && data.entity_type !== 'null') {
     document.querySelectorAll('input[name=entity]').forEach(r => {
-      if (r.value.includes(data.entity_type) || data.entity_type.includes(r.value.split(' ')[0])) {
-        r.checked = true; filled++;
-      }
+      if (r.value === data.entity_type) { r.checked = true; filled++; }
     });
   }
   return filled;
 }
+// عند تعديل المستخدم لأي حقل ملأه الذكاء: أزل سمة ai-filled كي «يملكه» المستخدم
+// فلا تكتب عليه إعادة القراءة لاحقاً (نحفظ تعديلاته اليدوية).
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains('ai-filled')) t.classList.remove('ai-filled');
+}, true);
 
 /* ════════════════════════════════════
    STEP NAVIGATION
