@@ -549,8 +549,8 @@ function builderHTML(){
   return `
   <div class="card">
     <div class="ocr-bar">
-      <button class="btn btn-primary btn-sm" onclick="ocrParse()">📄 رفع النموذج وقراءته آلياً</button>
-      <span class="muted">ارفع صورة/PDF لنموذج «طلب شراء مواد» لتعبئة الحقول والبنود تلقائياً بالذكاء — راجعها ثم أرسل.</span>
+      <button class="btn btn-primary btn-sm" onclick="ocrParse()">📄 رفع نموذج الطلب وقراءته آلياً</button>
+      <span class="muted">ارفع ملف <b>Excel</b> لنموذج «طلب شراء مواد» — يُقرأ فوراً وبدقّة تامّة بلا إنترنت. (الصور وملفات PDF تُقرأ بالذكاء كخيار احتياطي.) راجع البيانات ثم أرسل.</span>
     </div>
     <div class="sec-title">بيانات الطلب</div>
     <div class="grid">
@@ -726,10 +726,94 @@ async function act(id,action,comment){
 const OCR_MODEL='gemini-2.5-flash';
 function normDate(v){ if(!v)return''; const s=String(v).trim(); let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m)return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/); if(m)return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`; return ''; }
 async function ocrParse(){
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf';
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.xls,.csv,image/*,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel';
   inp.onchange=async()=>{
     const f=inp.files[0]; if(!f)return;
-    toast('جارٍ قراءة النموذج بالذكاء…');
+    const isExcel=/\.(xlsx|xls|csv)$/i.test(f.name)||/sheet|excel|csv/i.test(f.type||'');
+    if(isExcel){ await xlsxParse(f); return; }       // قراءة حتمية فورية للقالب الثابت
+    await aiParse(f);                                  // الذكاء احتياطاً للصور/PDF
+  };
+  inp.click();
+}
+// ── قراءة نموذج Excel حتمياً عبر SheetJS (بلا ذكاء/إنترنت) ──
+let _xlsxLoading=null;
+function ensureXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  if(_xlsxLoading) return _xlsxLoading;
+  const srcs=['/lib/xlsx.full.min.js','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'];
+  _xlsxLoading=new Promise((res,rej)=>{
+    let i=0; const next=()=>{ if(i>=srcs.length)return rej(new Error('تعذّر تحميل قارئ Excel')); const s=document.createElement('script'); s.src=srcs[i++]; s.onload=()=>res(); s.onerror=next; document.head.appendChild(s); };
+    next();
+  });
+  return _xlsxLoading;
+}
+function arNum(v){ if(v==null||v==='')return null; let s=String(v).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[,٬\s]/g,'').replace(/[^\d.\-]/g,''); if(s===''||s==='-')return null; const n=Number(s); return isFinite(n)?n:null; }
+function cellTxt(v){ if(v==null)return''; if(v instanceof Date)return v.toISOString().slice(0,10); return String(v).trim(); }
+function norm(s){ return cellTxt(s).replace(/[إأآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim(); }
+// قيمة مجاورة لخلية تسمية (يميناً/يساراً ثم أسفل) — أوّل خلية غير فارغة وليست تسمية أخرى.
+function valueNear(aoa,r,c){
+  const row=aoa[r]||[];
+  for(const dc of [1,2,-1,-2,3]){ const v=cellTxt(row[c+dc]); if(v&&v.length<60)return v; }
+  const below=(aoa[r+1]||[]); const v=cellTxt(below[c]); if(v)return v; return '';
+}
+function findLabel(aoa,keys){
+  for(let r=0;r<aoa.length;r++){ const row=aoa[r]||[]; for(let c=0;c<row.length;c++){ const t=norm(row[c]); if(t&&keys.some(k=>t.includes(k))) return valueNear(aoa,r,c); } }
+  return '';
+}
+async function xlsxParse(f){
+  toast('جارٍ قراءة ملف Excel…');
+  try{
+    await ensureXLSX();
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    // اختر الورقة التي تحوي جدول البنود (عمود «الصنف» + «المطلوبة»)، وإلا الأولى.
+    let aoa=null;
+    for(const name of wb.SheetNames){ const a=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:false}); if(detectHeaderRow(a)>=0){ aoa=a; break; } }
+    if(!aoa) aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',raw:false});
+    const hr=detectHeaderRow(aoa);
+    const out={
+      requester_name:findLabel(aoa,['مقدم الطلب','الطالب','اسم الطالب','اسم مقدم']),
+      title:findLabel(aoa,['نوع المواد','فئه المواد','نوع/فئه','المواد المطلوبه','الصنف العام','نوع الطلب']),
+      department:findLabel(aoa,['الاداره','القسم','الاداره العامه']),
+      sector:findLabel(aoa,['القطاع']),
+      project:findLabel(aoa,['المشروع','الموقع','اسم المشروع']),
+      needed_by:findLabel(aoa,['تاريخ التوريد','التوريد المطلوب','التاريخ المطلوب','تاريخ الاحتياج']),
+      items:[]
+    };
+    if(hr>=0){
+      const cols=colMap(aoa[hr]);
+      for(let r=hr+1;r<aoa.length;r++){
+        const row=aoa[r]||[]; const desc=cellTxt(row[cols.description]);
+        if(!desc) continue;
+        const nd=norm(desc); if(['الاجمالي','الإجمالي','المجموع','التوقيع','المعتمد','يعتمد'].some(k=>nd.includes(norm(k)))) continue;
+        out.items.push({
+          description:desc,
+          unit:cols.unit!=null?cellTxt(row[cols.unit]):'',
+          stock_balance:cols.stock_balance!=null?arNum(row[cols.stock_balance]):null,
+          requested_qty:cols.requested_qty!=null?arNum(row[cols.requested_qty]):null
+        });
+      }
+    }
+    if(!out.items.length){ toast('لم أجد جدول البنود في الملف — تحقّق أنه نموذج الطلب الصحيح','err'); return; }
+    ocrApply(out);
+  }catch(e){ toast('تعذّر قراءة Excel: '+(e.message||''),'err'); }
+}
+function detectHeaderRow(aoa){
+  for(let r=0;r<Math.min(aoa.length,40);r++){ const row=(aoa[r]||[]).map(norm); const hasName=row.some(t=>t.includes('الصنف')||t.includes('البيان')||t.includes('المواد')); const hasQty=row.some(t=>t.includes('المطلوبه')||t.includes('الكميه')); if(hasName&&hasQty) return r; }
+  return -1;
+}
+function colMap(headerRow){
+  const h=(headerRow||[]).map(norm); const find=keys=>{ for(let c=0;c<h.length;c++){ if(keys.some(k=>h[c].includes(k))) return c; } return null; };
+  return {
+    description: find(['اسم الصنف','الصنف','البيان','المواد'])??1,
+    unit: find(['الوحده']),
+    contract_qty: find(['كميه العقد','العقد']),
+    stock_balance: find(['رصيد مستودعي','رصيد مستودعى','الرصيد','مستودعي']),
+    requested_qty: find(['الكميه المطلوبه','المطلوبه','الكميه'])
+  };
+}
+async function aiParse(f){
+  toast('جارٍ قراءة النموذج بالذكاء…');
     try{
       const b64=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(String(rd.result).split(',')[1]);rd.onerror=rej;rd.readAsDataURL(f);});
       const prompt='هذا «نموذج طلب شراء مواد» لمجموعة الذيابي. استخرج بياناته وأعد JSON فقط (بلا أي شرح خارج الأقواس) بهذا الشكل:\n'
@@ -744,8 +828,6 @@ async function ocrParse(){
       const a=txt.indexOf('{'),z=txt.lastIndexOf('}'); if(a<0||z<0) throw new Error('لم يُفهم رد الذكاء');
       ocrApply(JSON.parse(txt.slice(a,z+1)));
     }catch(e){ toast('فشل القراءة: '+(e.message||''),'err'); }
-  };
-  inp.click();
 }
 function ocrApply(o){
   const set=(id,v)=>{const el=$(id);if(el&&v!=null&&String(v)!=='')el.value=v;};
