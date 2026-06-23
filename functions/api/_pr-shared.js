@@ -277,6 +277,40 @@ export async function notifyResult(env, base, pr, event, origin, comment) {
   return sendResend(env, [email], subjectFor(event, pr), html);
 }
 
+// بريد المشتريات عند الاعتماد النهائي — طلب جاهز للمعالجة (توريد/تسعير داخل النظام أو خارجه).
+function buildProcurementEmail(pr, origin) {
+  const B = BRAND;
+  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
+  const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
+    <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">اعتُمد طلب الشراء «${esc(pr.title || 'طلب شراء')}» نهائياً عبر كامل سلسلة الموافقات، وهو الآن <b>جاهز لمعالجة المشتريات</b> (عروض أسعار / توريد). راجع التفاصيل والبنود في البوابة.</p>
+    ${btn}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 6px"><tr>
+      <td style="background:${B.wash};border:1px solid ${B.line};border-radius:12px;padding:12px 16px" align="center">
+        <span style="font-size:12px;color:${B.soft}">رقم الطلب</span><br>
+        <span dir="ltr" style="font-size:17px;font-weight:800;color:${B.navy};letter-spacing:.05em">${esc(pr.id)}</span>
+        <div style="font-size:12px;color:${B.soft};margin-top:6px">القسم: ${esc(pr.department || '—')}${pr.requester_name ? ' · الطالب: ' + esc(pr.requester_name) : ''}</div>
+      </td></tr></table>
+  </td></tr>`;
+  return emailShell(inner, 'approved');
+}
+
+// إشعار فريق المشتريات (أصحاب صلاحية can_manage_rfq، وإلا الأدمن) عند الاعتماد النهائي.
+export async function notifyProcurement(env, base, pr, origin) {
+  let recips = [];
+  try {
+    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions`, { headers: svcHeaders(env) });
+    const users = await ur.json();
+    recips = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true).map((u) => u.username);
+    if (!recips.length) recips = (users || []).filter((u) => u.role === 'admin').map((u) => u.username);
+  } catch (_) {}
+  // لا تُكرّر بريد الطالب إن كان هو نفسه ضمن المشتريات.
+  const toList = [...new Set(recips.filter((u) => u && u !== pr.requester).map(usernameToEmail))];
+  if (!toList.length) return { skipped: true, reason: 'no_procurement' };
+  const html = buildProcurementEmail(pr, origin);
+  return sendResend(env, toList, `طلب معتمد جاهز للمشتريات — طلب ${pr.id} | مجموعة الذيابي`, html);
+}
+
 /**
  * تنفيذ قرار من داخل البريد عبر رمز موقّع — بصلاحية الخادم حصراً.
  *  يتحقّق: الرمز موجود/غير مستخدَم/غير منتهٍ، والطلب قيد المراجعة،

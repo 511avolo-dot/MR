@@ -19,7 +19,7 @@
  *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
  */
 
-import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult } from './_pr-shared.js';
+import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement } from './_pr-shared.js';
 
 const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
 
@@ -104,8 +104,13 @@ export async function onRequestPost({ request, env }) {
         // بريد «بانتظار اعتمادك» مع أزرار قرار موقّعة لكل معتمِد (الاعتماد من داخل البريد).
         const approvals = await prLoadApprovals(env, base, prId);
         res = await prNotifyPending(env, base, pr, approvals, origin);
+      } else if (ev === 'approved') {
+        // الاعتماد النهائي: بريد للطالب + بريد لفريق المشتريات (طلب جاهز للمعالجة).
+        const r1 = await prNotifyResult(env, base, pr, 'approved', origin, comment);
+        const r2 = await prNotifyProcurement(env, base, pr, origin);
+        res = { ok: true, sent: ((r1 && r1.sent) || 0) + ((r2 && r2.sent) || 0) };
       } else {
-        // بريد نتيجة لمُقدّم الطلب (اعتُمد/رُفض/أُعيد/استُلم).
+        // بريد نتيجة لمُقدّم الطلب (رُفض/أُعيد/استُلم).
         res = await prNotifyResult(env, base, pr, ev, origin, comment);
       }
       if (res && res.error) return json({ error: 'تعذّر إرسال البريد', detail: res.detail || '' }, 502);
