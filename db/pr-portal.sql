@@ -171,6 +171,30 @@ SELECT 'مشتريات صغيرة (≤ 1000)', 10, 0, 1000,
   ]'::jsonb
 WHERE NOT EXISTS (SELECT 1 FROM proc_approval_rules WHERE name='مشتريات صغيرة (≤ 1000)');
 
+-- ════════════════ 7) رموز الاعتماد من داخل البريد (lحظة واحدة، موقّعة) ════════════════
+--  تحصين أمني: هذا الجدول يُمكّن الاعتماد بنقرة من داخل البريد دون فتح البوابة.
+--  • RLS مُفعّل بلا أي سياسة ⇒ لا وصول إطلاقاً من العميل (anon/authenticated).
+--    الخادم فقط (service-role، يتجاوز RLS) يقرأ/يكتب الرموز. حتى لو سُرّب رمز،
+--    لا يمكن للمهاجم قراءة الجدول أو تزويره؛ والرمز عشوائي 256-بت لمرة واحدة وبصلاحية زمنية.
+--  • نطاق الضرر محصور: الرمز يخصّ (طلب + مرحلة + معتمِد) واحد فقط، يُبطَل فور الاستخدام،
+--    ولا يمنح أي صلاحية على القاعدة أو النظام الأساسي.
+CREATE TABLE IF NOT EXISTS proc_email_tokens (
+  token       TEXT PRIMARY KEY,                 -- عشوائي 256-بت (base62)
+  pr_id       TEXT NOT NULL REFERENCES proc_purchase_requests(id) ON DELETE CASCADE,
+  seq         INT  NOT NULL,                     -- مرحلة الاعتماد المستهدفة
+  approver    TEXT NOT NULL,                     -- اسم المستخدم المخوّل لهذا الرمز
+  used        BOOLEAN DEFAULT false,
+  used_at     TIMESTAMPTZ,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_prtok_pr ON proc_email_tokens(pr_id);
+ALTER TABLE proc_email_tokens ENABLE ROW LEVEL SECURITY;
+-- لا CREATE POLICY هنا عمداً: RLS مفعّل بلا سياسة = رفض كل وصول من العميل.
+
+-- قناة الاعتماد لكل صفّ (portal | email) — لأغراض التدقيق والعرض.
+ALTER TABLE proc_pr_approvals ADD COLUMN IF NOT EXISTS channel TEXT;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  التحديث اللحظي (Realtime) — يُفعَّل تلقائياً وبأمان (idempotent) بعد إنشاء الجداول.
 --  ملاحظة: لا تُشغّل أوامر ALTER PUBLICATION منفصلةً قبل إنشاء الجداول — هذا الملف
