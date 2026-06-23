@@ -14,7 +14,7 @@
  */
 import {
   BRAND, esc, loadPR, loadApprovals, currentPendingStage,
-  applyAction, readToken, notifyPending, notifyResult,
+  applyAction, readToken, notifyPending, notifyResult, notifyProcurement,
 } from './_pr-shared.js';
 
 const emailConfigured = (env) =>
@@ -128,6 +128,8 @@ export async function onRequestPost({ request, env }) {
     } else if (result.finalized) {
       const ev = result.status === 'approved' ? 'approved' : result.status === 'rejected' ? 'rejected' : 'returned';
       await notifyResult(env, base, result.pr, ev, origin, comment);
+      // الاعتماد النهائي: أبلغ فريق المشتريات أن الطلب جاهز للمعالجة.
+      if (result.status === 'approved') await notifyProcurement(env, base, result.pr, origin);
     }
   } catch (_) {}
 
