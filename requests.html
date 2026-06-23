@@ -350,7 +350,7 @@ async function afterLogin(){
 }
 async function loadAdminData(){
   try{
-    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active').order('username');
+    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active,delegate_to,is_away').order('username');
     USERS=(u.data||[]).map(x=>{ if(typeof x.permissions==='string'){try{x.permissions=JSON.parse(x.permissions);}catch(e){x.permissions={};}} return x; });
   }catch(e){ USERS=[]; }
   try{ const s=await SB.from('proc_settings').select('value').eq('key','portal_settings').maybeSingle(); PSET=(s.data&&s.data.value)?(typeof s.data.value==='string'?JSON.parse(s.data.value):s.data.value):{}; }catch(e){ PSET={}; }
@@ -418,12 +418,14 @@ function resolveApprover(pr,stage){
   return null;
 }
 function currentStage(pr){ if(pr.status!=='in_review')return null; return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0]||null; }
+// المفوَّض عن مستخدم في إجازة (أو null)
+function delegOf(username){ const u=USERS.find(x=>x.username===username); return (u&&u.is_away&&u.delegate_to)?u.delegate_to:null; }
 function canActOn(pr){
   const st=currentStage(pr); if(!st) return null;
   if(pr.requester===ME.username) return null; // فصل المهام
   let ok=false;
-  if(st.approver){ ok = (st.approver===ME.username); }                                  // الشخص المُحدَّد لهذه المرحلة
-  else if(st.resolver==='dept_manager'||st.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); ok=(d&&d.manager_user===ME.username); }
+  if(st.approver){ ok = (st.approver===ME.username)||(delegOf(st.approver)===ME.username); } // الشخص المُحدَّد أو مفوَّضه
+  else if(st.resolver==='dept_manager'||st.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); const m=d&&d.manager_user; ok=(m===ME.username)||(!!m&&delegOf(m)===ME.username); }
   else if(st.role_key){ ok = can(st.role_key); }                                          // توافق خلفي (قواعد قديمة)
   ok = ok || ME.role==='admin' || can('can_approve_l2');                                  // تجاوز المدير الأعلى/الأدمن
   return ok?st:null;
@@ -658,8 +660,9 @@ function trackHTML(id){
 /* ── صندوق الاعتماد ── */
 function inboxHTML(list){
   if(!list.length) return `<div class="empty"><div class="ic">📥</div>لا طلبات بانتظار اعتمادك.</div>`;
-  const rows=list.map(p=>{const st=currentStage(p);return `<tr>
-    <td dir="ltr" style="text-align:start"><a style="cursor:pointer;color:var(--gold-2);font-weight:600" onclick="goLoad('track','${esc(p.id)}')">${esc(p.id)}</a></td>
+  const sla=num0(PSET.sla_days)||3;
+  const rows=list.map(p=>{const st=currentStage(p);const od=ageDays(p)>sla;return `<tr>
+    <td dir="ltr" style="text-align:start"><a style="cursor:pointer;color:var(--gold-2);font-weight:600" onclick="goLoad('track','${esc(p.id)}')">${esc(p.id)}</a>${od?` <span class="badge danger" title="تجاوز المهلة">متأخّر ${ageDays(p)}ي</span>`:''}</td>
     <td>${esc(p.title||'—')}</td><td>${esc(p.department||'—')}</td><td>${esc(p.requester_name||p.requester||'—')}</td>
     <td>${esc(st?st.stage_label:'—')}</td>
     <td class="row-act"><button class="btn btn-primary btn-sm" onclick="actPrompt('${esc(p.id)}','approve')">اعتماد</button><button class="btn btn-ghost btn-sm" onclick="actPrompt('${esc(p.id)}','return')">إرجاع</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="actPrompt('${esc(p.id)}','reject')">رفض</button></td>
@@ -902,14 +905,19 @@ async function deptDel(id){ if(!confirm('حذف القسم؟'))return; try{ awai
 
 /* ── المستخدمون ── */
 function usersHTML(){
+  const delegOpt=(sel,selfU)=>['<option value="">— بلا —</option>'].concat(USERS.filter(x=>x.username!==selfU).map(x=>`<option value="${esc(x.username)}" ${sel===x.username?'selected':''}>${esc(x.display_name||x.username)}</option>`)).join('');
   const rows=USERS.map(u=>{
     const perms=PERM_DEFS.map(p=>`<label class="pchk"><input type="checkbox" ${u.role==='admin'||((u.permissions||{})[p.k]===true)?'checked':''} ${u.role==='admin'?'disabled':''} onchange="userPerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`).join('');
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
-        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">أدمن</span>':''} ${u.active===false?'<span class="badge danger">معطّل</span>':''}</div>
+        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">أدمن</span>':''} ${u.active===false?'<span class="badge danger">معطّل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''}</div>
         <div class="row-act"><button class="btn btn-ghost btn-sm" onclick="userReset('${esc(u.username)}')">كلمة مرور</button><button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',${u.active===false})">${u.active===false?'تفعيل':'تعطيل'}</button></div>
       </div>
       <div class="perms">${perms}</div>
+      <div class="grid" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+        <div><label>المفوَّض عند الغياب</label><select class="select" onchange="userDeleg('${esc(u.username)}',this.value)">${delegOpt(u.delegate_to,u.username)}</select></div>
+        <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل الموافقات للمفوَّض)</label></div>
+      </div>
     </div>`;
   }).join('')||`<div class="empty">لا مستخدمون</div>`;
   return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="userAddForm()">➕ مستخدم جديد</button></div>
@@ -939,6 +947,16 @@ async function userAdd(){
 async function userPerm(username,key,on){
   const u=USERS.find(x=>x.username===username); if(!u)return; u.permissions=u.permissions||{}; u.permissions[key]=on;
   try{ const e=(await SB.from('proc_users').update({permissions:u.permissions}).eq('username',username)).error; if(e)throw e; toast('حُدّثت الصلاحية','ok'); }
+  catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
+}
+async function userDeleg(username,to){
+  const u=USERS.find(x=>x.username===username);
+  try{ const e=(await SB.from('proc_users').update({delegate_to:to||null}).eq('username',username)).error; if(e)throw e; if(u)u.delegate_to=to||null; toast('حُدّث المفوَّض','ok'); }
+  catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
+}
+async function userAway(username,on){
+  const u=USERS.find(x=>x.username===username);
+  try{ const e=(await SB.from('proc_users').update({is_away:!!on}).eq('username',username)).error; if(e)throw e; if(u)u.is_away=!!on; toast(on?'وُضع في إجازة':'أُلغيت الإجازة','ok'); render(); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
 async function userReset(username){ const p=prompt('كلمة المرور الجديدة (6 أحرف على الأقل):',''); if(p===null)return; if(p.length<6){toast('قصيرة جداً','err');return;} try{ await adminApi({action:'setPassword',username,password:p}); toast('غُيّرت كلمة المرور','ok'); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); } }

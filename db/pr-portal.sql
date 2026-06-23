@@ -301,7 +301,7 @@ DECLARE
   v_pr proc_purchase_requests%ROWTYPE;
   v_stage proc_pr_approvals%ROWTYPE;
   v_pending int; v_next int; v_decision text; v_status text; v_seq int;
-  v_ok boolean := false; v_mgr text; v_perm boolean;
+  v_ok boolean := false; v_intended text; v_perm boolean;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
@@ -316,16 +316,23 @@ BEGIN
 
   IF v_pr.requester = v_me THEN RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)'; END IF;
 
-  -- تخويل: المُعتمِد المُحلّ لهذه المرحلة، أو أدمن.
+  -- تخويل: المُعتمِد المُحلّ لهذه المرحلة، أو مفوَّضه عند الغياب، أو أدمن.
+  v_intended := NULL;
   IF v_stage.approver IS NOT NULL THEN
-    v_ok := (v_stage.approver = v_me);
+    v_intended := v_stage.approver; v_ok := (v_intended = v_me);
   ELSIF v_stage.resolver = 'dept_manager' THEN
-    SELECT manager_user INTO v_mgr FROM proc_departments WHERE id = v_pr.department_id;
-    v_ok := (v_mgr = v_me);
+    SELECT manager_user INTO v_intended FROM proc_departments WHERE id = v_pr.department_id;
+    v_ok := (v_intended = v_me);
   ELSIF v_stage.role_key IS NOT NULL THEN
     SELECT coalesce((permissions->>v_stage.role_key)::boolean,false) INTO v_perm
       FROM proc_users WHERE lower(username)=lower(v_me) LIMIT 1;
     v_ok := coalesce(v_perm,false);
+  END IF;
+  -- التفويض: يعتمد المفوَّض بالنيابة عن مُعتمِد مُحدَّد في إجازة.
+  IF NOT v_ok AND v_intended IS NOT NULL THEN
+    SELECT (coalesce(is_away,false) AND lower(coalesce(delegate_to,''))=lower(v_me))
+      INTO v_ok FROM proc_users WHERE lower(username)=lower(v_intended) LIMIT 1;
+    v_ok := coalesce(v_ok,false);
   END IF;
   IF NOT v_ok AND NOT pr_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
 
@@ -364,4 +371,123 @@ GRANT EXECUTE ON FUNCTION pr_username()                       TO authenticated;
 GRANT EXECUTE ON FUNCTION pr_is_admin()                       TO authenticated;
 GRANT EXECUTE ON FUNCTION pr_is_service()                     TO authenticated;
 GRANT EXECUTE ON FUNCTION pr_transition(text, text, text)     TO authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════
+--  9) مهلة الاعتماد (SLA) + التصعيد التلقائي + التفويض (Phase 3)
+-- ════════════════════════════════════════════════════════════════════════
+--  • كل مرحلة لها مهلة (افتراضي من إعدادات البوابة sla_days، أو 3 أيام) تُحفظ في
+--    stage_due_at؛ يُعاد ضبطها تلقائياً عند دخول المراجعة أو الانتقال لمرحلة تالية.
+--  • مهمة دورية (pg_cron) تستدعي pr_run_sla() التي تُنشئ تنبيهات داخلية للمُعتمِد
+--    المتأخّر (ومفوَّضه عند الغياب) وللأدمن، وتزيد عدّاد التصعيد — دون لمس الحالة.
+--  • التفويض: عند ضبط المستخدم is_away مع delegate_to، يَعتمد المفوَّض بالنيابة
+--    (مفروضٌ على الخادم في pr_transition، ويُوجَّه إليه البريد/التنبيه).
+--  آمن لإعادة التشغيل.
+
+ALTER TABLE proc_users            ADD COLUMN IF NOT EXISTS is_away            BOOLEAN DEFAULT false;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS stage_due_at      TIMESTAMPTZ;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS escalations       INT DEFAULT 0;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS escalated_at      TIMESTAMPTZ;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS last_escalation_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_pr_due ON proc_purchase_requests(stage_due_at) WHERE status='in_review';
+
+-- مهلة المرحلة بالساعات (من إعدادات البوابة، أو 72 ساعة).
+CREATE OR REPLACE FUNCTION pr_sla_hours() RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT coalesce(
+    nullif((SELECT value->>'sla_days' FROM proc_settings WHERE key='portal_settings'),'')::numeric * 24,
+    72);
+$fn$;
+
+-- يضبط موعد استحقاق المرحلة عند الدخول للمراجعة أو الانتقال؛ ويُفرغه عند الخروج.
+CREATE OR REPLACE FUNCTION pr_set_due() RETURNS trigger
+LANGUAGE plpgsql AS $fn$
+DECLARE v_h numeric := pr_sla_hours();
+BEGIN
+  IF NEW.status = 'in_review' THEN
+    IF TG_OP='INSERT'
+       OR OLD.status IS DISTINCT FROM 'in_review'
+       OR NEW.current_seq IS DISTINCT FROM OLD.current_seq THEN
+      NEW.stage_due_at := now() + make_interval(hours => v_h);
+    END IF;
+  ELSE
+    NEW.stage_due_at := NULL;
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_pr_set_due ON proc_purchase_requests;
+CREATE TRIGGER trg_pr_set_due BEFORE INSERT OR UPDATE ON proc_purchase_requests
+  FOR EACH ROW EXECUTE FUNCTION pr_set_due();
+
+-- التصعيد الدوري: تنبيهات للمُعتمِد المتأخّر (+ مفوَّضه) وللأدمن. لا يُغيّر الحالة.
+CREATE OR REPLACE FUNCTION pr_run_sla() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_sla numeric := pr_sla_hours();
+  v_pr record; v_stage record; v_intended text; v_away boolean; v_deleg text;
+  v_admin text; v_n int := 0; v_body text;
+  fn_nid text;
+BEGIN
+  FOR v_pr IN
+    SELECT * FROM proc_purchase_requests
+     WHERE status='in_review' AND stage_due_at IS NOT NULL AND stage_due_at < now()
+       AND (last_escalation_at IS NULL OR last_escalation_at < now() - make_interval(hours => v_sla))
+  LOOP
+    SELECT * INTO v_stage FROM proc_pr_approvals
+      WHERE pr_id=v_pr.id AND decision='pending' ORDER BY seq ASC LIMIT 1;
+    CONTINUE WHEN NOT FOUND;
+    v_body := v_pr.id || ' — ' || coalesce(v_pr.title,'طلب شراء') || ' (تجاوز المهلة)';
+
+    v_intended := NULL;
+    IF v_stage.approver IS NOT NULL THEN v_intended := v_stage.approver;
+    ELSIF v_stage.resolver='dept_manager' THEN
+      SELECT manager_user INTO v_intended FROM proc_departments WHERE id=v_pr.department_id;
+    END IF;
+
+    IF v_intended IS NOT NULL THEN
+      fn_nid := 'ntf_'||floor(extract(epoch from clock_timestamp()))||'_'||substr(md5(random()::text),1,6)||'_'||v_intended;
+      INSERT INTO proc_notifications(id,recipient,type,title,body,link,read)
+        VALUES(fn_nid, v_intended,'system','تذكير: طلب متأخّر بانتظار اعتمادك', v_body, 'inbox', false)
+        ON CONFLICT DO NOTHING;
+      SELECT coalesce(is_away,false), delegate_to INTO v_away, v_deleg
+        FROM proc_users WHERE lower(username)=lower(v_intended) LIMIT 1;
+      IF v_away AND v_deleg IS NOT NULL THEN
+        fn_nid := 'ntf_'||floor(extract(epoch from clock_timestamp()))||'_'||substr(md5(random()::text),1,6)||'_'||v_deleg;
+        INSERT INTO proc_notifications(id,recipient,type,title,body,link,read)
+          VALUES(fn_nid, v_deleg,'system','تفويض: طلب متأخّر بانتظار اعتمادك (بالنيابة)', v_body, 'inbox', false)
+          ON CONFLICT DO NOTHING;
+      END IF;
+    END IF;
+
+    FOR v_admin IN SELECT username FROM proc_users WHERE role='admin' AND coalesce(active,true) LOOP
+      fn_nid := 'ntf_'||floor(extract(epoch from clock_timestamp()))||'_'||substr(md5(random()::text),1,6)||'_'||v_admin;
+      INSERT INTO proc_notifications(id,recipient,type,title,body,link,read)
+        VALUES(fn_nid, v_admin,'system','تصعيد SLA: طلب متأخّر', v_body, 'inbox', false)
+        ON CONFLICT DO NOTHING;
+    END LOOP;
+
+    UPDATE proc_purchase_requests
+       SET escalations = coalesce(escalations,0)+1,
+           escalated_at = coalesce(escalated_at, now()),
+           last_escalation_at = now()
+       WHERE id = v_pr.id;
+    v_n := v_n + 1;
+  END LOOP;
+  RETURN v_n;
+END $fn$;
+
+GRANT EXECUTE ON FUNCTION pr_sla_hours() TO authenticated;
+
+-- جدولة دورية كل 30 دقيقة عبر pg_cron (إن كان مفعّلاً في المشروع) — آمن لإعادة التشغيل.
+-- إن لم يكن pg_cron مفعّلاً: فعّله من Supabase ▸ Database ▸ Extensions ثم أعد تشغيل هذا الملف،
+-- أو استدعِ pr_run_sla() يدوياً/عبر مجدول خارجي.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_cron') THEN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname='pr-sla') THEN
+      PERFORM cron.unschedule('pr-sla');
+    END IF;
+    PERFORM cron.schedule('pr-sla', '*/30 * * * *', 'SELECT pr_run_sla();');
+  END IF;
+END $$;
 -- ════════════════════════════════════════════════════════════════════════
