@@ -677,19 +677,13 @@ async function act(id,action,comment){
   const stage=canActOn(pr); if(!stage){ toast('لست المعتمِد لهذه المرحلة','err'); return; }
   if(comment==null) comment=$('act-c')?$('act-c').value:'';
   if((action==='reject'||action==='return')&&!String(comment||'').trim()){ toast('اكتب السبب','err'); return; }
-  const pending=(pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0));
-  const isLast=pending.length<=1;
-  const decision=action==='approve'?'approved':action==='reject'?'rejected':'returned';
-  let newStatus=pr.status,newSeq=pr.current_seq;
-  if(action==='approve'){ if(isLast)newStatus='approved'; else newSeq=pending[1].seq; }
-  else if(action==='reject') newStatus='rejected';
-  else { newStatus='returned'; newSeq=0; }
-  const now=new Date().toISOString();
   try{
-    let e=(await SB.from('proc_pr_approvals').update({decision,approver:ME.username,comment:comment||null,acted_at:now}).eq('pr_id',id).eq('seq',stage.seq)).error; if(e)throw e;
-    e=(await SB.from('proc_purchase_requests').update({status:newStatus,current_seq:newSeq,updated_at:now,updated_by:ME.username}).eq('id',id)).error; if(e)throw e;
-    toast(action==='approve'?(isLast?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك'):action==='reject'?'رُفض الطلب':'أُعيد للتعديل','ok');
-    if(action==='approve'){ if(isLast) notifyPR('approved',id); else notifyPR('pending',id); }
+    // التنفيذ على الخادم عبر آلة الحالة الموثوقة (تتحقّق من المُعتمِد وفصل المهام).
+    const {data,error}=await SB.rpc('pr_transition',{p_pr_id:id,p_action:action,p_comment:comment||null});
+    if(error) throw error;
+    const fin = data ? !!data.finalized : (action!=='approve');
+    toast(action==='approve'?(fin?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك'):action==='reject'?'رُفض الطلب':'أُعيد للتعديل','ok');
+    if(action==='approve'){ if(fin) notifyPR('approved',id); else notifyPR('pending',id); }
     else if(action==='reject') notifyPR('rejected',id,comment);
     else notifyPR('returned',id,comment);
     await goLoad('inbox');

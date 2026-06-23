@@ -10809,21 +10809,17 @@ async function prAct(prId, action, comment){
   } else if(action==='reject'){ newStatus='rejected'; }
   else { newStatus='returned'; newSeq=0; }
   try{
-    // 1) تحديث صفّ المرحلة
-    const {error:e1}=await CLOUD.client.from('proc_pr_approvals')
-      .update({decision, approver:me, comment:comment||null, acted_at:now})
-      .eq('pr_id',prId).eq('seq',stage.seq);
-    if(e1) throw e1;
-    // 2) تحديث رأس الطلب
-    const {error:e2}=await CLOUD.client.from('proc_purchase_requests')
-      .update({status:newStatus, current_seq:newSeq, updated_at:now, updated_by:me})
-      .eq('id',prId);
-    if(e2) throw e2;
-    try{ pushAuditToCloud && pushAuditToCloud({username:me, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:(action==='approve'?'approve':action==='reject'?'reject':'return'), entity_type:'pr', entity_id:prId, old_value:{status:pr.status}, new_value:{status:newStatus, stage:stage.stage_label}, meta:{comment:comment||null}}); }catch(_){}
-    const msg = action==='approve' ? (isLast?'اعتُمد الطلب نهائياً — يُحوّل لطلب تسعير...':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
+    // التنفيذ على الخادم عبر آلة الحالة الموثوقة (pr_transition) — تفرض المُعتمِد
+    // الصحيح وفصل المهام وتمنع تجاوز السلسلة حتى لو تلاعب العميل.
+    const {data,error}=await CLOUD.client.rpc('pr_transition',{p_pr_id:prId, p_action:action, p_comment:comment||null});
+    if(error) throw error;
+    const finalized = data ? !!data.finalized : (action==='approve'&&isLast);
+    const resStatus = (data && data.status) || newStatus;
+    try{ pushAuditToCloud && pushAuditToCloud({username:me, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:(action==='approve'?'approve':action==='reject'?'reject':'return'), entity_type:'pr', entity_id:prId, old_value:{status:pr.status}, new_value:{status:resStatus, stage:stage.stage_label}, meta:{comment:comment||null}}); }catch(_){}
+    const msg = action==='approve' ? (finalized?'اعتُمد الطلب نهائياً — يُحوّل لطلب تسعير...':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
     toast('success','تم', msg);
     // P4: التحويل التلقائي إلى RFQ عند الاعتماد النهائي
-    if(action==='approve' && isLast){
+    if(action==='approve' && finalized){
       try{ await prToRFQ(Object.assign({}, pr, {status:'approved'})); }catch(e){ console.warn('[pr->rfq]', e?.message); }
     }
     __prLoaded=false;
