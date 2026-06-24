@@ -372,6 +372,98 @@ GRANT EXECUTE ON FUNCTION pr_is_admin()                       TO authenticated;
 GRANT EXECUTE ON FUNCTION pr_is_service()                     TO authenticated;
 GRANT EXECUTE ON FUNCTION pr_transition(text, text, text)     TO authenticated;
 
+-- ── 8ب) الاعتماد من داخل البريد عبر رمز موقّع — معاملة ذرّية واحدة ──
+-- يستهلك الرمز ويعيد التحقّق من المعتمِد وينفّذ الانتقال في معاملة واحدة (أقفال صفوف)،
+-- فيغلق سباق الإرسال المزدوج، ويمنع تنفيذ قرار من حامل رمز لم يعد مخوّلاً.
+-- يُستدعى بصلاحية الخادم فقط (service_role) من functions/api/pr-action.js.
+CREATE OR REPLACE FUNCTION pr_transition_email(p_token text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_tok proc_email_tokens%ROWTYPE;
+  v_pr proc_purchase_requests%ROWTYPE;
+  v_stage proc_pr_approvals%ROWTYPE;
+  v_me text; v_intended text; v_perm boolean; v_ok boolean := false;
+  v_pending int; v_next int; v_decision text; v_status text; v_seq int;
+BEGIN
+  IF p_action NOT IN ('approve','reject','return') THEN RETURN jsonb_build_object('error','invalid_action','code',400); END IF;
+
+  -- 1) اقفل الرمز وتحقّق (موجود/غير مستخدَم/غير منتهٍ) — المطالبة الذرّية.
+  SELECT * INTO v_tok FROM proc_email_tokens WHERE token = p_token FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','unknown_token','code',404); END IF;
+  IF v_tok.used THEN RETURN jsonb_build_object('error','used','code',410); END IF;
+  IF v_tok.expires_at < now() THEN RETURN jsonb_build_object('error','expired','code',410); END IF;
+  v_me := v_tok.approver;
+
+  SELECT * INTO v_pr FROM proc_purchase_requests WHERE id = v_tok.pr_id FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','pr_not_found','code',404); END IF;
+  IF v_pr.status <> 'in_review' THEN RETURN jsonb_build_object('error','not_in_review','code',409); END IF;
+
+  SELECT * INTO v_stage FROM proc_pr_approvals
+    WHERE pr_id = v_tok.pr_id AND decision='pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','no_pending','code',409); END IF;
+  IF v_stage.seq <> v_tok.seq THEN RETURN jsonb_build_object('error','stage_changed','code',409); END IF;
+
+  IF v_pr.requester = v_me THEN RETURN jsonb_build_object('error','sod','code',403); END IF;
+
+  -- 2) إعادة التحقّق أن حامل الرمز ما زال المعتمِد المخوّل (شخص/مدير قسم/صلاحية/مفوَّض/أدمن).
+  v_intended := NULL;
+  IF v_stage.approver IS NOT NULL THEN v_intended := v_stage.approver; v_ok := (v_intended = v_me);
+  ELSIF v_stage.resolver = 'dept_manager' THEN
+    SELECT manager_user INTO v_intended FROM proc_departments WHERE id = v_pr.department_id;
+    v_ok := (v_intended = v_me);
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    SELECT coalesce((permissions->>v_stage.role_key)::boolean,false) INTO v_perm
+      FROM proc_users WHERE lower(username)=lower(v_me) LIMIT 1;
+    v_ok := coalesce(v_perm,false);
+  END IF;
+  IF NOT v_ok AND v_intended IS NOT NULL THEN
+    SELECT (coalesce(is_away,false) AND lower(coalesce(delegate_to,''))=lower(v_me))
+      INTO v_ok FROM proc_users WHERE lower(username)=lower(v_intended) LIMIT 1;
+    v_ok := coalesce(v_ok,false);
+  END IF;
+  IF NOT v_ok THEN
+    SELECT EXISTS(SELECT 1 FROM proc_users WHERE lower(username)=lower(v_me) AND role='admin' AND coalesce(active,true)) INTO v_ok;
+  END IF;
+  IF NOT v_ok THEN RETURN jsonb_build_object('error','not_approver','code',403); END IF;
+
+  IF p_action IN ('reject','return') AND coalesce(btrim(p_comment),'')='' THEN
+    RETURN jsonb_build_object('error','comment_required','code',400);
+  END IF;
+
+  -- 3) استهلك الرمز (ضمن المعاملة المقفولة — ذرّي).
+  UPDATE proc_email_tokens SET used=true, used_at=now() WHERE token = p_token;
+
+  -- 4) نفّذ الانتقال.
+  v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
+  SELECT count(*) INTO v_pending FROM proc_pr_approvals WHERE pr_id=v_tok.pr_id AND decision='pending';
+  v_status := v_pr.status; v_seq := v_pr.current_seq;
+  IF p_action='approve' THEN
+    IF v_pending <= 1 THEN v_status := 'approved';
+    ELSE
+      SELECT seq INTO v_next FROM proc_pr_approvals
+        WHERE pr_id=v_tok.pr_id AND decision='pending' AND seq>v_stage.seq ORDER BY seq ASC LIMIT 1;
+      v_seq := coalesce(v_next, v_pr.current_seq);
+    END IF;
+  ELSIF p_action='reject' THEN v_status := 'rejected';
+  ELSE v_status := 'returned'; v_seq := 0; END IF;
+
+  PERFORM set_config('app.pr_transition','1', true);
+  UPDATE proc_pr_approvals
+     SET decision=v_decision, approver=v_me, comment=p_comment, acted_at=now(), channel='email'
+     WHERE pr_id=v_tok.pr_id AND seq=v_stage.seq;
+  UPDATE proc_purchase_requests
+     SET status=v_status, current_seq=v_seq, updated_at=now(), updated_by=v_me
+     WHERE id=v_tok.pr_id;
+
+  RETURN jsonb_build_object('ok',true,'action',p_action,'decision',v_decision,'status',v_status,
+    'finalized', v_status <> 'in_review','seq', v_stage.seq,
+    'pr', jsonb_build_object('id',v_pr.id,'title',v_pr.title,'department',v_pr.department,
+      'department_id',v_pr.department_id,'requester',v_pr.requester,'requester_name',v_pr.requester_name));
+END $fn$;
+-- يُستدعى بصلاحية الخادم فقط؛ لا يُمنح لـanon/authenticated (الرمز عشوائي وغير قابل للتخمين).
+GRANT EXECUTE ON FUNCTION pr_transition_email(text, text, text) TO service_role;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  9) مهلة الاعتماد (SLA) + التصعيد التلقائي + التفويض (Phase 3)
 -- ════════════════════════════════════════════════════════════════════════

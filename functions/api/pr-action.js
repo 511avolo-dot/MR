@@ -13,8 +13,8 @@
  * ════════════════════════════════════════════════════════════════════════
  */
 import {
-  BRAND, esc, loadPR, loadApprovals, currentPendingStage,
-  applyAction, readToken, notifyPending, notifyResult, notifyProcurement,
+  BRAND, esc, svcHeaders, loadPR, loadApprovals, currentPendingStage,
+  readToken, notifyPending, notifyResult, notifyProcurement,
 } from './_pr-shared.js';
 
 const emailConfigured = (env) =>
@@ -112,39 +112,56 @@ export async function onRequestPost({ request, env }) {
     }
   } catch (_) { return errPage('طلب غير صالح.', 400); }
   if (!ACTIONS[act]) return errPage('إجراء غير معروف.', 400);
+  if (!/^[0-9A-Za-z]{16,128}$/.test(token)) return errPage('رمز غير صالح.', 400);
 
-  const tk = await readToken(env, base, token);
-  if (tk.error) return errPage(tk.error, tk.code || 400);
-
-  const result = await applyAction(env, base, tk.row, act, comment);
-  if (result.error) return errPage(result.error, result.code || 400);
+  // التنفيذ بالكامل عبر دالة قاعدة بيانات واحدة في معاملة ذرّية (تستهلك الرمز،
+  // تعيد التحقّق من المعتمِد، وتنفّذ الانتقال) — تغلق سباق الإرسال المزدوج وتمنع
+  // أي قرار من حامل رمز لم يعد مخوّلاً. لا كتابة يدوية بصلاحية الخادم بعد الآن.
+  let data = null;
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/pr_transition_email`, {
+      method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_token: token, p_action: act, p_comment: comment || null }),
+    });
+    data = await r.json().catch(() => null);
+    if (!r.ok && (!data || !data.error)) return errPage('تعذّر تنفيذ القرار حالياً.', 502);
+  } catch (_) { return errPage('تعذّر الاتصال بالخدمة.', 502); }
+  if (!data || data.error) return errPage(ERR_AR[data && data.error] || 'تعذّر إتمام الطلب.', (data && data.code) || 400);
 
   // بريد المتابعة (أفضل جهد — لا يُفشل القرار إن تعذّر).
   let origin = ''; try { origin = url0(request); } catch (_) {}
   try {
-    if (result.action === 'approve' && !result.finalized) {
-      const approvals = await loadApprovals(env, base, result.pr.id);
-      await notifyPending(env, base, result.pr, approvals, origin);
-    } else if (result.finalized) {
-      const ev = result.status === 'approved' ? 'approved' : result.status === 'rejected' ? 'rejected' : 'returned';
-      await notifyResult(env, base, result.pr, ev, origin, comment);
+    if (data.action === 'approve' && !data.finalized) {
+      const approvals = await loadApprovals(env, base, data.pr.id);
+      await notifyPending(env, base, data.pr, approvals, origin);
+    } else if (data.finalized) {
+      const ev = data.status === 'approved' ? 'approved' : data.status === 'rejected' ? 'rejected' : 'returned';
+      await notifyResult(env, base, data.pr, ev, origin, comment);
       // الاعتماد النهائي: أبلغ فريق المشتريات أن الطلب جاهز للمعالجة.
-      if (result.status === 'approved') await notifyProcurement(env, base, result.pr, origin);
+      if (data.status === 'approved') await notifyProcurement(env, base, data.pr, origin);
     }
   } catch (_) {}
 
   const A = ACTIONS[act];
-  const done = result.action === 'approve'
-    ? (result.finalized ? 'تم اعتماد الطلب نهائياً عبر كامل سلسلة الموافقات.' : 'تم اعتماد مرحلتك، وأُرسل الطلب إلى المعتمِد التالي.')
-    : result.action === 'reject' ? 'تم رفض الطلب وإشعار مُقدّمه.' : 'أُعيد الطلب لمُقدّمه للتعديل.';
+  const done = data.action === 'approve'
+    ? (data.finalized ? 'تم اعتماد الطلب نهائياً عبر كامل سلسلة الموافقات.' : 'تم اعتماد مرحلتك، وأُرسل الطلب إلى المعتمِد التالي.')
+    : data.action === 'reject' ? 'تم رفض الطلب وإشعار مُقدّمه.' : 'أُعيد الطلب لمُقدّمه للتعديل.';
   const body = `
     <div class="ic" style="background:${A[1]}">${A[2]}</div>
     <h1 style="color:${A[1]}">تم تنفيذ القرار</h1>
     <p>${esc(done)}</p>
-    <div class="meta">رقم الطلب: <b dir="ltr">${esc(result.pr.id)}</b></div>
+    <div class="meta">رقم الطلب: <b dir="ltr">${esc(data.pr.id)}</b></div>
     <p class="muted">تم تسجيل قرارك في سجل التدقيق. يمكنك إغلاق هذه الصفحة.</p>`;
   return htmlResp(page('تم تنفيذ القرار', body, A[1]));
 }
+
+// ترجمة رموز أخطاء الدالة إلى رسائل عربية للمستخدم.
+const ERR_AR = {
+  invalid_action: 'إجراء غير معروف.', unknown_token: 'رمز غير معروف.', used: 'استُخدم هذا الرمز من قبل.',
+  expired: 'انتهت صلاحية الرمز.', pr_not_found: 'الطلب غير موجود.', not_in_review: 'لم يعد الطلب قيد المراجعة.',
+  no_pending: 'لا توجد مرحلة معلّقة.', stage_changed: 'هذه المرحلة لم تعد بانتظار قرارك.',
+  sod: 'لا يمكنك اعتماد طلبك.', not_approver: 'لم تعد المعتمِد المخوّل لهذه المرحلة.', comment_required: 'السبب مطلوب للرفض/الإرجاع.',
+};
 
 function url0(request) {
   const src = request.headers.get('origin') || request.headers.get('referer') || request.url;
