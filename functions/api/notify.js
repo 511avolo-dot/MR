@@ -64,6 +64,9 @@ async function verifyStaff(env, base, jwt) {
     const u = await r.json();
     if (!u || !u.email) return null;
     const email = String(u.email).toLowerCase();
+    // الهوية تُشتق من بريد الجلسة؛ نقصرها على نطاق الشركة الموثّق حتى لا يُنتحَل
+    // اسمُ موظفٍ عبر حسابٍ بريده الجزءُ المحلّي منه يطابق اسم مستخدم (سدّ ثغرة صلاحية).
+    if (!/@aldeyabi\.com$/i.test(email)) return null;
     const uname = emailToUsername(email);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
     const enc = encodeURIComponent;
@@ -121,7 +124,10 @@ export async function onRequestPost({ request, env }) {
         // الاعتماد النهائي: بريد للطالب + بريد لفريق المشتريات (طلب جاهز للمعالجة).
         const r1 = await prNotifyResult(env, base, pr, 'approved', origin, comment);
         const r2 = await prNotifyProcurement(env, base, pr, origin);
-        res = { ok: true, sent: ((r1 && r1.sent) || 0) + ((r2 && r2.sent) || 0) };
+        const aerr = (r1 && r1.error) || (r2 && r2.error);
+        res = aerr
+          ? { error: true, detail: (r1 && r1.detail) || (r2 && r2.detail) || '' }
+          : { ok: true, sent: ((r1 && r1.sent) || 0) + ((r2 && r2.sent) || 0) };
       } else {
         // بريد نتيجة لمُقدّم الطلب (رُفض/أُعيد/استُلم).
         res = await prNotifyResult(env, base, pr, ev, origin, comment);
@@ -374,8 +380,12 @@ function renderRevisionBox(rev) {
   </div>`;
 }
 function fillVars(t, v) {
+  // مُستبدِلات دالّية: تُدرِج القيمة حرفياً وتتفادى تأويل عميل البريد لرموز مثل $& أو $1
+  // إن وردت ضمن اسم منشأة (تشويه نصّي سابق).
   return String(t == null ? '' : t)
-    .replace(/\{name_en\}/g, v.name_en).replace(/\{name\}/g, v.name).replace(/\{id\}/g, v.id);
+    .replace(/\{name_en\}/g, () => (v.name_en == null ? '' : String(v.name_en)))
+    .replace(/\{name\}/g, () => (v.name == null ? '' : String(v.name)))
+    .replace(/\{id\}/g, () => (v.id == null ? '' : String(v.id)));
 }
 function paragraphs(text, style) {
   return String(text || '').split(/\n{2,}/).filter(s => s.trim() !== '')

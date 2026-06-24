@@ -16,7 +16,7 @@
  * نقطة النهاية:
  *   GET  /api/admin-users   → فحص التوفّر { ok: true }
  *   POST /api/admin-users   → { action, ... }
- *     action: "create" | "setPassword" | "setActive" | "delete"
+ *     action: "create" | "setPassword" | "setActive" | "setProfile" | "delete"
  */
 
 const AUTH_EMAIL_DOMAIN = 'aldeyabi.com';
@@ -190,6 +190,31 @@ export async function onRequestPost({ request, env }) {
       await api.updateAuthUser(u.id, { ban_duration: active ? 'none' : '876000h' });
     }
     await api.restWrite('PATCH', `proc_users?username=eq.${encodeURIComponent(username)}`, { active: !!active });
+    return json({ ok: true });
+  }
+
+  if (action === 'setProfile') {
+    // تحديث حقول الملف التعريفي الحسّاسة (الصلاحيات/التفويض/الإجازة/البريد) بصلاحية
+    // الخادم فقط بعد التحقّق من أن المستدعي مدير — لا تُكتب هذه الحقول مباشرةً من المتصفح
+    // (سدّ مسار رفع صلاحية: منع مستخدم عادي من منح نفسه صلاحية أو تحويل تفويض معتمِد).
+    const { username } = payload;
+    if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
+    const patch = {};
+    if ('permissions' in payload) {
+      const p = payload.permissions;
+      if (p === null || (typeof p === 'object' && !Array.isArray(p))) patch.permissions = p || {};
+      else return json({ error: 'صيغة الصلاحيات غير صالحة' }, 400);
+    }
+    if ('delegate_to' in payload) patch.delegate_to = payload.delegate_to ? String(payload.delegate_to) : null;
+    if ('is_away' in payload) patch.is_away = !!payload.is_away;
+    if ('email' in payload) {
+      const e = String(payload.email || '').trim().toLowerCase();
+      if (e && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(e)) return json({ error: 'البريد يجب أن يكون ضمن @aldeyabi.com' }, 400);
+      patch.email = e || null;
+    }
+    if (!Object.keys(patch).length) return json({ error: 'لا تغييرات' }, 400);
+    const r = await api.restWrite('PATCH', `proc_users?username=eq.${encodeURIComponent(username)}`, patch);
+    if (!r.ok) return json({ error: 'تعذّر حفظ التغييرات' }, 400);
     return json({ ok: true });
   }
 
