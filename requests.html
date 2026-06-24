@@ -1188,15 +1188,15 @@ async function emailDiag(){
   // 1) هل البريد مُهيّأ على الخادم؟
   try{
     const g=await fetch('/api/notify'); const gd=await g.json().catch(()=>({}));
-    if(gd.ok){ html+=line(true,'إعدادات البريد على الخادم: مضبوطة (RESEND_API_KEY / NOTIFY_FROM / مفتاح الخدمة).'); }
-    else{ html+=line(false,'إعدادات البريد غير مكتملة على Cloudflare — أضِف: RESEND_API_KEY و NOTIFY_FROM و SUPABASE_SERVICE_ROLE_KEY و SUPABASE_URL.'); if(out)out.innerHTML=html; return; }
+    if(gd.ok){ html+=line(true,'إعدادات البريد على الخادم: مضبوطة (RESEND_API_KEY / مفتاح الخدمة). المُرسِل من النطاق الموثّق suppliers.aldeyabi.com تلقائياً.'); }
+    else{ html+=line(false,'إعدادات البريد غير مكتملة على Cloudflare — أضِف: RESEND_API_KEY و SUPABASE_SERVICE_ROLE_KEY و SUPABASE_URL.'); if(out)out.innerHTML=html; return; }
   }catch(e){ html+=line(false,'تعذّر الوصول إلى /api/notify — تحقّق من النشر.'); if(out)out.innerHTML=html; return; }
   // 2) إرسال رسالة تجريبية فعلية إلى بريد المستخدم الحالي
   try{
     const r=await fetch('/api/notify',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({event:'test',status:'received'})});
     const d=await r.json().catch(()=>({}));
     if(r.ok && d.sent){ html+=line(true,'تم إرسال رسالة تجريبية إلى '+(d.to||usernameToEmail(ME.username))+' — افحص بريدك (وصندوق المهملات).'); }
-    else if(d.error){ html+=line(false,'رفض الخادم الإرسال: '+(d.error)+(d.detail?(' — '+d.detail):'')); html+=`<div class="muted" style="margin-top:6px">إن ذُكر «domain» أو «not verified»: فعّل نطاق <b>aldeyabi.com</b> في Resend (DNS) واجعل <b>NOTIFY_FROM</b> من نفس النطاق.</div>`; }
+    else if(d.error){ html+=line(false,'رفض الخادم الإرسال: '+(d.error)+(d.detail?(' — '+d.detail):'')); html+=`<div class="muted" style="margin-top:6px">إن ذُكر «domain» أو «not verified»: تأكّد أن نطاق <b>suppliers.aldeyabi.com</b> حالته <b>Verified</b> في Resend. المُرسِل يُضبط تلقائياً على هذا النطاق.</div>`; }
     else if(d.skipped){ html+=line(false,'تخطّى الإرسال — السبب: '+(d.reason||'غير معروف')); }
     else if(r.status===403){ html+=line(false,'غير مصرّح — حسابك ليس مُفعّلاً كموظف في proc_users، أو لا يُطابق البريد.'); }
     else{ html+=line(false,'رد غير متوقّع ('+r.status+').'); }
