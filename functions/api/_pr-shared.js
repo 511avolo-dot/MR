@@ -39,14 +39,19 @@ export const svcHeaders = (env) => ({
   'Content-Type': 'application/json',
 });
 
-// رمز عشوائي 256-بت بترميز base62 (يُولّد على الخادم فقط).
+// رمز عشوائي ~256-بت بترميز base62 (يُولّد على الخادم فقط).
+// عيّنة-رفض (نتجاهل البايتات ≥ 248) لإزالة انحياز القسمة تماماً؛ 43 رمزاً ≈ 256 بت.
 export function genToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
   const A = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-  let s = '';
-  for (const b of bytes) s += A[b % 62];
-  return s;
+  const out = [];
+  const buf = new Uint8Array(64);
+  while (out.length < 43) {
+    crypto.getRandomValues(buf);
+    for (let i = 0; i < buf.length && out.length < 43; i++) {
+      if (buf[i] < 248) out.push(A[buf[i] % 62]);
+    }
+  }
+  return out.join('');
 }
 
 // مدّة صلاحية الرمز (افتراضي 7 أيام) — قابلة للضبط عبر env.PR_TOKEN_TTL_HOURS.
@@ -325,55 +330,11 @@ export async function notifyProcurement(env, base, pr, origin) {
   return sendResend(env, toList, `طلب معتمد جاهز للمشتريات — طلب ${pr.id} | مجموعة الذيابي`, html);
 }
 
-/**
- * تنفيذ قرار من داخل البريد عبر رمز موقّع — بصلاحية الخادم حصراً.
- *  يتحقّق: الرمز موجود/غير مستخدَم/غير منتهٍ، والطلب قيد المراجعة،
- *  ومرحلة الرمز هي المرحلة المعلّقة الحالية. ثم ينفّذ الانتقال ويُبطل الرمز.
- *  يُعيد {ok, status, pr, finalized} أو {error, code}.
- */
-export async function applyAction(env, base, tokenRow, action, comment) {
-  const pr = await loadPR(env, base, tokenRow.pr_id);
-  if (!pr) return { error: 'الطلب غير موجود', code: 404 };
-  if (pr.status !== 'in_review') return { error: 'لم يعد الطلب قيد المراجعة', code: 409 };
-  const approvals = await loadApprovals(env, base, pr.id);
-  const stage = currentPendingStage(approvals);
-  if (!stage || stage.seq !== tokenRow.seq) return { error: 'هذه المرحلة لم تعد بانتظار قرارك', code: 409 };
-  const decision = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'returned';
-  if (!['approved', 'rejected', 'returned'].includes(decision)) return { error: 'إجراء غير صالح', code: 400 };
-  if ((action === 'reject' || action === 'return') && !String(comment || '').trim()) return { error: 'السبب مطلوب', code: 400 };
+// ملاحظة: تنفيذ قرار البريد انتقل بالكامل إلى دالة قاعدة البيانات pr_transition_email
+// (معاملة ذرّية واحدة: استهلاك الرمز + إعادة التحقّق من المعتمِد + الانتقال). لم يعد
+// هناك مسار كتابة يدوي بصلاحية الخادم — استدعاؤها في functions/api/pr-action.js.
 
-  const pending = approvals.filter((a) => a.decision === 'pending').sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  const isLast = pending.length <= 1;
-  let newStatus = pr.status, newSeq = pr.current_seq;
-  if (action === 'approve') { if (isLast) newStatus = 'approved'; else newSeq = pending[1].seq; }
-  else if (action === 'reject') newStatus = 'rejected';
-  else { newStatus = 'returned'; newSeq = 0; }
-  const now = new Date().toISOString();
-
-  // 1) سجّل القرار على صفّ المرحلة
-  let r = await fetch(`${base}/rest/v1/proc_pr_approvals?pr_id=eq.${encodeURIComponent(pr.id)}&seq=eq.${stage.seq}`, {
-    method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' },
-    body: JSON.stringify({ decision, approver: tokenRow.approver, comment: comment || null, acted_at: now, channel: 'email' }),
-  });
-  if (!r.ok) return { error: 'تعذّر تسجيل القرار', code: 502 };
-  // 2) حدّث رأس الطلب
-  r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(pr.id)}`, {
-    method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' },
-    body: JSON.stringify({ status: newStatus, current_seq: newSeq, updated_at: now, updated_by: tokenRow.approver }),
-  });
-  if (!r.ok) return { error: 'تعذّر تحديث الطلب', code: 502 };
-  // 3) أبطل الرمز (لمرة واحدة)
-  try {
-    await fetch(`${base}/rest/v1/proc_email_tokens?token=eq.${encodeURIComponent(tokenRow.token)}`, {
-      method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' },
-      body: JSON.stringify({ used: true, used_at: now }),
-    });
-  } catch (_) {}
-
-  return { ok: true, action, decision, status: newStatus, finalized: newStatus !== 'in_review', isLast, pr };
-}
-
-// قراءة رمز (بصلاحية الخادم) مع التحقّق من الصلاحية الزمنية والاستخدام.
+// قراءة رمز (بصلاحية الخادم) مع التحقّق من الصلاحية الزمنية والاستخدام (للعرض في صفحة GET فقط).
 export async function readToken(env, base, token) {
   if (!token || !/^[0-9A-Za-z]{16,128}$/.test(token)) return { error: 'رمز غير صالح', code: 400 };
   const r = await fetch(`${base}/rest/v1/proc_email_tokens?token=eq.${encodeURIComponent(token)}&select=token,pr_id,seq,approver,used,used_at,expires_at`, { headers: svcHeaders(env) });
