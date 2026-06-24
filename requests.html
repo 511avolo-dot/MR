@@ -511,7 +511,7 @@ function render(){
   const tabs=[['create','create','رفع طلب'],['mine','mine','طلباتي']];
   if(isApprover()) tabs.push(['inbox','inbox','بانتظار اعتمادي'+(inbox.length?` <span class="cnt">${inbox.length}</span>`:'')]);
   if(isApprover()) tabs.push(['dash','dash','لوحة المعلومات']);
-  if(isPortalAdmin()) tabs.push(['settings','settings','لوحة التحكّم']);
+  if(isPortalAdmin()){ const pend=(USERS||[]).filter(u=>u.active===false).length; tabs.push(['settings','settings','لوحة التحكّم'+(pend?` <span class="cnt">${pend}</span>`:'')]); }
   $('tabs').innerHTML = tabs.map(([k,icn,l])=>`<button class="tab${VIEW===k?' active':''}" onclick="go('${k}')">${ic(icn,16)}<span>${l}</span></button>`).join('')
     + `<button class="tab tab-refresh" style="margin-inline-start:auto" onclick="refresh()" title="تحديث">${ic('refresh',15)}</button>`;
   const v=$('view');
@@ -900,7 +900,8 @@ function ocrApply(o){
 /* ════════════════════ لوحة التحكّم والإعدادات ════════════════════ */
 function setGo(t){ SET_TAB=t; RULE_DRAFT=null; render(); }
 function settingsHTML(){
-  const sub=[['workflow','🔀 سير الموافقات'],['depts','🏢 الأقسام'],['users','👤 المستخدمون'],['general','🛠️ عام']];
+  const pend=(USERS||[]).filter(u=>u.active===false).length;
+  const sub=[['workflow','🔀 سير الموافقات'],['depts','🏢 الأقسام'],['users','👤 المستخدمون'+(pend?` <span class="cnt">${pend}</span>`:'')],['general','🛠️ عام']];
   const bar=`<div class="subtabs">${sub.map(([k,l])=>`<button class="subtab${SET_TAB===k?' active':''}" onclick="setGo('${k}')">${l}</button>`).join('')}</div>`;
   let body='';
   if(SET_TAB==='depts') body=deptsHTML();
