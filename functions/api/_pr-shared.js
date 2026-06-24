@@ -23,6 +23,18 @@ export function esc(s) {
 
 // خريطة بريد↔مستخدم (تطابق notify.js / admin-users.js / index.html)
 export const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'supply@aldeyabi.com', mahmoud: 'mahmoud@aldeyabi.com' };
+
+// النطاق الموثّق للإرسال في Resend (Verified sending domain). يجب أن يكون عنوان
+// المُرسِل من هذا النطاق وإلا يرفض Resend الإرسال.
+export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
+export const DEFAULT_FROM = `طلبات الذيابي <noreply@${SENDER_DOMAIN}>`;
+// عنوان المُرسِل: نستخدم NOTIFY_FROM فقط إذا كان من النطاق الموثّق؛ وإلا الافتراضي الصحيح
+// (يضمن الإرسال حتى لو بقي NOTIFY_FROM على النطاق القديم @aldeyabi.com أو فارغاً).
+export function fromAddress(env) {
+  const f = String((env && env.NOTIFY_FROM) || '').trim();
+  return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+}
+
 export const emailToUsername = (email) => {
   const e = String(email || '').toLowerCase();
   for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
@@ -140,7 +152,7 @@ export async function sendResend(env, toList, subject, html) {
   if (!to.length) return { skipped: true, reason: 'no_recipient' };
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: env.NOTIFY_FROM, to, subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
+    body: JSON.stringify({ from: fromAddress(env), to, subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); return { error: true, status: r.status, detail: t.slice(0, 300) }; }
   return { ok: true, sent: to.length };

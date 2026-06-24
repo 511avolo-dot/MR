@@ -8,7 +8,8 @@
  *   SUPABASE_URL                رابط مشروع Supabase
  *   SUPABASE_SERVICE_ROLE_KEY   مفتاح service_role (سرّ — لقراءة بريد المتقدّم فقط)
  *   RESEND_API_KEY              مفتاح Resend (https://resend.com) لإرسال البريد
- *   NOTIFY_FROM                 المُرسِل، مثل: "موردو الذيابي <noreply@aldeyabi.com>"
+ *   NOTIFY_FROM (اختياري)       المُرسِل من النطاق الموثّق، مثل: "طلبات الذيابي <noreply@suppliers.aldeyabi.com>"
+ *                               (إن لم يُضبط أو كان من نطاق غير موثّق، يستخدم الكود مُرسِلاً افتراضياً صحيحاً)
  *   NOTIFY_REPLY_TO (اختياري)   بريد الرد، مثل supply@aldeyabi.com
  *
  * الأمان (لا مُرسِل مفتوح / no open relay):
@@ -19,7 +20,7 @@
  *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
  */
 
-import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement } from './_pr-shared.js';
+import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress } from './_pr-shared.js';
 
 const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
 
@@ -39,8 +40,9 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// NOTIFY_FROM لم يعد إلزامياً: للكود مُرسِل افتراضي صحيح من النطاق الموثّق (fromAddress).
 const emailConfigured = (env) =>
-  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY && env.NOTIFY_FROM);
+  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY);
 
 // خريطة بريد→مستخدم (تطابق index.html / admin-users.js)
 const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'supply@aldeyabi.com', mahmoud: 'mahmoud@aldeyabi.com' };
@@ -156,7 +158,7 @@ export async function onRequestPost({ request, env }) {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: env.NOTIFY_FROM, to: [staffEmail], subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
+        body: JSON.stringify({ from: fromAddress(env), to: [staffEmail], subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
       });
       if (!r.ok) { const t = await r.text().catch(() => ''); return json({ error: 'تعذّر إرسال البريد التجريبي', detail: t.slice(0, 300) }, 502); }
       return json({ ok: true, sent: true, to: staffEmail });
@@ -277,7 +279,7 @@ export async function onRequestPost({ request, env }) {
   // أرسل عبر Resend
   try {
     const body = {
-      from: env.NOTIFY_FROM,
+      from: fromAddress(env),
       to: [to],
       subject,
       html,
