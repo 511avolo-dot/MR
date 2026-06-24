@@ -268,14 +268,14 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   // فصل المهام: لا تُرسل رمز اعتماد لمُقدّم الطلب نفسه.
   approvers = [...new Set(approvers.filter((u) => u && u !== pr.requester))];
   if (!approvers.length) return { skipped: true, reason: 'no_approver' };
-  let sent = 0;
+  let sent = 0, failed = 0, lastDetail = '';
   for (const uname of approvers) {
     const email = await userEmail(env, base, uname);
     if (!/@aldeyabi\.com$/i.test(email)) continue;
     let html;
     if (origin) {
       const token = await createToken(env, base, pr.id, stage.seq, uname);
-      if (!token) continue;
+      if (!token) { failed++; continue; }
       const actionBase = `${origin}/api/pr-action?token=${encodeURIComponent(token)}`;
       html = buildActionEmail(pr, origin, actionBase, stage.stage_label);
     } else {
@@ -283,7 +283,11 @@ export async function notifyPending(env, base, pr, approvals, origin) {
     }
     const res = await sendResend(env, [email], subjectFor('pending', pr), html);
     if (res && res.ok) sent += res.sent;
+    else if (res && res.error) { failed++; lastDetail = res.detail || ''; }
   }
+  // إن فشلت كل المحاولات ولم يُرسَل أيّ بريد للمعتمِدين: أبلغ بالخطأ بدل ادّعاء النجاح
+  // (حتى لا يبقى الطلب عالقاً بصمت بانتظار اعتماد لم يصل بريده).
+  if (sent === 0 && failed > 0) return { error: true, detail: lastDetail || 'all_sends_failed' };
   return { ok: true, sent };
 }
 

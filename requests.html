@@ -1127,27 +1127,27 @@ async function userAdd(){
   try{ await adminApi({action:'create',username,displayName,password,email:email||undefined,role:'user',permissions,active:true}); toast('أُنشئ الحساب','ok'); await loadAdminData(); render(); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
+// كل تعديلات الملف التعريفي الحسّاسة تمرّ عبر /api/admin-users (تحقّق مدير + صلاحية خادم)،
+// لا عبر كتابة مباشرة من المتصفح؛ ولا نُحدِّث الحالة المحلّية إلا بعد تأكيد الخادم.
 async function userSetEmail(username,email){
   const e=String(email||'').trim().toLowerCase();
   if(e && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(e)){ toast('البريد يجب أن يكون ضمن @aldeyabi.com','err'); return; }
-  const u=USERS.find(x=>x.username===username);
-  try{ const er=(await SB.from('proc_users').update({email:e||null}).eq('username',username)).error; if(er)throw er; if(u)u.email=e||null; toast('حُدّث البريد','ok'); }
+  try{ await adminApi({action:'setProfile',username,email:e}); const u=USERS.find(x=>x.username===username); if(u)u.email=e||null; toast('حُدّث البريد','ok'); }
   catch(err){ toast('تعذّر: '+(err.message||''),'err'); }
 }
 async function userPerm(username,key,on){
-  const u=USERS.find(x=>x.username===username); if(!u)return; u.permissions=u.permissions||{}; u.permissions[key]=on;
-  try{ const e=(await SB.from('proc_users').update({permissions:u.permissions}).eq('username',username)).error; if(e)throw e; toast('حُدّثت الصلاحية','ok'); }
-  catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
+  const u=USERS.find(x=>x.username===username); if(!u)return;
+  const perms=Object.assign({},u.permissions||{}); perms[key]=on;
+  try{ await adminApi({action:'setProfile',username,permissions:perms}); u.permissions=perms; toast('حُدّثت الصلاحية','ok'); }
+  catch(e){ toast('تعذّر: '+(e.message||''),'err'); render(); }
 }
 async function userDeleg(username,to){
-  const u=USERS.find(x=>x.username===username);
-  try{ const e=(await SB.from('proc_users').update({delegate_to:to||null}).eq('username',username)).error; if(e)throw e; if(u)u.delegate_to=to||null; toast('حُدّث المفوَّض','ok'); }
+  try{ await adminApi({action:'setProfile',username,delegate_to:to||null}); const u=USERS.find(x=>x.username===username); if(u)u.delegate_to=to||null; toast('حُدّث المفوَّض','ok'); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
 async function userAway(username,on){
-  const u=USERS.find(x=>x.username===username);
-  try{ const e=(await SB.from('proc_users').update({is_away:!!on}).eq('username',username)).error; if(e)throw e; if(u)u.is_away=!!on; toast(on?'وُضع في إجازة':'أُلغيت الإجازة','ok'); render(); }
-  catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
+  try{ await adminApi({action:'setProfile',username,is_away:!!on}); const u=USERS.find(x=>x.username===username); if(u)u.is_away=!!on; toast(on?'وُضع في إجازة':'أُلغيت الإجازة','ok'); render(); }
+  catch(e){ toast('تعذّر: '+(e.message||''),'err'); render(); }
 }
 async function userReset(username){ const p=prompt('كلمة المرور الجديدة (6 أحرف على الأقل):',''); if(p===null)return; if(p.length<6){toast('قصيرة جداً','err');return;} try{ await adminApi({action:'setPassword',username,password:p}); toast('غُيّرت كلمة المرور','ok'); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); } }
 async function userActive(username,on){ try{ await adminApi({action:'setActive',username,active:on}); toast(on?'فُعّل':'عُطّل','ok'); await loadAdminData(); render(); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); } }

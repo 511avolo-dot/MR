@@ -3150,10 +3150,12 @@ function prefillForm(data) {
     if (!el && val != null) console.warn('[prefillForm] field not found:', id);
     if (el && val != null) el.value = val;
   };
-  // Entity type radio
-  if (data.entity_type && ['individual','company','partnership','government'].includes(data.entity_type)) {
-    const radio = document.querySelector(`input[name=entity][value="${data.entity_type}"]`);
-    if (radio) radio.checked = true;
+  // Entity type radio — القيمة المخزَّنة عربية (نفس نصّ قيمة الراديو تماماً)، فنطابقها
+  // مباشرةً بدل قائمة سلاگ إنجليزية لا تطابق شيئاً (كانت تُفقِد نوع الكيان عند الاستئناف).
+  if (data.entity_type != null && String(data.entity_type) !== '') {
+    document.querySelectorAll('input[name=entity]').forEach(r => {
+      if (r.value === String(data.entity_type)) r.checked = true;
+    });
   }
   setVal('f-legal-ar', data.legal_name_ar);
   setVal('f-legal-en', data.legal_name_en);
@@ -3959,15 +3961,8 @@ async function submitForm() {
         uploadFailures.push(docData.name); continue;
       }
       try {
-        // نظّف أي ملفات سابقة لنفس الوثيقة (إعادة إرسال/استبدال) لتفادي تراكم ملفات يتيمة.
-        // يقتصر على وثائق رُفعت حديثاً فقط؛ وثائق وضع التعديل غير المعدَّلة لا تُمسّ.
-        try {
-          const folder = `${regId}/${docId}`;
-          const { data: existing } = await SB.storage.from(BUCKET).list(folder);
-          if (existing && existing.length) {
-            await SB.storage.from(BUCKET).remove(existing.map(f => `${folder}/${f.name}`)).catch(()=>{});
-          }
-        } catch(_) {}
+        // ترتيب غير مُتلِف: ارفع الملف الجديد أولاً، ثم احذف النسخ القديمة بعد نجاح الرفع.
+        // (الترتيب العكسي كان يحذف القديم ثم يفشل الرفع فيضيع الملف ويبقى المرجع معطوباً.)
         const path = `${regId}/${docId}/${Date.now()}.${ext}`;
         const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
           contentType: realType,   // النوع المُتحقَّق من التوقيع الفعلي، لا المُعلَن
@@ -3975,10 +3970,22 @@ async function submitForm() {
         });
         if (error) throw error;
         docPaths[docId] = path;
+        // بعد نجاح الرفع فقط: نظّف أي نسخ سابقة لنفس الوثيقة (عدا الملف الجديد) لتفادي التراكم.
+        try {
+          const folder = `${regId}/${docId}`;
+          const { data: existing } = await SB.storage.from(BUCKET).list(folder);
+          if (existing && existing.length) {
+            const stale = existing.map(f => `${folder}/${f.name}`).filter(p => p !== path);
+            if (stale.length) await SB.storage.from(BUCKET).remove(stale).catch(()=>{});
+          }
+        } catch(_) {}
       } catch(e) {
+        // فشل رفع وثيقة رُفعت حديثاً: لا تُبقِ المسار القديم (قد يكون حُذف أو لم يعُد ممثِّلاً
+        // للملف الجديد) كي يلتقطها فحص النواقص أدناه بدل إرسال الطلب بمرجع وثيقة قديمة.
+        delete docPaths[docId];
         const isBucket = /bucket/i.test(e.message || '');
         const msg = isBucket
-          ? `تعذر رفع "${docData.name}" — مخزن الملفات غير مُعدّ. سيتم إرسال الطلب بدون هذا الملف.`
+          ? `تعذر رفع "${docData.name}" — مخزن الملفات غير مُعدّ. يرجى إعادة المحاولة.`
           : `تعذر رفع "${docData.name}" — ${e.message}`;
         toast('warn', msg);
         uploadFailures.push(docData.name);
