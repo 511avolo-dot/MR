@@ -67,21 +67,20 @@ async function verifyStaff(env, base, jwt) {
     const uname = emailToUsername(email);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
     const enc = encodeURIComponent;
-    let rows = null;
-    // أفضّل المطابقة بالبريد المخزَّن (لمستخدمي التسجيل الذاتي) — تتطلب وجود عمود email.
+    let prof = null;
+    // 1) مطابقة بالبريد المخزَّن (لمستخدمي التسجيل الذاتي) — تُتجاهَل بهدوء إن لم يوجد عمود email.
     try {
-      const a = await fetch(`${base}/rest/v1/proc_users?or=(email.eq.${enc(email)},username.eq.${enc(uname)})&select=username,role,active,email`, { headers: svc });
-      if (a.ok) rows = await a.json();
+      const a = await fetch(`${base}/rest/v1/proc_users?email=eq.${enc(email)}&select=username,role,active`, { headers: svc });
+      if (a.ok) { const rows = await a.json(); if (Array.isArray(rows) && rows[0]) prof = rows[0]; }
     } catch (_) {}
-    // احتياط (قبل ترقية المخطّط/عمود email): المطابقة باسم المستخدم فقط — كي لا تتعطّل الإشعارات.
-    if (!Array.isArray(rows)) {
+    // 2) احتياط دائم: مطابقة باسم المستخدم بلا حساسية لحالة الأحرف (ilike) — تُصلح فروق الحالة.
+    if (!prof) {
       const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
       const b = await fetch(`${base}/rest/v1/proc_users?username=ilike.${enc(safe)}&select=username,role,active`, { headers: svc });
       if (!b.ok) return null;
-      rows = await b.json();
+      const rows = await b.json();
+      prof = (rows || []).find((x) => String(x.username).toLowerCase() === uname.toLowerCase()) || null;
     }
-    const prof = (rows || []).find((x) => String(x.email || '').toLowerCase() === email)
-      || (rows || []).find((x) => String(x.username).toLowerCase() === String(uname).toLowerCase());
     return (prof && prof.active !== false) ? String(u.email) : null;
   } catch (_) { return null; }
 }
