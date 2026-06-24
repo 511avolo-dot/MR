@@ -18,7 +18,7 @@ import {
 } from './_pr-shared.js';
 
 const emailConfigured = (env) =>
-  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY && env.NOTIFY_FROM);
+  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY);
 
 const ACTIONS = { approve: ['اعتماد الطلب', '#16a34a', '✓'], return: ['إرجاع الطلب للتعديل', '#2563eb', '↩'], reject: ['رفض الطلب', '#dc2626', '✕'] };
 
