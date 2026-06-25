@@ -88,6 +88,21 @@ async function verifyStaff(env, base, jwt) {
   } catch (_) { return { ok: false, reason: 'خطأ غير متوقّع أثناء التحقّق' }; }
 }
 
+// تحقّق أخفّ: جلسة Supabase صالحة فقط (دون اشتراط مطابقة سجلّ الموظفين).
+// يُستخدم لبريد تغيّر حالة طلب التسجيل: شرعيّته مضمونة أصلاً لأن الحالة في القاعدة
+// تكون قد تغيّرت بمُراجِع مُصرّح (محميّة بـRLS/can_review_registrations) والخادم يعيد
+// التأكّد من تطابق الحالة قبل الإرسال — فلا حاجة لمطابقة الاسم/البريد الصارمة التي قد
+// ترفض موظفاً حقيقياً بسبب اختلاف بريد الدخول عن سجلّه.
+async function verifySession(env, base, jwt) {
+  try {
+    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` } });
+    if (!r.ok) return { ok: false, reason: 'جلسة الدخول غير صالحة أو منتهية — سجّل الخروج ثم الدخول مجدداً' };
+    const u = await r.json();
+    if (!u || !u.email) return { ok: false, reason: 'لا يوجد بريد في جلسة الدخول' };
+    return { ok: true, email: String(u.email) };
+  } catch (_) { return { ok: false, reason: 'خطأ أثناء التحقّق من الجلسة' }; }
+}
+
 export async function onRequestGet({ env }) {
   return json({ ok: emailConfigured(env) });
 }
@@ -181,7 +196,8 @@ export async function onRequestPost({ request, env }) {
   if (event !== 'received') {
     const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
-    const vsReg = await verifyStaff(env, base, jwt);
+    // بريد حالة التسجيل: يكفي جلسة صالحة (الشرعية مضمونة بتغيّر الحالة المحمي + إعادة فحص التطابق).
+    const vsReg = await verifySession(env, base, jwt);
     if (!vsReg.ok) return json({ error: 'غير مصرّح', detail: vsReg.reason }, 403);
   }
   const headers = {
