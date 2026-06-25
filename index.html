@@ -21534,21 +21534,42 @@ async function notifyRegEmail(id, event) {
   try {
     let token = null;
     try { const { data } = await CLOUD.client.auth.getSession(); token = data?.session?.access_token || null; } catch (_) {}
+    // بلا جلسة سحابية صالحة لا يمكن للخادم التحقّق من صلاحية الموظف → لا يُرسَل البريد.
+    // نُظهر السبب بدل الصمت (الدخول المحلي/المنتهي لا يصدر رمزاً يقبله الخادم).
+    if (!token) {
+      toast('warn', 'لم يُرسَل بريد الإشعار', 'لا توجد جلسة دخول سحابية صالحة — سجّل الخروج ثم الدخول مجدداً.');
+      return;
+    }
     const r = await fetch('/api/notify', {
       method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { 'Authorization': 'Bearer ' + token } : {}),
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({ id, event })
     });
     const d = await r.json().catch(() => ({}));
-    // تأكيد للمراجِع عند نجاح الإرسال؛ صامت إن لم يُفعّل البريد بعد (لا إزعاج)
-    if (d && d.ok && d.sent) toast('info', 'تم إشعار المورد', 'أُرسلت رسالة بريد بالحالة الجديدة');
+    if (d && d.ok && d.sent) {
+      toast('info', 'تم إشعار المورد', 'أُرسلت رسالة بريد بالحالة الجديدة');
+    } else if (d && d.skipped) {
+      // تخطٍّ مقصود من الخادم — نوضّح السبب كي لا يظنّ المراجِع أن البريد وصل.
+      const why = d.reason === 'no_recipient'        ? 'لا يوجد بريد للمورد في هذا الطلب'
+                : d.reason === 'status_mismatch'      ? 'حالة الطلب لا تطابق الإشعار — أعِد فتح الطلب وحاول ثانيةً'
+                : d.reason === 'email_not_configured' ? 'البريد غير مُهيّأ على الخادم'
+                : ('تخطّى الإرسال: ' + (d.reason || 'غير معروف'));
+      toast('warn', 'لم يُرسَل بريد الإشعار', why);
+    } else {
+      // خطأ صريح (غير مصرّح / فشل Resend / غير ذلك) — نعرضه مع التلميح للتشخيص.
+      const why = (d && d.error) ? String(d.error) : ('رمز الرد ' + r.status);
+      const det = (d && d.detail) ? (' — ' + d.detail) : '';
+      toast('warn', 'لم يُرسَل بريد الإشعار', why + det);
+    }
     // سجّل نتيجة الإشعار على الطلب ليراها المراجِع لاحقاً في التفاصيل (يتطلب عمود last_notify)
     const rec = { event, at: new Date().toISOString(), sent: !!(d && d.ok && d.sent), to: (d && d.to) || null, reason: (d && (d.reason || d.error)) || null };
     try {
       await CLOUD.client.from(REG_TABLE).update({ last_notify: rec }).eq('id', id);
       if (_regDetailCurrent && _regDetailCurrent.id === id) _regDetailCurrent.last_notify = rec;
     } catch (_) {}
-  } catch (_) {}
+  } catch (e) {
+    toast('warn', 'تعذّر إرسال بريد الإشعار', (e && e.message) || 'خطأ في الاتصال');
+  }
 }
 
 async function approveRegistration(reg) {
