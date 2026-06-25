@@ -2423,17 +2423,17 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
         </div>
         <div class="field">
           <label>تاريخ الإصدار</label>
-          <input type="date" id="f-cr-issue" dir="ltr">
+          <input type="date" id="f-cr-issue" dir="ltr" lang="en-GB">
         </div>
         <div class="field">
           <label>تاريخ الانتهاء</label>
-          <input type="date" id="f-cr-expiry" dir="ltr">
+          <input type="date" id="f-cr-expiry" dir="ltr" lang="en-GB">
         </div>
       </div>
       <div class="form-row">
         <div class="field">
           <label>تاريخ التأسيس (ميلادي)</label>
-          <input type="date" id="f-est-date" dir="ltr">
+          <input type="date" id="f-est-date" dir="ltr" lang="en-GB">
         </div>
         <div class="field">
           <label>تاريخ التأسيس (هجري) <span class="opt">(إن وجد)</span></label>
@@ -2454,7 +2454,7 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
         </div>
         <div class="field">
           <label>تاريخ انتهاء العضوية</label>
-          <input type="date" id="f-chamber-exp" dir="ltr">
+          <input type="date" id="f-chamber-exp" dir="ltr" lang="en-GB">
         </div>
       </div>
 
@@ -3349,6 +3349,7 @@ async function setupSave() {
 function showMainForm() {
   document.getElementById('main-form').classList.remove('hidden');
   renderDocCards();
+  _applyExpiryMins();   // امنع اختيار تاريخ انتهاء ماضٍ (مستند منتهٍ)
   addServiceRow();
   initLang();   // طبّق اللغة المحفوظة (عربي افتراضياً) على النموذج بعد عرضه
   if (_trackId) openTracker(_trackId);   // فتح نافذة التتبّع تلقائياً عند القدوم من رابط البريد
@@ -3360,6 +3361,30 @@ function showMainForm() {
 function renderDocCards() {
   document.getElementById('docs-required').innerHTML = REQUIRED_DOCS.map(d => docCard(d, true)).join('');
   document.getElementById('docs-optional').innerHTML = OPTIONAL_DOCS.map(d => docCard(d, false)).join('');
+}
+
+// تاريخ اليوم بصيغة YYYY-MM-DD (لتقييد منتقي تاريخ الانتهاء بألا يكون في الماضي).
+function _todayISO() {
+  const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+// يمنع منتقي التاريخ من اختيار تاريخ انتهاء ماضٍ (مستند منتهٍ) — تدقيق فوري على مستوى الواجهة.
+function _applyExpiryMins() {
+  const today = _todayISO();
+  ['f-cr-expiry', 'f-chamber-exp'].forEach((id) => { const el = document.getElementById(id); if (el) el.min = today; });
+}
+// تدقيق نهائي: ترفض الإرسال إذا كان أي تاريخ انتهاء في الماضي (مستند منتهٍ) مع تسمية المستند.
+function _validateExpiryDates() {
+  const today = _todayISO();
+  const checks = [['f-cr-expiry', 'السجل التجاري'], ['f-chamber-exp', 'شهادة الغرفة التجارية']];
+  for (const [id, label] of checks) {
+    const v = (document.getElementById(id)?.value || '').trim();
+    if (v && v < today) {
+      toast('warn', `${label} منتهٍ (تاريخ الانتهاء ${v}). لا يمكن إرسال مستند منتهي الصلاحية — يرجى رفع نسخة سارية.`);
+      return false;
+    }
+  }
+  return true;
 }
 
 function docCard(d, required) {
@@ -3403,7 +3428,27 @@ function docDrop(event, docId) {
 }
 
 // يضبط/يستبدل ملف وثيقة — idempotent: لا يكرّر زر الحذف، ويزيل حالات «مرفوع مسبقاً/يحتاج تعديل».
+// حدود الملفات — تُفحَص فور الاختيار (لا عند الإرسال النهائي فقط) كي يصحّحها المورد مبكراً.
+const MAX_DOC_SIZE = 10 * 1024 * 1024; // ١٠ ميجابايت
+const ALLOWED_DOC_EXTS  = ['pdf','jpg','jpeg','png'];
+const ALLOWED_DOC_TYPES = ['application/pdf','image/jpeg','image/jpg','image/png'];
+function _validateDocFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (!ALLOWED_DOC_EXTS.includes(ext) || (file.type && !ALLOWED_DOC_TYPES.includes(file.type))) {
+    toast('warn', `"${file.name}" — نوع غير مقبول. المسموح: PDF أو JPG أو PNG فقط`);
+    return false;
+  }
+  if (file.size > MAX_DOC_SIZE) {
+    const mb = (file.size / 1048576).toFixed(1);
+    toast('warn', `"${file.name}" حجمه ${mb} ميجابايت ويتجاوز الحدّ (١٠ ميجابايت). يرجى ضغط الملف أو رفع نسخة أصغر — بياناتك محفوظة.`);
+    return false;
+  }
+  return true;
+}
+
 function _setDocFile(docId, file) {
+  // فحص فوري للحجم/النوع عند الاختيار؛ إن لم يطابق لا نُخزّنه فيُعيد المورد الاختيار دون فقد بياناته.
+  if (!_validateDocFile(file)) return;
   uploadedDocs[docId] = {file, name: file.name, size: file.size, path: null};
   const card = document.getElementById('dc-' + docId);
   card.classList.remove('already-uploaded', 'revision-needed');
@@ -3927,6 +3972,9 @@ async function submitForm() {
   if (!repName)  { toast('warn','يرجى إدخال اسم ممثل المنشأة المفوض بالتوقيع'); return; }
   if (!repTitle) { toast('warn','يرجى إدخال منصب ممثل المنشأة'); return; }
   if (!repId)    { toast('warn','يرجى إدخال رقم هوية / إقامة ممثل المنشأة'); return; }
+
+  // امنع إرسال مستند منتهي الصلاحية (تاريخ انتهاء في الماضي)
+  if (!_validateExpiryDates()) return;
 
   const btn = document.getElementById('submit-btn');
   if (!btn) return;
