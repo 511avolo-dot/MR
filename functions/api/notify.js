@@ -392,7 +392,7 @@ function paragraphs(text, style) {
     .map(p => `<p style="${style}">${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, origin) {
+export function buildEmail(event, row, id, resumeUrl, custom, revisionInfo, trackUrl, origin) {
   const nameAr = row.legal_name_ar || row.legal_name_en || 'المورد الكريم';
   const nameEn = row.legal_name_en || row.legal_name_ar || 'Valued Supplier';
   const D = DEFAULTS[event] || DEFAULTS.received;
