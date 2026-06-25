@@ -27,12 +27,20 @@ export const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'sup
 // النطاق الموثّق للإرسال في Resend (Verified sending domain). يجب أن يكون عنوان
 // المُرسِل من هذا النطاق وإلا يرفض Resend الإرسال.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-export const DEFAULT_FROM = `طلبات الذيابي <noreply@${SENDER_DOMAIN}>`;
+// مُرسِل غير «no-reply» (تحذير Resend: «no-reply» يقلّل الثقة ويرفع احتمال السبام).
+export const DEFAULT_FROM = `طلبات الذيابي <procurement@${SENDER_DOMAIN}>`;
+// عنوان ردّ حقيقي يستقبل الرسائل (نطاق الإرسال subdomain قد لا يستقبل) — يرفع ثقة صندوق الوارد.
+export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 // عنوان المُرسِل: نستخدم NOTIFY_FROM فقط إذا كان من النطاق الموثّق؛ وإلا الافتراضي الصحيح
 // (يضمن الإرسال حتى لو بقي NOTIFY_FROM على النطاق القديم @aldeyabi.com أو فارغاً).
 export function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();
   return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+}
+// عنوان الردّ: قيمة البيئة إن وُجدت، وإلا بريد حقيقي افتراضي (لا نترك الرسالة بلا Reply-To).
+export function replyTo(env) {
+  const r = String((env && env.NOTIFY_REPLY_TO) || '').trim();
+  return r || DEFAULT_REPLY_TO;
 }
 
 export const emailToUsername = (email) => {
@@ -152,7 +160,7 @@ export async function sendResend(env, toList, subject, html) {
   if (!to.length) return { skipped: true, reason: 'no_recipient' };
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAddress(env), to, subject, html, ...(env.NOTIFY_REPLY_TO ? { reply_to: env.NOTIFY_REPLY_TO } : {}) }),
+    body: JSON.stringify({ from: fromAddress(env), to, subject, html, reply_to: replyTo(env) }),
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); return { error: true, status: r.status, detail: t.slice(0, 300) }; }
   return { ok: true, sent: to.length };
