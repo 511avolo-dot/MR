@@ -57,35 +57,35 @@ const usernameToEmail = (u) => {
 };
 // تحقّق أن المستدعي موظف نشط (جلسة Supabase صالحة + سجل في proc_users).
 // يُعيد بريد الموظف عند النجاح (يُستخدم كمستقبِل للبريد التجريبي)، وإلا null.
+// يُعيد { ok:true, email } عند نجاح التحقّق، أو { ok:false, reason } مع سبب واضح
+// (يُعرض للمستدعي — وهو موظف مُصادَق — لتشخيص سبب الرفض بدل «غير مصرّح» المبهمة).
 async function verifyStaff(env, base, jwt) {
   try {
     const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` } });
-    if (!r.ok) return null;
+    if (!r.ok) return { ok: false, reason: 'الجلسة غير صالحة أو منتهية' };
     const u = await r.json();
-    if (!u || !u.email) return null;
+    if (!u || !u.email) return { ok: false, reason: 'لا يوجد بريد في جلسة الدخول' };
     const email = String(u.email).toLowerCase();
-    // الهوية تُشتق من بريد الجلسة؛ نقصرها على نطاق الشركة الموثّق حتى لا يُنتحَل
-    // اسمُ موظفٍ عبر حسابٍ بريده الجزءُ المحلّي منه يطابق اسم مستخدم (سدّ ثغرة صلاحية).
-    if (!/@aldeyabi\.com$/i.test(email)) return null;
-    const uname = emailToUsername(email);
     const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
-    const enc = encodeURIComponent;
-    let prof = null;
-    // 1) مطابقة بالبريد المخزَّن (لمستخدمي التسجيل الذاتي) — تُتجاهَل بهدوء إن لم يوجد عمود email.
-    try {
-      const a = await fetch(`${base}/rest/v1/proc_users?email=eq.${enc(email)}&select=username,role,active`, { headers: svc });
-      if (a.ok) { const rows = await a.json(); if (Array.isArray(rows) && rows[0]) prof = rows[0]; }
-    } catch (_) {}
-    // 2) احتياط دائم: مطابقة باسم المستخدم بلا حساسية لحالة الأحرف (ilike) — تُصلح فروق الحالة.
-    if (!prof) {
-      const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
-      const b = await fetch(`${base}/rest/v1/proc_users?username=ilike.${enc(safe)}&select=username,role,active`, { headers: svc });
-      if (!b.ok) return null;
-      const rows = await b.json();
-      prof = (rows || []).find((x) => String(x.username).toLowerCase() === uname.toLowerCase()) || null;
+    // مطابقة متينة: نقبل المستدعي موظفاً إذا كان بريد جلسته يساوي البريد المخزَّن لأي
+    // حساب نشط، أو البريد المشتقّ من اسمه (usernameToEmail) — يُصلح فروق الحالة وحالة
+    // غياب عمود email، ويُغلق الانتحال (بريد خارجي لن يساوي أي بريد شركة قانوني).
+    let resp = await fetch(`${base}/rest/v1/proc_users?select=username,email,active`, { headers: svc });
+    if (!resp.ok) {
+      // قاعدة قديمة بلا عمود email: طابِق بالاسم المشتقّ فقط (توافق خلفي).
+      resp = await fetch(`${base}/rest/v1/proc_users?select=username,active`, { headers: svc });
+      if (!resp.ok) return { ok: false, reason: 'تعذّر التحقّق من قائمة المستخدمين' };
     }
-    return (prof && prof.active !== false) ? String(u.email) : null;
-  } catch (_) { return null; }
+    const rows = await resp.json();
+    const match = (Array.isArray(rows) ? rows : []).find((x) => {
+      if (x.active === false) return false;
+      const stored = x.email ? String(x.email).toLowerCase() : '';
+      const derived = usernameToEmail(x.username).toLowerCase();
+      return stored === email || derived === email;
+    });
+    if (!match) return { ok: false, reason: `بريد جلستك (${email}) لا يطابق أي حساب موظف نشط في النظام` };
+    return { ok: true, email: String(u.email) };
+  } catch (_) { return { ok: false, reason: 'خطأ غير متوقّع أثناء التحقّق' }; }
 }
 
 export async function onRequestGet({ env }) {
@@ -106,7 +106,8 @@ export async function onRequestPost({ request, env }) {
     const base = env.SUPABASE_URL;
     const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
-    if (!(await verifyStaff(env, base, jwt))) return json({ error: 'غير مصرّح' }, 403);
+    const vsPr = await verifyStaff(env, base, jwt);
+    if (!vsPr.ok) return json({ error: 'غير مصرّح', detail: vsPr.reason }, 403);
     const prId = String(payload.pr_id || '').trim();
     const ev = String(payload.event || '').trim();
     if (!prId || !['pending', 'approved', 'rejected', 'returned', 'submitted'].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
@@ -146,8 +147,9 @@ export async function onRequestPost({ request, env }) {
     const tbase = env.SUPABASE_URL;
     const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
-    const staffEmail = await verifyStaff(env, tbase, jwt);
-    if (!staffEmail) return json({ error: 'غير مصرّح' }, 403);
+    const vsTest = await verifyStaff(env, tbase, jwt);
+    if (!vsTest.ok) return json({ error: 'غير مصرّح', detail: vsTest.reason }, 403);
+    const staffEmail = vsTest.email;
     const status = EVENTS.has(payload?.status) ? payload.status : 'received';
     const tpl = (payload && payload.tpl && typeof payload.tpl === 'object') ? payload.tpl : null;
     let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
@@ -179,7 +181,8 @@ export async function onRequestPost({ request, env }) {
   if (event !== 'received') {
     const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
-    if (!(await verifyStaff(env, base, jwt))) return json({ error: 'غير مصرّح' }, 403);
+    const vsReg = await verifyStaff(env, base, jwt);
+    if (!vsReg.ok) return json({ error: 'غير مصرّح', detail: vsReg.reason }, 403);
   }
   const headers = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
