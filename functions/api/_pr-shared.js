@@ -27,9 +27,8 @@ export const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'sup
 // النطاق الموثّق للإرسال في Resend (Verified sending domain). يجب أن يكون عنوان
 // المُرسِل من هذا النطاق وإلا يرفض Resend الإرسال.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-// الاسم الظاهر للمستقبِل = النطاق الموثّق نفسه «suppliers.aldeyabi.com». العنوان خلفه
-// إلزامي تقنياً (لا يمكن إرسال بريد بنطاق فقط) وهو على نفس النطاق الموثّق.
-export const DEFAULT_FROM = `suppliers.aldeyabi.com <suppliers@${SENDER_DOMAIN}>`;
+// المُرسِل على النطاق الموثّق suppliers.aldeyabi.com (لكل الرسائل: استلام/قبول/رفض/تعديل).
+export const DEFAULT_FROM = `noreply@${SENDER_DOMAIN}`;
 // عنوان ردّ حقيقي يستقبل الرسائل (نطاق الإرسال subdomain قد لا يستقبل) — يرفع ثقة صندوق الوارد.
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 // عنوان المُرسِل: نستخدم NOTIFY_FROM فقط إذا كان من النطاق الموثّق؛ وإلا الافتراضي الصحيح
