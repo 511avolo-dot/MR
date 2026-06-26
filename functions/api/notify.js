@@ -20,7 +20,7 @@
  *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
  */
 
-import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress, replyTo } from './_pr-shared.js';
+import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress, replyTo, htmlToText } from './_pr-shared.js';
 
 const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
 
@@ -175,7 +175,7 @@ export async function onRequestPost({ request, env }) {
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: fromAddress(env), to: [staffEmail], subject, html, reply_to: replyTo(env) }),
+        body: JSON.stringify({ from: fromAddress(env), to: [staffEmail], subject, html, text: htmlToText(html), reply_to: replyTo(env) }),
       });
       if (!r.ok) { const t = await r.text().catch(() => ''); return json({ error: 'تعذّر إرسال البريد التجريبي', detail: t.slice(0, 300) }, 502); }
       return json({ ok: true, sent: true, to: staffEmail });
@@ -302,6 +302,7 @@ export async function onRequestPost({ request, env }) {
       to: [to],
       subject,
       html,
+      text: htmlToText(html),
       reply_to: replyTo(env),
     };
     const r = await fetch('https://api.resend.com/emails', {

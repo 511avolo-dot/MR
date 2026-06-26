@@ -27,8 +27,8 @@ export const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'sup
 // النطاق الموثّق للإرسال في Resend (Verified sending domain). يجب أن يكون عنوان
 // المُرسِل من هذا النطاق وإلا يرفض Resend الإرسال.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-// المُرسِل من النطاق الموثّق suppliers.aldeyabi.com (لم يتغيّر النطاق إطلاقاً).
-export const DEFAULT_FROM = `طلبات الذيابي <noreply@${SENDER_DOMAIN}>`;
+// المُرسِل من النطاق الموثّق suppliers.aldeyabi.com (النطاق لم يتغيّر). بلا «noreply».
+export const DEFAULT_FROM = `مجموعة الذيابي <info@${SENDER_DOMAIN}>`;
 // عنوان ردّ حقيقي يستقبل الرسائل (نطاق الإرسال subdomain قد لا يستقبل) — يرفع ثقة صندوق الوارد.
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 // عنوان المُرسِل: نستخدم NOTIFY_FROM فقط إذا كان من النطاق الموثّق؛ وإلا الافتراضي الصحيح
@@ -41,6 +41,27 @@ export function fromAddress(env) {
 export function replyTo(env) {
   const r = String((env && env.NOTIFY_REPLY_TO) || '').trim();
   return r || DEFAULT_REPLY_TO;
+}
+
+// نسخة نصّية (text/plain) من قالب HTML — لإرسال multipart/alternative.
+// غياب النسخة النصّية إشارة سبام معروفة (MIME_HTML_ONLY)؛ وجودها يرفع الوصول للوارد.
+export function htmlToText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (m, href, txt) => {
+      const t = txt.replace(/<[^>]+>/g, '').trim();
+      const u = String(href).replace(/&amp;/g, '&');
+      return t && !/^https?:/i.test(t) ? `${t}: ${u}` : u;
+    })
+    .replace(/<(?:br|\/p|\/div|\/tr|\/h[1-6]|\/li)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export const emailToUsername = (email) => {
@@ -160,7 +181,7 @@ export async function sendResend(env, toList, subject, html) {
   if (!to.length) return { skipped: true, reason: 'no_recipient' };
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromAddress(env), to, subject, html, reply_to: replyTo(env) }),
+    body: JSON.stringify({ from: fromAddress(env), to, subject, html, text: htmlToText(html), reply_to: replyTo(env) }),
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); return { error: true, status: r.status, detail: t.slice(0, 300) }; }
   return { ok: true, sent: to.length };
