@@ -20,7 +20,7 @@
  *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
  */
 
-import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress, replyTo, htmlToText } from './_pr-shared.js';
+import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress, replyTo, htmlToText, publicOrigin } from './_pr-shared.js';
 
 const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
 
@@ -123,7 +123,7 @@ export async function onRequestPost({ request, env }) {
     if (!prId || !['pending', 'approved', 'rejected', 'returned', 'submitted'].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
     const pr = await prLoadPR(env, base, prId);
     if (!pr) return json({ error: 'الطلب غير موجود' }, 404);
-    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {} origin = publicOrigin(env, origin);
     const comment = payload && payload.comment ? String(payload.comment) : '';
     try {
       let res;
@@ -162,7 +162,7 @@ export async function onRequestPost({ request, env }) {
     const staffEmail = vsTest.email;
     const status = EVENTS.has(payload?.status) ? payload.status : 'received';
     const tpl = (payload && payload.tpl && typeof payload.tpl === 'object') ? payload.tpl : null;
-    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+    let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {} origin = publicOrigin(env, origin);
     const resumeUrl = status === 'needs_revision' ? `${origin}/register.html?resume=reg_demo&t=demo` : '';
     const trackUrl = origin ? `${origin}/register.html?track=DG-DEMO12` : '';
     const sampleRow = { legal_name_ar: 'شركة النور للمقاولات (تجربة)', legal_name_en: 'Al-Noor Contracting Co. (Test)' };
@@ -267,6 +267,7 @@ export async function onRequestPost({ request, env }) {
 
   let origin = '';
   try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
+  origin = publicOrigin(env, origin);
   const resumeUrl = (event === 'needs_revision' && row.revision_token)
     ? `${origin}/register.html?resume=${encodeURIComponent(id)}&t=${encodeURIComponent(row.revision_token)}`
     : '';

@@ -43,6 +43,14 @@ export function replyTo(env) {
   return r || DEFAULT_REPLY_TO;
 }
 
+// النطاق العام الثابت لروابط البريد: إن ضُبط env.PUBLIC_ORIGIN استُخدم دائماً (مثل
+// https://portal.aldeyabi.com) لتطابق روابط البريد مع نطاق الإرسال وتقليل السبام؛
+// وإلا يُستخدم أصل الطلب الفعلي (توافق خلفي — لا تغيير سلوك إن لم يُضبط).
+export function publicOrigin(env, fallbackOrigin) {
+  const o = String((env && env.PUBLIC_ORIGIN) || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(o) ? o : (fallbackOrigin || '');
+}
+
 // نسخة نصّية (text/plain) من قالب HTML — لإرسال multipart/alternative.
 // غياب النسخة النصّية إشارة سبام معروفة (MIME_HTML_ONLY)؛ وجودها يرفع الوصول للوارد.
 export function htmlToText(html) {
