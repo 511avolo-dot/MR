@@ -46,11 +46,6 @@ const emailConfigured = (env) =>
 
 // خريطة بريد→مستخدم (تطابق index.html / admin-users.js)
 const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'supply@aldeyabi.com', mahmoud: 'mahmoud@aldeyabi.com' };
-const emailToUsername = (email) => {
-  const e = String(email || '').toLowerCase();
-  for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
-  return e.split('@')[0];
-};
 const usernameToEmail = (u) => {
   const k = String(u || '').trim().toLowerCase();
   return AUTH_EMAIL_MAP[k] || (k + '@aldeyabi.com');
