@@ -8059,9 +8059,52 @@ async function _loadSupplierRegLink(sup) {
     if (!reg) return;
     _supplierRegCache = reg;
     const docCount = reg.doc_paths ? Object.keys(reg.doc_paths).length : 0;
-    box.innerHTML = `<div style="background:var(--wash,#f6f4ee);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-      <div style="font-size:12.5px;color:var(--muted)">📋 بيانات التسجيل الكاملة محفوظة${docCount ? ` · ${docCount} مستند` : ''} — اطّلع عليها أو نزّل المستندات.</div>
-      <button onclick="_openSupplierReg()" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">عرض بيانات التسجيل والمستندات</button>
+    // تُعرض كل بيانات التسجيل (نصّية) مرتّبةً مباشرةً داخل بطاقة المورد — تبقى محفوظة في
+    // جدول الطلبات بعد الموافقة (المستندات فقط تُحمَّل/تُنظَّف يدوياً لتوفير المساحة).
+    const E = (v) => escapeHtml(String(v));
+    const rsect = (label, rows) => {
+      const filled = rows.filter(([, v]) => v != null && v !== '');
+      if (!filled.length) return '';
+      return `<div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#1a3a5c;background:#f0f4f8;padding:6px 10px;border-radius:6px;margin-bottom:6px">${label}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #f1f5f9;border-radius:8px;overflow:hidden">
+          ${filled.map(([k, v]) => `<div style="display:flex;flex-direction:column;font-size:12px;padding:7px 10px;border-bottom:1px solid #f1f5f9"><span style="color:#94a3b8;font-size:11px;margin-bottom:2px">${k}</span><span style="font-weight:600;color:#1a1f2e">${E(v)}</span></div>`).join('')}
+        </div></div>`;
+    };
+    const scope = (reg.business_scope || []).join('، ') || null;
+    const sectors = (reg.sectors || []).join('، ') || null;
+    const sectionsHtml = [
+      rsect('المعلومات العامة', [
+        ['الاسم القانوني (عربي)', reg.legal_name_ar], ['الاسم القانوني (إنجليزي)', reg.legal_name_en],
+        ['الاسم التجاري', reg.trade_name], ['نوع الكيان', reg.entity_type],
+        ['المدينة / الدولة', [reg.city, reg.country].filter(Boolean).join(' — ')],
+        ['تاريخ التأسيس', reg.established_date], ['تاريخ التأسيس (هجري)', reg.established_hijri],
+        ['رقم السجل التجاري', reg.commercial_reg], ['تاريخ إصدار السجل', reg.cr_issue_date], ['تاريخ انتهاء السجل', reg.cr_expiry_date],
+        ['الرقم الضريبي (VAT)', reg.vat_number], ['رقم الزكاة', reg.zakat_number], ['رقم التأمينات (GOSI)', reg.gosi_number],
+        ['الغرفة التجارية', reg.chamber], ['رقم عضوية الغرفة', reg.chamber_membership], ['تاريخ انتهاء العضوية', reg.chamber_expiry],
+        ['العنوان', reg.address], ['الرمز البريدي', reg.postal_code], ['ص.ب', reg.po_box],
+        ['هاتف المنشأة', reg.phone], ['الفاكس', reg.fax], ['البريد الإلكتروني', reg.email], ['الموقع الإلكتروني', reg.website],
+      ]),
+      rsect('التواصل', [
+        ['الشخص الرئيسي', reg.contact_name], ['منصبه', reg.contact_title], ['جواله', reg.contact_mobile], ['بريده الإلكتروني', reg.contact_email],
+        ['مسؤول المبيعات', reg.sales_name], ['جوال المبيعات', reg.sales_mobile], ['مسؤول المالية', reg.finance_name], ['جوال المالية', reg.finance_mobile],
+      ]),
+      rsect('النشاط والخدمات', [
+        ['وصف النشاط', reg.business_description], ['سنة بدء النشاط', reg.activity_start_year],
+        ['رأس المال المدفوع', reg.paid_capital ? reg.paid_capital + ' ريال' : null],
+        ['إجمالي الموظفين', reg.employees_total], ['الموظفون السعوديون', reg.employees_saudi],
+        ['نطاق العمل', scope], ['القطاعات', sectors], ['تصنيف المقاولين', reg.contractor_grade],
+      ]),
+      rsect('ممثل المنشأة', [
+        ['الاسم', reg.rep_name], ['المنصب', reg.rep_title], ['رقم الهوية / الإقامة', reg.rep_id_number],
+      ]),
+    ].join('');
+    box.innerHTML = `<div style="margin:8px 0 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:800;color:#1a3a5c">📋 بيانات التسجيل الكاملة</div>
+        ${docCount ? `<button onclick="_openSupplierReg()" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">عرض المستندات (${docCount}) وتنزيلها</button>` : ''}
+      </div>
+      ${sectionsHtml || '<div style="font-size:12px;color:#94a3b8">لا توجد بيانات تسجيل إضافية.</div>'}
     </div>`;
   } catch (_) { /* صامت — المورد قد يكون مُضافاً يدوياً بلا طلب تسجيل */ }
 }
