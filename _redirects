@@ -3,4 +3,6 @@
 /rfq.html /rfq.html 200
 /q/* /rfq.html 200
 /q /rfq.html 200
+/portal /purchase-portal.html 200
+/portal/ /purchase-portal.html 200
 /* /index.html 200
