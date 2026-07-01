@@ -550,8 +550,8 @@
 
 // مشروع Supabase الخاص بالبوابة — منفصل تماماً عن مشروع النظام القديم.
 // استبدل القيمتين أدناه بعنوان المشروع الجديد ومفتاح anon العام (كلاهما آمن في العميل).
-const SUPABASE_URL = '__PORTAL_SUPABASE_URL__';
-const SUPABASE_ANON_KEY = '__PORTAL_SUPABASE_ANON_KEY__';
+const SUPABASE_URL = 'https://mwbjoysuybgbrvfrprex.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
 const SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 /* ══════ حالة التطبيق ══════ */
