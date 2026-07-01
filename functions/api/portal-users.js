@@ -152,7 +152,8 @@ export async function onRequestPost({ request, env }) {
 
     const auth = await api.createAuthUser(realEmail, password, { portal_username: username });
     if (!auth.ok && !/already|exists|registered/i.test(JSON.stringify(auth.data))) {
-      return json({ error: 'تعذّر إنشاء حساب الدخول: ' + (auth.data.msg || auth.data.message || '') }, 400);
+      console.error('[portal-users] createAuthUser failed:', auth.data && (auth.data.msg || auth.data.message));
+      return json({ error: 'تعذّر إنشاء حساب الدخول' }, 400);
     }
 
     const prof = await api.restWrite('POST', 'portal_users', {
@@ -160,7 +161,7 @@ export async function onRequestPost({ request, env }) {
       role: 'user', permissions: permObj, active: active !== false,
       department_id: departmentId || null, created_by: callerUsername,
     });
-    if (!prof.ok) return json({ error: 'أُنشئ حساب الدخول لكن تعذّر حفظ الملف التعريفي: ' + prof.text }, 400);
+    if (!prof.ok) { console.error('[portal-users] insert profile failed:', prof.text); return json({ error: 'أُنشئ حساب الدخول لكن تعذّر حفظ الملف التعريفي' }, 400); }
     return json({ ok: true, username });
   }
 

@@ -137,7 +137,7 @@ export async function onRequestPost({ request, env }) {
       }
     } else if (kind === 'receipt') {
       if (event === 'recorded') {
-        if (req.status === 'closed') return json({ skipped: true, reason: 'status_mismatch' });
+        if (req.status !== 'receipt_pending') return json({ skipped: true, reason: 'status_mismatch' });
         res = await notifyInfo(env, base, req, deptLabel, 'receipt_recorded', origin, [req.requester], comment);
       } else if (event === 'closed') {
         if (req.status !== 'closed') return json({ skipped: true, reason: 'status_mismatch' });
@@ -149,7 +149,7 @@ export async function onRequestPost({ request, env }) {
       return json({ error: 'kind غير معروف' }, 400);
     }
 
-    if (res && res.error) return json({ error: 'تعذّر إرسال البريد', detail: res.detail || '' }, 502);
+    if (res && res.error) { console.warn('[portal-notify] resend error:', res.detail || ''); return json({ error: 'تعذّر إرسال البريد' }, 502); }
     if (res && res.skipped) return json({ skipped: true, reason: res.reason });
     return json({ ok: true, sent: (res && res.sent) || 0 });
   } catch (e) {
