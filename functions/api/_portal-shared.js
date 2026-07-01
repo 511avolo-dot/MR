@@ -246,7 +246,7 @@ function portalButton(url, label, color) {
 // بريد «بانتظار اعتمادك» (دورة الحاجة) — أزرار قرار موقّعة من داخل البريد.
 export function buildActionEmail(req, deptLabel, origin, actionBase, stageLabel) {
   const B = BRAND;
-  const portalUrl = origin ? `${origin}/purchase-portal.html` : '';
+  const portalUrl = origin ? `${origin}/portal` : '';
   const stageNote = stageLabel ? `<div style="font-size:12.5px;color:${B.soft};margin:2px 0 10px">مرحلتك: <b style="color:${B.navy}">${esc(stageLabel)}</b></div>` : '';
   const actions = origin ? `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 4px"><tr>
@@ -282,7 +282,7 @@ const RESULT_LINES = {
 };
 export function buildResultEmail(event, req, deptLabel, origin, comment) {
   const B = BRAND; const title = req.title || 'طلب شراء';
-  const portalUrl = origin ? `${origin}/purchase-portal.html` : '';
+  const portalUrl = origin ? `${origin}/portal` : '';
   const line = (RESULT_LINES[event] || RESULT_LINES.submitted)(title);
   const cmt = comment ? `<div dir="rtl" style="text-align:right;background:${B.wash};border:1px solid ${B.line};border-right:4px solid ${(META[event] || META.submitted)[1]};border-radius:12px;padding:12px 16px;margin:14px 0;font-size:13.5px;color:${B.ink}"><b>ملاحظة:</b> ${esc(comment)}</div>` : '';
   const btn = portalButton(portalUrl, 'فتح بوابة الطلبات', B.gold);
@@ -302,7 +302,7 @@ const PENDING_LINES = {
 };
 export function buildInfoEmail(event, req, deptLabel, origin, extra) {
   const B = BRAND;
-  const portalUrl = origin ? `${origin}/purchase-portal.html` : '';
+  const portalUrl = origin ? `${origin}/portal` : '';
   const line = PENDING_LINES[event] || 'تحديث جديد على طلب الشراء.';
   const extraLine = extra ? `<div style="font-size:13px;color:${B.soft};margin-top:6px">${esc(extra)}</div>` : '';
   const btn = portalButton(portalUrl, 'فتح البوابة لاتخاذ الإجراء', B.gold);
