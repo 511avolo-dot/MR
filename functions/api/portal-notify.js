@@ -20,6 +20,7 @@ import {
   loadRequest, deptName, loadApprovals, loadAwardApprovals,
   notifyPending, notifyResult, notifyInfo, notifyProcurement,
   resolveAwardStageApprovers, currentPendingStage, publicOrigin,
+  portalUrl, portalKey, portalConfigured,
 } from './_portal-shared.js';
 
 function json(obj, status = 200) {
@@ -33,16 +34,16 @@ function sameOrigin(request) {
   if (!host || !src) return false;
   try { return new URL(src).host === host; } catch (_) { return false; }
 }
-const emailConfigured = (env) => !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY);
+const emailConfigured = (env) => !!(portalConfigured(env) && env.RESEND_API_KEY);
 
 async function verifyPortalStaff(env, base, jwt) {
   try {
-    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` } });
+    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}` } });
     if (!r.ok) return { ok: false, reason: 'الجلسة غير صالحة أو منتهية' };
     const u = await r.json();
     if (!u || !u.email) return { ok: false, reason: 'لا يوجد بريد في جلسة الدخول' };
     const email = String(u.email).toLowerCase();
-    const svc = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
+    const svc = { apikey: portalKey(env), Authorization: `Bearer ${portalKey(env)}` };
     const safe = email.replace(/[\\%_]/g, c => '\\' + c);
     const resp = await fetch(`${base}/rest/v1/portal_users?email=ilike.${encodeURIComponent(safe)}&select=username,active`, { headers: svc });
     if (!resp.ok) return { ok: false, reason: 'تعذّر التحقّق من قائمة المستخدمين' };
@@ -64,7 +65,7 @@ export async function onRequestPost({ request, env }) {
   let payload;
   try { payload = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
 
-  const base = env.SUPABASE_URL;
+  const base = portalUrl(env);
   const jwt = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!jwt) return json({ error: 'رمز الجلسة مفقود' }, 401);
   const vs = await verifyPortalStaff(env, base, jwt);
