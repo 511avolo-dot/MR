@@ -5,7 +5,7 @@
  * لا تلمس أي جدول أو دالة proc_*، تتعامل حصراً مع portal_users/Supabase Auth.
  *
  * الإعداد (نفس أسرار بيئة Cloudflare Pages المستخدمة أصلاً):
- *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ *   PORTAL_SUPABASE_URL, PORTAL_SUPABASE_SERVICE_ROLE_KEY (مشروع البوابة المنفصل)
  *
  * الأمان:
  *   - المستدعي يرسل رمز جلسته (Authorization: Bearer <JWT>).
@@ -35,9 +35,13 @@ function sameOrigin(request) {
   try { return new URL(src).host === host; } catch (_) { return false; }
 }
 
+// مشروع Supabase الخاص بالبوابة (منفصل تماماً عن مشروع النظام القديم).
+const PORTAL_URL = (env) => String((env && env.PORTAL_SUPABASE_URL) || '').replace(/\/+$/, '');
+const PORTAL_KEY = (env) => String((env && env.PORTAL_SUPABASE_SERVICE_ROLE_KEY) || '');
+
 function sb(env) {
-  const base = env.SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const base = PORTAL_URL(env);
+  const key = PORTAL_KEY(env);
   const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
   return {
     async verifyCaller(jwt) {
@@ -102,13 +106,13 @@ function sb(env) {
 }
 
 export async function onRequestGet({ env }) {
-  const configured = !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+  const configured = !!(PORTAL_URL(env) && PORTAL_KEY(env));
   return json({ ok: configured });
 }
 
 export async function onRequestPost({ request, env }) {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return json({ error: 'إدارة مستخدمي البوابة غير مهيّأة على الخادم (SUPABASE_SERVICE_ROLE_KEY).' }, 503);
+  if (!PORTAL_URL(env) || !PORTAL_KEY(env)) {
+    return json({ error: 'إدارة مستخدمي البوابة غير مهيّأة على الخادم (PORTAL_SUPABASE_SERVICE_ROLE_KEY).' }, 503);
   }
   if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
 
@@ -191,8 +195,8 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setActive') {
     const { username, active } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
-    const r0 = await fetch(`${env.SUPABASE_URL}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
-      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` },
+    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
+      headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
     const rows0 = r0.ok ? await r0.json() : [];
     const email0 = rows0 && rows0[0] && rows0[0].email;
@@ -208,8 +212,8 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setPassword') {
     const { username, password } = payload;
     if (!username || String(password || '').length < 6) return json({ error: 'بيانات غير صالحة' }, 400);
-    const r0 = await fetch(`${env.SUPABASE_URL}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
-      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` },
+    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
+      headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
     const rows0 = r0.ok ? await r0.json() : [];
     const email0 = rows0 && rows0[0] && rows0[0].email;
@@ -225,8 +229,8 @@ export async function onRequestPost({ request, env }) {
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
     if (username === callerUsername) return json({ error: 'لا يمكنك حذف حسابك' }, 400);
-    const r0 = await fetch(`${env.SUPABASE_URL}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
-      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` },
+    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
+      headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
     const rows0 = r0.ok ? await r0.json() : [];
     const email0 = rows0 && rows0[0] && rows0[0].email;

@@ -15,10 +15,11 @@
 import {
   BRAND, esc, svcHeaders, loadRequest, deptName, loadApprovals, currentPendingStage,
   readToken, notifyPending, notifyResult, notifyProcurement,
+  portalUrl, portalConfigured,
 } from './_portal-shared.js';
 
 const emailConfigured = (env) =>
-  !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.RESEND_API_KEY);
+  !!(portalConfigured(env) && env.RESEND_API_KEY);
 
 const ACTIONS = { approve: ['اعتماد الطلب', '#16a34a', '✓'], return: ['إرجاع الطلب للتعديل', '#2563eb', '↩'], reject: ['رفض الطلب', '#dc2626', '✕'] };
 
@@ -65,7 +66,7 @@ export async function onRequestGet({ request, env }) {
   const token = url.searchParams.get('token') || '';
   const act = (url.searchParams.get('do') || '').toLowerCase();
   if (!ACTIONS[act]) return errPage('إجراء غير معروف.', 400);
-  const base = env.SUPABASE_URL;
+  const base = portalUrl(env);
   const tk = await readToken(env, base, token);
   if (tk.error) return errPage(tk.error, tk.code || 400);
   const req = await loadRequest(env, base, tk.row.request_id);
@@ -100,7 +101,7 @@ export async function onRequestGet({ request, env }) {
 // ── POST: تنفيذ القرار ──
 export async function onRequestPost({ request, env }) {
   if (!emailConfigured(env)) return errPage('الخدمة غير مهيأة حالياً.', 503);
-  const base = env.SUPABASE_URL;
+  const base = portalUrl(env);
   let token = '', act = '', comment = '';
   try {
     const ct = request.headers.get('content-type') || '';

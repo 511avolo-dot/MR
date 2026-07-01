@@ -548,8 +548,10 @@
    نظام مستقل تماماً عن index.html / proc_* — لا استدعاء لأي كائن قائم.
    ════════════════════════════════════════════════════════════════════════ */
 
-const SUPABASE_URL = 'https://yofcaxvstjcrmbgciwym.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvZmNheHZzdGpjcm1iZ2Npd3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNzUxNDMsImV4cCI6MjA5Mjk1MTE0M30.zL0qfSrOkxqJRgo1m3mWnp3jjXklvJ2l3u-jvuVbsJQ';
+// مشروع Supabase الخاص بالبوابة — منفصل تماماً عن مشروع النظام القديم.
+// استبدل القيمتين أدناه بعنوان المشروع الجديد ومفتاح anon العام (كلاهما آمن في العميل).
+const SUPABASE_URL = '__PORTAL_SUPABASE_URL__';
+const SUPABASE_ANON_KEY = '__PORTAL_SUPABASE_ANON_KEY__';
 const SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 /* ══════ حالة التطبيق ══════ */

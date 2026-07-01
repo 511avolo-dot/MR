@@ -62,9 +62,16 @@ export function htmlToText(html) {
     .trim();
 }
 
+// مشروع Supabase الخاص بالبوابة — منفصل تماماً عن مشروع النظام القديم.
+// يُقرأ من متغيّرات بيئة مستقلة (PORTAL_SUPABASE_*) كي لا تُخلَط أبداً مع
+// SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY اللذين يخصّان مشروع index.html القديم.
+export const portalUrl = (env) => String((env && env.PORTAL_SUPABASE_URL) || '').replace(/\/+$/, '');
+export const portalKey = (env) => String((env && env.PORTAL_SUPABASE_SERVICE_ROLE_KEY) || '');
+export const portalConfigured = (env) => !!(portalUrl(env) && portalKey(env));
+
 export const svcHeaders = (env) => ({
-  apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-  Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  apikey: portalKey(env),
+  Authorization: `Bearer ${portalKey(env)}`,
   'Content-Type': 'application/json',
 });
 
