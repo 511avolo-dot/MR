@@ -67,8 +67,13 @@
   RPCs الوظائف (portal_apply_job/save_job/delete_job بحمايات: آخر أدمن، gm، حاملون) +
   DoA الشريحتان الدنيتان → can_approve_award + فرض can_create + واجهة إنشاء موظف بوظيفة
   + نطاق رؤية own/sector/all. Migration: `db/portal-migrations/001-seeds-jobs-model.sql`.
-- [ ] المرحلة 2: نموذج الرفع (project/need_by/proc_type/justification + حدود MAXQ/MAXP).
-- [ ] المرحلة 3: المستندات الأربعة + الطباعة. - [ ] المرحلة 4: on_hold/تجزئة/تصعيد SoD/آيبان.
+- [x] **المرحلة 2:** نموذج الرفع (project/need_by/proc_type/justification + حدود MAXQ/MAXP
+  + اشتقاق القسم + quotes حسب DoA). Migration: `db/portal-migrations/002-request-fields.sql`.
+  اختبارها: `09_request_fields.sql` (7 سلبيات). portal_create_request توقيع 9 معاملات (حُذف القديم).
+- [x] **المرحلة 3:** المستندات الأربعة (طلب/أمر شراء/سند صرف/استلام) + tafqit + طباعة —
+  **واجهة فقط** (CSS المستندات موجود مسبقاً). دوال docReqHTML/docPoHTML/docPayHTML/docGrnHTML/
+  documentsHTML/printEl/printDossier. تواقيع من المعتمِدين الفعليين.
+- [ ] المرحلة 4: on_hold/تجزئة/تصعيد SoD/آيبان.
 - [ ] المرحلة 5: شاشات إدارة كاملة + portal_suppliers. - [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
 **ترجمة المفاتيح (نموذج→حيّ):** approveReq→can_approve_stage، approveAward→can_approve_award،
 issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
