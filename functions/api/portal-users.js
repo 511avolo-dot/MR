@@ -137,12 +137,24 @@ export async function onRequestPost({ request, env }) {
   const action = payload && payload.action;
 
   if (action === 'create') {
-    const { email, password, displayName, permissions, active, departmentId } = payload;
+    const { email, password, displayName, permissions, active, departmentId, jobKey } = payload;
     if (!email || !password || !displayName) return json({ error: 'حقول ناقصة' }, 400);
     const realEmail = String(email).trim().toLowerCase();
     if (!COMPANY_EMAIL_RE.test(realEmail)) return json({ error: 'بريد إلكتروني غير صالح' }, 400);
     if (String(password).length < 6) return json({ error: 'كلمة السر 6 أحرف على الأقل' }, 400);
     if (await api.emailExists(realEmail)) return json({ error: 'هذا البريد مسجّل مسبقاً في البوابة' }, 409);
+
+    // الوظيفة من الكتالوج (نموذج الوظائف): تُورَّث صلاحياتها من الخادم — لا تُقبل
+    // صلاحيات خام من العميل عند تحديد وظيفة. gm = دور أدمن (كما النموذج المرجعي).
+    let job = null;
+    if (jobKey) {
+      const jr = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_jobs?key=eq.${encodeURIComponent(String(jobKey))}&active=eq.true&select=key,permissions`, {
+        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+      });
+      const jrows = jr.ok ? await jr.json() : [];
+      job = jrows && jrows[0] ? jrows[0] : null;
+      if (!job) return json({ error: 'وظيفة غير موجودة أو غير مفعّلة' }, 400);
+    }
 
     // اشتقاق اسم مستخدم فريد (مفتاح أساسي داخلي) من مقطع البريد
     let baseUser = realEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '').slice(0, 26) || 'user';
@@ -152,7 +164,8 @@ export async function onRequestPost({ request, env }) {
       username = baseUser + (i + 2);
     }
 
-    const permObj = (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) ? permissions : {};
+    const permObj = job ? job.permissions
+      : ((permissions && typeof permissions === 'object' && !Array.isArray(permissions)) ? permissions : {});
 
     const auth = await api.createAuthUser(realEmail, password, { portal_username: username });
     if (!auth.ok && !/already|exists|registered/i.test(JSON.stringify(auth.data))) {
@@ -162,8 +175,10 @@ export async function onRequestPost({ request, env }) {
 
     const prof = await api.restWrite('POST', 'portal_users', {
       username, display_name: String(displayName).trim(), email: realEmail,
-      role: 'user', permissions: permObj, active: active !== false,
-      department_id: departmentId || null, created_by: callerUsername,
+      role: job && job.key === 'gm' ? 'admin' : 'user',
+      permissions: permObj, active: active !== false,
+      department_id: departmentId || null, job_key: job ? job.key : null,
+      created_by: callerUsername,
     });
     if (!prof.ok) { console.error('[portal-users] insert profile failed:', prof.text); return json({ error: 'أُنشئ حساب الدخول لكن تعذّر حفظ الملف التعريفي' }, 400); }
     return json({ ok: true, username });

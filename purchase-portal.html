@@ -591,7 +591,15 @@ function navAllowed(k) {
   return true;
 }
 function tabLabel(k, l) { if (k === 'pipeline' && !canSeeAll()) return 'طلباتي'; if (k === 'overview' && !canSeeAll()) return 'متابعة'; return l; }
-function canSeeAll() { return isAdmin() || can('can_manage_procurement') || can('can_disburse') || can('can_verify_stock'); }
+/* نطاق الرؤية من كتالوج الوظائف (own/sector/all) — نموذج المرجع الباب 4.
+   بلا وظيفة: يُشتق من الصلاحيات (توافق خلفي مع المستخدمين قبل نموذج الوظائف). */
+function myScope() {
+  if (isAdmin()) return 'all';
+  const j = ME && JOBS[ME.job_key];
+  if (j && j.scope) return j.scope;
+  return (can('can_manage_procurement') || can('can_disburse') || can('can_verify_stock') || can('can_see_finance')) ? 'all' : 'own';
+}
+function canSeeAll() { return myScope() === 'all'; }
 function isAdmin() { return !!(ME && ME.role === 'admin'); }
 function can(key) { return !!(ME && (ME.role === 'admin' || (ME.permissions || {})[key])); }
 
@@ -667,7 +675,9 @@ async function loadRefs() {
 
 async function loadPipeline() {
   let q = SB.from('portal_requests').select('*').order('created_at', { ascending: false }).limit(200);
-  if (!canSeeAll()) q = q.eq('requester', ME.username);
+  const sc = myScope();
+  if (sc === 'own') q = q.eq('requester', ME.username);
+  else if (sc === 'sector' && ME.department_id) q = q.eq('department_id', ME.department_id);
   const { data, error } = await q;
   REQS = error ? [] : (data || []);
 }
@@ -1051,12 +1061,79 @@ function adminHTML() {
   <div class="filters">${tabs.map(([k, l]) => `<button class="fbtn ${ADMIN_TAB === k ? 'active' : ''}" onclick="ADMIN_TAB='${k}';render()">${l}</button>`).join('')}</div>
   ${ADMIN_TAB === 'users' ? adminUsersHTML() : ADMIN_TAB === 'depts' ? adminDeptsHTML() : ADMIN_TAB === 'doa' ? adminDoaHTML() : adminWorkflowsHTML()}`;
 }
+/* تسميات صلاحيات كتالوج الوظائف (PERM_CATALOG المرجعي مترجماً لمفاتيح الحيّ) */
+const PERM_LABELS = {
+  can_approve_stage: 'اعتماد الحاجة', can_approve_award: 'اعتماد التعميد', can_issue_po: 'إصدار أمر الشراء',
+  can_manage_procurement: 'إدارة التسعير', can_approve_finance: 'التحقق المالي', can_disburse: 'اعتماد وتنفيذ الصرف',
+  can_create: 'رفع الطلبات', can_edit: 'تعديل الطلبات', can_manage_users: 'إدارة المستخدمين',
+  can_see_finance: 'رؤية مالية', can_verify_stock: 'الاستلام والمخزون', can_manage_company: 'إدارة المنشأة',
+};
+const SCOPE_LABELS = { own: 'طلباته فقط', sector: 'قطاعه', all: 'كل الطلبات' };
+function permBadges(perms) {
+  const keys = Object.keys(perms || {}).filter(k => perms[k]);
+  if (!keys.length) return '<span class="muted" style="font-size:11.5px">اطّلاع فقط</span>';
+  return keys.map(k => `<span class="badge">${esc(PERM_LABELS[k] || k)}</span>`).join(' ');
+}
+function jobBadgesPreview() {
+  const jk = ($('nu-job') || {}).value || '';
+  const j = JOBS[jk]; const el = $('nu-job-badges');
+  if (el) el.innerHTML = jk === 'gm'
+    ? '<span class="badge gold">أدمن — صلاحية كاملة</span>'
+    : (j ? `${permBadges(j.permissions)} <span class="badge">النطاق: ${esc(SCOPE_LABELS[j.scope] || j.scope || '—')}</span>` : '');
+}
 function adminUsersHTML() {
-  return `<div class="card"><button class="btn btn-primary btn-sm" onclick="openAddUser()">${ic('plus', 14)} مستخدم جديد</button>
-  <div style="margin-top:14px">${Object.values(USERS).map(u => `<div class="bar-row">
-    <div class="bl"><b>${esc(u.display_name)}</b> <span class="muted">${esc(u.email)}</span> ${u.role === 'admin' ? '<span class="badge gold">أدمن</span>' : ''} ${u.active === false ? '<span class="badge danger">معطّل</span>' : ''}</div>
-    <button class="btn btn-ghost btn-sm" onclick="openEditUser('${esc(u.username)}')">${ic('edit', 13)} تعديل</button>
-  </div>`).join('')}</div></div>`;
+  const jobOpts = ['<option value="">— اختر الوظيفة —</option>']
+    .concat(Object.values(JOBS).filter(j => j.active !== false).map(j => `<option value="${esc(j.key)}">${esc(j.title)} · ${esc(j.category || '')}</option>`)).join('');
+  const deptOpts = ['<option value="">— القسم —</option>']
+    .concat(Object.values(DEPTS).map(d => `<option value="${esc(d.id)}">${esc(d.name_ar)}</option>`)).join('');
+  return `<div class="card">
+    <div class="sec-title">إضافة موظف (يرث صلاحيات وظيفته تلقائياً)</div>
+    <div class="grid2">
+      <div><label>الاسم الكامل</label><input class="input" id="nu-name"></div>
+      <div><label>البريد الإلكتروني</label><input class="input" id="nu-email" dir="ltr"></div>
+      <div><label>كلمة المرور (6+)</label><input class="input" id="nu-pass" type="password" dir="ltr"></div>
+      <div><label>الوظيفة</label><select class="input" id="nu-job" onchange="jobBadgesPreview()">${jobOpts}</select></div>
+      <div><label>القسم / القطاع</label><select class="input" id="nu-dept">${deptOpts}</select></div>
+    </div>
+    <div id="nu-job-badges" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"></div>
+    <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="nuSubmit()">${ic('plus', 14)} إنشاء الحساب</button>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="sec-title">الموظفون</div>
+    ${Object.values(USERS).map(u => `<div class="bar-row">
+    <div class="bl"><b>${esc(u.display_name)}</b> <span class="muted">${esc(u.email)}</span>
+      ${u.role === 'admin' ? '<span class="badge gold">أدمن</span>' : ''}
+      ${u.job_key && JOBS[u.job_key] ? `<span class="badge">${esc(JOBS[u.job_key].title)}</span>` : ''}
+      ${u.department_id && DEPTS[u.department_id] ? `<span class="muted" style="font-size:11.5px">${esc(DEPTS[u.department_id].name_ar)}</span>` : ''}
+      ${u.active === false ? '<span class="badge danger">معطّل</span>' : ''}</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="openAssignJob('${esc(u.username)}')">${ic('user', 13)} الوظيفة</button>
+      <button class="btn btn-ghost btn-sm" onclick="openEditUser('${esc(u.username)}')">${ic('edit', 13)} صلاحيات مخصّصة</button>
+    </div>
+  </div>`).join('')}</div>`;
+}
+async function nuSubmit() {
+  const name = ($('nu-name') || {}).value || '', email = ($('nu-email') || {}).value || '';
+  const password = ($('nu-pass') || {}).value || '', jobKey = ($('nu-job') || {}).value || '';
+  const departmentId = ($('nu-dept') || {}).value || '';
+  if (!name.trim() || !email.trim()) { toast('الاسم والبريد مطلوبان', 'err'); return; }
+  if (password.length < 6) { toast('كلمة المرور 6 أحرف على الأقل', 'err'); return; }
+  if (!jobKey) { toast('اختر الوظيفة — منها تُشتق الصلاحيات', 'err'); return; }
+  await createUser(name.trim(), email.trim(), password, jobKey, departmentId || null);
+}
+function openAssignJob(username) {
+  const u = USERS[username]; if (!u) return;
+  const list = Object.values(JOBS).filter(j => j.active !== false).map(j => `${j.key} = ${j.title}`).join('\n');
+  const jk = prompt(`الوظيفة الجديدة لـ${u.display_name} (اكتب المفتاح):\n\n${list}`, u.job_key || '');
+  if (jk === null) return;
+  assignJob(username, jk.trim());
+}
+async function assignJob(username, jobKey) {
+  if (!jobKey || !JOBS[jobKey]) { toast('مفتاح وظيفة غير صحيح', 'err'); return; }
+  try {
+    await rpc('portal_apply_job', { p_username: username, p_job_key: jobKey });
+    toast('أُسندت الوظيفة وورِثت صلاحياتها', 'ok'); await loadRefs(); render();
+  } catch (e) { /* rpc يعرض الخطأ */ }
 }
 function adminDeptsHTML() {
   return `<div class="card">${Object.values(DEPTS).map(d => `<div class="bar-row"><div class="bl"><b>${esc(d.name_ar)}</b> <span class="muted">${esc(d.sector || '')}</span></div>
@@ -1070,17 +1147,11 @@ function adminDoaHTML() {
 function adminWorkflowsHTML() {
   return `<div class="card">${WORKFLOWS.map(w => `<div class="bar-row"><div class="bl"><b>${esc(w.name)}</b></div><span class="muted">${(w.stages || []).length} مراحل</span></div>`).join('') || '<div class="muted">لا سير عمل مخصّص — يُستخدم المسار الاحتياطي (مدير القسم فقط)</div>'}</div>`;
 }
-function openAddUser() {
-  const name = prompt('الاسم الكامل:'); if (!name) return;
-  const email = prompt('البريد الإلكتروني:'); if (!email) return;
-  const password = prompt('كلمة المرور (6 أحرف على الأقل):'); if (!password || password.length < 6) { toast('كلمة مرور قصيرة', 'err'); return; }
-  createUser(name, email, password);
-}
-async function createUser(name, email, password) {
+async function createUser(name, email, password, jobKey, departmentId) {
   try {
     const { data: { session } } = await SB.auth.getSession();
     const r = await fetch('/api/portal-users', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session && session.access_token) },
-      body: JSON.stringify({ action: 'create', displayName: name, email, password }) });
+      body: JSON.stringify({ action: 'create', displayName: name, email, password, jobKey: jobKey || null, departmentId: departmentId || null }) });
     const d = await r.json();
     if (!r.ok || d.error) { toast('تعذّر: ' + (d.error || r.status), 'err'); return; }
     toast('أُضيف المستخدم', 'ok'); await loadRefs(); render();
