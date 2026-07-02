@@ -736,13 +736,17 @@ async function notifyPortal(kind, reqId, event, comment) {
   } catch (e) { console.warn('[notifyPortal]', e); }
 }
 
-async function submitNewRequest(title, deptId, priority, items) {
-  // إنشاء وإرسال ذرّيان بهوية الجلسة (لا إدراج عميل مباشر) — يمنع أي احتمال
-  // لانتحال «الطالب» ويضمن اتساق السلسلة من أول لحظة.
-  const payload = items.map(it => ({ desc: it.desc, unit: it.unit, qty: it.qty, price: it.price }));
+async function submitNewRequest(meta) {
+  // إنشاء وإرسال ذرّيان بهوية الجلسة (لا إدراج عميل مباشر) — الحقول الإلزامية
+  // (المشروع/تاريخ التوريد/تبرير الاستثنائي) والحدود المنطقية تُفرض في الخادم أيضاً.
+  const payload = meta.items.map(it => ({ desc: it.desc, unit: it.unit, qty: it.qty, price: it.price }));
   let res;
   try {
-    res = await rpc('portal_create_request', { p_title: title, p_department_id: deptId, p_priority: priority, p_items: payload });
+    res = await rpc('portal_create_request', {
+      p_title: meta.title, p_department_id: meta.deptId || null, p_priority: meta.priority,
+      p_items: payload, p_project: meta.project, p_need_by: meta.needBy,
+      p_proc_type: meta.procType || 'normal', p_justification: meta.justif || null, p_note: meta.note || null,
+    });
   } catch (e) { return null; }
   toast('أُرسل الطلب بنجاح ✦', 'ok');
   if (res && res.id) notifyPortal('request', res.id, 'submitted');
@@ -896,9 +900,14 @@ function detailHTML(r) {
       <div class="kv" style="margin-top:12px;font-size:20px">الإجمالي: ${money(r.est_total)} ر.س</div></div>
     <div class="card"><div class="sec-title">${ic('user')}بيانات الطلب</div>
       <div class="bar-row"><span class="bl">الطالب</span><b>${esc(r.requester_name || r.requester)}</b></div>
+      ${r.project ? `<div class="bar-row"><span class="bl">اسم المشروع</span><b>${esc(r.project)}</b></div>` : ''}
+      ${r.need_by ? `<div class="bar-row"><span class="bl">تاريخ التوريد المطلوب</span><b>${esc(r.need_by)}</b></div>` : ''}
       <div class="bar-row"><span class="bl">الأولوية</span><b>${esc(r.priority)}</b></div>
+      ${r.proc_type && r.proc_type !== 'normal' ? `<div class="bar-row"><span class="bl">نوع الشراء</span><b><span class="badge gold">${r.proc_type === 'single' ? 'وحيد المصدر' : 'مشتريات طارئة'}</span></b></div>` : ''}
       <div class="bar-row"><span class="bl">تاريخ الإنشاء</span><b>${fmtDate(r.created_at)}</b></div>
       ${r.po_issued_by ? `<div class="bar-row"><span class="bl">أمر الشراء صادر بواسطة</span><b>${esc((USERS[r.po_issued_by] || {}).display_name || r.po_issued_by)}</b></div>` : ''}
+      ${r.justification ? `<div style="margin-top:8px;padding:9px 12px;border:1px dashed var(--gold);border-radius:9px;font-size:12.5px"><b>مبرّر الشراء الاستثنائي:</b> ${esc(r.justification)}</div>` : ''}
+      ${r.note ? `<div class="muted" style="margin-top:8px;font-size:12.5px"><b>ملاحظات:</b> ${esc(r.note)}</div>` : ''}
     </div>
   </div>
 
@@ -911,7 +920,7 @@ function detailHTML(r) {
 
   ${approvalFlow(r.approvals, 'سلسلة اعتماد الحاجة')}
 
-  ${r.phase === 'pricing' || r.offers.length ? `<div class="card" style="margin-top:16px"><div class="sec-title">${ic('money')}عروض المقارنة</div>
+  ${r.phase === 'pricing' || r.offers.length ? `<div class="card" style="margin-top:16px"><div class="sec-title">${ic('money')}عروض المقارنة${r.quotes_required ? ` <span class="muted" style="font-size:12px">· المطلوب: ${r.quotes_required} ${r.quotes_required === 1 ? 'عرض (شراء استثنائي مبرَّر)' : 'عروض'}</span>` : ''}</div>
     <table class="mini-table" style="width:100%"><thead><tr><th>المورد</th><th>الإجمالي</th><th>التسليم (يوم)</th><th>الجودة</th><th>السداد (يوم)</th>${canPrice ? '<th></th>' : ''}</tr></thead>
     <tbody>${r.offers.map(o => `<tr><td>${esc(o.supplier_name)}</td><td>${money(o.total)}</td><td>${o.delivery_days ?? '—'}</td><td>${o.quality ?? '—'}</td><td>${o.payment_days ?? '—'}</td>
       ${canPrice ? `<td><button class="btn btn-sm btn-gold" onclick="promptAward('${r.id}',${o.id},${o.total})">ترسية</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="6" class="muted">لا عروض بعد</td></tr>`}</tbody></table>
@@ -1002,42 +1011,68 @@ function openReceiveModal(id) {
   recordReceipt(id, lines, null);
 }
 
-/* ══════ رفع طلب جديد ══════ */
+/* ══════ رفع طلب جديد (سيناريو 6-1: مشروع + تاريخ توريد + نوع شراء + تبرير) ══════ */
 let NR_ITEMS = [{ desc: '', unit: 'حبة', qty: 1, price: 0 }];
+const PROC_TYPES = [['normal', 'عادي (تنافسي)'], ['single', 'وحيد المصدر'], ['emergency', 'مشتريات طارئة']];
+function nrJustifToggle() {
+  const t = ($('nr-proctype') || {}).value || 'normal';
+  const box = $('nr-justif-box');
+  if (box) box.style.display = t === 'normal' ? 'none' : '';
+  const lbl = $('nr-justif-label');
+  if (lbl) lbl.textContent = t === 'single' ? 'مبرّر وحيد المصدر (إلزامي)' : 'مبرّر الشراء الطارئ (إلزامي)';
+}
 function newRequestHTML() {
   const total = NR_ITEMS.reduce((s, it) => s + (it.qty * it.price), 0);
+  const myDept = DEPTS[ME.department_id];
+  // القطاع يُشتق من ملف الموظف (المرجع 6-1) — الأدمن فقط يختار نيابةً عن قسم.
+  const deptBlock = isAdmin()
+    ? `<div><label>القسم (أدمن — نيابةً عن)</label><select class="input" id="nr-dept">${Object.values(DEPTS).map(d => `<option value="${esc(d.id)}" ${d.id === ME.department_id ? 'selected' : ''}>${esc(d.name_ar)}</option>`).join('')}</select></div>`
+    : `<div><label>القطاع</label><div class="input" style="background:var(--surface-2,#faf8f2);cursor:default">${esc(myDept ? myDept.name_ar : '— لا قسم في ملفك، راجع الإدارة —')} <span class="muted" style="font-size:11px">· يُحدَّد تلقائياً من ملفك</span></div></div>`;
   return `<div class="pagehead"><h1>رفع طلب شراء جديد</h1></div>
   <div class="card">
     <div class="grid2">
-      <div><label>عنوان الطلب</label><input class="input" id="nr-title" placeholder="مثال: مواد صيانة مكيّفات"></div>
-      <div><label>القسم</label><select class="input" id="nr-dept">${Object.values(DEPTS).map(d => `<option value="${esc(d.id)}" ${d.id === ME.department_id ? 'selected' : ''}>${esc(d.name_ar)}</option>`).join('')}</select></div>
+      <div><label>وصف الطلب <b style="color:var(--danger)">*</b></label><input class="input" id="nr-title" placeholder="مثال: مواد صيانة مكيّفات"></div>
+      <div><label>اسم المشروع <b style="color:var(--danger)">*</b></label><input class="input" id="nr-project" placeholder="مثال: مشروع صيانة برج الرياض"></div>
+      <div><label>تاريخ التوريد المطلوب <b style="color:var(--danger)">*</b></label><input class="input" id="nr-needby" type="date"></div>
+      ${deptBlock}
+      <div><label>الأولوية</label>
+        <select class="input" id="nr-priority">${['منخفض', 'متوسط', 'عالي', 'عاجل'].map(p => `<option ${p === 'متوسط' ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div><label>نوع الشراء</label>
+        <select class="input" id="nr-proctype" onchange="nrJustifToggle()">${PROC_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
     </div>
-    <div style="margin-top:10px"><label>الأولوية</label>
-      <select class="input" id="nr-priority" style="max-width:200px">${['منخفض', 'متوسط', 'عالي', 'عاجل'].map(p => `<option ${p === 'متوسط' ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+    <div id="nr-justif-box" style="display:none;margin-top:10px">
+      <label id="nr-justif-label">المبرّر (إلزامي)</label>
+      <textarea class="input" id="nr-justif" rows="2" placeholder="وثّق سبب الشراء الاستثنائي — يخضع لاعتماد أعلى"></textarea>
+    </div>
 
     <div class="sec-title" style="margin-top:18px">البنود</div>
     <table class="mini-table" style="width:100%"><thead><tr><th>الصنف</th><th>الوحدة</th><th>الكمية</th><th>السعر التقديري</th><th></th></tr></thead>
     <tbody>${NR_ITEMS.map((it, i) => `<tr>
       <td><input class="input" value="${esc(it.desc)}" oninput="NR_ITEMS[${i}].desc=this.value"></td>
       <td><input class="input" value="${esc(it.unit)}" oninput="NR_ITEMS[${i}].unit=this.value" style="width:80px"></td>
-      <td><input class="input" type="number" value="${it.qty}" oninput="NR_ITEMS[${i}].qty=+this.value;render()" style="width:90px"></td>
-      <td><input class="input" type="number" value="${it.price}" oninput="NR_ITEMS[${i}].price=+this.value;render()" style="width:110px"></td>
+      <td><input class="input" type="number" min="1" value="${it.qty}" oninput="NR_ITEMS[${i}].qty=+this.value;render()" style="width:90px"></td>
+      <td><input class="input" type="number" min="0" value="${it.price}" oninput="NR_ITEMS[${i}].price=+this.value;render()" style="width:110px"></td>
       <td>${NR_ITEMS.length > 1 ? `<button class="btn btn-ghost btn-sm" onclick="NR_ITEMS.splice(${i},1);render()">${ic('trash', 14)}</button>` : ''}</td>
     </tr>`).join('')}</tbody></table>
     <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="NR_ITEMS.push({desc:'',unit:'حبة',qty:1,price:0});render()">${ic('plus', 14)} إضافة بند</button>
+    <div style="margin-top:12px"><label>ملاحظات (اختياري)</label><textarea class="input" id="nr-note" rows="2"></textarea></div>
     <div class="kv" style="margin-top:14px;font-size:20px">الإجمالي التقديري: ${money(total)} ر.س</div>
     <button class="btn btn-primary" style="margin-top:16px" onclick="nrSubmit()">${ic('check', 15)} إرسال الطلب</button>
   </div>`;
 }
 async function nrSubmit() {
-  const title = ($('nr-title') || {}).value || '';
-  const dept = ($('nr-dept') || {}).value || '';
-  const priority = ($('nr-priority') || {}).value || 'متوسط';
-  if (!title.trim()) { toast('أدخل عنوان الطلب', 'err'); return; }
-  if (!dept) { toast('اختر القسم', 'err'); return; }
+  const v = id => ($(id) || {}).value || '';
+  const title = v('nr-title'), project = v('nr-project'), needBy = v('nr-needby');
+  const procType = v('nr-proctype') || 'normal', justif = v('nr-justif'), note = v('nr-note');
+  const dept = isAdmin() ? v('nr-dept') : (ME.department_id || '');
+  if (!title.trim()) { toast('اكتب وصف الطلب', 'err'); return; }
+  if (!project.trim()) { toast('اسم المشروع مطلوب', 'err'); return; }
+  if (!needBy) { toast('تاريخ التوريد المطلوب مطلوب', 'err'); return; }
+  if (procType !== 'normal' && !justif.trim()) { toast('التبرير مطلوب لهذا النوع من الشراء', 'err'); return; }
   const items = NR_ITEMS.filter(it => it.desc.trim() && it.qty > 0);
   if (!items.length) { toast('أضِف بنداً واحداً على الأقل', 'err'); return; }
-  const id = await submitNewRequest(title.trim(), dept, priority, items);
+  const id = await submitNewRequest({ title: title.trim(), deptId: dept, priority: v('nr-priority') || 'متوسط',
+    items, project: project.trim(), needBy, procType, justif: justif.trim(), note: note.trim() });
   if (id) { NR_ITEMS = [{ desc: '', unit: 'حبة', qty: 1, price: 0 }]; await loadPipeline(); await openDetail(id); }
 }
 
