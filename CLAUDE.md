@@ -56,9 +56,23 @@
 
 ### الاختبار
 بيئة PostgreSQL محلية تحاكي Supabase (`authenticator` + `SET ROLE` + `service_role BYPASSRLS`).
-سكربتات الاختبار في مجلد scratchpad: `00_supabase_stub.sql`, `01_seed_and_test.sql` (E2E: 10 اختبار سلبي + دورة كاملة),
-`02b.sql` (محارس), `03_rls_positive_path.sql`, `04_create_request.sql`, `06_reaward.sql`, `07_locked.sql`.
+سكربتات الاختبار في مجلد scratchpad: `00_supabase_stub.sql`, `01_seed_and_test.sql` (E2E: 11 اختبار سلبي + دورة كاملة),
+`02b.sql` (محارس), `03_rls_positive_path.sql`, `04_create_request.sql`, `06_reaward.sql`, `07_locked.sql`,
+`08_jobs_model.sql` (المرحلة 1: بذور/وظائف/توجيه قطاعات — **يجب تشغيله كـauthenticator لا postgres**).
 **آخر تشغيل: كل الاختبارات ناجحة.**
+
+### مشروع «نقل التصميم المرجعي» (6 مراحل — الخطة في /root/.claude/plans/unified-cuddling-widget.md)
+المرجع الأعلى: «الملف الشامل المتكامل» (uploads) — 18 وظيفة، 22 سيناريو، نظام تصميم بارد جديد.
+- [x] **المرحلة 1:** بذور (4 أقسام OPS/CON/GA/LOG + 18 وظيفة + 4 سلاسل قطاعات بالأدوار) +
+  RPCs الوظائف (portal_apply_job/save_job/delete_job بحمايات: آخر أدمن، gm، حاملون) +
+  DoA الشريحتان الدنيتان → can_approve_award + فرض can_create + واجهة إنشاء موظف بوظيفة
+  + نطاق رؤية own/sector/all. Migration: `db/portal-migrations/001-seeds-jobs-model.sql`.
+- [ ] المرحلة 2: نموذج الرفع (project/need_by/proc_type/justification + حدود MAXQ/MAXP).
+- [ ] المرحلة 3: المستندات الأربعة + الطباعة. - [ ] المرحلة 4: on_hold/تجزئة/تصعيد SoD/آيبان.
+- [ ] المرحلة 5: شاشات إدارة كاملة + portal_suppliers. - [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
+**ترجمة المفاتيح (نموذج→حيّ):** approveReq→can_approve_stage، approveAward→can_approve_award،
+issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
+edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance.
 
 ---
 
