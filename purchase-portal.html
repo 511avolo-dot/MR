@@ -948,6 +948,8 @@ function detailHTML(r) {
   ${r.receipts.length ? `<div class="card" style="margin-top:16px"><div class="sec-title">${ic('box')}سجل الاستلام</div>
     ${r.receipts.map(rc => `<div class="bar-row"><span class="bl">${fmtDate(rc.received_at)} — ${esc((USERS[rc.received_by] || {}).display_name || rc.received_by)}</span><span class="muted">${esc(rc.note || '')}</span></div>`).join('')}</div>` : ''}
 
+  ${documentsHTML(r)}
+
   <div class="card" style="margin-top:16px"><div class="sec-title">${ic('clock')}سجل الأحداث</div>
     ${r.audit.map(a => `<div class="bar-row"><span class="bl">${fmtDate(a.created_at)}</span><span>${esc(eventLabel(a.event))}${a.actor ? ' — ' + esc((USERS[a.actor] || {}).display_name || a.actor) : ''}</span></div>`).join('') || '<div class="muted">لا أحداث</div>'}
   </div>
@@ -1213,7 +1215,233 @@ async function updateUserPerms(username, permissions) {
 }
 
 /* ══════ الإقلاع ══════ */
+/* ════════════════════════════════════════════════════════════════════════
+   المستندات الرسمية الأربعة (المرحلة 3 — سيناريو 6-22)
+   طلب شراء · أمر شراء · سند صرف · سند استلام — بترويسة رسمية وعلامة مائية
+   وتواقيع المعتمِدين الفعليين من السلاسل. الطباعة عبر printEl → #print-root.
+   بنية CSS المستندات (.doc*) موجودة مسبقاً في <style>. ═══════════════════════ */
+const ORG = { name: 'مجموعة الذيابي', nameEn: 'AL-DEYABI GROUP', legal: 'مجموعة الذيابي للمقاولات',
+  cr: '1010007315', membership: '8452', bldg: '8000', zip: '12284', city: 'الرياض',
+  phone: '920000194', email: 'info@aldeyabi.com', web: 'aldeyabi.com', vat: 15 };
+let LOGO_DOC = '';               // يُلتقط من DOM عند الإقلاع
+function fmtD(ts) { if (!ts) return '—'; try { return new Date(ts).toLocaleDateString('en-GB'); } catch (_) { return '—'; } }
+function uName(k) { const u = USERS[k]; return u ? (u.display_name || k) : (k || '—'); }
+
+/* تفقيط المبلغ بالعربية (أعداد صحيحة — كافٍ للمستندات) */
+function tafqit(n) {
+  n = Math.round(Number(n) || 0);
+  if (n === 0) return 'صفر ريال لا غير';
+  const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة',
+    'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+  const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+  const hund = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+  function below1000(x) {
+    let s = [];
+    if (x >= 100) { s.push(hund[Math.floor(x / 100)]); x %= 100; }
+    if (x >= 20) { const t = tens[Math.floor(x / 10)]; const o = x % 10; s.push(o ? ones[o] + ' و' + t : t); }
+    else if (x > 0) s.push(ones[x]);
+    return s.join(' و');
+  }
+  // صيغة العدد التمييزية العربية: 1 مفرد، 2 مثنى، 3–10 جمع (آلاف/ملايين)،
+  // مئات صحيحة → مجرور مفرد (ألف/مليون)، والباقي (11–99 وما ينتهي بها) → منصوب مفرد (ألفاً/مليوناً).
+  const unitWord = (x, one, two, few, singular, accus) =>
+    x === 1 ? one : x === 2 ? two
+    : (x >= 3 && x <= 10) ? below1000(x) + ' ' + few
+    : (x % 100 === 0) ? below1000(x) + ' ' + singular
+    : below1000(x) + ' ' + accus;
+  let parts = [];
+  const mil = Math.floor(n / 1000000); n %= 1000000;
+  const th = Math.floor(n / 1000); n %= 1000;
+  if (mil) parts.push(unitWord(mil, 'مليون', 'مليونان', 'ملايين', 'مليون', 'مليوناً'));
+  if (th) parts.push(unitWord(th, 'ألف', 'ألفان', 'آلاف', 'ألف', 'ألفاً'));
+  if (n) parts.push(below1000(n));
+  return parts.join(' و') + ' ريال لا غير';
+}
+
+function docHead(kindAr, kindEn, no) {
+  return `<div class="doc-accent"></div>
+    <div class="doc-head">
+      ${LOGO_DOC ? `<img class="doc-logo-full" src="${LOGO_DOC}" alt="">` : ''}
+      <div class="doc-idblock">
+        <span class="kind">${esc(kindAr)}<span class="kind-en">${esc(kindEn)}</span></span>
+        <div class="row">رقم المستند: <b class="no">${esc(no)}</b></div>
+        <div class="row">التاريخ: <b class="no">${fmtD(Date.now())}</b></div>
+      </div>
+    </div>
+    <div class="doc-regbar">${esc(ORG.legal)} · س.ت <b>${ORG.cr}</b> · عضوية <b>${ORG.membership}</b> · ${esc(ORG.city)} ${ORG.zip} · هاتف <b>${ORG.phone}</b> · ${esc(ORG.email)}</div>`;
+}
+function metaGrid(pairs) {
+  return `<div class="doc-meta">${pairs.map(([l, v]) => `<div class="m"><div class="l">${esc(l)}</div><div class="v">${esc(v == null || v === '' ? '—' : v)}</div></div>`).join('')}</div>`;
+}
+function signBlock(role, name, sub) {
+  return `<div class="s"><div class="who">${esc(role)}</div><div class="line">${name ? esc(name) : '—'}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>`;
+}
+function stampEl(status) {
+  const m = { approved: ['ok', 'معتمَد'], pricing: ['warn', 'قيد التسعير'], award_review: ['warn', 'بانتظار الاعتماد'],
+    awarded: ['ok', 'معتمَد'], payment_pending: ['warn', 'بانتظار الصرف'], receipt_pending: ['ok', 'صُرِف'],
+    closed: ['ok', 'مُقفلة'], rejected: ['info', 'مرفوض'], cancelled: ['info', 'ملغى'], in_review: ['warn', 'قيد الاعتماد'] }[status];
+  return m ? `<div class="doc-stamp ${m[0]}">${m[1]}</div>` : '';
+}
+function itemRows(items, unitPriceOf) {
+  return (items || []).map(it => {
+    const p = unitPriceOf ? unitPriceOf(it) : (it.unit_price || 0);
+    return `<tr><td style="text-align:center">${it.seq}</td><td>${esc(it.description)}</td><td style="text-align:center">${esc(it.unit || '—')}</td><td style="text-align:end">${money(it.qty)}</td><td style="text-align:end">${money(p)}</td><td style="text-align:end">${money(it.qty * p)}</td></tr>`;
+  }).join('');
+}
+/* المعتمِدون الفعليون من السلاسل */
+function approvedStages(r) { return (r.approvals || []).filter(a => a.decision === 'approved' && a.acted_at); }
+function needApprover(r) { const s = approvedStages(r).find(a => a.resolver === 'dept_manager') || approvedStages(r)[0]; return s ? s.approver : null; }
+function financeApprover(r) { const s = approvedStages(r).find(a => a.role_key === 'can_approve_finance'); return s ? s.approver : null; }
+function pricingAuthorizer(r) { const a = approvedStages(r); return a.length ? a[a.length - 1].approver : null; }
+function finalAwardApprover(r) { const a = (r.awardApprovals || []).filter(x => x.decision === 'approved' && x.approver); return a.length ? a[a.length - 1].approver : (r.award ? null : null); }
+function disburser(r) { const p = (r.payments || []).find(x => x.status === 'disbursed'); return p ? p.disbursed_by : null; }
+function paymentApprover(r) { const p = (r.payments || []).find(x => x.approved_by); return p ? p.approved_by : null; }
+function lastReceiver(r) { const c = (r.receipts || []); return c.length ? c[c.length - 1].received_by : null; }
+function winnerSupplier(r) { if (!r.award) return '—'; const o = (r.offers || []).find(x => x.id === r.award.winner_offer_id); return o ? o.supplier_name : '—'; }
+
+/* ── 1) طلب الشراء ── */
+function docReqHTML(r) {
+  const dom = 'doc-req-' + r.id;
+  return `<div class="doc" id="${dom}">
+    ${docHead('طلب شراء', 'PURCHASE REQUISITION', r.id)}
+    <div class="doc-body">${stampEl(r.status)}
+      ${metaGrid([['مُقدّم الطلب', r.requester_name || r.requester], ['القسم / القطاع', (DEPTS[r.department_id] || {}).name_ar],
+        ['اسم المشروع', r.project], ['تاريخ التوريد المطلوب', r.need_by], ['الأولوية', r.priority], ['تاريخ الطلب', fmtD(r.created_at)]])}
+      <div class="doc-sech">بنود الطلب</div>
+      <table><thead><tr><th>م</th><th>الصنف</th><th>الوحدة</th><th>الكمية</th><th>السعر التقديري</th><th>الإجمالي</th></tr></thead>
+        <tbody>${itemRows(r.items)}</tbody>
+        <tfoot><tr><td colspan="5">الإجمالي التقديري (ر.س)</td><td style="text-align:end">${money(r.est_total)}</td></tr></tfoot></table>
+      <div class="doc-words">الإجمالي التقديري كتابةً: <b>${tafqit(r.est_total)}</b></div>
+      ${r.justification ? `<div class="doc-words" style="margin-top:8px"><b>مبرّر الشراء الاستثنائي:</b> ${esc(r.justification)}</div>` : ''}
+      <div class="doc-sign">
+        ${signBlock('مُقدّم الطلب', r.requester_name || r.requester, '')}
+        ${signBlock('اعتماد مدير القطاع', uName(needApprover(r)), needApprover(r) ? 'اعتُمد' : '')}
+        ${signBlock('التحقق المالي المسبق', uName(financeApprover(r)), 'الإدارة المالية')}
+      </div>
+      <div class="doc-foot"><span class="conf">مستند رسمي — ${esc(ORG.name)}</span><span>${esc(ORG.web)}</span></div>
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${dom}','طلب شراء','${r.id}')">${ic('list', 14)} طباعة / PDF</button></div>
+  </div>`;
+}
+/* ── 2) أمر الشراء ── */
+function docPoHTML(r) {
+  if (!r.award) return '';
+  const dom = 'doc-po-' + r.id;
+  const win = r.award.winner_total || 0;
+  const vat = Math.round(win * (ORG.vat / 100));
+  const supplier = winnerSupplier(r);
+  return `<div class="doc" id="${dom}">
+    ${docHead('أمر شراء', 'PURCHASE ORDER', 'PO-' + r.id)}
+    <div class="doc-body">${stampEl(r.status)}
+      <div class="parties">
+        <div class="party"><div class="role">الطرف الأول (المشتري)</div><div class="pn">${esc(ORG.legal)}</div><div class="pr">س.ت: <b>${ORG.cr}</b><br>${esc(ORG.city)} · هاتف ${ORG.phone}</div></div>
+        <div class="party"><div class="role">الطرف الثاني (المورّد)</div><div class="pn">${esc(supplier)}</div><div class="pr">المشروع: <b>${esc(r.project || '—')}</b></div></div>
+      </div>
+      ${metaGrid([['رقم الطلب', r.id], ['تاريخ الإصدار', fmtD(r.po_issued_at || Date.now())], ['طريقة التوريد', r.proc_type === 'single' ? 'وحيد المصدر' : r.proc_type === 'emergency' ? 'طارئ' : 'تنافسي']])}
+      <div class="doc-sech">تفاصيل التعميد</div>
+      <table><thead><tr><th>البيان</th><th>القيمة (ر.س)</th></tr></thead>
+        <tbody><tr><td>قيمة التعميد للمورّد الفائز</td><td style="text-align:end">${money(win)}</td></tr></tbody>
+        <tfoot><tr><td>ضريبة القيمة المضافة (${ORG.vat}%)</td><td style="text-align:end">${money(vat)}</td></tr>
+        <tr><td>الإجمالي شامل الضريبة</td><td style="text-align:end">${money(win + vat)}</td></tr></tfoot></table>
+      <div class="doc-words">الإجمالي كتابةً: <b>${tafqit(win + vat)}</b></div>
+      <div class="doc-terms"><ol>
+        <li>يلتزم المورّد بالتوريد وفق المواصفات والكميات المعتمدة في طلب الشراء المرجعي.</li>
+        <li>الأسعار ثابتة ونهائية وشاملة كل ما يلزم للتسليم في الموقع المحدّد.</li>
+        <li>يُصرف المستحق بعد التوريد الكامل واستلام الجهة المختصة وتوثيق سند الاستلام.</li>
+        <li>يخضع هذا الأمر لأنظمة المملكة العربية السعودية.</li>
+      </ol></div>
+      <div class="doc-sign">
+        ${signBlock('إذن التسعير', uName(pricingAuthorizer(r)), 'المشتريات')}
+        ${signBlock('اعتماد التعميد', uName(finalAwardApprover(r)), 'حسب الصلاحية')}
+        ${signBlock('إصدار أمر الشراء', uName(r.po_issued_by), 'المشتريات')}
+      </div>
+      <div class="doc-foot"><span class="conf">مستند رسمي — ${esc(ORG.name)}</span><span>${esc(ORG.web)}</span></div>
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${dom}','أمر شراء','PO-${r.id}')">${ic('list', 14)} طباعة / PDF</button></div>
+  </div>`;
+}
+/* ── 3) سند الصرف ── */
+function docPayHTML(r) {
+  const pay = (r.payments || []).find(p => p.status === 'disbursed') || (r.payments || [])[0];
+  if (!pay) return '';
+  const dom = 'doc-pay-' + r.id;
+  const kindL = { bank: 'تحويل بنكي', custody: 'عهدة نقدية', credit: 'آجل' }[pay.kind] || pay.kind;
+  const det = pay.details || {};
+  let detRows = [['طريقة الصرف', kindL], ['المبلغ (ر.س)', money(pay.amount)]];
+  if (pay.kind === 'bank') detRows.push(['اسم الحساب', det.account_name], ['الآيبان', det.iban], ['البنك', det.bank]);
+  else if (pay.kind === 'custody') detRows.push(['المستلِم للعهدة', uName(pay.custody_to)]);
+  else if (pay.kind === 'credit') detRows.push(['تاريخ الاستحقاق', det.due_date], ['الشروط', det.terms]);
+  return `<div class="doc" id="${dom}">
+    ${docHead('سند صرف', 'PAYMENT VOUCHER', 'PV-' + r.id)}
+    <div class="doc-body">${stampEl(pay.status === 'disbursed' ? 'receipt_pending' : 'payment_pending')}
+      ${metaGrid([['رقم الطلب', r.id], ['المشروع', r.project], ['تاريخ الصرف', fmtD(pay.disbursed_at || pay.created_at)]])}
+      <div class="doc-sech">تفاصيل الصرف</div>
+      ${metaGrid(detRows.map(([l, v]) => [l, v]))}
+      <div class="doc-words" style="font-size:15px;text-align:center;border:none;background:linear-gradient(90deg,#fbf3e0,#f7edd6)">المبلغ: <b>${money(pay.amount)}</b> · <b>${tafqit(pay.amount)}</b></div>
+      <div class="doc-sign">
+        ${signBlock('طلب الصرف', uName(pay.requested_by), 'المشتريات')}
+        ${signBlock('اعتماد الصرف', uName(paymentApprover(r)), 'المالية')}
+        ${signBlock('تم الصرف', uName(disburser(r)), 'المالية')}
+      </div>
+      <div class="doc-foot"><span class="conf">مستند رسمي — ${esc(ORG.name)}</span><span>${esc(ORG.web)}</span></div>
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${dom}','سند صرف','PV-${r.id}')">${ic('list', 14)} طباعة / PDF</button></div>
+  </div>`;
+}
+/* ── 4) سند الاستلام ── */
+function docGrnHTML(r) {
+  if (!(r.phase === 'receipt' || r.phase === 'closed' || (r.receipts && r.receipts.length))) return '';
+  const dom = 'doc-grn-' + r.id;
+  const rows = (r.items || []).map(it => {
+    const recv = it.received_qty || 0; const st = recv >= it.qty ? ['ok', 'مكتمل'] : recv > 0 ? ['warn', 'جزئي'] : ['info', 'عجز'];
+    return `<tr><td style="text-align:center">${it.seq}</td><td>${esc(it.description)}</td><td style="text-align:center">${esc(it.unit || '—')}</td><td style="text-align:end">${money(it.qty)}</td><td style="text-align:end">${money(recv)}</td><td style="text-align:center"><span class="badge ${st[0] === 'ok' ? 'ok' : st[0] === 'warn' ? 'gold' : 'danger'}">${st[1]}</span></td></tr>`;
+  }).join('');
+  return `<div class="doc" id="${dom}">
+    ${docHead('سند استلام', 'GOODS RECEIPT NOTE', 'GRN-' + r.id)}
+    <div class="doc-body">${stampEl(r.phase === 'closed' ? 'closed' : 'receipt_pending')}
+      ${metaGrid([['رقم الطلب', r.id], ['المشروع', r.project], ['تاريخ الاستلام', fmtD((r.receipts[r.receipts.length - 1] || {}).received_at || Date.now())]])}
+      <div class="doc-sech">الأصناف المستلَمة</div>
+      <table><thead><tr><th>م</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>المستلَم</th><th>الحالة</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="doc-sign">
+        ${signBlock('المستلِم', uName(lastReceiver(r)), 'المستودع / الجهة الطالبة')}
+        ${signBlock('المورّد', winnerSupplier(r), '')}
+        ${signBlock('اعتماد أمر الشراء', uName(r.po_issued_by), 'المشتريات')}
+      </div>
+      <div class="doc-foot"><span class="conf">مستند رسمي — ${esc(ORG.name)}</span><span>${esc(ORG.web)}</span></div>
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${dom}','سند استلام','GRN-${r.id}')">${ic('list', 14)} طباعة / PDF</button></div>
+  </div>`;
+}
+
+/* لوحة المستندات في التفاصيل + الطباعة */
+function documentsHTML(r) {
+  const docs = [docReqHTML(r), docPoHTML(r), docPayHTML(r), docGrnHTML(r)].filter(Boolean);
+  const hasFull = !!r.award;
+  return `<div class="card" style="margin-top:16px"><div class="sec-title">${ic('list')}المستندات الرسمية
+    ${hasFull ? `<button class="btn btn-sm btn-gold" style="margin-inline-start:auto" onclick="printDossier('${r.id}')">${ic('list', 13)} طباعة الملف الكامل</button>` : ''}</div>
+    <div style="display:flex;flex-direction:column;gap:20px">${docs.join('')}</div></div>`;
+}
+function pFooter(no, title) {
+  return `<div class="p-footer"><b>${esc(ORG.name)}</b> · ${esc(title)} · <span dir="ltr">${esc(no)}</span><span>${esc(ORG.web)} · ${ORG.phone}</span></div>`;
+}
+function printEl(elId, title, no) {
+  const el = document.getElementById(elId); if (!el) { toast('المستند غير متاح', 'err'); return; }
+  const root = $('print-root'); if (!root) return;
+  root.innerHTML = el.outerHTML + pFooter(no || '', title || '');
+  window.print();
+}
+function printDossier(id) {
+  const parts = ['doc-req-', 'doc-po-', 'doc-pay-', 'doc-grn-'].map(p => document.getElementById(p + id)).filter(Boolean);
+  if (!parts.length) { toast('لا مستندات متاحة', 'err'); return; }
+  const root = $('print-root'); if (!root) return;
+  root.innerHTML = parts.map((el, i) => (i ? '<div style="page-break-before:always"></div>' : '') + el.outerHTML).join('') + pFooter(id, 'الملف الكامل');
+  window.print();
+}
+window.addEventListener('afterprint', () => { const r = $('print-root'); if (r) r.innerHTML = ''; });
+
 (async function boot() {
+  // التقط شعار المستندات من عنصر الشاشة (يتفادى تكرار base64) + فعّل العلامة المائية.
+  try { const im = document.querySelector('.crest-full'); if (im && im.src) { LOGO_DOC = im.src; document.documentElement.style.setProperty('--wm', `url(${im.src})`); } } catch (_) {}
   const { data: { session } } = await SB.auth.getSession();
   if (session) await afterLogin(); else renderShell();
   SB.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') { ME = null; renderShell(); } });
