@@ -617,7 +617,12 @@ async function doLogin() {
     if (error) throw error;
     await afterLogin();
   } catch (e) {
-    if (err) err.textContent = 'تعذّر الدخول: تحقّق من البريد وكلمة المرور';
+    const m = String((e && e.message) || '').toLowerCase();
+    let msg = 'تعذّر الدخول: تحقّق من البريد وكلمة المرور';
+    if (m.includes('not confirmed')) msg = 'البريد غير مُؤكَّد — فعّل «Auto Confirm» للحساب في Supabase ثم أعد المحاولة';
+    else if (m.includes('invalid')) msg = 'البريد أو كلمة المرور غير صحيحة';
+    else if (m.includes('network') || m.includes('fetch')) msg = 'تعذّر الاتصال بالخادم — تحقّق من الإنترنت';
+    if (err) err.textContent = msg;
     toast('فشل الدخول', 'err');
   } finally { if (btn) btn.disabled = false; }
 }
