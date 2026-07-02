@@ -83,10 +83,12 @@ edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance
 - [x] فصل الكود إلى مشروع Supabase مستقل (متغيّرات `PORTAL_SUPABASE_*`).
 - [x] إنشاء مشروع Supabase الجديد `mwbjoysuybgbrvfrprex` + تشغيل `portal-standalone.sql` (نجح).
 - [x] ربط الواجهة بعنوان + anon key الجديد (كوميت `11190bd`).
-- [ ] **معلّق على المالك:** إضافة `PORTAL_SUPABASE_URL` + `PORTAL_SUPABASE_SERVICE_ROLE_KEY` في Cloudflare.
-- [ ] **معلّق على المالك:** إنشاء حساب الأدمن الأول (Auth user + صف `portal_users` role='admin' بنفس البريد).
-- [ ] **معلّق:** الدفع إلى `main` للنشر (بعد تأكيد المتغيّرات).
-- [ ] **قرار معلّق:** الدومين — مقترح مسار نظيف `/portal` + نطاق فرعي `portal.aldeyabi.com`. لم يُنفّذ بعد.
+- [x] إضافة `PORTAL_SUPABASE_URL` + `PORTAL_SUPABASE_SERVICE_ROLE_KEY` في Cloudflare (Production).
+- [x] إنشاء أول أدمن: `admin` / `abdullah@aldeyabi.com` / role='admin' (صف `portal_users` جاهز).
+- [x] `NOTIFY_FROM` مضبوط: `Aldeyabi Group <noreply@suppliers.aldeyabi.com>`.
+- [x] **الدفع إلى `main` — تمّ النشر** (2026-07-01). البوابة على `…/portal`.
+- [ ] **تحقّق ما بعد النشر:** تأكيد وجود حساب Auth للأدمن + أول تسجيل دخول ناجح + جولة اختبار.
+- [ ] **قرار معلّق:** نطاق فرعي `portal.aldeyabi.com` (مسار `/portal` مُفعّل بالفعل). لم يُنفّذ النطاق الفرعي بعد.
 
 ### إنشاء أول أدمن للبوابة (الطريقة)
 1. Supabase (المشروع الجديد) → Authentication → Users → Add user (بريد + كلمة مرور + Auto Confirm).
