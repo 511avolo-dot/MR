@@ -617,11 +617,13 @@ async function doLogin() {
     if (error) throw error;
     await afterLogin();
   } catch (e) {
-    const m = String((e && e.message) || '').toLowerCase();
-    let msg = 'تعذّر الدخول: تحقّق من البريد وكلمة المرور';
-    if (m.includes('not confirmed')) msg = 'البريد غير مُؤكَّد — فعّل «Auto Confirm» للحساب في Supabase ثم أعد المحاولة';
+    const raw = String((e && (e.message || e.error_description || e.name)) || 'خطأ غير معروف');
+    const m = raw.toLowerCase();
+    let msg;
+    if (m.includes('not confirmed')) msg = 'البريد غير مُؤكَّد — فعّل «Auto Confirm» للحساب في Supabase';
     else if (m.includes('invalid')) msg = 'البريد أو كلمة المرور غير صحيحة';
-    else if (m.includes('network') || m.includes('fetch')) msg = 'تعذّر الاتصال بالخادم — تحقّق من الإنترنت';
+    else if (m.includes('failed to fetch') || m.includes('load failed') || m.includes('network')) msg = 'تعذّر الاتصال بالخادم (شبكة/حجب): ' + raw;
+    else msg = 'تعذّر الدخول: ' + raw;
     if (err) err.textContent = msg;
     toast('فشل الدخول', 'err');
   } finally { if (btn) btn.disabled = false; }
