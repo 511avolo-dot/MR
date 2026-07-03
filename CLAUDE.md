@@ -78,7 +78,12 @@
   مفاتيح SOD_RULES في portal_settings. Migration: `db/portal-migrations/003-governance.sql`.
   اختبارها: `10_governance.sql`. توقيعات جديدة: portal_pr_transition(+p_hold_until)،
   portal_payment_request(+p_details)، portal_resume_hold. E2E: صرف بنكي يتطلب آيبان صحيح الآن.
-- [ ] المرحلة 5: شاشات إدارة كاملة + portal_suppliers. - [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
+- [x] **المرحلة 5:** شاشات إدارة كاملة (وظائف/أقسام/موردون/DoA/مسارات/إعدادات/تدقيق+CSV) +
+  `portal_suppliers` + RPCs (save/delete_department، delete_supplier). **إصلاحات أمان من الفحص
+  العدائي:** منع تصعيد الصلاحية عبر portal_apply_job/save_job (gm أو مفاتيح إدارية = أدمن فقط +
+  قائمة بيضاء)، منع انتحال القسم لموظف بلا قسم، DROP توقيعات قديمة، قفل استشاري لآخر أدمن.
+  Migration: `db/portal-migrations/004-admin-suppliers.sql`. اختبارها: `11_admin_security.sql`.
+- [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
 **ترجمة المفاتيح (نموذج→حيّ):** approveReq→can_approve_stage، approveAward→can_approve_award،
 issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
 edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance.

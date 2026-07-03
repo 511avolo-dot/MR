@@ -556,7 +556,7 @@ const SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:
 
 /* ══════ حالة التطبيق ══════ */
 let ME = null;               // صف portal_users الحالي
-let DEPTS = {}, USERS = {}, JOBS = {}, DOA = [], WORKFLOWS = [];
+let DEPTS = {}, USERS = {}, JOBS = {}, DOA = [], WORKFLOWS = [], SUPPLIERS = [], SETTINGS = null;
 let REQS = [];                // قائمة مختصرة لكل الطلبات المرئية
 let CURRENT = null;           // تفاصيل الطلب المفتوح حالياً (مع items/approvals/offers/award/payments/receipts/audit)
 let VIEW = 'overview';
@@ -659,18 +659,22 @@ async function afterLogin() {
 
 /* ══════ تحميل البيانات المرجعية ══════ */
 async function loadRefs() {
-  const [d, u, j, doa, wf] = await Promise.all([
+  const [d, u, j, doa, wf, sup, setg] = await Promise.all([
     SB.from('portal_departments').select('*'),
     SB.from('portal_users').select('*'),
     SB.from('portal_jobs').select('*'),
     SB.from('portal_doa').select('*').order('priority'),
     SB.from('portal_workflows').select('*').order('priority'),
+    SB.from('portal_suppliers').select('*').order('name'),
+    SB.from('portal_settings').select('*').eq('key', 'portal_settings').maybeSingle(),
   ]);
   DEPTS = {}; (d.data || []).forEach(x => DEPTS[x.id] = x);
   USERS = {}; (u.data || []).forEach(x => USERS[x.username] = x);
   JOBS = {}; (j.data || []).forEach(x => JOBS[x.key] = x);
   DOA = doa.data || [];
   WORKFLOWS = wf.data || [];
+  SUPPLIERS = sup.data || [];
+  SETTINGS = setg.data || { key: 'portal_settings', value: {} };
 }
 
 async function loadPipeline() {
@@ -1126,10 +1130,14 @@ function archiveHTML() {
 /* ══════ الإدارة ══════ */
 let ADMIN_TAB = 'users';
 function adminHTML() {
-  const tabs = [['users', 'المستخدمون'], ['depts', 'الأقسام'], ['doa', 'مصفوفة التعميد'], ['workflows', 'سير الموافقات']];
+  const tabs = [['users', 'المستخدمون'], ['jobs', 'الوظائف'], ['depts', 'الأقسام والقطاعات'],
+    ['suppliers', 'الموردون'], ['doa', 'مصفوفة التعميد'], ['workflows', 'مسارات الاعتماد'],
+    ['settings', 'الإعدادات'], ['audit', 'سجل التدقيق']];
+  const body = { users: adminUsersHTML, jobs: adminJobsHTML, depts: adminDeptsHTML, suppliers: adminSuppliersHTML,
+    doa: adminDoaHTML, workflows: adminWorkflowsHTML, settings: adminSettingsHTML, audit: adminAuditHTML };
   return `<div class="pagehead"><h1>الإدارة</h1></div>
-  <div class="filters">${tabs.map(([k, l]) => `<button class="fbtn ${ADMIN_TAB === k ? 'active' : ''}" onclick="ADMIN_TAB='${k}';render()">${l}</button>`).join('')}</div>
-  ${ADMIN_TAB === 'users' ? adminUsersHTML() : ADMIN_TAB === 'depts' ? adminDeptsHTML() : ADMIN_TAB === 'doa' ? adminDoaHTML() : adminWorkflowsHTML()}`;
+  <div class="filters" style="flex-wrap:wrap">${tabs.map(([k, l]) => `<button class="fbtn ${ADMIN_TAB === k ? 'active' : ''}" onclick="ADMIN_TAB='${k}';render()">${l}</button>`).join('')}</div>
+  ${(body[ADMIN_TAB] || adminUsersHTML)()}`;
 }
 /* تسميات صلاحيات كتالوج الوظائف (PERM_CATALOG المرجعي مترجماً لمفاتيح الحيّ) */
 const PERM_LABELS = {
@@ -1205,17 +1213,200 @@ async function assignJob(username, jobKey) {
     toast('أُسندت الوظيفة وورِثت صلاحياتها', 'ok'); await loadRefs(); render();
   } catch (e) { /* rpc يعرض الخطأ */ }
 }
+/* ── الوظائف (كتالوج قابل للتحرير — 6-20) ── */
+function adminJobsHTML() {
+  const cats = {}; Object.values(JOBS).forEach(j => { (cats[j.category || 'عام'] = cats[j.category || 'عام'] || []).push(j); });
+  return `<div class="card"><button class="btn btn-primary btn-sm" onclick="openJobEditor('')">${ic('plus', 14)} وظيفة جديدة</button></div>
+  ${Object.entries(cats).map(([cat, js]) => `<div class="card" style="margin-top:12px"><div class="sec-title">${esc(cat)}</div>
+    ${js.map(j => `<div class="bar-row"><div class="bl"><b>${esc(j.title)}</b> <span class="muted" style="font-size:11px">${esc(SCOPE_LABELS[j.scope] || j.scope)}</span><br>${permBadges(j.permissions)}</div>
+      <div style="display:flex;gap:6px">${j.key === 'gm' ? '<span class="badge gold">محمية</span>' : `<button class="btn btn-ghost btn-sm" onclick="openJobEditor('${esc(j.key)}')">${ic('edit', 12)}</button><button class="btn btn-ghost btn-sm" onclick="deleteJob('${esc(j.key)}')">${ic('trash', 12)}</button>`}</div>
+    </div>`).join('')}</div>`).join('')}`;
+}
+const PERM_EDIT_KEYS = ['can_approve_stage', 'can_approve_award', 'can_issue_po', 'can_manage_procurement', 'can_approve_finance', 'can_disburse', 'can_create', 'can_edit', 'can_verify_stock', 'can_see_finance', 'can_manage_users', 'can_manage_company'];
+function openJobEditor(key) {
+  const j = JOBS[key] || {};
+  const title = prompt('اسم الوظيفة:', j.title || ''); if (!title) return;
+  const k = key || (prompt('مفتاح الوظيفة (إنجليزي بلا مسافات):', '') || '').trim(); if (!k) return;
+  const cat = prompt('الفئة:', j.category || 'عام') || 'عام';
+  const scope = prompt('النطاق (own / sector / all):', j.scope || 'own') || 'own';
+  const cur = Object.keys(j.permissions || {}).filter(p => j.permissions[p]);
+  const input = prompt(`الصلاحيات (افصل بفاصلة):\n${PERM_EDIT_KEYS.join(', ')}\n\nالحالية: ${cur.join(',') || 'لا شيء'}`, cur.join(','));
+  if (input === null) return;
+  const perms = {}; input.split(',').map(s => s.trim()).filter(Boolean).forEach(p => perms[p] = true);
+  saveJob(k, title.trim(), cat, scope, perms);
+}
+async function saveJob(key, title, category, scope, permissions) {
+  try { await rpc('portal_save_job', { p_key: key, p_title: title, p_category: category, p_scope: scope, p_permissions: permissions, p_description: null });
+    toast('حُفظت الوظيفة (وسرت على حامليها)', 'ok'); await loadRefs(); render();
+  } catch (e) {}
+}
+async function deleteJob(key) {
+  if (!confirm('حذف الوظيفة؟ (يُمنع إن كان يحملها موظفون)')) return;
+  try { await rpc('portal_delete_job', { p_key: key }); toast('حُذفت الوظيفة', 'ok'); await loadRefs(); render(); } catch (e) {}
+}
+
+/* ── الأقسام والقطاعات (6-19) ── */
 function adminDeptsHTML() {
-  return `<div class="card">${Object.values(DEPTS).map(d => `<div class="bar-row"><div class="bl"><b>${esc(d.name_ar)}</b> <span class="muted">${esc(d.sector || '')}</span></div>
-    <span class="muted">المدير: ${esc((USERS[d.manager_user] || {}).display_name || '—')}</span></div>`).join('')}
-    <div class="muted" style="margin-top:10px;font-size:12px">لإضافة/تعديل الأقسام، استخدم Supabase مباشرةً حالياً — شاشة إدارة كاملة تُضاف لاحقاً عند الطلب.</div></div>`;
+  return `<div class="card"><button class="btn btn-primary btn-sm" onclick="openDeptEditor('')">${ic('plus', 14)} قسم جديد</button>
+  <div style="margin-top:12px">${Object.values(DEPTS).map(d => `<div class="bar-row">
+    <div class="bl"><b>${esc(d.name_ar)}</b> <span class="muted">${esc(d.sector || '')}</span> ${d.active === false ? '<span class="badge danger">مغلق</span>' : ''}<br>
+      <span class="muted" style="font-size:11.5px">المدير: ${esc((USERS[d.manager_user] || {}).display_name || '— غير محدَّد —')}</span></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="openDeptEditor('${esc(d.id)}')">${ic('edit', 12)} تعديل</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleDept('${esc(d.id)}',${d.active === false})">${d.active === false ? 'فتح' : 'إغلاق'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="deleteDept('${esc(d.id)}')">${ic('trash', 12)}</button>
+    </div></div>`).join('')}</div></div>`;
 }
+function openDeptEditor(id) {
+  const d = DEPTS[id] || {};
+  const key = id || (prompt('معرّف القسم (حروف إنجليزية قصيرة، مثل OPS):', '') || '').trim().toUpperCase(); if (!key) return;
+  const name = prompt('اسم القسم:', d.name_ar || ''); if (!name) return;
+  const sector = prompt('القطاع (لتوجيه سلسلة الاعتماد):', d.sector || name) || name;
+  const mgrList = Object.values(USERS).map(u => `${u.username} = ${u.display_name}`).join('\n');
+  const mgr = prompt(`مدير القسم (username، اختياري):\n${mgrList}`, d.manager_user || '') || '';
+  saveDept(key, name.trim(), sector.trim(), mgr.trim(), d.active !== false);
+}
+async function saveDept(id, name, sector, manager, active) {
+  try { await rpc('portal_save_department', { p_id: id, p_name: name, p_sector: sector, p_manager: manager || null, p_active: active });
+    toast('حُفظ القسم', 'ok'); await loadRefs(); render(); } catch (e) {}
+}
+async function toggleDept(id, makeActive) {
+  const d = DEPTS[id]; if (!d) return;
+  await saveDept(id, d.name_ar, d.sector, d.manager_user, makeActive);
+}
+async function deleteDept(id) {
+  if (!confirm('حذف القسم؟ (يُمنع إن كان له طلبات أو موظفون)')) return;
+  try { await rpc('portal_delete_department', { p_id: id }); toast('حُذف القسم', 'ok'); await loadRefs(); render(); } catch (e) {}
+}
+
+/* ── الموردون (6-21) ── */
+function supplierStats(name) {
+  const deals = REQS.filter(r => r.award_supplier === name); // ملاحظة: تجميع تقريبي — التفاصيل في التفاصيل
+  return { deals: deals.length };
+}
+function adminSuppliersHTML() {
+  return `<div class="card"><button class="btn btn-primary btn-sm" onclick="openSupplierEditor('')">${ic('plus', 14)} مورد جديد</button>
+  <div style="margin-top:12px">${(SUPPLIERS || []).map(s => `<div class="bar-row">
+    <div class="bl"><b>${esc(s.name)}</b> ${s.active === false ? '<span class="badge danger">معطّل</span>' : ''}<br>
+      <span class="muted" style="font-size:11.5px">${s.cr ? 'س.ت: ' + esc(s.cr) + ' · ' : ''}${s.iban ? esc(s.iban) + ' · ' : ''}${esc(s.contact || '')}</span></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="openSupplierEditor(${s.id})">${ic('edit', 12)}</button>
+      <button class="btn btn-ghost btn-sm" onclick="deleteSupplier(${s.id})">${ic('trash', 12)}</button>
+    </div></div>`).join('') || '<div class="muted">لا موردين بعد</div>'}</div></div>`;
+}
+function openSupplierEditor(id) {
+  const s = (SUPPLIERS || []).find(x => x.id === id) || {};
+  const name = prompt('اسم المورد:', s.name || ''); if (!name) return;
+  const cr = prompt('السجل التجاري (اختياري):', s.cr || '') || '';
+  const vat = prompt('الرقم الضريبي (اختياري):', s.vat || '') || '';
+  const iban = prompt('الآيبان (اختياري):', s.iban || '') || '';
+  const contact = prompt('جهة الاتصال (اختياري):', s.contact || '') || '';
+  saveSupplier(id, name.trim(), cr.trim(), vat.trim(), iban.trim(), contact.trim());
+}
+async function saveSupplier(id, name, cr, vat, iban, contact) {
+  const row = { name, cr: cr || null, vat: vat || null, iban: iban || null, contact: contact || null };
+  try {
+    if (id) { const { error } = await SB.from('portal_suppliers').update(row).eq('id', id); if (error) throw error; }
+    else { row.created_by = ME.username; const { error } = await SB.from('portal_suppliers').insert(row); if (error) throw error; }
+    toast('حُفظ المورد', 'ok'); await loadRefs(); render();
+  } catch (e) { toast('تعذّر: ' + (e.message || ''), 'err'); }
+}
+async function deleteSupplier(id) {
+  if (!confirm('حذف المورد؟ (يُمنع إن كان مرتبطاً بعروض)')) return;
+  try { await rpc('portal_delete_supplier', { p_id: id }); toast('حُذف المورد', 'ok'); await loadRefs(); render(); } catch (e) {}
+}
+
+/* ── مصفوفة التعميد DoA (تحرير مباشر — config_guard يؤمّن للأدمن) ── */
 function adminDoaHTML() {
-  return `<div class="card"><table class="mini-table" style="width:100%"><thead><tr><th>الشريحة</th><th>الحد الأقصى</th><th>العروض المطلوبة</th><th>لجنة</th><th>صلاحية الاعتماد</th></tr></thead>
-  <tbody>${DOA.map(d => `<tr><td>${esc(d.label)}</td><td>${d.max_value == null ? 'بلا حد' : money(d.max_value)}</td><td>${d.quotes_required}</td><td>${d.committee_required ? 'نعم' : 'لا'}</td><td>${esc(d.award_role_key)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="card"><div class="sec-title">مصفوفة الصلاحيات المالية (DoA)</div>
+  <table class="mini-table" style="width:100%"><thead><tr><th>الشريحة</th><th>الحد الأقصى</th><th>العروض</th><th>لجنة</th><th>صلاحية الاعتماد</th><th></th></tr></thead>
+  <tbody>${DOA.map(d => `<tr><td>${esc(d.label)}</td><td>${d.max_value == null ? 'بلا حد' : money(d.max_value)}</td><td>${d.quotes_required}</td><td>${d.committee_required ? 'نعم' : 'لا'}</td><td>${esc(PERM_LABELS[d.award_role_key] || d.award_role_key)}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick="editDoa(${d.id})">${ic('edit', 12)}</button></td></tr>`).join('')}</tbody></table>
+  <div class="muted" style="margin-top:8px;font-size:12px">تعديل الشرائح لا يعيد بناء سلاسل تعميد قائمة (مجمّد عمداً كما المرجع).</div></div>`;
 }
+async function editDoa(id) {
+  const d = DOA.find(x => x.id === id); if (!d) return;
+  const q = parseInt(prompt('عدد العروض المطلوب:', d.quotes_required)); if (!q || q < 1) return;
+  const comm = confirm('تتطلّب الشريحة لجنة؟ (موافق=نعم)');
+  const role = prompt(`مفتاح صلاحية الاعتماد:\n${['can_approve_award', 'can_manage_users', 'can_manage_company'].join(', ')}`, d.award_role_key) || d.award_role_key;
+  try { const { error } = await SB.from('portal_doa').update({ quotes_required: q, committee_required: comm, award_role_key: role.trim() }).eq('id', id); if (error) throw error;
+    toast('حُدّثت الشريحة', 'ok'); await loadRefs(); render(); } catch (e) { toast('تعذّر: ' + (e.message || ''), 'err'); }
+}
+
+/* ── مسارات الاعتماد (عرض + تحرير المراحل) ── */
 function adminWorkflowsHTML() {
-  return `<div class="card">${WORKFLOWS.map(w => `<div class="bar-row"><div class="bl"><b>${esc(w.name)}</b></div><span class="muted">${(w.stages || []).length} مراحل</span></div>`).join('') || '<div class="muted">لا سير عمل مخصّص — يُستخدم المسار الاحتياطي (مدير القسم فقط)</div>'}</div>`;
+  return `<div class="card">${WORKFLOWS.map(w => `<div style="border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(w.name)}</b><span class="muted" style="font-size:11px">${esc(w.sector || w.department_id || '')}</span></div>
+    <div style="margin-top:8px">${(w.stages || []).map((s, i) => `<div class="bar-row" style="padding:6px 0">
+      <span class="bl"><b>${i + 1}.</b> ${esc(s.label)} <span class="muted" style="font-size:11px">· ${s.resolver === 'dept_manager' ? 'مدير القسم' : s.resolver === 'role' ? ('دور: ' + esc(PERM_LABELS[s.role_key] || s.role_key || '')) : 'مستخدم'} · SLA ${s.sla || 24}س</span></span>
+    </div>`).join('')}</div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="editWorkflowStages('${esc(w.id)}')">${ic('edit', 12)} تعديل المراحل (SLA/التسميات)</button>
+  </div>`).join('') || '<div class="muted">لا مسارات — يُستخدم المسار الاحتياطي (مدير القسم فقط)</div>'}</div>`;
+}
+async function editWorkflowStages(id) {
+  const w = WORKFLOWS.find(x => x.id === id); if (!w) return;
+  const stages = JSON.parse(JSON.stringify(w.stages || []));
+  for (let i = 0; i < stages.length; i++) {
+    const lbl = prompt(`تسمية المرحلة ${i + 1}:`, stages[i].label); if (lbl === null) return; stages[i].label = lbl;
+    const sla = parseInt(prompt(`مهلة المرحلة ${i + 1} (ساعات):`, stages[i].sla || 24)); if (sla > 0) stages[i].sla = sla;
+  }
+  try { const { error } = await SB.from('portal_workflows').update({ stages }).eq('id', id); if (error) throw error;
+    toast('حُدّث المسار', 'ok'); await loadRefs(); render(); } catch (e) { toast('تعذّر: ' + (e.message || ''), 'err'); }
+}
+
+/* ── الإعدادات (SoD + منع التجزئة + ضريبة/SLA) ── */
+function adminSettingsHTML() {
+  const s = (SETTINGS && SETTINGS.value) || {};
+  const row = (key, label, checked) => `<label style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13.5px;cursor:pointer"><input type="checkbox" id="st-${key}" ${checked ? 'checked' : ''}> ${label}</label>`;
+  return `<div class="card"><div class="sec-title">قواعد فصل المهام (SoD)</div>
+    ${row('sod_requester_cannot_approve', 'الطالب لا يعتمد طلبه', s.sod_requester_cannot_approve !== false)}
+    ${row('sod_auto_escalation', 'التصعيد التلقائي عند التعارض', s.sod_auto_escalation !== false)}
+    <div class="sec-title" style="margin-top:16px">منع التجزئة</div>
+    ${row('split_guard', 'تفعيل كشف التجزئة', s.split_guard !== false)}
+    <div class="grid2" style="margin-top:8px">
+      <div><label>عتبة القيمة (ر.س)</label><input class="input" id="st-split_threshold" type="number" value="${s.split_threshold || 100000}"></div>
+      <div><label>النافذة الزمنية (أيام)</label><input class="input" id="st-split_window_days" type="number" value="${s.split_window_days || 7}"></div>
+    </div>
+    <div class="sec-title" style="margin-top:16px">عام</div>
+    <div class="grid2">
+      <div><label>ضريبة القيمة المضافة (%)</label><input class="input" id="st-vat" type="number" value="${s.vat != null ? s.vat : 15}"></div>
+      <div><label>مهلة SLA الافتراضية (أيام)</label><input class="input" id="st-sla_days" type="number" value="${s.sla_days || 3}"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveSettings()">${ic('check', 14)} حفظ الإعدادات</button></div>`;
+}
+async function saveSettings() {
+  const cur = (SETTINGS && SETTINGS.value) || {};
+  const val = Object.assign({}, cur, {
+    sod_requester_cannot_approve: $('st-sod_requester_cannot_approve').checked,
+    sod_auto_escalation: $('st-sod_auto_escalation').checked,
+    split_guard: $('st-split_guard').checked,
+    split_threshold: +$('st-split_threshold').value || 100000,
+    split_window_days: +$('st-split_window_days').value || 7,
+    vat: +$('st-vat').value, sla_days: +$('st-sla_days').value || 3,
+  });
+  try { const { error } = await SB.from('portal_settings').upsert({ key: 'portal_settings', value: val }); if (error) throw error;
+    toast('حُفظت الإعدادات', 'ok'); await loadRefs(); render(); } catch (e) { toast('تعذّر: ' + (e.message || ''), 'err'); }
+}
+
+/* ── سجل التدقيق + تصدير CSV بـ BOM ── */
+let AUDIT_ROWS = [];
+async function loadAudit() {
+  const { data } = await SB.from('portal_audit').select('*').order('id', { ascending: false }).limit(500);
+  AUDIT_ROWS = data || []; render();
+}
+function adminAuditHTML() {
+  if (!AUDIT_ROWS.length) { loadAudit(); return `<div class="card muted">جارٍ تحميل سجل التدقيق…</div>`; }
+  return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="sec-title" style="margin:0">سجل التدقيق (آخر 500)</div>
+    <button class="btn btn-ghost btn-sm" onclick="exportAuditCSV()">${ic('list', 13)} تصدير CSV</button></div>
+    <table class="mini-table" style="width:100%;margin-top:10px"><thead><tr><th>الوقت</th><th>الحدث</th><th>الفاعل</th><th>الطلب</th><th>القناة</th></tr></thead>
+    <tbody>${AUDIT_ROWS.map(a => `<tr><td>${fmtDate(a.created_at)}</td><td>${esc(eventName(a.event))}</td><td>${esc((USERS[a.actor] || {}).display_name || a.actor || '—')}</td><td dir="ltr">${esc(a.request_id || '—')}</td><td>${esc(a.channel || '')}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function exportAuditCSV() {
+  const rows = [['الوقت', 'الحدث', 'الفاعل', 'الطلب', 'القناة']].concat(
+    AUDIT_ROWS.map(a => [fmtDate(a.created_at), eventName(a.event), (USERS[a.actor] || {}).display_name || a.actor || '', a.request_id || '', a.channel || '']));
+  const csv = '﻿' + rows.map(r => r.map(c => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'portal-audit-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
 }
 async function createUser(name, email, password, jobKey, departmentId) {
   try {
