@@ -753,13 +753,18 @@ async function submitNewRequest(meta) {
   return res && res.id ? res.id : null;
 }
 
-async function decide(reqId, action, comment) {
-  const res = await rpc('portal_pr_transition', { p_request_id: reqId, p_action: action, p_comment: comment || null });
-  toast(action === 'approve' ? 'تم الاعتماد' : action === 'reject' ? 'تم الرفض' : 'أُعيد للتعديل', 'ok');
+async function decide(reqId, action, comment, holdUntil) {
+  const res = await rpc('portal_pr_transition', { p_request_id: reqId, p_action: action, p_comment: comment || null, p_hold_until: holdUntil || null });
+  toast(action === 'approve' ? 'تم الاعتماد' : action === 'reject' ? 'تم الرفض' : action === 'defer' ? 'أُجِّل مالياً' : 'أُعيد للتعديل', 'ok');
   if (action === 'approve') notifyPortal('request', reqId, res.finalized ? 'approved' : 'stage', comment);
-  else notifyPortal('request', reqId, action === 'reject' ? 'rejected' : 'returned', comment);
+  else if (action === 'reject' || action === 'return') notifyPortal('request', reqId, action === 'reject' ? 'rejected' : 'returned', comment);
   await openDetail(reqId);
   await loadPipeline();
+}
+async function resumeHold(reqId) {
+  await rpc('portal_resume_hold', { p_request_id: reqId, p_comment: null });
+  toast('استُؤنف الطلب بعد توفّر السيولة', 'ok');
+  await openDetail(reqId); await loadPipeline();
 }
 async function addOffer(reqId, supplier, total, deliveryDays, quality, paymentDays, note) {
   await rpc('portal_submit_offer', { p_request_id: reqId, p_supplier: supplier, p_total: total, p_delivery_days: deliveryDays || null, p_quality: quality || null, p_payment_days: paymentDays || null, p_note: note || null });
@@ -777,8 +782,8 @@ async function awardDecide(reqId, action, comment) {
   notifyPortal('award', reqId, action === 'approve' ? 'approved' : 'rejected', comment);
   await openDetail(reqId); await loadPipeline();
 }
-async function requestPayment(reqId, kind, amount, custodyTo) {
-  await rpc('portal_payment_request', { p_request_id: reqId, p_kind: kind, p_amount: amount, p_custody_to: custodyTo || null });
+async function requestPayment(reqId, kind, amount, custodyTo, details) {
+  await rpc('portal_payment_request', { p_request_id: reqId, p_kind: kind, p_amount: amount, p_custody_to: custodyTo || null, p_details: details || null });
   toast('أُرسل طلب الصرف', 'ok');
   notifyPortal('payment', reqId, 'pending');
   await openDetail(reqId);
@@ -830,7 +835,7 @@ const STATUSMETA = {
   draft: ['مسودة', 'neutral'], in_review: ['قيد المراجعة', 'warn'], returned: ['أُعيد للتعديل', 'info'],
   rejected: ['مرفوض', 'danger'], pricing: ['قيد التسعير', 'info'], award_review: ['بانتظار اعتماد التعميد', 'warn'],
   awarded: ['اعتُمد التعميد', 'gold'], payment_pending: ['بانتظار الصرف', 'warn'], receipt_pending: ['بانتظار الاستلام', 'info'],
-  closed: ['مُغلق', 'ok'], cancelled: ['مُلغى', 'neutral'],
+  closed: ['مُغلق', 'ok'], cancelled: ['مُلغى', 'neutral'], on_hold: ['مؤجَّل مالياً', 'warn'],
 };
 function statusBadge(s) { const m = STATUSMETA[s] || [s, 'neutral']; return `<span class="badge ${m[1]}">${esc(m[0])}</span>`; }
 
@@ -892,8 +897,17 @@ function detailHTML(r) {
   const pendingPay = r.payments.find(p => p.status === 'pending_pay' || p.status === 'approved_pay');
   const canReceive = r.phase === 'receipt' && can('can_verify_stock');
 
+  const isFinanceStage = myPendingStage && myPendingStage.role_key === 'can_approve_finance';
+  const canResume = r.status === 'on_hold' && (can('can_disburse') || can('can_approve_finance') || isAdmin());
+
   return `<div class="pagehead"><div><h1>${esc(r.title)}</h1><div class="sub">${esc(r.id)} · ${esc(dept.name_ar || '—')} · ${statusBadge(r.status)}</div></div>
     <button class="btn btn-ghost" onclick="go('pipeline')">${ic('list', 14)} رجوع</button></div>
+
+  ${r.split_flag ? `<div class="card" style="border-color:var(--warn);background:var(--warn-bg)"><div style="display:flex;gap:10px;align-items:center"><b style="color:var(--warn)">${ic('shield', 16)} تنبيه منع التجزئة</b><span style="font-size:13px">هذا الطلب ضمن مجموعة طلبات متقاربة في القسم قد يتجاوز مجموعها حدّ الصلاحية — راجعه قبل الاعتماد.</span></div></div>` : ''}
+
+  ${r.status === 'on_hold' ? `<div class="card" style="border-color:var(--warn)"><div class="sec-title" style="color:var(--warn)">${ic('clock')}مؤجَّل مالياً</div>
+    <div class="muted" style="font-size:13px">${esc(r.hold_reason || '')}${r.hold_until ? ' · الاستئناف المتوقّع: ' + esc(r.hold_until) : ''}</div>
+    ${canResume ? `<button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="resumeHold('${r.id}')">${ic('check', 14)} استئناف بعد توفّر السيولة</button>` : ''}</div>` : ''}
 
   <div class="grid2">
     <div class="card"><div class="sec-title">${ic('list')}البنود</div>${itemsTable(r.items, r.phase === 'receipt' || r.phase === 'closed')}
@@ -915,6 +929,7 @@ function detailHTML(r) {
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="promptDecide('${r.id}','approve')">${ic('check', 15)} اعتماد</button>
       <button class="btn" onclick="promptDecide('${r.id}','return')">إرجاع للتعديل</button>
+      ${isFinanceStage ? `<button class="btn" onclick="promptDecide('${r.id}','defer')">${ic('clock', 15)} تأجيل مالي</button>` : ''}
       <button class="btn btn-danger" onclick="promptDecide('${r.id}','reject')">${ic('x', 15)} رفض</button>
     </div></div>` : ''}
 
@@ -962,13 +977,19 @@ function eventLabel(e) {
   const M = { submitted: 'إرسال الطلب', stage_approved: 'اعتماد مرحلة', stage_rejected: 'رفض مرحلة', stage_returned: 'إرجاع مرحلة',
     offer_added: 'إضافة عرض', awarded: 'ترسية', award_approved: 'اعتماد تعميد', award_rejected: 'رفض تعميد',
     payment_requested: 'طلب صرف', payment_approved_pay: 'اعتماد صرف', payment_disbursed: 'تنفيذ الصرف', payment_rejected: 'رفض صرف',
-    receipt_recorded: 'تسجيل استلام', closed: 'إغلاق الطلب', cancelled: 'إلغاء الطلب', escalated: 'تصعيد SLA' };
+    receipt_recorded: 'تسجيل استلام', closed: 'إغلاق الطلب', cancelled: 'إلغاء الطلب', escalated: 'تصعيد SLA',
+    deferred: 'تأجيل مالي', resumed: 'استئناف', split_flag: 'تنبيه تجزئة', proc_type: 'نوع شراء استثنائي', job_assigned: 'إسناد وظيفة' };
   return M[e] || e;
 }
 
 /* ── تفاعلات بسيطة (prompt-based، مطابقة أسلوب requests.html القائم) ── */
 function promptDecide(id, action) {
   let c = '';
+  if (action === 'defer') {
+    c = prompt('سبب التأجيل المالي (ضعف السيولة…):', ''); if (c === null) return; if (!c.trim()) { toast('السبب مطلوب', 'err'); return; }
+    const until = prompt('تاريخ الاستئناف المتوقّع (YYYY-MM-DD، اختياري):', '') || null;
+    decide(id, 'defer', c, until && until.trim() ? until.trim() : null); return;
+  }
   if (action !== 'approve') { c = prompt(action === 'reject' ? 'سبب الرفض:' : 'سبب الإرجاع:', ''); if (c === null) return; if (!c.trim()) { toast('السبب مطلوب', 'err'); return; } }
   decide(id, action, c);
 }
@@ -993,8 +1014,20 @@ function promptPayment(id) {
   const kind = prompt('نوع الصرف (bank / custody / credit):', 'bank'); if (!kind) return;
   const amount = parseFloat(prompt('المبلغ:', String(CURRENT.award ? CURRENT.award.winner_total : CURRENT.est_total)));
   if (!amount || amount <= 0) { toast('مبلغ غير صالح', 'err'); return; }
-  let custody = null; if (kind === 'custody') custody = prompt('اسم مستلم العهدة:');
-  requestPayment(id, kind, amount, custody);
+  let custody = null, details = {};
+  if (kind === 'bank') {
+    const iban = (prompt('الآيبان (SA + 22 رقماً):', 'SA') || '').replace(/\s+/g, '').toUpperCase();
+    if (!/^SA\d{22}$/.test(iban)) { toast('آيبان غير صحيح — SA + 22 رقماً', 'err'); return; }
+    const accName = prompt('اسم صاحب الحساب:'); if (!accName || !accName.trim()) { toast('اسم الحساب مطلوب', 'err'); return; }
+    details = { iban, account_name: accName.trim(), bank_name: (prompt('اسم البنك (اختياري):', '') || '').trim() };
+  } else if (kind === 'custody') {
+    custody = prompt('اسم مستخدم مسؤول العهدة (username):'); if (!custody || !custody.trim()) { toast('مسؤول العهدة مطلوب', 'err'); return; }
+    custody = custody.trim();
+  } else if (kind === 'credit') {
+    const due = prompt('تاريخ الاستحقاق (YYYY-MM-DD):'); if (!due || !due.trim()) { toast('تاريخ الاستحقاق مطلوب', 'err'); return; }
+    details = { due_date: due.trim(), terms: (prompt('الشروط (اختياري):', '') || '').trim() };
+  } else { toast('نوع صرف غير معروف', 'err'); return; }
+  requestPayment(id, kind, amount, custody, details);
 }
 function promptPayReject(paymentId) { const c = prompt('سبب رفض الصرف:'); if (!c || !c.trim()) { toast('السبب مطلوب', 'err'); return; } paymentDecide(paymentId, 'reject', c); }
 function promptCancel(id) { const c = prompt('سبب الإلغاء (اختياري):', ''); if (c === null) return; if (confirm('تأكيد إلغاء الطلب؟')) cancelRequest(id, c); }
