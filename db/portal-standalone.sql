@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS portal_requests (
   note            TEXT,                                        -- ملاحظات الطالب
   split_flag      BOOLEAN NOT NULL DEFAULT false,              -- علم منع التجزئة (المرحلة 4)
   quotes_required INT,                                         -- عدد العروض المطلوب (DoA أو 1 للاستثنائي)
+  hold_reason     TEXT,                                        -- سبب التأجيل المالي (on_hold)
+  hold_until      DATE,                                        -- تاريخ استئناف متوقّع
+  held_by         TEXT,                                        -- من أجّل مالياً
   po_issued_by    TEXT,
   po_issued_at    TIMESTAMPTZ,
   stage_due_at    TIMESTAMPTZ,
@@ -229,7 +232,8 @@ CREATE TABLE IF NOT EXISTS portal_payments (
   disbursed_by  TEXT,
   disbursed_at  TIMESTAMPTZ,
   comment       TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  details       JSONB
 );
 CREATE INDEX IF NOT EXISTS idx_portal_pay_req ON portal_payments(request_id);
 
@@ -564,8 +568,10 @@ DECLARE
   v_name text;
   v_q numeric; v_p numeric;
   v_quotes int;
-  MAXQ CONSTANT numeric := 1000000;      -- حد الكمية المنطقي (المرجع 6-1)
-  MAXP CONSTANT numeric := 100000000;    -- حد السعر المنطقي (المرجع 6-1)
+  v_win_days numeric; v_thr numeric; v_cluster_sum numeric; v_peers int; v_all_below boolean;
+  v_split boolean := false;
+  MAXQ CONSTANT numeric := 1000000;
+  MAXP CONSTANT numeric := 100000000;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   IF NOT (portal_has_perm('can_create') OR portal_is_admin()) THEN
@@ -581,8 +587,6 @@ BEGIN
     RAISE EXCEPTION 'التبرير مطلوب لهذا النوع من الشراء';
   END IF;
 
-  -- القطاع يُشتق من ملف الموظف (المرجع: الموظف لا يختار القطاع). الأدمن فقط
-  -- يستطيع الرفع نيابةً عن قسم آخر (تشغيل/إعداد).
   SELECT department_id INTO v_my_dept FROM portal_users WHERE username = v_me;
   v_dept := CASE
     WHEN portal_is_admin() AND coalesce(p_department_id,'') <> '' THEN p_department_id
@@ -606,7 +610,6 @@ BEGIN
     v_est := v_est + v_q * v_p;
   END LOOP;
 
-  -- عدد العروض المطلوب: الاستثنائي عرض واحد (مبرَّر)، وإلا حسب شريحة DoA للقيمة التقديرية.
   IF coalesce(p_proc_type,'normal') <> 'normal' THEN
     v_quotes := 1;
   ELSE
@@ -619,12 +622,27 @@ BEGIN
   v_id := 'REQ-' || to_char(now(), 'YYYYMMDD') || '-' || substr(md5(random()::text || clock_timestamp()::text), 1, 6);
   SELECT display_name INTO v_name FROM portal_users WHERE username = v_me;
 
+  -- منع التجزئة (قبل الإدراج — العنقود = الأقران + هذا الطلب)
+  IF portal_setting_bool('split_guard', true) THEN
+    v_thr := portal_setting_num('split_threshold', 100000);
+    v_win_days := portal_setting_num('split_window_days', 7);
+    SELECT count(*), coalesce(sum(est_total),0), coalesce(bool_and(est_total < v_thr), true)
+      INTO v_peers, v_cluster_sum, v_all_below
+      FROM portal_requests
+      WHERE department_id = v_dept AND status <> 'rejected'
+        AND created_at >= now() - make_interval(days => v_win_days::int)
+        AND created_at <= now() + make_interval(days => v_win_days::int);
+    IF v_peers > 0 AND (v_cluster_sum + v_est) >= v_thr AND v_all_below AND v_est < v_thr THEN
+      v_split := true;
+    END IF;
+  END IF;
+
   PERFORM set_config('app.portal_transition', '1', true);
   INSERT INTO portal_requests (id, title, department_id, requester, requester_name, priority,
-                               est_total, created_by, project, need_by, proc_type, justification, note, quotes_required)
+                               est_total, created_by, project, need_by, proc_type, justification, note, quotes_required, split_flag)
     VALUES (v_id, trim(p_title), v_dept, v_me, v_name, coalesce(nullif(p_priority, ''), 'متوسط'),
             v_est, v_me, trim(p_project), p_need_by, coalesce(p_proc_type,'normal'),
-            nullif(trim(coalesce(p_justification,'')),''), nullif(trim(coalesce(p_note,'')),''), v_quotes);
+            nullif(trim(coalesce(p_justification,'')),''), nullif(trim(coalesce(p_note,'')),''), v_quotes, v_split);
 
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_items) LOOP
     v_seq := v_seq + 1;
@@ -637,8 +655,12 @@ BEGIN
     PERFORM portal_audit_write(v_id, 'proc_type', v_me, 'portal',
       jsonb_build_object('type', p_proc_type, 'justification', p_justification));
   END IF;
+  IF v_split THEN
+    PERFORM portal_audit_write(v_id, 'split_flag', v_me, 'portal',
+      jsonb_build_object('cluster_sum', v_cluster_sum + v_est, 'threshold', v_thr, 'window_days', v_win_days, 'peers', v_peers));
+  END IF;
 
-  RETURN portal_submit_request(v_id) || jsonb_build_object('id', v_id, 'quotes_required', v_quotes);
+  RETURN portal_submit_request(v_id) || jsonb_build_object('id', v_id, 'quotes_required', v_quotes, 'split_flag', v_split);
 END $fn$;
 
 -- بناء سلسلة الاعتماد عند الإرسال: يطابق portal_workflows بالقسم/القطاع/القيمة،
@@ -702,7 +724,7 @@ END $fn$;
 
 -- قرار مرحلة (اعتماد/رفض/إرجاع) — الدورة الأولى. مطابق تماماً لمنطق pr_transition
 -- المُثبَت أمنياً (فصل مهام، تفويض، قفل صفوف، تحديث ذرّي).
-CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL)
+CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE
   v_me text := portal_username();
@@ -712,7 +734,7 @@ DECLARE
   v_ok boolean := false; v_intended text; v_perm boolean;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','defer') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
 
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
@@ -722,9 +744,11 @@ BEGIN
     WHERE request_id = p_request_id AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
   IF NOT FOUND THEN RAISE EXCEPTION 'لا توجد مرحلة معلّقة'; END IF;
 
-  IF v_req.requester = v_me THEN RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)'; END IF;
+  IF portal_setting_bool('sod_requester_cannot_approve', true)
+     AND v_req.requester = v_me AND NOT portal_is_admin() THEN
+    RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)';
+  END IF;
   -- فصل المهام متعدّد المراحل: من اعتمد مرحلة سابقة لا يعتمد مرحلة لاحقة لنفس الطلب
-  -- (يمنع مستخدماً واحداً يحمل الصلاحية من طيّ كامل سلسلة موافقات متعددة المستويات).
   IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = p_request_id
               AND approver = v_me AND decision = 'approved' AND seq < v_stage.seq)
      AND NOT portal_is_admin() THEN
@@ -733,7 +757,9 @@ BEGIN
 
   v_intended := portal_resolve_stage(p_request_id, v_stage);
   IF v_intended IS NOT NULL THEN
-    v_ok := (portal_effective_approver(v_intended) = v_me);
+    -- تصعيد تعارض فصل المهام: إن كان المعتمِد المقصود هو الطالب نفسه، يُحوَّل
+    -- الاستحقاق تلقائياً لبديل مؤهَّل (باب 5-2) — فلا يعلق الطلب ولا يُعتمد ذاتياً.
+    v_ok := (portal_qualified_approver(v_intended, v_req.requester) = v_me);
   ELSIF v_stage.role_key IS NOT NULL THEN
     SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm
       FROM portal_users WHERE username = v_me;
@@ -741,8 +767,24 @@ BEGIN
   END IF;
   IF NOT v_ok AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
 
-  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN
-    RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع';
+  IF p_action IN ('reject','return','defer') AND coalesce(trim(p_comment),'') = '' THEN
+    RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع/التأجيل';
+  END IF;
+
+  -- التأجيل المالي (سيناريو 6-4): من بوابة التحقق المالي فقط (أو الأدمن).
+  -- لا يمسّ سلسلة الموافقات — الطلب يتجمّد على مرحلته ويُستثنى من SLA.
+  IF p_action = 'defer' THEN
+    IF v_stage.role_key IS DISTINCT FROM 'can_approve_finance' AND NOT portal_is_admin() THEN
+      RAISE EXCEPTION 'التأجيل المالي متاح في مرحلة التحقق المالي فقط';
+    END IF;
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_requests SET status = 'on_hold', hold_reason = p_comment, hold_until = p_hold_until,
+           held_by = v_me, updated_at = now(), updated_by = v_me
+      WHERE id = p_request_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(p_request_id, 'deferred', v_me, 'portal',
+      jsonb_build_object('reason', p_comment, 'until', p_hold_until));
+    RETURN jsonb_build_object('ok', true, 'action', 'defer', 'status', 'on_hold');
   END IF;
 
   v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
@@ -907,9 +949,12 @@ END $fn$;
 
 -- ═══════════════════════ 7) الصرف ═══════════════════════
 
-CREATE OR REPLACE FUNCTION portal_payment_request(p_request_id text, p_kind text, p_amount numeric, p_custody_to text DEFAULT NULL)
+CREATE OR REPLACE FUNCTION portal_payment_request(p_request_id text, p_kind text, p_amount numeric,
+    p_custody_to text DEFAULT NULL, p_details jsonb DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
-DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_id bigint;
+DECLARE
+  v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_id bigint;
+  v_iban text; v_details jsonb := coalesce(p_details, '{}'::jsonb);
 BEGIN
   IF v_me IS NULL OR NOT (portal_has_perm('can_manage_procurement') OR portal_has_perm('can_disburse')) THEN
     RAISE EXCEPTION 'غير مصرّح';
@@ -917,13 +962,28 @@ BEGIN
   IF p_kind NOT IN ('bank','custody','credit') THEN RAISE EXCEPTION 'نوع صرف غير صالح'; END IF;
   IF coalesce(p_amount,0) <= 0 THEN RAISE EXCEPTION 'مبلغ غير صالح'; END IF;
 
+  IF p_kind = 'bank' THEN
+    v_iban := upper(regexp_replace(coalesce(v_details->>'iban',''), '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+    IF coalesce(trim(v_details->>'account_name'),'') = '' THEN RAISE EXCEPTION 'اسم الحساب البنكي مطلوب'; END IF;
+    v_details := v_details || jsonb_build_object('iban', v_iban);
+  ELSIF p_kind = 'custody' THEN
+    IF coalesce(p_custody_to,'') = '' OR NOT EXISTS (SELECT 1 FROM portal_users WHERE username = p_custody_to AND active) THEN
+      RAISE EXCEPTION 'حدّد مسؤول العهدة (مستخدم نشط)';
+    END IF;
+  ELSIF p_kind = 'credit' THEN
+    IF (v_details->>'due_date') IS NULL OR (v_details->>'due_date')::date IS NULL THEN
+      RAISE EXCEPTION 'تاريخ الاستحقاق مطلوب للصرف الآجل';
+    END IF;
+  END IF;
+
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
   IF v_req.phase <> 'payment' THEN RAISE EXCEPTION 'الطلب ليس جاهزاً للصرف'; END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
-  INSERT INTO portal_payments(request_id, kind, amount, custody_to, requested_by)
-    VALUES (p_request_id, p_kind, p_amount, p_custody_to, v_me) RETURNING id INTO v_id;
+  INSERT INTO portal_payments(request_id, kind, amount, custody_to, requested_by, details)
+    VALUES (p_request_id, p_kind, p_amount, p_custody_to, v_me, nullif(v_details, '{}'::jsonb)) RETURNING id INTO v_id;
   UPDATE portal_requests SET status = 'payment_pending', updated_at = now(), updated_by = v_me WHERE id = p_request_id;
   PERFORM set_config('app.portal_transition', '0', true);
 
@@ -1082,7 +1142,8 @@ BEGIN
   IF NOT FOUND THEN RETURN jsonb_build_object('error','no_pending','code',409); END IF;
   IF v_stage.seq <> v_tok.seq THEN RETURN jsonb_build_object('error','stage_changed','code',409); END IF;
 
-  IF v_req.requester = v_tok.approver THEN RETURN jsonb_build_object('error','sod','code',403); END IF;
+  IF portal_setting_bool('sod_requester_cannot_approve', true)
+     AND v_req.requester = v_tok.approver THEN RETURN jsonb_build_object('error','sod','code',403); END IF;
   -- فصل المهام متعدّد المراحل (نفس منطق portal_pr_transition): من اعتمد مرحلة سابقة لا يعتمد لاحقة.
   IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_tok.request_id
               AND approver = v_tok.approver AND decision = 'approved' AND seq < v_stage.seq) THEN
@@ -1091,7 +1152,7 @@ BEGIN
 
   v_intended := portal_resolve_stage(v_tok.request_id, v_stage);
   IF v_intended IS NOT NULL THEN
-    v_ok := (portal_effective_approver(v_intended) = v_tok.approver);
+    v_ok := (portal_qualified_approver(v_intended, v_req.requester) = v_tok.approver);
   ELSIF v_stage.role_key IS NOT NULL THEN
     SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm FROM portal_users WHERE username = v_tok.approver;
     v_ok := coalesce(v_perm, false);
@@ -1134,6 +1195,152 @@ END $fn$;
 
 
 -- ═══════════════════════ 10) SLA/تصعيد (اختياري — pg_cron إن توفّر) ═══════════════════════
+
+-- ═══ دوال الحوكمة (المرحلة 4): إعدادات + تصعيد تعارض + استئناف ═══
+CREATE OR REPLACE FUNCTION portal_setting_bool(p_key text, p_default boolean)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT coalesce((SELECT (value->>p_key)::boolean FROM portal_settings WHERE key='portal_settings'), p_default);
+$fn$;
+CREATE OR REPLACE FUNCTION portal_setting_num(p_key text, p_default numeric)
+RETURNS numeric LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT coalesce((SELECT (value->>p_key)::numeric FROM portal_settings WHERE key='portal_settings'), p_default);
+$fn$;
+
+-- 4) المعتمِد المؤهَّل (باب 5-2): تفويض ← عند تعارض (المعتمِد هو الطالب) تصعيدٌ
+--    عبر سلسلة المدراء (manager_user) لأول نشط مؤهَّل بلا تعارض، وإلا أي مؤهَّل
+--    نشط. حارس دورات في كلا المسارين.
+CREATE OR REPLACE FUNCTION portal_qualified_approver(p_base text, p_requester text)
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_u text := portal_effective_approver(p_base);
+  v_cur text; v_cand text; v_seen text[] := ARRAY[]::text[];
+BEGIN
+  IF v_u IS NULL THEN RETURN NULL; END IF;
+  IF NOT portal_setting_bool('sod_auto_escalation', true) THEN RETURN v_u; END IF;
+  IF v_u IS DISTINCT FROM p_requester THEN RETURN v_u; END IF;   -- لا تعارض
+
+  -- (أ) سلسلة المدراء
+  v_cur := v_u;
+  WHILE v_cur IS NOT NULL AND NOT (v_cur = ANY(v_seen)) LOOP
+    v_seen := v_seen || v_cur;
+    SELECT manager_user INTO v_cur FROM portal_users WHERE username = v_cur;
+    IF v_cur IS NOT NULL THEN
+      v_cand := portal_effective_approver(v_cur);
+      IF v_cand IS DISTINCT FROM p_requester AND EXISTS (
+           SELECT 1 FROM portal_users WHERE username = v_cand AND active
+             AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+         ) THEN
+        RETURN v_cand;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- (ب) أي معتمِد نشط مؤهَّل بلا تعارض (الأدمن أولاً — يكافئ ROOT المرجعي)
+  SELECT username INTO v_cand FROM portal_users
+    WHERE active AND username IS DISTINCT FROM p_requester
+      AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+    ORDER BY (role='admin') DESC, username ASC LIMIT 1;
+  IF v_cand IS NOT NULL THEN RETURN portal_effective_approver(v_cand); END IF;
+  RETURN v_u;
+END $fn$;
+CREATE OR REPLACE FUNCTION portal_setting_num(p_key text, p_default numeric)
+RETURNS numeric LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT coalesce((SELECT (value->>p_key)::numeric FROM portal_settings WHERE key='portal_settings'), p_default);
+$fn$;
+
+-- 4) المعتمِد المؤهَّل (باب 5-2): تفويض ← عند تعارض (المعتمِد هو الطالب) تصعيدٌ
+--    عبر سلسلة المدراء (manager_user) لأول نشط مؤهَّل بلا تعارض، وإلا أي مؤهَّل
+--    نشط. حارس دورات في كلا المسارين.
+CREATE OR REPLACE FUNCTION portal_qualified_approver(p_base text, p_requester text)
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_u text := portal_effective_approver(p_base);
+  v_cur text; v_cand text; v_seen text[] := ARRAY[]::text[];
+BEGIN
+  IF v_u IS NULL THEN RETURN NULL; END IF;
+  IF NOT portal_setting_bool('sod_auto_escalation', true) THEN RETURN v_u; END IF;
+  IF v_u IS DISTINCT FROM p_requester THEN RETURN v_u; END IF;   -- لا تعارض
+
+  -- (أ) سلسلة المدراء
+  v_cur := v_u;
+  WHILE v_cur IS NOT NULL AND NOT (v_cur = ANY(v_seen)) LOOP
+    v_seen := v_seen || v_cur;
+    SELECT manager_user INTO v_cur FROM portal_users WHERE username = v_cur;
+    IF v_cur IS NOT NULL THEN
+      v_cand := portal_effective_approver(v_cur);
+      IF v_cand IS DISTINCT FROM p_requester AND EXISTS (
+           SELECT 1 FROM portal_users WHERE username = v_cand AND active
+             AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+         ) THEN
+        RETURN v_cand;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- (ب) أي معتمِد نشط مؤهَّل بلا تعارض (الأدمن أولاً — يكافئ ROOT المرجعي)
+  SELECT username INTO v_cand FROM portal_users
+    WHERE active AND username IS DISTINCT FROM p_requester
+      AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+    ORDER BY (role='admin') DESC, username ASC LIMIT 1;
+  IF v_cand IS NOT NULL THEN RETURN portal_effective_approver(v_cand); END IF;
+  RETURN v_u;
+END $fn$;
+CREATE OR REPLACE FUNCTION portal_qualified_approver(p_base text, p_requester text)
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_u text := portal_effective_approver(p_base);
+  v_cur text; v_cand text; v_seen text[] := ARRAY[]::text[];
+BEGIN
+  IF v_u IS NULL THEN RETURN NULL; END IF;
+  IF NOT portal_setting_bool('sod_auto_escalation', true) THEN RETURN v_u; END IF;
+  IF v_u IS DISTINCT FROM p_requester THEN RETURN v_u; END IF;   -- لا تعارض
+
+  -- (أ) سلسلة المدراء
+  v_cur := v_u;
+  WHILE v_cur IS NOT NULL AND NOT (v_cur = ANY(v_seen)) LOOP
+    v_seen := v_seen || v_cur;
+    SELECT manager_user INTO v_cur FROM portal_users WHERE username = v_cur;
+    IF v_cur IS NOT NULL THEN
+      v_cand := portal_effective_approver(v_cur);
+      IF v_cand IS DISTINCT FROM p_requester AND EXISTS (
+           SELECT 1 FROM portal_users WHERE username = v_cand AND active
+             AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+         ) THEN
+        RETURN v_cand;
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- (ب) أي معتمِد نشط مؤهَّل بلا تعارض (الأدمن أولاً — يكافئ ROOT المرجعي)
+  SELECT username INTO v_cand FROM portal_users
+    WHERE active AND username IS DISTINCT FROM p_requester
+      AND (role='admin' OR coalesce((permissions->>'can_approve_stage')::boolean,false))
+    ORDER BY (role='admin') DESC, username ASC LIMIT 1;
+  IF v_cand IS NOT NULL THEN RETURN portal_effective_approver(v_cand); END IF;
+  RETURN v_u;
+END $fn$;
+CREATE OR REPLACE FUNCTION portal_resume_hold(p_request_id text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF NOT (portal_has_perm('can_disburse') OR portal_has_perm('can_approve_finance') OR portal_is_admin()) THEN
+    RAISE EXCEPTION 'استئناف المؤجَّل مالياً متاح للمالية فقط';
+  END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'on_hold' THEN RAISE EXCEPTION 'الطلب ليس مؤجَّلاً'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_requests SET status = 'in_review', hold_reason = NULL, hold_until = NULL, held_by = NULL,
+         updated_at = now(), updated_by = v_me
+    WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'resumed', v_me, 'portal',
+    jsonb_build_object('comment', coalesce(p_comment, 'تأكيد توفّر السيولة — استئناف')));
+  RETURN jsonb_build_object('ok', true, 'status', 'in_review');
+END $fn$;
 
 CREATE OR REPLACE FUNCTION portal_sla_hours() RETURNS numeric
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
@@ -1575,6 +1782,7 @@ END $fn$;
 --     portal_payment_request, portal_payment_transition, portal_record_receipt,
 --     portal_cancel_request, portal_gen_token, portal_create_token,
 --     portal_apply_job, portal_save_job, portal_delete_job,
+--     portal_setting_bool, portal_setting_num, portal_qualified_approver, portal_resume_hold,
 --     portal_sla_hours, portal_set_due, portal_run_sla, portal_audit_write,
 --     portal_approvals_guard, portal_request_status_guard, portal_award_approvals_guard,
 --     portal_award_guard, portal_payments_guard, portal_locked_guard, portal_users_guard,

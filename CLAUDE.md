@@ -73,7 +73,11 @@
 - [x] **المرحلة 3:** المستندات الأربعة (طلب/أمر شراء/سند صرف/استلام) + tafqit + طباعة —
   **واجهة فقط** (CSS المستندات موجود مسبقاً). دوال docReqHTML/docPoHTML/docPayHTML/docGrnHTML/
   documentsHTML/printEl/printDossier. تواقيع من المعتمِدين الفعليين.
-- [ ] المرحلة 4: on_hold/تجزئة/تصعيد SoD/آيبان.
+- [x] **المرحلة 4:** on_hold (defer/resume — مستثنى من SLA) + منع التجزئة (split_flag) +
+  تصعيد تعارض SoD (portal_qualified_approver) + سلامة الصرف (آيبان SA+22 + details jsonb) +
+  مفاتيح SOD_RULES في portal_settings. Migration: `db/portal-migrations/003-governance.sql`.
+  اختبارها: `10_governance.sql`. توقيعات جديدة: portal_pr_transition(+p_hold_until)،
+  portal_payment_request(+p_details)، portal_resume_hold. E2E: صرف بنكي يتطلب آيبان صحيح الآن.
 - [ ] المرحلة 5: شاشات إدارة كاملة + portal_suppliers. - [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
 **ترجمة المفاتيح (نموذج→حيّ):** approveReq→can_approve_stage، approveAward→can_approve_award،
 issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
