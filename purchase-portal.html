@@ -6,14 +6,14 @@
 <title>نظام طلبات الشراء والموافقات — مجموعة الذيابي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --navy:#16243d; --navy-2:#0f1a2e; --navy-3:#22375a;
-    --ink:#1b2333; --muted:#6a7488; --faint:#98a1b1;
+    --ink:#1b2333; --muted:#5d6b80; --faint:#93a0b3;
     --gold:#c2a063; --gold-2:#a37f43; --gold-3:#876734; --gold-soft:#eaddc1;
-    --bg:#f3efe7; --surface:#ffffff; --surface-2:#faf8f2;
-    --line:#e8e2d6; --line-2:#f1ede4;
+    --bg:#f2f4f8; --surface:#ffffff; --surface-2:#f7f9fc;
+    --line:#e2e7ef; --line-2:#ecf0f6;
     --ok:#2e7d5b; --ok-bg:#e9f3ee; --ok-line:#c2e0d0;
     --danger:#b4453f; --danger-bg:#f8ecea; --danger-line:#edcac6;
     --warn:#a9802f; --warn-bg:#f7efdc; --warn-line:#e8d6ac;
@@ -23,6 +23,7 @@
     --sh-2:0 6px 18px -8px rgba(20,28,46,.16),0 2px 6px -4px rgba(20,28,46,.08);
     --sh-3:0 26px 54px -22px rgba(15,26,46,.34),0 10px 24px -14px rgba(15,26,46,.18);
     --ease:cubic-bezier(.32,.72,.32,1);
+    --font-mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
   body{
@@ -68,7 +69,7 @@
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px;margin-bottom:16px}
   .kpi{background:var(--surface);border:1px solid var(--line-2);border-radius:15px;padding:18px;box-shadow:var(--sh-1);transition:.2s var(--ease);position:relative;overflow:hidden}
   .kpi:hover{transform:translateY(-3px);box-shadow:var(--sh-2);border-color:var(--gold-soft)}
-  .kpi .kv{font-size:30px;font-weight:700;line-height:1;letter-spacing:-.03em;color:var(--navy)}
+  .kpi .kv{font-size:30px;font-weight:600;line-height:1;letter-spacing:-1px;color:var(--navy);font-family:var(--font-mono);font-variant-numeric:tabular-nums}
   .kpi .kl{font-size:11.5px;color:var(--muted);margin-top:8px;font-weight:600;display:flex;align-items:center;gap:6px}
   .kpi .kl svg{width:14px;height:14px;color:var(--gold-2)}
   .kpi.alert .kv{color:var(--danger)}
@@ -102,7 +103,7 @@
   .badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
   .badge.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-line)}
   .badge.info{background:var(--info-bg);color:var(--info);border-color:var(--info-line)}
-  .badge.neutral{background:#f0ece2;color:#6c6452;border-color:var(--line)}
+  .badge.neutral{background:#eef1f6;color:#6c6452;border-color:var(--line)}
   .badge.neutral::before{display:none}
   .badge.gold{background:linear-gradient(180deg,#f0e4c8,#e7d4a8);color:var(--gold-3);border-color:var(--gold-soft)}
   .badge.gold::before{background:var(--gold-2)}
@@ -136,7 +137,7 @@
   .rc::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:var(--accent,var(--gold))}
   .rc:hover{transform:translateY(-3px);box-shadow:var(--sh-2);border-color:var(--gold-soft)}
   .rc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:11px}
-  .rc-id{font-size:11.5px;color:var(--muted);font-weight:600}
+  .rc-id{font-size:11.5px;color:var(--muted);font-weight:600;font-family:var(--font-mono);letter-spacing:.02em}
   .rc-title{font-size:15.5px;font-weight:700;letter-spacing:-.01em;margin-top:2px}
   .rc-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-bottom:13px}
   .rc-meta b{color:var(--ink);font-weight:600}
@@ -182,13 +183,13 @@
   .fl-conn.active{background:linear-gradient(90deg,var(--gold),var(--line))}
   .fl-conn::after{content:'';position:absolute;inset-inline-start:-1px;top:50%;transform:translateY(-50%);border:5px solid transparent;border-inline-end-color:var(--line)}
   .fl-conn.done::after{border-inline-end-color:var(--ok)}
-  .fl-cond{position:absolute;top:-22px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9.5px;font-weight:600;color:var(--gold-3);background:#fbf3e0;border:1px solid var(--gold-soft);border-radius:7px;padding:1px 7px}
+  .fl-cond{position:absolute;top:-22px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9.5px;font-weight:600;color:var(--gold-3);background:#eef1f6;border:1px solid var(--gold-soft);border-radius:7px;padding:1px 7px}
   /* parallel sub-rows */
   .par-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--line)}
   .par-row:last-child{border-bottom:none}
   .par-row .nm{font-size:11.5px;font-weight:600;flex:1;line-height:1.2}
   .par-row .st{font-size:9.5px;font-weight:700}
-  .par-gate{font-size:9.5px;font-weight:700;color:var(--gold-3);background:#fbf3e0;border:1px solid var(--gold-soft);border-radius:7px;padding:2px 8px;display:inline-block;margin-bottom:7px}
+  .par-gate{font-size:9.5px;font-weight:700;color:var(--gold-3);background:#eef1f6;border:1px solid var(--gold-soft);border-radius:7px;padding:2px 8px;display:inline-block;margin-bottom:7px}
   .fl-start,.fl-end{flex-shrink:0;width:128px;align-self:center;border-radius:16px;padding:16px 12px;text-align:center;font-weight:700;font-size:13px}
   .fl-start{background:linear-gradient(180deg,var(--navy-3),var(--navy));color:#f6efe0}
   .fl-start svg{color:var(--gold)}
@@ -233,7 +234,7 @@
   .doc-idblock .row{font-size:11px;color:var(--muted);margin-top:4px}
   .doc-idblock .row b{color:var(--ink);font-weight:700}
   .doc-idblock .no{direction:ltr;display:inline-block}
-  .doc-body{padding:20px 26px 24px;position:relative}
+  .doc-body{padding:20px 26px 24px;position:relative;font-variant-numeric:tabular-nums}
   .doc-body::before{content:"";position:absolute;inset:0;background-image:var(--wm);background-repeat:no-repeat;background-position:center 60%;background-size:58%;opacity:.035;pointer-events:none;z-index:0}
   .doc-body>*:not(.doc-stamp){position:relative;z-index:1}
   .doc-stamp{position:absolute;top:34%;inset-inline-start:50%;transform:translate(50%,-50%) rotate(-16deg);border:3.5px solid;border-radius:12px;padding:6px 22px;font-size:34px;font-weight:800;letter-spacing:.04em;opacity:.13;pointer-events:none;z-index:0;white-space:nowrap}
@@ -260,7 +261,7 @@
   tbody td{padding:8px 11px;border:1px solid var(--line);vertical-align:middle}
   tbody tr:nth-child(even){background:var(--surface-2)}
   tfoot td{padding:9px 11px;font-weight:600;border:1px solid var(--line)}
-  tfoot tr:last-child td{font-weight:700;font-size:13.5px;background:linear-gradient(90deg,#fbf3e0,#f7edd6);color:var(--gold-3);border-color:var(--gold-soft)}
+  tfoot tr:last-child td{font-weight:700;font-size:13.5px;background:linear-gradient(90deg,#eef1f6,#e7ecf4);color:var(--gold-3);border-color:var(--gold-soft)}
   .doc-words{margin-top:14px;font-size:12.5px;color:var(--ink);background:linear-gradient(90deg,var(--surface-2),transparent);border-inline-start:3px solid var(--gold);border-radius:0 9px 9px 0;padding:10px 14px}
   .doc-words b{color:var(--navy)}
   .doc-terms{margin-top:18px}
@@ -292,7 +293,7 @@
   .dn.parallel .dn-num{border-radius:50%}
   .dn-lbl{flex:1;font-weight:700;font-size:13.5px}
   .dn-type{font-size:10.5px;color:var(--muted);margin-top:1px;font-weight:600}
-  .dn-sla{font-size:10.5px;font-weight:700;color:var(--gold-3);background:#fbf3e0;border:1px solid var(--gold-soft);border-radius:7px;padding:2px 8px;display:inline-flex;gap:4px;align-items:center}
+  .dn-sla{font-size:10.5px;font-weight:700;color:var(--gold-3);background:#eef1f6;border:1px solid var(--gold-soft);border-radius:7px;padding:2px 8px;display:inline-flex;gap:4px;align-items:center}
   .dn-cond{margin-top:9px;font-size:11px;color:var(--info);background:var(--info-bg);border:1px solid var(--info-line);border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:6px}
   .dn-conn{width:2px;height:26px;background:linear-gradient(var(--gold),var(--gold-2));position:relative}
   .dn-conn::after{content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--gold-2)}
@@ -355,7 +356,7 @@
   .dz-stage.dragging{opacity:.35}
   .dz-grip{cursor:grab;color:var(--faint);display:grid;place-items:center;width:20px;flex-shrink:0}
   .dz-grip:active{cursor:grabbing}
-  .sla-in{width:54px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;text-align:center;color:var(--gold-3);background:#fbf3e0}
+  .sla-in{width:54px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;text-align:center;color:var(--gold-3);background:#eef1f6}
   .sla-in:focus{outline:none;border-color:var(--gold)}
   .dz-x{width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;display:grid;place-items:center;color:var(--danger);flex-shrink:0;transition:.15s}
   .dz-x:hover{background:var(--danger-bg);border-color:var(--danger-line)}
@@ -479,6 +480,27 @@
     .bn-item svg{width:21px;height:21px}
   }
 
+
+  .bell{position:relative;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;width:40px;height:40px;display:grid;place-items:center;cursor:pointer;color:var(--navy);flex-shrink:0;transition:.18s var(--ease)}
+  .bell:hover{border-color:var(--gold);box-shadow:var(--sh-1)}
+  .bell::after{content:attr(data-count);position:absolute;top:-6px;inset-inline-start:-6px;min-width:18px;height:18px;padding:0 4px;background:var(--danger);color:#fff;border-radius:9px;font-size:10.5px;font-weight:700;display:none;align-items:center;justify-content:center;font-family:var(--font-mono)}
+  .bell.has::after{display:flex}
+
+
+  /* الشريط الجانبي المؤسسي (سطح المكتب ≥921px) — تحويل CSS خالص لـ.topbar */
+  @media (min-width:921px){
+    .topbar{position:fixed;inset-block:0;inset-inline-start:0;width:238px;flex-direction:column;align-items:stretch;padding:0;gap:0;z-index:60;border-inline-end:1px solid rgba(194,160,99,.22);overflow-y:auto}
+    .brand{flex-direction:column;text-align:center;gap:8px;padding:20px 14px 14px;border-bottom:1px solid rgba(246,239,224,.12)}
+    .brand .crest-full{height:38px;max-width:150px}
+    .nav{margin:0;flex-direction:column;gap:4px;padding:14px 12px;flex:1;align-items:stretch}
+    .nav button{justify-content:flex-start;position:relative;width:100%}
+    .nav button.active::before{content:'';position:absolute;inset-inline-start:-12px;top:8px;bottom:8px;width:3px;border-radius:3px;background:linear-gradient(180deg,#d5b578,#a37f43)}
+    .bell{margin:0 12px 10px;width:auto;height:auto;justify-content:flex-start;gap:9px;padding:11px 12px;background:rgba(255,255,255,.06);border-color:rgba(246,239,224,.14);color:#f6efe0}
+    .bell::before{content:'مهامي وتنبيهاتي';font-size:12.5px;font-weight:600;color:#f6efe0}
+    .me{padding:13px 14px;border-inline-start:0;border-top:1px solid rgba(246,239,224,.14);flex-wrap:wrap}
+    .wrap{max-width:none;margin:0;padding-inline-start:268px}
+  }
+
   @media print{
     @page{size:A4;margin:14mm 12mm 18mm}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
@@ -530,6 +552,7 @@
     <div><div class="ttl" id="topbar-ttl">طلبات الشراء والموافقات</div><div class="ttl-sub">مجموعة الذيابي</div></div>
   </div>
   <div class="nav" id="nav"></div>
+  <button class="bell" id="bell" onclick="openTasksSheet()" title="مهامي وتنبيهاتي"></button>
   <div class="me" id="me"></div>
 </div>
 <div class="wrap"><div id="view"></div></div>
@@ -611,8 +634,67 @@ function renderNav() {
   if (me) me.innerHTML = ME ? `<div class="av sm" style="background:linear-gradient(155deg,#22375a,#16243d)">${esc((ME.display_name || ME.username || '?').slice(0, 1))}</div>
     <div><div class="nm">${esc(ME.display_name)}</div><div class="rl">${esc(ME.role === 'admin' ? 'مدير' : (JOBS[ME.job_key] || {}).title || 'مستخدم')}</div></div>
     <button class="btn btn-ghost btn-sm" onclick="doLogout()" title="خروج" style="margin-inline-start:10px">${ic('logout', 15)}</button>` : '';
+  const bell = $('bell');
+  if (bell) {
+    const n = ME ? myTasks().length : 0;
+    bell.innerHTML = ic('clock', 17);
+    bell.setAttribute('data-count', n > 99 ? '99+' : String(n));
+    bell.classList.toggle('has', n > 0);
+    bell.style.display = ME ? '' : 'none';
+  }
 }
 function go(v) { VIEW = v; CURRENT = null; render(); }
+
+/* ══════ نوافذ (overlay/modal) ══════ */
+function openModal(html) { const o = $('overlay'), m = $('modal'); if (!o || !m) return; m.innerHTML = html; o.style.display = 'flex'; }
+function closeModal() { const o = $('overlay'); if (o) o.style.display = 'none'; }
+
+/* ══════ مركز المهام (الجرس) — سيناريو 6-17 ══════ */
+function myTasks() {
+  const t = [];
+  (REQS || []).forEach(r => {
+    if (r.status === 'cancelled' || r.phase === 'closed' || r.status === 'closed') return;
+    const dept = DEPTS[r.department_id] || {};
+    const overdue = r.stage_due_at && new Date(r.stage_due_at) < new Date();
+    if (r.status === 'in_review') {
+      // في التفاصيل: approvals محمّلة → مطابقة دقيقة للمرحلة المعلّقة العائدة لي.
+      const mine = (r.approvals || []).find(a => a.decision === 'pending' &&
+        (a.approver === ME.username || (a.role_key && can(a.role_key)) || (a.resolver === 'dept_manager' && dept.manager_user === ME.username)));
+      // في القائمة: approvals غير محمّلة → تلميح ألطف لمن يملك صلاحية اعتماد فعلية وليس الطالب.
+      const approverish = can('can_approve_stage') || can('can_approve_finance') || can('can_approve_award') || dept.manager_user === ME.username;
+      if (mine) t.push({ r, label: 'بانتظار اعتمادك', ic: 'check', urgent: overdue, sub: overdue ? 'متأخّر عن المهلة' : '' });
+      else if (!r.approvals && approverish && r.requester !== ME.username) t.push({ r, label: 'بانتظار اعتمادك (راجع التفاصيل)', ic: 'check', urgent: overdue, sub: overdue ? 'متأخّر عن المهلة' : 'قد يتطلّب اعتمادك' });
+    }
+    if (r.status === 'returned' && r.requester === ME.username) t.push({ r, label: 'مُعاد إليك للتعديل', ic: 'edit', sub: 'عدّل وأعد التقديم' });
+    if (r.status === 'on_hold' && (can('can_disburse') || can('can_approve_finance'))) t.push({ r, label: 'مؤجَّل مالياً', ic: 'clock', sub: 'استأنف عند توفّر السيولة' });
+    if (r.status === 'award_review' && can('can_approve_award')) t.push({ r, label: 'اعتماد تعميد بانتظارك', ic: 'shield', sub: '' });
+    if ((r.phase === 'payment' || r.status === 'payment_pending') && can('can_disburse')) t.push({ r, label: 'قرار/تنفيذ صرف', ic: 'money', urgent: r.status === 'payment_pending' });
+    if (r.phase === 'receipt' && can('can_verify_stock')) t.push({ r, label: 'بانتظار تسجيل الاستلام', ic: 'box', sub: '' });
+  });
+  // إزالة التكرار حسب (الطلب+التسمية)
+  const seen = {}; return t.filter(x => { const k = x.r.id + x.label; if (seen[k]) return false; seen[k] = 1; return true; });
+}
+function openTasksSheet() {
+  const tasks = myTasks();
+  const body = tasks.length ? tasks.map(t => `<div class="bar-row" style="cursor:pointer;border-bottom:1px solid var(--line-2)" onclick="closeModal();openDetail('${t.r.id}')">
+    <div style="display:flex;gap:11px;align-items:center">
+      <span style="width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:${t.urgent ? 'var(--danger-bg)' : 'var(--surface-2)'};color:${t.urgent ? 'var(--danger)' : 'var(--gold-2)'}">${ic(t.ic, 16)}</span>
+      <span class="bl"><b>${esc(t.label)}</b> ${t.urgent ? '<span class="badge danger">عاجل</span>' : ''}<br><span class="muted" style="font-size:11.5px"><span class="rc-id">${esc(t.r.id)}</span> · ${esc(t.r.title)}${t.sub ? ' · ' + esc(t.sub) : ''}</span></span>
+    </div></div>`).join('') : '<div class="muted" style="padding:20px;text-align:center">صندوق مهامك فارغ ✦</div>';
+  openModal(`<div class="sec-title">${ic('clock')}مهامي وتنبيهاتي (${tasks.length})</div><div style="max-height:60vh;overflow:auto">${body}</div>
+    <button class="btn" style="margin-top:12px" onclick="closeModal()">إغلاق</button>`);
+}
+let REORDER_META = null;
+async function reorderReq(id) {
+  const r = (CURRENT && CURRENT.id === id) ? CURRENT : (REQS || []).find(x => x.id === id);
+  if (!r) return;
+  const src = (r.items && r.items.length) ? r.items : ((CURRENT && CURRENT.items) || []);
+  const items = src.map(it => ({ desc: it.description || it.desc || '', unit: it.unit || 'حبة', qty: Number(it.qty) || 1, price: Number(it.unit_price || it.price) || 0 }));
+  NR_ITEMS = items.length ? items : [{ desc: '', unit: 'حبة', qty: 1, price: 0 }];
+  REORDER_META = { title: r.title, project: r.project || '', note: 'إعادة طلب — مرجع سابق: ' + r.id };
+  go('new');
+  toast('نُسخ الطلب ' + r.id + ' — حدّث تاريخ التوريد ثم أرسل', 'ok');
+}
 
 /* ══════ مصادقة ══════ */
 async function doLogin() {
@@ -681,7 +763,7 @@ async function loadPipeline() {
   let q = SB.from('portal_requests').select('*').order('created_at', { ascending: false }).limit(200);
   const sc = myScope();
   if (sc === 'own') q = q.eq('requester', ME.username);
-  else if (sc === 'sector' && ME.department_id) q = q.eq('department_id', ME.department_id);
+  else if (sc === 'sector') q = ME.department_id ? q.eq('department_id', ME.department_id) : q.eq('requester', ME.username);
   const { data, error } = await q;
   REQS = error ? [] : (data || []);
 }
@@ -905,7 +987,10 @@ function detailHTML(r) {
   const canResume = r.status === 'on_hold' && (can('can_disburse') || can('can_approve_finance') || isAdmin());
 
   return `<div class="pagehead"><div><h1>${esc(r.title)}</h1><div class="sub">${esc(r.id)} · ${esc(dept.name_ar || '—')} · ${statusBadge(r.status)}</div></div>
-    <button class="btn btn-ghost" onclick="go('pipeline')">${ic('list', 14)} رجوع</button></div>
+    <div style="display:flex;gap:8px">
+      ${can('can_create') || isAdmin() ? `<button class="btn btn-ghost" onclick="reorderReq('${r.id}')">${ic('plus', 14)} إعادة الطلب</button>` : ''}
+      <button class="btn btn-ghost" onclick="go('pipeline')">${ic('list', 14)} رجوع</button>
+    </div></div>
 
   ${r.split_flag ? `<div class="card" style="border-color:var(--warn);background:var(--warn-bg)"><div style="display:flex;gap:10px;align-items:center"><b style="color:var(--warn)">${ic('shield', 16)} تنبيه منع التجزئة</b><span style="font-size:13px">هذا الطلب ضمن مجموعة طلبات متقاربة في القسم قد يتجاوز مجموعها حدّ الصلاحية — راجعه قبل الاعتماد.</span></div></div>` : ''}
 
@@ -1066,12 +1151,13 @@ function newRequestHTML() {
   // القطاع يُشتق من ملف الموظف (المرجع 6-1) — الأدمن فقط يختار نيابةً عن قسم.
   const deptBlock = isAdmin()
     ? `<div><label>القسم (أدمن — نيابةً عن)</label><select class="input" id="nr-dept">${Object.values(DEPTS).map(d => `<option value="${esc(d.id)}" ${d.id === ME.department_id ? 'selected' : ''}>${esc(d.name_ar)}</option>`).join('')}</select></div>`
-    : `<div><label>القطاع</label><div class="input" style="background:var(--surface-2,#faf8f2);cursor:default">${esc(myDept ? myDept.name_ar : '— لا قسم في ملفك، راجع الإدارة —')} <span class="muted" style="font-size:11px">· يُحدَّد تلقائياً من ملفك</span></div></div>`;
+    : `<div><label>القطاع</label><div class="input" style="background:var(--surface-2,#f7f9fc);cursor:default">${esc(myDept ? myDept.name_ar : '— لا قسم في ملفك، راجع الإدارة —')} <span class="muted" style="font-size:11px">· يُحدَّد تلقائياً من ملفك</span></div></div>`;
+  const rm = REORDER_META || {}; REORDER_META = null;  // تعبئة من «إعادة الطلب» مرة واحدة
   return `<div class="pagehead"><h1>رفع طلب شراء جديد</h1></div>
   <div class="card">
     <div class="grid2">
-      <div><label>وصف الطلب <b style="color:var(--danger)">*</b></label><input class="input" id="nr-title" placeholder="مثال: مواد صيانة مكيّفات"></div>
-      <div><label>اسم المشروع <b style="color:var(--danger)">*</b></label><input class="input" id="nr-project" placeholder="مثال: مشروع صيانة برج الرياض"></div>
+      <div><label>وصف الطلب <b style="color:var(--danger)">*</b></label><input class="input" id="nr-title" value="${esc(rm.title || '')}" placeholder="مثال: مواد صيانة مكيّفات"></div>
+      <div><label>اسم المشروع <b style="color:var(--danger)">*</b></label><input class="input" id="nr-project" value="${esc(rm.project || '')}" placeholder="مثال: مشروع صيانة برج الرياض"></div>
       <div><label>تاريخ التوريد المطلوب <b style="color:var(--danger)">*</b></label><input class="input" id="nr-needby" type="date"></div>
       ${deptBlock}
       <div><label>الأولوية</label>
@@ -1601,7 +1687,7 @@ function docPayHTML(r) {
       ${metaGrid([['رقم الطلب', r.id], ['المشروع', r.project], ['تاريخ الصرف', fmtD(pay.disbursed_at || pay.created_at)]])}
       <div class="doc-sech">تفاصيل الصرف</div>
       ${metaGrid(detRows.map(([l, v]) => [l, v]))}
-      <div class="doc-words" style="font-size:15px;text-align:center;border:none;background:linear-gradient(90deg,#fbf3e0,#f7edd6)">المبلغ: <b>${money(pay.amount)}</b> · <b>${tafqit(pay.amount)}</b></div>
+      <div class="doc-words" style="font-size:15px;text-align:center;border:none;background:linear-gradient(90deg,#eef1f6,#e7ecf4)">المبلغ: <b>${money(pay.amount)}</b> · <b>${tafqit(pay.amount)}</b></div>
       <div class="doc-sign">
         ${signBlock('طلب الصرف', uName(pay.requested_by), 'المشتريات')}
         ${signBlock('اعتماد الصرف', uName(paymentApprover(r)), 'المالية')}
