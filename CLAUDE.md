@@ -107,7 +107,13 @@ edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance
 - [x] إنشاء أول أدمن: `admin` / `abdullah@aldeyabi.com` / role='admin' (صف `portal_users` جاهز).
 - [x] `NOTIFY_FROM` مضبوط: `Aldeyabi Group <noreply@suppliers.aldeyabi.com>`.
 - [x] **الدفع إلى `main` — تمّ النشر** (2026-07-01). البوابة على `…/portal`.
+- [x] **المراحل 1–6 كلها منشورة على `main`** (المرحلة 6 دُفعت 2026-07-04، cherry-pick `70761b7`).
+- [x] **قاعدة البيانات مكتملة ومؤكَّدة (2026-07-04):** كل الهجرات 001–004 مطبَّقة في Supabase —
+  18 جدولاً بينها `portal_suppliers` (تحقّق المالك: `information_schema.tables` = 1)؛ البذور موجودة
+  (portal_jobs=18، departments=4، doa=4، workflows=4، settings=1). إصلاحات الأمان (004) حيّة.
 - [ ] **تحقّق ما بعد النشر:** تأكيد وجود حساب Auth للأدمن + أول تسجيل دخول ناجح + جولة اختبار.
+- [ ] **تنظيف بنية تحتية (المالك):** فصل مشروع Cloudflare Workers الزائد `aldeyabi-pricing` عن ربط
+  Git (يفشل في 0 ثانية على كل كوميت — لا إعداد له في المستودع، لا علاقة له بالكود). + تدوير anon key القديم.
 - [ ] **قرار معلّق:** نطاق فرعي `portal.aldeyabi.com` (مسار `/portal` مُفعّل بالفعل). لم يُنفّذ النطاق الفرعي بعد.
 
 ### إنشاء أول أدمن للبوابة (الطريقة)
