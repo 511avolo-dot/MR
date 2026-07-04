@@ -83,7 +83,13 @@
   العدائي:** منع تصعيد الصلاحية عبر portal_apply_job/save_job (gm أو مفاتيح إدارية = أدمن فقط +
   قائمة بيضاء)، منع انتحال القسم لموظف بلا قسم، DROP توقيعات قديمة، قفل استشاري لآخر أدمن.
   Migration: `db/portal-migrations/004-admin-suppliers.sql`. اختبارها: `11_admin_security.sql`.
-- [ ] المرحلة 6: التصميم البارد #f2f4f8 + شريط جانبي + مركز مهام.
+- [x] **المرحلة 6:** التصميم البارد #f2f4f8 (استبدال الكريمي بالكامل) + خط IBM Plex Mono لأرقام
+  دفتر القيد (كبسولات معرّفات الطلبات + قيم KPI) + شريط جانبي 238px بـ@media(min-width:921px)
+  (CSS خالص، الشريط السفلي للجوال محفوظ) + مركز المهام «الجرس» (myTasks: اعتماد معلّق [عاجل عند
+  تجاوز SLA]/مُعاد لي/مؤجَّل مالياً/صرف معلّق/استلام منتظر) بعدّاد حيّ + ورقة مهام قابلة للنقر +
+  إعادة الطلب (نسخ بنود+مشروع لمسودة جديدة بمرجع). **واجهة فقط — بلا تغيير SQL.** إصلاحان:
+  تلميح الاعتماد في القائمة مقيَّد بصلاحية اعتماد فعلية (لا نطاق رؤية واسع)، وloadPipeline
+  لنطاق «قطاع» بلا قسم يرجع own-only. الاختبار: كامل الحزم صفر إخفاقات + دورة حياة كاملة حتى closed.
 **ترجمة المفاتيح (نموذج→حيّ):** approveReq→can_approve_stage، approveAward→can_approve_award،
 issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
 edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance.
