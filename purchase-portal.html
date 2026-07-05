@@ -2804,11 +2804,7 @@ function pa_ensureLogin(){ let el=document.getElementById('pa-login'); if(el) re
   document.body.appendChild(el); return el; }
 function pa_toggleApp(show){ const tb=document.querySelector('.topbar'), wr=document.querySelector('.wrap'), bn=document.querySelector('.bottom-nav');
   [tb,wr,bn].forEach(e=>{ if(e) e.style.display=show?'':'none'; });
-  let lo=document.getElementById('pa-logout');
-  if(show){ if(!lo){ lo=document.createElement('button'); lo.id='pa-logout'; lo.type='button'; lo.title='تسجيل الخروج'; lo.onclick=doLogout;
-      lo.style.cssText='position:fixed;bottom:16px;inset-inline-start:16px;z-index:9998;background:var(--surface-2,#e9edf5);color:var(--ink,#1b2333);border:1px solid var(--line,#e2e6ee);border-radius:12px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(20,30,50,.10)';
-      lo.textContent='خروج'; document.body.appendChild(lo); } lo.style.display=''; }
-  else if(lo){ lo.style.display='none'; } }
+  /* زرّ الخروج مُدمَج في بطاقة المستخدم عبر تغليف renderNav — لا زرّ عائم. */ }
 function pa_showLogin(){ pa_ensureLogin().style.display='flex'; pa_toggleApp(false); }
 function pa_hideLogin(){ const el=document.getElementById('pa-login'); if(el) el.style.display='none'; pa_toggleApp(true); }
 
@@ -3002,7 +2998,68 @@ async function setDoa(i,field,val){ const d=DOA[i]; if(!d) return;
   else { d[field]=val; toast('حُدّثت المصفوفة (محلياً — الخادم يخزّن مفاتيح صلاحية للتعميد/الأمر)','ok'); }
 }
 
-/* بدء التشغيل: سكربت المرجع نادى boot() قبل تعريفها (ترتيب الوسوم) فتُتجاهَل بأمان؛ هذا هو الإقلاع الفعلي. */
+/* ══════════════════════════════════════════════════════════════════════════
+   إصلاحات ما بعد المعاينة (سلوكية فقط — لا تغيير على تصميم المرجع):
+   (1) دمج زرّ الخروج في بطاقة المستخدم بدل مبدّل المستخدم التجريبي والزرّ العائم.
+   (2) التفاف أزرار بطاقة الصرف فلا تُقصّ.
+   (3) عرض كل أوراق المعاملة (مقارنة/أمر شراء/سند صرف/استلام) للطلبات المُقفلة في الأرشيف.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* (0) أيقونة الخروج (غير موجودة في مجموعة المرجع) */
+try{ ICON.logout='M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4 M16 17l5-5-5-5 M21 12H9'; }catch(e){}
+
+/* (2) بطاقة الصرف: اسمح بالتفاف صفّ الأزرار فلا يُقصّ «رفض» */
+try{ var _paStyle=document.createElement('style'); _paStyle.textContent='.rc-foot{flex-wrap:wrap;row-gap:8px}'; document.head.appendChild(_paStyle); }catch(e){}
+
+/* (1) تغليف renderNav: استبدال مبدّل المستخدم التجريبي بزرّ خروج نظيف داخل بطاقة المستخدم */
+var _pa_refRenderNav=renderNav;
+renderNav=function(){
+  _pa_refRenderNav();
+  var me=document.getElementById('me');
+  if(me && typeof ME!=='undefined' && ME){
+    me.innerHTML=avatar(uName(ME))
+      +'<div style="min-width:0"><div class="nm">'+esc(uName(ME))+'</div><div class="rl">'+esc(uRole(ME))+'</div></div>'
+      +'<button class="btn btn-ghost btn-sm" onclick="doLogout()" title="تسجيل الخروج" style="margin-inline-start:auto;flex-shrink:0">'+ic('logout',15)+' خروج</button>';
+  }
+};
+
+/* (3) محضر مقارنة العروض (قراءة فقط) — لاكتمال أوراق الأرشيف */
+function paComparisonDoc(r){
+  var p=r.proc; if(!p||!p.offers||!p.supplierList||!p.supplierList.length) return '';
+  var cols=p.supplierList, win=p.winner;
+  var head='<th style="min-width:150px">الصنف</th><th style="text-align:end">الكمية</th>'+cols.map(function(sid){return '<th style="text-align:center;'+(sid===win?'background:var(--gold-2);color:#fff':'')+'">'+esc((SUPPLIERS[sid]||{}).n||sid)+'</th>';}).join('');
+  var rows=r.items.map(function(it,i){ return '<tr><td>'+esc(it.desc)+'</td><td style="text-align:end">'+it.qty+'</td>'+cols.map(function(sid){var v=(p.offers[sid].items||[])[i]; return '<td style="text-align:end">'+(v!=null?Number(v).toLocaleString('en-US'):'—')+'</td>';}).join('')+'</tr>'; }).join('');
+  var metaRow='<tr><td class="muted" style="font-size:11px">التوريد / الدفع</td><td></td>'+cols.map(function(sid){var o=p.offers[sid]; return '<td style="text-align:center;font-size:10.5px;color:var(--muted)">'+(o.deliveryDays||'—')+' يوم · '+esc(o.paymentTerms||'—')+'</td>';}).join('')+'</tr>';
+  var totalsRow='<tr style="background:var(--surface-2)"><td style="font-weight:700">الإجمالي (قبل الضريبة)</td><td></td>'+cols.map(function(sid){var t=offerTotal(r,p.offers[sid]); return '<td style="text-align:end;font-weight:700;'+(sid===win?'color:var(--gold-3)':'')+'">'+t.toLocaleString('en-US')+'</td>';}).join('')+'</tr>';
+  return '<div class="doc" id="doc-cmp-'+r.id+'" style="margin-top:16px">'+docHead('محضر مقارنة عروض','QUOTE COMPARISON',r.id)
+    +'<div class="doc-body">'+stampEl('closed')+'<div class="doc-sech">العروض المستلمة</div><div style="overflow-x:auto"><table><thead><tr>'+head+'</tr></thead><tbody>'+rows+metaRow+totalsRow+'</tbody></table></div>'
+    +(win?'<div class="doc-words">المورّد المُعمَّد: <b>'+esc((SUPPLIERS[win]||{}).n||win)+'</b> بقيمة <b>'+money(p.winnerTotal||offerTotal(r,p.offers[win]))+'</b>'+(p.awardReason?' — مبرّر اختيار غير الأقل سعراً: '+esc(p.awardReason):'')+'</div>':'')
+    +docFoot(r.id)+'</div><div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl(\'doc-cmp-'+r.id+'\',\'محضر مقارنة\',\''+r.id+'\')">'+ic('print',14)+' طباعة</button></div></div>';
+}
+
+/* تغليف docPreview: للطلبات المُقفلة أضف كل أوراق المعاملة بعد طلب الشراء (بلا تكرار — لوحة سير العمل فارغة عند الإغلاق) */
+var _pa_refDocPreview=docPreview;
+docPreview=function(r){
+  var html=_pa_refDocPreview(r);
+  if(r && r.proc && r.phase==='closed'){
+    html+=paComparisonDoc(r)+poPreview(r)+paymentPreview(r)+grnPreview(r);
+  }
+  return html;
+};
+
+/* طباعة الملف الكامل: أضف محضر المقارنة إلى تسلسل الأوراق */
+printDossier=function(id){ var r=REQS.find(function(x){return x.id===id;}); if(!r)return;
+  var parts=['doc-req-','doc-cmp-','doc-po-','doc-pay-','doc-grn-'].map(function(p){return document.getElementById(p+id);}).filter(Boolean);
+  if(!parts.length){toast('لا مستندات متاحة','err');return;}
+  _printTitle='الملف الكامل · '+id;
+  document.getElementById('print-root').innerHTML=parts.map(function(el,i){return (i?'<div style="page-break-before:always"></div>':'')+el.outerHTML;}).join('')+pFooter(id,'الملف الكامل');
+  window.print();
+};
+
+/* (4) تعطيل ميزات النسخ المحلي التجريبية بأمان (البيانات في Supabase لا localStorage) */
+try{ confirmImport=function(){ toast('الاستيراد غير متاح في النسخة الحيّة — البيانات محفوظة في Supabase','err'); try{closeModal();}catch(e){} }; }catch(e){}
+try{ resetState=function(){ toast('غير متاح في النسخة الحيّة — لا تخزين محلي في المتصفح','err'); try{closeModal();}catch(e){} }; }catch(e){}
+
+/* الإقلاع الفعلي */
 boot();
 </script>
 
