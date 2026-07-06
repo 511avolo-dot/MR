@@ -137,18 +137,22 @@ function inviteHtml() {
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'forbidden' }, 403);
   if (!env.RESEND_API_KEY) return json({ error: 'email_not_configured', detail: 'RESEND_API_KEY مفقود' }, 500);
-  if (!env.INVITE_TOKEN) return json({ error: 'not_configured', detail: 'INVITE_TOKEN غير مضبوط في Cloudflare' }, 500);
 
   let body = {};
   try { body = await request.json(); } catch (_) { return json({ error: 'bad_json' }, 400); }
 
-  const token = String(body.token || '');
-  if (token.length !== String(env.INVITE_TOKEN).length || token !== String(env.INVITE_TOKEN)) {
-    return json({ error: 'unauthorized', detail: 'رمز الإرسال غير صحيح' }, 401);
-  }
-
   const email = String(body.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return json({ error: 'bad_email', detail: 'بريد غير صالح' }, 400);
+
+  // معاينة داخلية: بُرد @aldeyabi.com تُرسَل بلا رمز؛ البُرد الخارجية (الموردون) تتطلّب INVITE_TOKEN.
+  const isInternal = /@aldeyabi\.com$/i.test(email);
+  if (!isInternal) {
+    if (!env.INVITE_TOKEN) return json({ error: 'not_configured', detail: 'INVITE_TOKEN غير مضبوط في Cloudflare (مطلوب للبُرد الخارجية)' }, 500);
+    const token = String(body.token || '');
+    if (token.length !== String(env.INVITE_TOKEN).length || token !== String(env.INVITE_TOKEN)) {
+      return json({ error: 'unauthorized', detail: 'رمز الإرسال غير صحيح' }, 401);
+    }
+  }
 
   const subject = 'دعوة التسجيل كمورد معتمد — مجموعة الذيابي · Supplier Registration Invitation';
   const html = inviteHtml();
