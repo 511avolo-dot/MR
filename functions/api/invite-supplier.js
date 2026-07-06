@@ -144,8 +144,9 @@ export async function onRequestPost({ request, env }) {
   const email = String(body.email || '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return json({ error: 'bad_email', detail: 'بريد غير صالح' }, 400);
 
-  // معاينة داخلية: بُرد @aldeyabi.com تُرسَل بلا رمز؛ البُرد الخارجية (الموردون) تتطلّب INVITE_TOKEN.
-  const isInternal = /@aldeyabi\.com$/i.test(email);
+  // معاينة داخلية: بُرد @aldeyabi.com + بريد المالك للمعاينة تُرسَل بلا رمز؛ البُرد الخارجية (الموردون) تتطلّب INVITE_TOKEN.
+  const PREVIEW_ALLOW = ['511avolo@gmail.com'];
+  const isInternal = /@aldeyabi\.com$/i.test(email) || PREVIEW_ALLOW.includes(email);
   if (!isInternal) {
     if (!env.INVITE_TOKEN) return json({ error: 'not_configured', detail: 'INVITE_TOKEN غير مضبوط في Cloudflare (مطلوب للبُرد الخارجية)' }, 500);
     const token = String(body.token || '');
