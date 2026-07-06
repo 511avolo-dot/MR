@@ -5,7 +5,5 @@
 /q /rfq.html 200
 /portal /purchase-portal.html 200
 /portal/ /purchase-portal.html 200
-/invite /invite.html 200
-/invite/ /invite.html 200
 /lib/* /lib/:splat 200
 /* /index.html 200
