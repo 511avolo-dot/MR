@@ -20,6 +20,9 @@ ALTER TABLE portal_doa ADD COLUMN IF NOT EXISTS po_gm        boolean NOT NULL DE
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
+  -- فكّ ارتباط التعميدات التاريخية بشرائح DoA قبل استبدالها (تجنّب انتهاك FK).
+  -- النظام يشتقّ الشريحة من قيمة التعميد (winner_total) لا من doa_id، فلا أثر على المستندات.
+  UPDATE portal_award SET doa_id = NULL WHERE doa_id IS NOT NULL;
   DELETE FROM portal_doa;
   INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key,
                           po_committee, po_finance, po_gm, label, note, priority) VALUES
