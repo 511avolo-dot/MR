@@ -141,6 +141,19 @@ export async function onRequestPost({ request, env }) {
     if (!email || !password || !displayName) return json({ error: 'حقول ناقصة' }, 400);
     const realEmail = String(email).trim().toLowerCase();
     if (!COMPANY_EMAIL_RE.test(realEmail)) return json({ error: 'بريد إلكتروني غير صالح' }, 400);
+    // سياسة النطاق: @<allowed_email_domain> (الافتراضي aldeyabi.com) أو قائمة بيضاء
+    // يعتمدها الأدمن مسبقاً — القرار من الإعدادات الخادمية لا من العميل.
+    {
+      const sr = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_settings?key=eq.portal_settings&select=value`, {
+        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+      });
+      const srows = sr.ok ? await sr.json().catch(() => []) : [];
+      const val = (srows && srows[0] && srows[0].value) || {};
+      const domain = String(val.allowed_email_domain || 'aldeyabi.com').toLowerCase();
+      const wl = Array.isArray(val.email_whitelist) ? val.email_whitelist : [];
+      const allowed = realEmail.endsWith('@' + domain) || wl.some((w) => String(w || '').trim().toLowerCase() === realEmail);
+      if (!allowed) return json({ error: `البريد خارج نطاق الشركة (@${domain}) وغير مُدرَج في القائمة البيضاء المعتمَدة` }, 400);
+    }
     if (String(password).length < 6) return json({ error: 'كلمة السر 6 أحرف على الأقل' }, 400);
     if (await api.emailExists(realEmail)) return json({ error: 'هذا البريد مسجّل مسبقاً في البوابة' }, 409);
 

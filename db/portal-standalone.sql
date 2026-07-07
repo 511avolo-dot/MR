@@ -1777,6 +1777,52 @@ WHERE NOT EXISTS (SELECT 1 FROM portal_settings WHERE key = 'committee_members')
 -- ملاحظة: التعميد = can_approve_award (مدير المشتريات). اعتماد أمر الشراء يُبنى تلقائياً
 -- حسب الشريحة عبر portal_build_po_chain (لجنة/مالية/عام). can_approve_committee يُمنح لأعضاء اللجنة.
 
+-- ═══ بوابة الدعوات + تقييد النطاق البريدي (الهجرة 010) ═══
+CREATE TABLE IF NOT EXISTS portal_invitations (
+  id            BIGSERIAL PRIMARY KEY,
+  token         TEXT UNIQUE NOT NULL,
+  email         TEXT NOT NULL,
+  display_name  TEXT,
+  job_key       TEXT REFERENCES portal_jobs(key),
+  department_id TEXT REFERENCES portal_departments(id),
+  role          TEXT NOT NULL DEFAULT 'user',
+  status        TEXT NOT NULL DEFAULT 'pending',
+  invited_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days'),
+  accepted_at   TIMESTAMPTZ,
+  accepted_user TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_portal_inv_email  ON portal_invitations(lower(email));
+CREATE INDEX IF NOT EXISTS idx_portal_inv_status ON portal_invitations(status);
+ALTER TABLE portal_invitations ENABLE ROW LEVEL SECURITY;    -- بلا سياسة = خادم فقط
+REVOKE ALL ON portal_invitations FROM authenticated, anon;
+GRANT ALL ON portal_invitations TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE portal_invitations_id_seq TO service_role;
+
+INSERT INTO portal_settings(key, value) VALUES ('portal_settings', '{}'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+UPDATE portal_settings SET value = value || jsonb_build_object('allowed_email_domain','aldeyabi.com')
+  WHERE key='portal_settings' AND NOT (value ? 'allowed_email_domain');
+UPDATE portal_settings SET value = value || jsonb_build_object('email_whitelist','[]'::jsonb)
+  WHERE key='portal_settings' AND NOT (value ? 'email_whitelist');
+
+CREATE OR REPLACE FUNCTION portal_email_allowed(p_email text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  WITH s AS (SELECT value FROM portal_settings WHERE key='portal_settings')
+  SELECT
+    lower(trim(coalesce(p_email,''))) <> ''
+    AND (
+      lower(trim(p_email)) LIKE ('%@' || lower(coalesce((SELECT value->>'allowed_email_domain' FROM s), 'aldeyabi.com')))
+      OR EXISTS (
+        SELECT 1 FROM s, jsonb_array_elements_text(coalesce((SELECT value->'email_whitelist' FROM s), '[]'::jsonb)) w
+        WHERE lower(trim(w)) = lower(trim(p_email))
+      )
+    );
+$fn$;
+REVOKE ALL ON FUNCTION portal_email_allowed(text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_email_allowed(text) TO authenticated, service_role;
+
 
 -- ═══════════════════════ 13) بذور المرجع + نموذج الوظائف (المرحلة 1) ═══════════════════════
 -- (مطابق لـ db/portal-migrations/001-seeds-jobs-model.sql — انظر جدول ترجمة المفاتيح هناك)

@@ -157,13 +157,22 @@ edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance
   الجداول الفرعية محجوبة) + إسناد وظائف لمستخدمي الاختبار في `01_seed`. **كل الحزم صفر إخفاقات + محارس سليمة.**
 
 ### ⚠️ هجرات يجب تشغيلها في Supabase (المشروع الجديد) بالترتيب — إضافة فقط، لا حذف يدوي:
-`005-resubmit.sql` → `006-guard-alignment.sql` → `007-doa-po-chain.sql` → `008-flexible-return.sql` → `009-visibility-rls.sql`
+`005-resubmit.sql` → `006-guard-alignment.sql` → `007-doa-po-chain.sql` → `008-flexible-return.sql` → `009-visibility-rls.sql` → `010-invitations.sql`
 (007 يستبدل بذور DoA داخلياً بأمان: يفكّ ارتباط التعميدات ثم يعيد الزرع — لا تحذف شيئاً يدوياً.)
+**010 يتطلّب متغيّر Cloudflare جديد: `INVITE_*`؟ لا — يعيد استخدام `RESEND_API_KEY` + `PORTAL_SUPABASE_*` القائمة.**
 **009 يتطلّب أن يكون لكل مستخدم `job_key` صحيح** (يحدّد نطاق رؤيته)؛ من بلا وظيفة = own (طلباته فقط).
 
-### 🔜 المتبقّي (نفس الصرامة — الخطة في المهام 17–18):
-- **D** إدارة المستخدمين + التفويض (`/api/portal-users`) + **بوابة الدعوات**: روابط تسجيل للموظفين، بريد @aldeyabi حصراً،
-  رفض أي بريد خارجي/شخصي إلا ما يعتمده الأدمن مسبقاً (قائمة بيضاء).
+- **D إدارة المستخدمين + بوابة الدعوات (هجرة 010):** التفويض (`delegate_to`/`is_away`) مربوط أصلاً في
+  `portal_resolve_stage`/`portal_qualified_approver`. الجديد: جدول `portal_invitations` (رمز لمرة واحدة،
+  صلاحية 7 أيام، **مقفل RLS = خادم فقط** كنمط email_tokens) + إعدادات `allowed_email_domain='aldeyabi.com'` +
+  `email_whitelist=[]` + دالة `portal_email_allowed()` (نطاق الشركة أو قائمة بيضاء، ترفض الانتحال). الخلفية:
+  `functions/api/portal-invite.js` (أدمن: send/list/revoke + whitelist_add/remove — البريد يجتاز السياسة، يُرسل
+  رابط تفعيل Resend) + `portal-register.js` (عام محكوم بالرمز: يتحقّق ثم ينشئ Auth+ملف بصلاحيات الوظيفة) +
+  تشديد `portal-users.js` create (نطاق/قائمة بيضاء خادمياً). الواجهة: صفحة `register-portal.html` المستقلة +
+  تبويب «الدعوات» في لوحة الإدارة (مُحقَن عبر المُحوِّل: دعوة موظف + إدارة القائمة البيضاء + سجل الدعوات).
+  الاختبار: `16_invitations.sql` (سياسة البريد + قفل الجدول + إدارة الخادم). **صفر إخفاقات.**
+  ⚠️ الإعدادات محروسة بـ`portal_config_guard` (تتطلّب صلاحية إدارية) — الخادم يكتبها بمفتاح service_role (claims.role=service).
+
 - **E/F** H5 (عرض DoA مقروء) · إعادة إصدار صرف بعد الإرجاع · توجيه مهمة الاستلام للمستودع · `portal_delete_user` ·
   بيانات الأرشفة (تاريخ/منفّذ + كل الحركات) · تجميليات · ثم **تحقّق E2E شامل عدائي حتى الأرشفة**.
 

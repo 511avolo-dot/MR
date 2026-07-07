@@ -3230,6 +3230,77 @@ decide = async function(reqId,action,comment,returnToSeq){
   await pa_after(reqId);
 };
 
+/* ══════ بوابة الدعوات (D) — تبويب إداري: دعوة موظف + قائمة بيضاء @aldeyabi ══════ */
+var PA_INVITES=null, PA_WL=[], PA_DOMAIN='aldeyabi.com', PA_INV_LOADING=false;
+async function pa_apiPost(path, body){
+  var sess=(await SB.auth.getSession()).data.session; if(!sess){ toast('انتهت الجلسة','err'); return null; }
+  var r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+sess.access_token},body:JSON.stringify(body)});
+  var d=null; try{ d=await r.json(); }catch(e){}
+  if(!r.ok || !(d&&d.ok)){ toast((d&&d.error)||'تعذّرت العملية','err'); return null; }
+  return d;
+}
+async function loadInvites(){
+  PA_INV_LOADING=true;
+  var d=await pa_apiPost('/api/portal-invite',{action:'list'});
+  PA_INV_LOADING=false;
+  if(d){ PA_INVITES=d.invitations||[]; PA_WL=d.whitelist||[]; PA_DOMAIN=d.domain||'aldeyabi.com'; }
+  else { PA_INVITES=PA_INVITES||[]; }
+  render();
+}
+/* حقن تبويب «الدعوات» في لوحة الإدارة (تعديل واجهة = في المُحوِّل فقط) */
+var _pa_adminHTML = adminHTML;
+adminHTML = function(){
+  if(!isAdmin()) return _pa_adminHTML();
+  if(ADMIN_TAB==='invites'){
+    var subs=[['accounts','الحسابات','users'],['invites','الدعوات','mail'],['jobs','الوظائف والصلاحيات','shield'],['depts','الأقسام والقطاعات','building'],['suppliers','الموردون','cart'],['matrix','مصفوفة الصلاحيات','scale'],['workflows','مسارات الاعتماد','route'],['audit','سجل التدقيق','list'],['settings','إعدادات عامة','gear']];
+    var bar='<div class="filters">'+subs.map(function(s){return '<button class="fbtn '+(ADMIN_TAB===s[0]?'active':'')+'" onclick="setAdminTab(\''+s[0]+'\')">'+ic(s[2],15)+' '+s[1]+'</button>';}).join('')+'</div>';
+    return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">دعوات الموظفين · التسجيل بنطاق الشركة</div></div></div>'+bar+adminInvites();
+  }
+  // للتبويبات الأخرى: أضِف زر «الدعوات» قبل زر «الحسابات» في شريط المرجع (استبدال واحد).
+  var invBtn='<button class="fbtn" onclick="setAdminTab(\'invites\')">'+ic('mail',15)+' الدعوات</button>';
+  return _pa_adminHTML().replace(/(<button class="fbtn[^"]*" onclick="setAdminTab\('accounts'\)">)/, invBtn+'$1');
+};
+function adminInvites(){
+  if(PA_INVITES===null){ if(!PA_INV_LOADING) loadInvites(); return '<div class="card"><div class="muted" style="text-align:center;padding:20px">جارٍ تحميل الدعوات…</div></div>'; }
+  var jobOpts='<option value="">— بلا وظيفة (يحدّدها الأدمن لاحقاً) —</option>'+jobOptions('');
+  var deptOpts='<option value="">— بلا قسم —</option>'+Object.keys(DEPTS).map(function(dk){return '<option value="'+dk+'">'+esc(DEPTS[dk].n)+' — '+esc(DEPTS[dk].sector||'')+'</option>';}).join('');
+  var form='<div class="card" style="margin-bottom:14px"><div class="sec-title"><span class="ico">'+ic('mail',16)+'</span>دعوة موظف جديد</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:12px">'+ic('info',13)+' يُقبل بريد <b dir="ltr">@'+esc(PA_DOMAIN)+'</b> حصراً — أو بريد مُدرَج في القائمة البيضاء أدناه. تُرسَل رسالة تفعيل برابط صالح 7 أيام.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +'<div><label class="lbl">البريد الإلكتروني</label><input class="input" id="inv-email" dir="ltr" placeholder="name@'+esc(PA_DOMAIN)+'"></div>'
+    +'<div><label class="lbl">الاسم</label><input class="input" id="inv-name" placeholder="الاسم الكامل"></div>'
+    +'<div><label class="lbl">الوظيفة</label><select class="select" id="inv-job">'+jobOpts+'</select></div>'
+    +'<div><label class="lbl">القسم/القطاع</label><select class="select" id="inv-dept">'+deptOpts+'</select></div>'
+    +'</div>'
+    +'<div style="margin-top:12px"><button class="btn btn-gold" onclick="sendInvite()">'+ic('mail',15)+' إرسال الدعوة</button></div></div>';
+
+  var wlRows=PA_WL.length?PA_WL.map(function(e){return '<div class="par-row"><div class="nm" style="flex:1" dir="ltr">'+esc(e)+'</div><button class="btn btn-danger btn-sm" onclick="removeWhitelist(\''+esc(e)+'\')">'+ic('x',12)+' إزالة</button></div>';}).join(''):'<div class="muted" style="font-size:12px;padding:6px 0">لا عناوين خارجية معتمَدة — النطاق '+esc(PA_DOMAIN)+' فقط.</div>';
+  var wl='<div class="card" style="margin-bottom:14px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>القائمة البيضاء (عناوين خارجية معتمَدة مسبقاً)</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">أضِف بريداً خارجياً يستثنيه الأدمن من قيد النطاق (مقاول/استشاري). القرار خادمي.</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><input class="input" id="wl-email" dir="ltr" style="flex:1;min-width:200px" placeholder="external@example.com"><button class="btn btn-primary btn-sm" onclick="addWhitelist()">'+ic('plus',13)+' اعتماد</button></div>'
+    +wlRows+'</div>';
+
+  var st={pending:['معلّقة','warn'],accepted:['مُفعّلة','ok'],revoked:['ملغاة','neutral'],expired:['منتهية','neutral']};
+  var listRows=(PA_INVITES||[]).map(function(iv){
+    var s=st[iv.status]||[iv.status,'neutral'];
+    var when=iv.created_at?new Date(iv.created_at).toLocaleDateString('ar'):'';
+    var actions=iv.status==='pending'?'<button class="btn btn-danger btn-sm" onclick="revokeInvite('+iv.id+')">'+ic('x',12)+' إلغاء</button>':'';
+    return '<div class="par-row"><div class="nm" style="flex:1"><b dir="ltr">'+esc(iv.email)+'</b> <span class="badge '+s[1]+'" style="font-size:9.5px">'+s[0]+'</span><div class="muted" style="font-size:10.5px">'+esc(iv.display_name||'')+(iv.job_key?' · '+esc((JOBS[iv.job_key]||{}).title||iv.job_key):'')+' · '+when+'</div></div>'+actions+'</div>';
+  }).join('');
+  var list='<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>الدعوات ('+(PA_INVITES||[]).length+')</div>'+(listRows||'<div class="muted" style="font-size:12px;padding:6px 0">لا دعوات بعد.</div>')+'</div>';
+  return form+wl+list;
+}
+async function sendInvite(){
+  var email=(($('inv-email')||{}).value||'').trim(), name=(($('inv-name')||{}).value||'').trim();
+  var job=($('inv-job')||{}).value||'', dept=($('inv-dept')||{}).value||'';
+  if(!email||!name){ toast('البريد والاسم مطلوبان','err'); return; }
+  var d=await pa_apiPost('/api/portal-invite',{action:'send',email:email,displayName:name,jobKey:job||null,departmentId:dept||null});
+  if(d){ toast('أُرسلت الدعوة'+(d.mail&&d.mail.error?' (تعذّر البريد — انسخ الرابط)':''),'ok'); if(d.mail&&d.mail.error&&d.url) prompt('انسخ رابط التفعيل وأرسله يدوياً:', d.url); await loadInvites(); }
+}
+async function revokeInvite(id){ var d=await pa_apiPost('/api/portal-invite',{action:'revoke',id:id}); if(d){ toast('أُلغيت الدعوة','ok'); await loadInvites(); } }
+async function addWhitelist(){ var e=(($('wl-email')||{}).value||'').trim(); if(!e){ toast('أدخِل بريداً','err'); return; } var d=await pa_apiPost('/api/portal-invite',{action:'whitelist_add',email:e}); if(d){ PA_WL=d.whitelist||PA_WL; toast('اعتُمد البريد','ok'); render(); } }
+async function removeWhitelist(e){ var d=await pa_apiPost('/api/portal-invite',{action:'whitelist_remove',email:e}); if(d){ PA_WL=d.whitelist||PA_WL; toast('أُزيل من القائمة','ok'); render(); } }
+
 /* الإقلاع الفعلي */
 boot();
 </script>
