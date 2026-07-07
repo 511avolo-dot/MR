@@ -257,10 +257,18 @@ export async function onRequestPost({ request, env }) {
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
     if (username === callerUsername) return json({ error: 'لا يمكنك حذف حسابك' }, 400);
-    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
+    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email,role,active`, {
       headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
     const rows0 = r0.ok ? await r0.json() : [];
+    // منع حذف آخر أدمن نشط (لئلّا تبقى البوابة بلا مدير) — دفاع في العمق فوق RPC القاعدة.
+    if (rows0 && rows0[0] && rows0[0].role === 'admin' && rows0[0].active !== false) {
+      const ra = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?role=eq.admin&active=eq.true&select=username`, {
+        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+      });
+      const admins = ra.ok ? await ra.json().catch(() => []) : [];
+      if (Array.isArray(admins) && admins.length <= 1) return json({ error: 'لا يمكن حذف آخر أدمن نشط للبوابة' }, 400);
+    }
     const email0 = rows0 && rows0[0] && rows0[0].email;
     if (email0) {
       const u = await api.findAuthUserByEmail(email0);
