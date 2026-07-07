@@ -28,11 +28,15 @@ export function esc(s) {
 // نفس النطاق الموثّق للإرسال في Resend المستخدَم فعلياً للنظام (مشروع Resend واحد
 // للشركة) — القوالب والمحتوى مستقلة بالكامل، فقط المُرسِل التقني مشترك.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-export const DEFAULT_FROM = `noreply@${SENDER_DOMAIN}`;
+// مُرسِل غير «no-reply» (توصية Resend لتحسين التسليم وتقليل السبام). الردود تذهب إلى
+// DEFAULT_REPLY_TO (صندوق حقيقي). أي عنوان @suppliers.aldeyabi.com صالح للإرسال.
+export const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 export function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();
-  return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+  // نتجاهل أي إعداد يحوي no-reply/noreply (يضرّ بالتسليم) ونرجع للمُرسِل الجيّد.
+  if (f && f.toLowerCase().includes('@' + SENDER_DOMAIN) && !/no-?reply/i.test(f)) return f;
+  return DEFAULT_FROM;
 }
 export function replyTo(env) {
   const r = String((env && env.NOTIFY_REPLY_TO) || '').trim();

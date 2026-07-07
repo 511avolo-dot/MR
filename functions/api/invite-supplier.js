@@ -12,14 +12,14 @@
  */
 
 const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-const DEFAULT_FROM = `Aldeyabi Group <noreply@${SENDER_DOMAIN}>`;
+const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
-const LOGO_URL = 'https://aldeyabi-procurement.pages.dev/logo.png';
 const REGISTER_URL = 'https://aldeyabi.com/suppliers';
 
 function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();
-  return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+  if (f && f.toLowerCase().includes('@' + SENDER_DOMAIN) && !/no-?reply/i.test(f)) return f;
+  return DEFAULT_FROM;
 }
 function replyTo(env) {
   const r = String((env && env.NOTIFY_REPLY_TO) || '').trim();
@@ -61,8 +61,9 @@ function inviteHtml() {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#e9e5dd" style="background:#e9e5dd;padding:28px 12px;">
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="width:600px;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(15,26,46,.12);">
-  <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:32px 40px 22px;text-align:center;">
-    <img src="${LOGO_URL}" alt="مجموعة الذيابي · AL-DEYABI GROUP" width="224" style="display:block;margin:0 auto;width:224px;max-width:224px;height:auto;border:0;outline:none;text-decoration:none;">
+  <tr><td bgcolor="#16243d" style="background:#16243d;background:linear-gradient(135deg,#16243d,#22355a);padding:30px 40px;text-align:center;">
+    <div style="color:#E9D9B4;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">AL-DEYABI GROUP</div>
+    <div style="color:#ffffff;font-size:22px;font-weight:800;margin-top:8px;">مجموعة الذيابي</div>
   </td></tr>
   <tr><td height="4" bgcolor="#c2a063" style="height:4px;background:#c2a063;background:linear-gradient(90deg,#876734,#c2a063,#876734);font-size:0;line-height:0;">&nbsp;</td></tr>
   <tr><td style="padding:30px 40px 4px;text-align:center;">
