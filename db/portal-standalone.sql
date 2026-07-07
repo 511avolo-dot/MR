@@ -1085,9 +1085,15 @@ BEGIN
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
   IF v_req.status IN ('closed','cancelled') THEN RAISE EXCEPTION 'لا يمكن إلغاء طلب مُغلق'; END IF;
-  IF v_req.requester <> v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  IF v_req.requester = v_me AND v_req.status NOT IN ('draft','in_review','returned') AND NOT portal_is_admin() THEN
-    RAISE EXCEPTION 'لا يمكنك إلغاء الطلب بعد بدء التعميد — تواصل مع الإدارة';
+  -- من يُلغي: الأدمن/المشتريات (أي وقت) — أو المُقدّم قبل بدء التعميد فقط. (الباب 7 + سيناريو 6-5)
+  IF NOT (
+        portal_is_admin()
+        OR portal_has_perm('can_manage_procurement')
+        OR portal_has_perm('can_approve_award')
+        OR portal_has_perm('can_issue_po')
+        OR (v_req.requester = v_me AND v_req.status IN ('draft','in_review','returned'))
+     ) THEN
+    RAISE EXCEPTION 'غير مصرّح بإلغاء هذا الطلب في حالته الحالية';
   END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);

@@ -3099,6 +3099,9 @@ async function submitOffer(reqId){
   closeModal(); toast('أُضيف العرض','ok'); await pa_after(reqId);
 }
 
+/* مواءمة حارس الاستلام: الواجهة تطابق الخادم (can_verify_stock/أدمن فقط) — فصل مهام صحيح، لا زر يفشل */
+canReceive = function(r){ var p=(USERS[ME]||{}).perms||{}; return !!(p.can_verify_stock || (USERS[ME]||{}).admin); };
+
 /* الإقلاع الفعلي */
 boot();
 </script>
