@@ -2729,7 +2729,7 @@ async function loadAll(){
       else if(a.role_key==='can_approve_finance'){ type='finance'; user=acted?a.approver:pa_resolveApprover(a.role_key,a.approver); who={kind:'user',user,finance:true}; }
       else if(a.resolver==='role'){ type='role'; user=acted?a.approver:pa_resolveApprover(a.role_key,a.approver); who={kind:'role',user,label:a.stage_label}; }
       else { type='user'; user=acted?a.approver:pa_resolveApprover(a.role_key,a.approver); who={kind:'user',user}; }
-      return { def:'s'+a.seq, label:a.stage_label, type, who, sla:slaH, gate:null, escalate:null, condTxt:'', approvers:null,
+      return { def:'s'+a.seq, seq:a.seq, label:a.stage_label, type, who, sla:slaH, gate:null, escalate:null, condTxt:'', approvers:null,
         decision:dec,
         enteredAt:(dec==='pending' ? (r.stage_due_at?(pa_ms(r.stage_due_at)-slaH*3600000):pa_ms(r.created_at)) : (pa_ms(a.acted_at)||pa_ms(r.created_at))),
         actedAt:pa_ms(a.acted_at), actor:acted?a.approver:null, comment:a.comment||null, escalated:false }; });
@@ -2932,10 +2932,11 @@ async function confirmPayReject(id){
   closeModal(); toast('رُفض طلب الصرف','ok'); await pa_after(id);
 }
 async function confirmPayReturn(id){
-  /* لا يوجد إجراء «إرجاع» للصرف في الخادم — نستخدم «رفض» بالملاحظة (يعيد الطلب لحالة awarded ليُعاد إصدار طلب صرف). */
+  /* إجراء «إرجاع» مستقل: يعيد الطلب لحالة awarded ليُعيد المشتريات إصدار الصرف، مع حفظ الوجهة. */
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
-  const reason=($('payret-reason')||{}).value||''; if(!reason.trim()){ toast('الملاحظة مطلوبة','err'); return; } if(!pid) return;
-  try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'reject',p_comment:reason.trim()}); }catch(e){ return; }
+  const reason=($('payret-reason')||{}).value||''; const to=($('payret-to')||{}).value||'procurement';
+  if(!reason.trim()){ toast('الملاحظة مطلوبة','err'); return; } if(!pid) return;
+  try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'return',p_comment:reason.trim(),p_return_to:to}); }catch(e){ return; }
   closeModal(); toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); await pa_after(id);
 }
 async function resubmitPayment(id){ toPayment(id); }
@@ -3177,6 +3178,56 @@ myTasks = function(){
     }
   });
   return t;
+};
+
+/* ══════ الإرجاع المرن (توجيه المالك): اختيار مَن يعود له الطلب من المشاركين السابقين ══════ */
+/* قائمة الوجهات: مقدّم الطلب (seq 0) + كل مرحلة اعتماد سابقة اعتُمدت فعلاً (seq>0). */
+function pa_returnTargets(r){
+  var cur=curStage(r); var curSeq=cur?(cur.seq||0):0; var out=[];
+  out.push({seq:0,label:'مقدّم الطلب — '+uName(r.requester||r.requesterName||'')});
+  (r.chain||[]).forEach(function(s){
+    if((s.seq||0)>0 && (s.seq||0)<curSeq && s.decision==='approved'){
+      out.push({seq:s.seq,label:esc(s.label)+(s.actor?(' — '+uName(s.actor)):'')});
+    }
+  });
+  return out;
+}
+askReason = function(id,action){
+  var r=REQS.find(function(x){return x.id===id;}); var isRej=action==='reject';
+  var targetSel='';
+  if(!isRej){
+    var tg=pa_returnTargets(r);
+    var opts=tg.map(function(t){return '<option value="'+t.seq+'">'+t.label+'</option>';}).join('');
+    targetSel='<label style="margin-top:10px">إلى مَن يعود الطلب؟</label>'
+      +'<select class="select" id="return-to">'+opts+'</select>'
+      +'<div class="muted" style="font-size:11px;margin-top:4px">'+ic('info',12)+' المرحلة التي يعود إليها الطلب — ومن يستلمه يمكنه إرجاعه لمن سبقه أيضاً.</div>';
+  }
+  $('modal').innerHTML='<div class="modal-head"><div class="mi '+(isRej?'danger':'info')+'">'+ic(isRej?'x':'undo',22)+'</div><div><h3>'+(isRej?'رفض الطلب':'إرجاع الطلب للتعديل')+'</h3><div class="ms">'+(isRej?'سيُنهى الطلب نهائياً':'سيعود الطلب للمرحلة التي تختارها')+'</div></div></div>'
+    +'<div class="modal-body">'
+    +'<div class="mini-req"><div class="r"><span class="l">رقم الطلب</span><b dir="ltr">'+esc(r.id)+'</b></div><div class="r"><span class="l">الوصف</span><b>'+esc(r.title)+'</b></div><div class="r"><span class="l">القيمة</span><b>'+money(r.estTotal)+'</b></div><div class="r"><span class="l">المرحلة</span><b>'+esc(curStage(r).label)+'</b></div></div>'
+    +'<label>'+(isRej?'سبب الرفض':'سبب الإرجاع وما المطلوب تعديله')+' <span style="color:var(--danger)">*</span></label>'
+    +'<textarea id="reason" rows="3" placeholder="'+(isRej?'وضّح سبب الرفض...':'وضّح ما يلزم تعديله...')+'"></textarea>'
+    +targetSel
+    +'<div class="modal-foot"><button class="btn '+(isRej?'btn-danger':'btn-primary')+'" onclick="confirmReason(\''+id+'\',\''+action+'\')">'+ic(isRej?'x':'undo',15)+' تأكيد '+(isRej?'الرفض':'الإرجاع')+'</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>'
+    +'</div>';
+  $('overlay').classList.add('show'); setTimeout(function(){ var e=$('reason'); if(e)e.focus(); },60);
+};
+confirmReason = function(id,action){
+  var c=(($('reason')||{}).value||'').trim();
+  if(!c){ var e=$('reason'); if(e)e.style.borderColor='var(--danger)'; toast('السبب مطلوب','err'); return; }
+  var toSeq=0; if(action==='return'){ var sel=$('return-to'); if(sel) toSeq=parseInt(sel.value,10)||0; }
+  closeModal(); decide(id,action,c,toSeq);
+};
+/* تمديد decide لتمرير وجهة الإرجاع (p_return_to_seq) */
+decide = async function(reqId,action,comment,returnToSeq){
+  var cmt=comment, until=null;
+  if(action==='defer' && comment && typeof comment==='object'){ until=comment.until||null; cmt=comment.reason||''; }
+  var res; try{ res=await pa_rpc('portal_pr_transition',{p_request_id:reqId,p_action:action,p_comment:cmt||null,p_hold_until:until||null,p_return_to_seq:(returnToSeq||0)}); }catch(e){ return; }
+  toast(action==='approve'?'تم الاعتماد':action==='reject'?'تم الرفض':action==='defer'?'أُجّل مالياً':'أُعيد للتعديل','ok');
+  if(action==='approve') pa_notify('request',reqId,(res&&res.finalized)?'approved':'stage');
+  else if(action==='reject') pa_notify('request',reqId,'rejected',cmt);
+  else if(action==='return') pa_notify('request',reqId,'returned',cmt);
+  await pa_after(reqId);
 };
 
 /* الإقلاع الفعلي */

@@ -731,12 +731,15 @@ END $fn$;
 -- قرار مرحلة (اعتماد/رفض/إرجاع) — الدورة الأولى. مطابق تماماً لمنطق pr_transition
 -- المُثبَت أمنياً (فصل مهام، تفويض، قفل صفوف، تحديث ذرّي).
 DROP FUNCTION IF EXISTS portal_pr_transition(text, text, text);
-CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL)
+DROP FUNCTION IF EXISTS portal_pr_transition(text, text, text, date);
+CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text,
+    p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL, p_return_to_seq int DEFAULT 0)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE
   v_me text := portal_username();
   v_req portal_requests%ROWTYPE;
   v_stage portal_approvals%ROWTYPE;
+  v_target portal_approvals%ROWTYPE;
   v_pending int; v_next_seq int; v_decision text; v_status text; v_phase text;
   v_ok boolean := false; v_intended text; v_perm boolean;
 BEGIN
@@ -794,6 +797,35 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'action', 'defer', 'status', 'on_hold');
   END IF;
 
+  -- ═══ الإرجاع المرن إلى مرحلة سابقة (p_return_to_seq > 0) — الباب: توجيه المالك ═══
+  -- المعتمِد يختار مرحلة سابقة يعود إليها الطلب؛ تُصفَّر تلك المرحلة وكل ما بعدها إلى
+  -- pending فيعود in_review على المرحلة الهدف. من عاد إليه الطلب يستطيع بدوره إرجاعه
+  -- لمن سبقه (الآلية نفسها تعمل تراكمياً عبر النداءات).
+  IF p_action = 'return' AND coalesce(p_return_to_seq, 0) > 0 THEN
+    IF p_return_to_seq >= v_stage.seq THEN
+      RAISE EXCEPTION 'الإرجاع يكون لمرحلة سابقة فقط';
+    END IF;
+    SELECT * INTO v_target FROM portal_approvals
+      WHERE request_id = p_request_id AND seq = p_return_to_seq;
+    IF NOT FOUND THEN RAISE EXCEPTION 'المرحلة الهدف غير موجودة'; END IF;
+
+    PERFORM set_config('app.portal_transition', '1', true);
+    -- أعد فتح المرحلة الهدف وكل ما بعدها (بما فيها المرحلة الحالية) إلى pending.
+    UPDATE portal_approvals SET decision = 'pending', approver = NULL, comment = NULL,
+           acted_at = NULL, channel = 'portal'
+      WHERE request_id = p_request_id AND seq >= p_return_to_seq;
+    UPDATE portal_requests SET status = 'in_review', phase = 'requisition',
+           current_seq = p_return_to_seq, updated_at = now(), updated_by = v_me
+      WHERE id = p_request_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+
+    PERFORM portal_audit_write(p_request_id, 'stage_returned', v_me, 'portal',
+      jsonb_build_object('from_seq', v_stage.seq, 'from_stage', v_stage.stage_label,
+                         'to_seq', p_return_to_seq, 'to_stage', v_target.stage_label, 'comment', p_comment));
+    RETURN jsonb_build_object('ok', true, 'action', 'return', 'decision', 'returned',
+      'status', 'in_review', 'finalized', false, 'seq', v_stage.seq, 'return_to_seq', p_return_to_seq);
+  END IF;
+
   v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
 
   SELECT count(*) INTO v_pending FROM portal_approvals WHERE request_id = p_request_id AND decision = 'pending';
@@ -825,6 +857,9 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'action', p_action, 'decision', v_decision, 'status', v_status,
                              'finalized', v_status <> 'in_review', 'seq', v_stage.seq);
 END $fn$;
+
+REVOKE ALL ON FUNCTION portal_pr_transition(text, text, text, date, int) FROM public;
+GRANT EXECUTE ON FUNCTION portal_pr_transition(text, text, text, date, int) TO authenticated;
 
 
 -- ═══════════════════════ 6) التسعير + التعميد (الدورة الثانية) ═══════════════════════
@@ -1122,12 +1157,13 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'id', v_id);
 END $fn$;
 
-CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text, p_comment text DEFAULT NULL)
+DROP FUNCTION IF EXISTS portal_payment_transition(bigint, text, text);
+CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text, p_comment text DEFAULT NULL, p_return_to text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_me text := portal_username(); v_pay portal_payments%ROWTYPE; v_status text;
 BEGIN
   IF v_me IS NULL OR NOT portal_has_perm('can_disburse') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  IF p_action NOT IN ('approve','reject','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
 
   SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'طلب الصرف غير موجود'; END IF;
@@ -1140,14 +1176,19 @@ BEGIN
     PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_payments SET status = v_status, approved_by = v_me, approved_at = now(), comment = p_comment WHERE id = p_payment_id;
     PERFORM set_config('app.portal_transition', '0', true);
-  ELSIF p_action = 'reject' THEN
+  ELSIF p_action IN ('reject','return') THEN
     IF v_pay.status <> 'pending_pay' THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
-    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض'; END IF;
-    v_status := 'rejected';
+    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع'; END IF;
+    -- الإرجاع = رفض غير نهائي مع توجيه: يعود الطلب إلى awarded فيُعيد المشتريات إصدار
+    -- طلب الصرف (بعد معالجة ملاحظة المالية). الوجهة تُحفظ في التدقيق للإشعار/التتبّع.
+    v_status := CASE p_action WHEN 'return' THEN 'returned' ELSE 'rejected' END;
     PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_payments SET status = v_status, comment = p_comment WHERE id = p_payment_id;
     UPDATE portal_requests SET status = 'awarded', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
     PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+      jsonb_build_object('payment_id', p_payment_id, 'return_to', p_return_to, 'comment', p_comment));
+    RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
   ELSE -- disburse
     IF v_pay.status <> 'approved_pay' THEN RAISE EXCEPTION 'يلزم اعتماد الصرف أولاً'; END IF;
     -- فصل المهام (maker-checker على تحرير المال): من اعتمد الصرف لا ينفّذه بنفسه.
@@ -1162,6 +1203,9 @@ BEGIN
   PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal', jsonb_build_object('payment_id', p_payment_id));
   RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
 END $fn$;
+
+REVOKE ALL ON FUNCTION portal_payment_transition(bigint, text, text, text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint, text, text, text) TO authenticated;
 
 
 -- ═══════════════════════ 8) الاستلام (GRN) ═══════════════════════
