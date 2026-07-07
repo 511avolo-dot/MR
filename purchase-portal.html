@@ -2866,8 +2866,8 @@ async function resumeHold(reqId){
   toast('استُؤنف الطلب بعد توفّر السيولة','ok'); await pa_after(reqId);
 }
 async function resubmitRequest(reqId){
-  /* لا توجد RPC مخصّصة لإعادة تقديم طلب مُعاد — نستخدم دالة الإرسال (تنجح للمسودّات فقط). */
-  try{ await pa_rpc('portal_submit_request',{p_request_id:reqId}); }catch(e){ return; }
+  /* B2: RPC مخصّصة تُعيد بناء السلسلة وتُعيد الحالة in_review (الطلبات المُعادة فقط). */
+  try{ await pa_rpc('portal_resubmit_request',{p_request_id:reqId,p_comment:null}); }catch(e){ return; }
   toast('أُعيد تقديم الطلب — بدأت سلسلة الاعتماد','ok'); await pa_after(reqId);
 }
 async function awardTo(id,sid,reason){
@@ -3058,6 +3058,46 @@ printDossier=function(id){ var r=REQS.find(function(x){return x.id===id;}); if(!
 /* (4) تعطيل ميزات النسخ المحلي التجريبية بأمان (البيانات في Supabase لا localStorage) */
 try{ confirmImport=function(){ toast('الاستيراد غير متاح في النسخة الحيّة — البيانات محفوظة في Supabase','err'); try{closeModal();}catch(e){} }; }catch(e){}
 try{ resetState=function(){ toast('غير متاح في النسخة الحيّة — لا تخزين محلي في المتصفح','err'); try{closeModal();}catch(e){} }; }catch(e){}
+
+/* ══════ B1: إدخال عروض الموردين (portal_submit_offer) — يفتح دورة المشتريات كاملةً ══════ */
+var _pa_refProcWorkspace = procWorkspace;
+procWorkspace = function(r){
+  var html = _pa_refProcWorkspace(r);
+  var canPr = (accessOf(ME).can && accessOf(ME).can.manageRfq) || isAdmin();
+  if(r && r.proc && (r.proc.phase==='pricing' || r.proc.phase==='comparison') && canPr){
+    html += '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
+      + '<div class="sec-title"><span class="ico">'+ic('plus',16)+'</span>إدخال عروض الموردين</div>'
+      + '<div class="muted" style="font-size:12px;margin-bottom:10px">أدخل عرض كل مورد (الإجمالي وشروط التوريد) — تُبنى منها المقارنة والتعميد. المطلوب حسب الحوكمة: '+esc(String(r.proc.quotesRequired||'—'))+' عروض.</div>'
+      + '<button class="btn btn-gold btn-sm" onclick="openOfferForm(\''+r.id+'\')">'+ic('plus',14)+' إضافة عرض مورد</button>'
+      + '</div>';
+  }
+  return html;
+};
+function openOfferForm(reqId){
+  var supList = Object.keys(SUPPLIERS||{}).map(function(k){ return '<option value="'+esc((SUPPLIERS[k]||{}).n||'')+'"></option>'; }).join('');
+  $('modal').innerHTML = '<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('cart',22)+'</div><div><h3>إضافة عرض مورد</h3><div class="ms">الإجمالي قبل الضريبة وشروط التوريد</div></div></div>'
+    + '<div class="modal-body">'
+    + '<label>المورد <span class="req">*</span></label><input class="input" id="of-sup" list="of-sups" placeholder="اسم المورد" autocomplete="off"><datalist id="of-sups">'+supList+'</datalist>'
+    + '<label style="margin-top:10px">الإجمالي (ر.س، قبل الضريبة) <span class="req">*</span></label><input class="input num" id="of-total" type="number" min="1" placeholder="0">'
+    + '<div style="display:flex;gap:10px;margin-top:10px"><div style="flex:1"><label>مدة التوريد (يوم)</label><input class="input num" id="of-deliv" type="number" min="0" placeholder="0"></div>'
+    + '<div style="flex:1"><label>مهلة السداد (يوم)</label><input class="input num" id="of-pay" type="number" min="0" placeholder="0"></div></div>'
+    + '<label style="margin-top:10px">ملاحظة (اختياري)</label><input class="input" id="of-note" placeholder="ضمان / جودة / شروط">'
+    + '<div class="modal-foot"><button class="btn btn-gold" onclick="submitOffer(\''+reqId+'\')">'+ic('check',15)+' حفظ العرض</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>'
+    + '</div>';
+  $('overlay').classList.add('show'); setTimeout(function(){ var e=$('of-sup'); if(e)e.focus(); },60);
+}
+async function submitOffer(reqId){
+  var sup=(($('of-sup')||{}).value||'').trim();
+  var total=Number(($('of-total')||{}).value||0);
+  var deliv=Number(($('of-deliv')||{}).value||0)||null;
+  var pay=Number(($('of-pay')||{}).value||0)||null;
+  var note=(($('of-note')||{}).value||'').trim()||null;
+  if(!sup){ toast('اسم المورد مطلوب','err'); return; }
+  if(!(total>0)){ toast('الإجمالي مطلوب','err'); return; }
+  try{ await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:note}); }
+  catch(e){ return; }
+  closeModal(); toast('أُضيف العرض','ok'); await pa_after(reqId);
+}
 
 /* الإقلاع الفعلي */
 boot();
