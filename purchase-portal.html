@@ -2787,6 +2787,13 @@ async function loadAll(){
 
 /* ══════ إعادة التحميل ثم العرض مع الحفاظ على الطلب المفتوح ══════ */
 async function pa_after(reqId){ await loadAll(); if(reqId){ CURRENT=reqId; VIEW='detail'; } render(); }
+/* H2: إشعار بريدي «أفضل جهد» — المستقبِلون والتحقّق يتمّان في الخادم من القاعدة (لا بريد من العميل). */
+async function pa_notify(kind,reqId,event,comment){
+  try{
+    var sess=(await SB.auth.getSession()).data.session; if(!sess) return;
+    await fetch('/api/portal-notify',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+sess.access_token},body:JSON.stringify({kind:kind,request_id:reqId,event:event,comment:comment||null})});
+  }catch(e){}
+}
 
 /* ══════ المصادقة + شاشة الدخول ══════ */
 function pa_ensureLogin(){ let el=document.getElementById('pa-login'); if(el) return el;
@@ -2834,8 +2841,11 @@ async function boot(){
 async function decide(reqId,action,comment){
   let cmt=comment, until=null;
   if(action==='defer' && comment && typeof comment==='object'){ until=comment.until||null; cmt=comment.reason||''; }
-  try{ await pa_rpc('portal_pr_transition',{p_request_id:reqId,p_action:action,p_comment:cmt||null,p_hold_until:until||null}); }catch(e){ return; }
+  let res; try{ res=await pa_rpc('portal_pr_transition',{p_request_id:reqId,p_action:action,p_comment:cmt||null,p_hold_until:until||null}); }catch(e){ return; }
   toast(action==='approve'?'تم الاعتماد':action==='reject'?'تم الرفض':action==='defer'?'أُجّل مالياً':'أُعيد للتعديل','ok');
+  if(action==='approve') pa_notify('request',reqId,(res&&res.finalized)?'approved':'stage');
+  else if(action==='reject') pa_notify('request',reqId,'rejected',cmt);
+  else if(action==='return') pa_notify('request',reqId,'returned',cmt);
   await pa_after(reqId);
 }
 async function submitRequest(){
@@ -2858,6 +2868,7 @@ async function submitRequest(){
     p_project:(NR_META.project||'').trim(), p_need_by:NR_META.needBy||null, p_proc_type:NR_META.procType||'normal',
     p_justification:(NR_META.justif||'').trim()||null, p_note:(NR_META.note||'').trim()||null }); }catch(e){ return; }
   toast('رُفع الطلب '+((res&&res.id)||'')+((res&&res.split_flag)?' — مع تنبيه تجزئة ⚠':' ✦'),(res&&res.split_flag)?'err':'ok');
+  if(res&&res.id) pa_notify('request',res.id,'submitted');
   nrReset();
   await loadAll(); if(res&&res.id){ CURRENT=res.id; VIEW='detail'; } else { VIEW='pipeline'; CURRENT=null; } render();
 }
@@ -2868,18 +2879,18 @@ async function resumeHold(reqId){
 async function resubmitRequest(reqId){
   /* B2: RPC مخصّصة تُعيد بناء السلسلة وتُعيد الحالة in_review (الطلبات المُعادة فقط). */
   try{ await pa_rpc('portal_resubmit_request',{p_request_id:reqId,p_comment:null}); }catch(e){ return; }
-  toast('أُعيد تقديم الطلب — بدأت سلسلة الاعتماد','ok'); await pa_after(reqId);
+  toast('أُعيد تقديم الطلب — بدأت سلسلة الاعتماد','ok'); pa_notify('request',reqId,'stage'); await pa_after(reqId);
 }
 async function awardTo(id,sid,reason){
   const r=REQS.find(x=>x.id===id); if(!r||!r.proc){ return; }
   const offerId=r.proc._offerIdByKey && r.proc._offerIdByKey[sid];
   if(offerId==null){ toast('عرض غير معروف','err'); return; }
   try{ await pa_rpc('portal_award',{p_request_id:id,p_winner_offer_id:offerId,p_reason:reason||null}); }catch(e){ return; }
-  toast(reason?'عُمّد المورّد مع توثيق المبرّر':'بدأت سلسلة اعتماد التعميد','ok'); await pa_after(id);
+  toast(reason?'عُمّد المورّد مع توثيق المبرّر':'بدأت سلسلة اعتماد التعميد','ok'); pa_notify('award',id,'pending'); await pa_after(id);
 }
 async function approveAward(id){
-  try{ await pa_rpc('portal_award_transition',{p_request_id:id,p_action:'approve',p_comment:null}); }catch(e){ return; }
-  toast('اعتُمدت مرحلة التعميد','ok'); await pa_after(id);
+  let res; try{ res=await pa_rpc('portal_award_transition',{p_request_id:id,p_action:'approve',p_comment:null}); }catch(e){ return; }
+  toast('اعتُمدت مرحلة التعميد','ok'); pa_notify('award',id,(res&&res.status==='awarded')?'approved':'pending'); await pa_after(id);
 }
 async function confirmPayment(id){
   const r=REQS.find(x=>x.id===id); if(!r||!r.proc){ return; }
@@ -2892,7 +2903,7 @@ async function confirmPayment(id){
   else if(kind==='custody'){ custodyTo=($('pm-cust')||{}).value||''; if(!custodyTo){ toast('حدّد مسؤول العهدة','err'); return; } }
   else { const due=($('pm-due')||{}).value||''; if(!due){ toast('تاريخ الاستحقاق مطلوب','err'); return; } details={due_date:due,terms:($('pm-terms')||{}).value||''}; }
   try{ await pa_rpc('portal_payment_request',{p_request_id:id,p_kind:kind,p_amount:amount,p_custody_to:custodyTo||null,p_details:Object.keys(details).length?details:null}); }catch(e){ return; }
-  closeModal(); toast('صدر طلب الصرف وأُحيل للإدارة المالية ✓','ok'); await pa_after(id);
+  closeModal(); toast('صدر طلب الصرف وأُحيل للإدارة المالية ✓','ok'); pa_notify('payment',id,'pending'); await pa_after(id);
 }
 async function payApprove(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
@@ -2904,7 +2915,7 @@ async function disburse(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
   if(!pid){ toast('لا يوجد طلب صرف','err'); return; }
   try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'disburse',p_comment:null}); }catch(e){ return; }
-  toast('سُجّل «تم الصرف» ✦','ok'); await pa_after(id);
+  toast('سُجّل «تم الصرف» ✦','ok'); pa_notify('payment',id,'disbursed'); await pa_after(id);
 }
 async function confirmPayReject(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
@@ -2925,7 +2936,7 @@ async function confirmReceive(id){
   const lines=[]; r.items.forEach((it,i)=>{ const add=+(($('rv-'+i)||{}).value)||0; if(add>0) lines.push({item_id:it._id,qty:add}); });
   if(!lines.length){ toast('أدخِل كمية مستلمة واحدة على الأقل','err'); return; }
   let res; try{ res=await pa_rpc('portal_record_receipt',{p_request_id:id,p_lines:lines,p_note:null}); }catch(e){ return; }
-  closeModal(); toast((res&&res.remaining>0)?'سُجّل استلام جزئي — يمكن استكماله لاحقاً':'سُجّل الاستلام الكامل ✦','ok'); await pa_after(id);
+  closeModal(); toast((res&&res.remaining>0)?'سُجّل استلام جزئي — يمكن استكماله لاحقاً':'سُجّل الاستلام الكامل ✦','ok'); pa_notify('receipt',id,(res&&res.remaining>0)?'recorded':'closed'); await pa_after(id);
 }
 async function closeReq(id){
   /* الاستلام الكامل يُقفل المعاملة تلقائياً في portal_record_receipt — نعيد التحميل ونؤكّد. */
