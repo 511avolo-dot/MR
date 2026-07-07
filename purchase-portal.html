@@ -2637,6 +2637,7 @@ function pa_procPhase(r,offers,award,payments){
   if(st==='closed'||ph==='closed') return 'closed';
   if(st==='receipt_pending'||ph==='receipt') return 'receipt';
   if(payments&&payments.length) return 'payment';
+  if(st==='po_review'||ph==='po_review') return 'po_review';
   if(r.po_issued_at) return 'po';
   if(st==='award_review'||ph==='award'||award) return 'award';
   if(offers&&offers.length) return 'comparison';
@@ -2652,7 +2653,7 @@ async function loadAll(){
   const { data:{ session } }=await SB.auth.getSession();
   if(!session) return false;
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,awR,aaR,payR,rcR,auR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2668,7 +2669,8 @@ async function loadAll(){
     SB.from('portal_award_approvals').select('*').order('seq'),
     SB.from('portal_payments').select('*').order('id'),
     SB.from('portal_receipts').select('*').order('received_at'),
-    SB.from('portal_audit').select('*').order('id')
+    SB.from('portal_audit').select('*').order('id'),
+    SB.from('portal_po_approvals').select('*').order('seq')
   ]);
 
   /* الأقسام */
@@ -2709,7 +2711,8 @@ async function loadAll(){
   /* فهرسة صفوف التفاصيل حسب الطلب */
   const by=(rows,key)=>{ const m={}; (rows||[]).forEach(x=>{ (m[x[key]]=m[x[key]]||[]).push(x); }); return m; };
   const itemsBy=by(itR.data,'request_id'), apprBy=by(apR.data,'request_id'), offBy=by(ofR.data,'request_id'),
-        awApBy=by(aaR.data,'request_id'), payBy=by(payR.data,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id');
+        awApBy=by(aaR.data,'request_id'), payBy=by(payR.data,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id'),
+        poBy=by(poR.data,'request_id');
   const awardBy={}; (awR.data||[]).forEach(a=>{ awardBy[a.request_id]=a; });
   const slaH=(PSET.sla_days?PSET.sla_days*24:48);
 
@@ -2749,8 +2752,8 @@ async function loadAll(){
 
     /* دورة حياة المشتريات (proc) — تُبنى فقط بعد تجاوز اعتماد الحاجة */
     const offers=offBy[r.id]||[]; const award=awardBy[r.id]||null; const payments=payBy[r.id]||[]; const receipts=rcBy[r.id]||[];
-    const hasProc=['pricing','award','payment','receipt','closed'].includes(r.phase)
-      || ['pricing','award_review','awarded','payment_pending','receipt_pending','closed'].includes(r.status)
+    const hasProc=['pricing','award','po_review','payment','receipt','closed'].includes(r.phase)
+      || ['pricing','award_review','po_review','awarded','payment_pending','receipt_pending','closed'].includes(r.status)
       || offers.length>0 || !!award;
     if(hasProc){
       const phase=pa_procPhase(r,offers,award,payments);
@@ -2766,6 +2769,11 @@ async function loadAll(){
       proc.awardChain=aa.length? aa.map(a=>({ seq:a.seq, label:a.stage_label,
         user:(a.decision!=='pending'&&a.approver)?a.approver:pa_resolveApprover(a.role_key,a.approver),
         decision:a.decision, actedAt:pa_ms(a.acted_at), actor:a.approver||null })) : null;
+      /* سلسلة اعتماد أمر الشراء (لجنة/مالية/عام حسب DoA) */
+      const po=(poBy[r.id]||[]).slice().sort((a,b)=>(a.seq||0)-(b.seq||0));
+      proc.poChain=po.length? po.map(a=>({ seq:a.seq, kind:a.kind, label:a.stage_label, roleKey:a.role_key,
+        user:(a.decision!=='pending'&&a.approver)?a.approver:pa_resolveApprover(a.role_key,a.approver),
+        decision:a.decision, actedAt:pa_ms(a.acted_at), actor:a.approver||null, comment:a.comment||null })) : null;
       if(r.po_issued_at) proc.po={ no:'P.O-DG26-'+r.id.slice(-4), issuedAt:pa_ms(r.po_issued_at), issuedBy:r.po_issued_by };
       if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
       const anyRecv=items.some(it=>it.received>0);
@@ -3082,6 +3090,8 @@ procWorkspace = function(r){
       + '<button class="btn btn-gold btn-sm" onclick="openOfferForm(\''+r.id+'\')">'+ic('plus',14)+' إضافة عرض مورد</button>'
       + '</div>';
   }
+  /* طور اعتماد أمر الشراء (سلسلة حسب القيمة) — غير معروف للمرجع فنحقنه */
+  if(r && r.proc && r.proc.phase==='po_review'){ html += poReviewPanel(r); }
   return html;
 };
 function openOfferForm(reqId){
@@ -3112,6 +3122,62 @@ async function submitOffer(reqId){
 
 /* مواءمة حارس الاستلام: الواجهة تطابق الخادم (can_verify_stock/أدمن فقط) — فصل مهام صحيح، لا زر يفشل */
 canReceive = function(r){ var p=(USERS[ME]||{}).perms||{}; return !!(p.can_verify_stock || (USERS[ME]||{}).admin); };
+
+/* ══════ اعتماد أمر الشراء (portal_po_transition) — سلسلة حسب شريحة القيمة ══════ */
+function pa_canApprovePo(s){
+  if(isAdmin()) return true;
+  var perms=(USERS[ME]||{}).perms||{};
+  if(s.kind==='committee') return !!perms.can_approve_committee;
+  return !!perms[s.roleKey];
+}
+function poReviewPanel(r){
+  var p=r.proc; if(!p||!p.poChain) return '';
+  var rows=p.poChain.map(function(s,i){
+    var done=s.decision==='approved';
+    var active=!done && s.decision==='pending' && p.poChain.slice(0,i).every(function(x){return x.decision==='approved';});
+    var canAct=active && pa_canApprovePo(s);
+    var right = done ? '<span class="badge ok" style="font-size:10px">معتمد</span>'
+      : active ? (canAct
+          ? '<button class="btn btn-gold btn-sm" onclick="poApprove(\''+r.id+'\')">'+ic('check',13)+' اعتماد</button> <button class="btn btn-danger btn-sm" onclick="askPoReject(\''+r.id+'\')">'+ic('x',13)+' رفض</button>'
+          : '<span class="chip">'+ic('eye',12)+' بانتظار '+esc(uName(s.user||''))+'</span>')
+      : '<span class="chip">بالانتظار</span>';
+    return '<div class="par-row"><div class="av sm" style="background:'+(done?'linear-gradient(155deg,#36916b,#2e7d5b)':active?'linear-gradient(155deg,#c2a063,#a37f43)':'#cdc4b2')+';color:#fff">'+(done?'✓':s.seq)+'</div><div class="nm" style="flex:1">'+esc(s.label)+'<div class="rl muted" style="font-size:10.5px;font-weight:500">'+esc(uName(s.user||''))+'</div></div>'+right+'</div>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)"><div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>اعتماد أمر الشراء — سلسلة حسب القيمة</div>'
+    + '<div class="muted" style="font-size:11.5px;margin-bottom:10px">'+ic('scale',13)+' تكبر السلسلة بقيمة التعميد: اللجنة (>25 ألف) ← المالية (>150) ← المدير العام (>250).</div>'
+    + rows + '</div>' + (poPreview(r)||'');
+}
+async function poApprove(id){
+  try{ await pa_rpc('portal_po_transition',{p_request_id:id,p_action:'approve',p_comment:null}); }catch(e){ return; }
+  toast('اعتُمدت مرحلة أمر الشراء','ok'); pa_notify('award',id,'pending'); await pa_after(id);
+}
+function askPoReject(id){
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--danger-bg);color:var(--danger)">'+ic('x',22)+'</div><div><h3>رفض أمر الشراء</h3><div class="ms">يعود الطلب للتسعير لإعادة التعميد</div></div></div>'
+    +'<div class="modal-body"><label>سبب الرفض <span class="req">*</span></label><textarea id="po-rej" rows="3" placeholder="سبب رفض أمر الشراء..."></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-danger" onclick="confirmPoReject(\''+id+'\')">'+ic('x',15)+' تأكيد الرفض</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show'); setTimeout(function(){ var e=$('po-rej'); if(e)e.focus(); },60);
+}
+async function confirmPoReject(id){
+  var c=(($('po-rej')||{}).value||'').trim(); if(!c){ toast('السبب مطلوب','err'); return; }
+  try{ await pa_rpc('portal_po_transition',{p_request_id:id,p_action:'reject',p_comment:c}); }catch(e){ return; }
+  closeModal(); toast('رُفض أمر الشراء — عاد للتسعير','ok'); await pa_after(id);
+}
+
+/* تنبيه مركز المهام: اعتماد أمر شراء معلّق للمعتمِد المخوَّل */
+var _pa_refMyTasks = myTasks;
+myTasks = function(){
+  var t = _pa_refMyTasks() || [];
+  (REQS||[]).forEach(function(r){
+    if(r && r.proc && r.proc.phase==='po_review' && r.proc.poChain && r.requester!==ME){
+      var idx=-1; for(var i=0;i<r.proc.poChain.length;i++){ if(r.proc.poChain[i].decision==='pending'){ idx=i; break; } }
+      if(idx>=0){ var s=r.proc.poChain[idx];
+        var active = r.proc.poChain.slice(0,idx).every(function(x){return x.decision==='approved';});
+        if(active && pa_canApprovePo(s)) t.push({ r:r, label:'اعتماد أمر شراء بانتظارك', ic:'clipboard', sub:s.label||'' });
+      }
+    }
+  });
+  return t;
+};
 
 /* الإقلاع الفعلي */
 boot();
