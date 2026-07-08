@@ -1687,9 +1687,9 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
     portal_is_admin()
     OR portal_my_scope() = 'all'
     OR p_requester = portal_username()
-    OR (portal_my_scope() = 'sector' AND EXISTS (
+    OR (portal_my_scope() = 'sector' AND portal_my_sector() IS NOT NULL AND EXISTS (
           SELECT 1 FROM portal_departments d
-           WHERE d.id = p_dept AND d.sector IS NOT DISTINCT FROM portal_my_sector()))
+           WHERE d.id = p_dept AND d.sector = portal_my_sector()))
     OR EXISTS (SELECT 1 FROM portal_approvals a
                 WHERE a.request_id = p_id AND a.approver = portal_username());
 $fn$;
@@ -1836,6 +1836,10 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtext('portal_last_admin'));
     SELECT count(*) INTO v_admins FROM portal_users WHERE role = 'admin' AND active;
     IF v_admins <= 1 THEN RAISE EXCEPTION 'لا يمكن حذف آخر أدمن نشط للبوابة'; END IF;
+  END IF;
+  -- سلامة التدقيق: لا حذف صلب لمن له طلبات مسجّلة — يُعطَّل حسابه بدلاً من ذلك.
+  IF EXISTS (SELECT 1 FROM portal_requests WHERE requester = p_username) THEN
+    RAISE EXCEPTION 'لا يمكن حذف مستخدم له طلبات مسجّلة (سلامة التدقيق) — عطّل حسابه بدلاً من الحذف';
   END IF;
   UPDATE portal_users       SET delegate_to  = NULL WHERE delegate_to  = p_username;
   UPDATE portal_users       SET manager_user = NULL WHERE manager_user = p_username;

@@ -105,6 +105,24 @@ function sb(env) {
   };
 }
 
+// عدد الأدمن النشطين (لحماية «آخر أدمن نشط» في الحذف/التعطيل/التخفيض).
+async function activeAdminCount(env) {
+  const r = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?role=eq.admin&active=eq.true&select=username`, {
+    headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+  });
+  const rows = r.ok ? await r.json().catch(() => []) : [];
+  return Array.isArray(rows) ? rows.length : 999;
+}
+// هل الهدف أدمن نشط؟ (نقرأ الدور والحالة الحاليّين قبل أي تعديل خطر).
+async function targetAdminState(env, username) {
+  const r = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=role,active`, {
+    headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+  });
+  const rows = r.ok ? await r.json().catch(() => []) : [];
+  const u = rows && rows[0];
+  return { isAdmin: !!(u && u.role === 'admin'), isActive: !!(u && u.active !== false) };
+}
+
 export async function onRequestGet({ env }) {
   const configured = !!(PORTAL_URL(env) && PORTAL_KEY(env));
   return json({ ok: configured });
@@ -154,7 +172,7 @@ export async function onRequestPost({ request, env }) {
       const allowed = realEmail.endsWith('@' + domain) || wl.some((w) => String(w || '').trim().toLowerCase() === realEmail);
       if (!allowed) return json({ error: `البريد خارج نطاق الشركة (@${domain}) وغير مُدرَج في القائمة البيضاء المعتمَدة` }, 400);
     }
-    if (String(password).length < 6) return json({ error: 'كلمة السر 6 أحرف على الأقل' }, 400);
+    if (String(password).length < 8) return json({ error: 'كلمة السر 8 أحرف على الأقل' }, 400);
     if (await api.emailExists(realEmail)) return json({ error: 'هذا البريد مسجّل مسبقاً في البوابة' }, 409);
 
     // الوظيفة من الكتالوج (نموذج الوظائف): تُورَّث صلاحياتها من الخادم — لا تُقبل
@@ -215,6 +233,13 @@ export async function onRequestPost({ request, env }) {
     if ('isAway' in payload) patch.is_away = !!payload.isAway;
     if ('role' in payload) patch.role = payload.role === 'admin' ? 'admin' : 'user';
     if (!Object.keys(patch).length) return json({ error: 'لا تغييرات' }, 400);
+    // منع تخفيض دور آخر أدمن نشط (يُبقي البوابة بلا مدير).
+    if (patch.role === 'user') {
+      const t = await targetAdminState(env, username);
+      if (t.isAdmin && t.isActive && (await activeAdminCount(env)) <= 1) {
+        return json({ error: 'لا يمكن تخفيض دور آخر أدمن نشط للبوابة' }, 400);
+      }
+    }
     const r = await api.restWrite('PATCH', `portal_users?username=eq.${encodeURIComponent(username)}`, patch);
     if (!r.ok) return json({ error: 'تعذّر حفظ التغييرات' }, 400);
     return json({ ok: true });
@@ -223,6 +248,13 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setActive') {
     const { username, active } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
+    // منع تعطيل آخر أدمن نشط (يُبقي البوابة بلا مدير).
+    if (!active) {
+      const t = await targetAdminState(env, username);
+      if (t.isAdmin && t.isActive && (await activeAdminCount(env)) <= 1) {
+        return json({ error: 'لا يمكن تعطيل آخر أدمن نشط للبوابة' }, 400);
+      }
+    }
     const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
       headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
@@ -239,7 +271,7 @@ export async function onRequestPost({ request, env }) {
 
   if (action === 'setPassword') {
     const { username, password } = payload;
-    if (!username || String(password || '').length < 6) return json({ error: 'بيانات غير صالحة' }, 400);
+    if (!username || String(password || '').length < 8) return json({ error: 'كلمة السر 8 أحرف على الأقل' }, 400);
     const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
       headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
@@ -269,12 +301,28 @@ export async function onRequestPost({ request, env }) {
       const admins = ra.ok ? await ra.json().catch(() => []) : [];
       if (Array.isArray(admins) && admins.length <= 1) return json({ error: 'لا يمكن حذف آخر أدمن نشط للبوابة' }, 400);
     }
+    // سلامة التدقيق: لا حذف صلب لمن له طلبات مسجّلة (FK requester = NOT NULL) —
+    // يُعطَّل حسابه بدلاً من ذلك (setActive:false يحفظ السجلّ والمراجع).
+    const rq = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_requests?requester=eq.${encodeURIComponent(username)}&select=id&limit=1`, {
+      headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+    });
+    const rqRows = rq.ok ? await rq.json().catch(() => []) : [];
+    if (Array.isArray(rqRows) && rqRows.length) {
+      return json({ error: 'لا يمكن حذف مستخدم له طلبات مسجّلة (سلامة التدقيق) — عطّل حسابه بدلاً من الحذف' }, 409);
+    }
+    // فُكّ المراجع (تفويض/مدير/مدير قسم) لتفادي انتهاك FK.
+    await api.restWrite('PATCH', `portal_users?delegate_to=eq.${encodeURIComponent(username)}`, { delegate_to: null });
+    await api.restWrite('PATCH', `portal_users?manager_user=eq.${encodeURIComponent(username)}`, { manager_user: null });
+    await api.restWrite('PATCH', `portal_departments?manager_user=eq.${encodeURIComponent(username)}`, { manager_user: null });
+    // احذف الملف التعريفي أولاً؛ ولا تُتلِف حساب الدخول إلا إذا نجح حذف الملف
+    // (وإلا يبقى ملف يتيم بلا دخول ويُبلَّغ الأدمن زوراً بالنجاح).
+    const del = await api.restWrite('DELETE', `portal_users?username=eq.${encodeURIComponent(username)}`);
+    if (!del.ok) return json({ error: 'تعذّر حذف المستخدم (قد يكون مرتبطاً بسجلات) — عطّل حسابه بدلاً من ذلك' }, 400);
     const email0 = rows0 && rows0[0] && rows0[0].email;
     if (email0) {
       const u = await api.findAuthUserByEmail(email0);
       if (u) await api.deleteAuthUser(u.id);
     }
-    await api.restWrite('DELETE', `portal_users?username=eq.${encodeURIComponent(username)}`);
     return json({ ok: true });
   }
 
