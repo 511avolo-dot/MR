@@ -3128,7 +3128,7 @@ canReceive = function(r){ var p=(USERS[ME]||{}).perms||{}; return !!(p.can_verif
 function pa_canApprovePo(s){
   if(isAdmin()) return true;
   var perms=(USERS[ME]||{}).perms||{};
-  if(s.kind==='committee') return !!perms.can_approve_committee;
+  if(s.kind==='committee') return !!(perms.can_approve_committee || (PA_COMMITTEE&&PA_COMMITTEE.indexOf(ME)>=0));
   return !!perms[s.roleKey];
 }
 function poReviewPanel(r){
@@ -3300,6 +3300,120 @@ async function sendInvite(){
 async function revokeInvite(id){ var d=await pa_apiPost('/api/portal-invite',{action:'revoke',id:id}); if(d){ toast('أُلغيت الدعوة','ok'); await loadInvites(); } }
 async function addWhitelist(){ var e=(($('wl-email')||{}).value||'').trim(); if(!e){ toast('أدخِل بريداً','err'); return; } var d=await pa_apiPost('/api/portal-invite',{action:'whitelist_add',email:e}); if(d){ PA_WL=d.whitelist||PA_WL; toast('اعتُمد البريد','ok'); render(); } }
 async function removeWhitelist(e){ var d=await pa_apiPost('/api/portal-invite',{action:'whitelist_remove',email:e}); if(d){ PA_WL=d.whitelist||PA_WL; toast('أُزيل من القائمة','ok'); render(); } }
+
+/* ══════ تخصيص اللجنة المصغّرة (م1b) — لوحة في تبويب «مصفوفة الصلاحيات» ══════ */
+var PA_COMMITTEE=null, PA_COM_LOADING=false;
+async function loadCommittee(){
+  PA_COM_LOADING=true;
+  var r=await SB.from('portal_settings').select('value').eq('key','committee_members').maybeSingle();
+  PA_COM_LOADING=false;
+  PA_COMMITTEE=(r.data&&Array.isArray(r.data.value))?r.data.value:[];
+  render();
+}
+function committeePanel(){
+  if(PA_COMMITTEE===null){ if(!PA_COM_LOADING) loadCommittee(); return '<div class="card"><div class="muted" style="text-align:center;padding:14px">جارٍ تحميل اللجنة…</div></div>'; }
+  var rows=Object.keys(USERS).filter(function(u){return USERS[u].active!==false;}).map(function(u){
+    var inC=PA_COMMITTEE.indexOf(u)>=0;
+    return '<label style="'+_pchk+';margin:0 0 8px"><input type="checkbox" id="com-'+u+'" '+(inC?'checked':'')+'> '
+      +esc(uName(u))+' <span class="muted" style="font-size:10.5px">'+esc((USERS[u].r||''))+'</span></label>';
+  }).join('');
+  var members=PA_COMMITTEE.length?PA_COMMITTEE.map(function(u){return '<span class="badge gold" style="font-size:10px">'+esc(uName(u))+'</span>';}).join(' '):'<span class="muted" style="font-size:12px">لا أعضاء بعد — حدّدهم أدناه</span>';
+  return '<div class="card" style="margin-bottom:14px;border-color:var(--gold-soft)"><div class="sec-title"><span class="ico">'+ic('users',16)+'</span>اللجنة المصغّرة — اعتماد أوامر الشراء (25–150 ألف وما فوق)</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">'+ic('info',13)+' أعضاء اللجنة يعتمدون مرحلة «اللجنة» في سلسلة أمر الشراء. أي عضو واحد منهم يكفي للمرحلة. (الأدمن دائماً مخوَّل.)</div>'
+    +'<div style="margin-bottom:12px"><span class="muted" style="font-size:12px;font-weight:700">الأعضاء الحاليون:</span> '+members+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px;margin-bottom:12px">'+rows+'</div>'
+    +'<button class="btn btn-gold" onclick="saveCommittee()">'+ic('check',15)+' حفظ اللجنة</button></div>';
+}
+async function saveCommittee(){
+  var members=Object.keys(USERS).filter(function(u){ var e=$('com-'+u); return e&&e.checked; });
+  var res; try{ res=await pa_rpc('portal_set_committee',{p_members:members}); }catch(e){ return; }
+  PA_COMMITTEE=(res&&res.members)||members;
+  toast('حُفظت اللجنة المصغّرة ('+PA_COMMITTEE.length+' أعضاء)','ok'); render();
+}
+var _pa_adminMatrix = adminMatrix;
+adminMatrix = function(){ return committeePanel() + _pa_adminMatrix(); };
+/* حمّل قائمة اللجنة مع كل تحميل بيانات — كي يرى العضو زرّ اعتماده ومهمّته دون فتح الإدارة */
+var _pa_loadAll_c = loadAll;
+loadAll = async function(){
+  await _pa_loadAll_c();
+  try{ var r=await SB.from('portal_settings').select('value').eq('key','committee_members').maybeSingle();
+       PA_COMMITTEE=(r.data&&Array.isArray(r.data.value))?r.data.value:(PA_COMMITTEE||[]); }catch(e){}
+  /* م1c: أسماء عرض متوافقة — مربّعات PERM_DEFS المرجعية تقرأ مفاتيح قديمة؛ نضيف
+     مرايا قراءة فقط كي يظهر الوضع الصحيح (الكتابة تُترجَم في togglePerm وتُنظَّف). */
+  try{ Object.keys(USERS).forEach(function(u){ var p=USERS[u].perms||{};
+    p.can_approve_l1=!!p.can_approve_stage; p.can_approve_l2=!!p.can_manage_users;
+    p.can_manage_rfq=!!p.can_manage_procurement; USERS[u].perms=p; }); }catch(e){}
+};
+
+/* م1c: تبديل صلاحية فردية يحفظ فعلياً في القاعدة (عبر خادم الأدمن) بالمفاتيح الحيّة */
+var PA_PERM_MAP={can_approve_l1:'can_approve_stage',can_approve_l2:'can_manage_users',can_manage_rfq:'can_manage_procurement'};
+var PA_PERM_ALIASES=Object.keys(PA_PERM_MAP);
+togglePerm = async function(k,pk,on){
+  var u=USERS[k]; if(!u) return;
+  var real=PA_PERM_MAP[pk]||pk;
+  var perms=Object.assign({},u.perms||{});
+  PA_PERM_ALIASES.forEach(function(a){ delete perms[a]; });   /* لا تُحفَظ مفاتيح العرض */
+  if(on) perms[real]=true; else delete perms[real];
+  var d=await pa_apiPost('/api/portal-users',{action:'setProfile',username:k,permissions:perms});
+  if(d){
+    u.perms=perms;
+    u.perms.can_approve_l1=!!perms.can_approve_stage; u.perms.can_approve_l2=!!perms.can_manage_users;
+    u.perms.can_manage_rfq=!!perms.can_manage_procurement;
+    delete u.acc; toast('حُفظت الصلاحية','ok');
+  }
+  render();
+};
+
+/* ══════ م2: طباعة مضغوطة — كل مستند في صفحة A4 واحدة (مقيسة بـChromium PDF) ══════
+   تُحقن كـ<style> كي تبقى منطقة التصميم 1–2555 دون مساس. لا تغيّر عرض الشاشة إطلاقاً.
+   السبب الجذري المقيس: هوامش/أحجام المرجع تفيض قليلاً عن A4 + هامش margin-top على
+   محضر المقارنة يفتح صفحة ثانية تحت page-break-inside:avoid + جداول عريضة تُرقّم أفقياً. */
+(function(){
+  var css = ''
+  +'@media print{'
+  +'@page{size:A4;margin:8mm 9mm 11mm}'
+  +'#print-root .doc{font-size:10.5px;page-break-inside:avoid;margin:0 !important}'
+  +'#print-root .doc-accent{display:none}'
+  +'#print-root .doc-head{padding:8px 16px 7px;gap:10px}'
+  +'#print-root .doc-logo-full{height:40px}'
+  +'#print-root .doc-idblock .kind{font-size:11px;padding:3px 10px;margin-bottom:4px}'
+  +'#print-root .doc-idblock .kind-en{font-size:7.5px}'
+  +'#print-root .doc-idblock .row{font-size:9.5px;margin-top:2px}'
+  +'#print-root .doc-regbar{padding:3px 16px;font-size:8.5px}'
+  +'#print-root .doc-body{padding:9px 16px 8px}'
+  +'#print-root .doc-body::before{background-size:44%}'
+  +'#print-root .doc-meta{margin-bottom:8px;border-radius:8px}'
+  +'#print-root .doc-meta .m{padding:4px 9px}'
+  +'#print-root .doc-meta .m .l{font-size:8px}'
+  +'#print-root .doc-meta .m .v{font-size:10.5px;margin-top:1px}'
+  +'#print-root .doc-sech{font-size:9.5px;margin:0 0 5px}'
+  +'#print-root .doc table{font-size:9.5px;width:100% !important;table-layout:fixed}'
+  +'#print-root .doc th{min-width:0 !important}'
+  +'#print-root .doc th,#print-root .doc td{word-wrap:break-word;overflow-wrap:break-word}'
+  +'#print-root .doc [style*="overflow-x"]{overflow:visible !important}'
+  +'#print-root .doc table th{padding:4px 7px;font-size:8.5px}'
+  +'#print-root .doc table td{padding:3px 7px}'
+  +'#print-root .doc-words{font-size:9.5px;margin:6px 0;padding:5px 9px}'
+  +'#print-root .parties{gap:8px;margin-bottom:8px}'
+  +'#print-root .party{padding:7px 10px;font-size:9.5px;border-radius:8px}'
+  +'#print-root .doc-terms{margin-top:6px}'
+  +'#print-root .doc-terms ol{margin:2px 0 0;padding-inline-start:15px}'
+  +'#print-root .doc-terms ol li{font-size:8.5px;line-height:1.55;margin:0 0 1px}'
+  +'#print-root .aplog{margin:6px 0}'
+  +'#print-root .aplog .row,#print-root .aplog td{font-size:9px;padding:2px 6px}'
+  +'#print-root .doc-sign{margin-top:10px;gap:8px}'
+  +'#print-root .doc-sign .s{padding-top:8px}'
+  +'#print-root .doc-sign .who{font-size:8.5px}'
+  +'#print-root .doc-sign .line{min-height:16px;font-size:10px;padding-top:5px}'
+  +'#print-root .doc-sign .sub{font-size:7.5px}'
+  +'#print-root .doc-foot{margin-top:7px;padding-top:5px;font-size:7.5px}'
+  +'#print-root .doc-stamp{font-size:26px;padding:4px 16px}'
+  +'#print-root .badge{font-size:8px !important;padding:1px 6px}'
+  +'.p-footer{bottom:3mm;font-size:7.5px;padding:3px 9mm 0}'
+  +'}';
+  var st=document.createElement('style'); st.id='pa-print-compact'; st.textContent=css;
+  document.head.appendChild(st);
+})();
 
 /* الإقلاع الفعلي */
 boot();
