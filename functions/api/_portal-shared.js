@@ -34,7 +34,7 @@ export function esc(s) {
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
 // مُرسِل غير «no-reply» (توصية Resend لتحسين التسليم وتقليل السبام). الردود تذهب إلى
 // DEFAULT_REPLY_TO (صندوق حقيقي). أي عنوان @suppliers.aldeyabi.com صالح للإرسال.
-export const DEFAULT_FROM = `مجموعة الذيابي — بوابة الطلبات <notifications@${SENDER_DOMAIN}>`;
+export const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 export function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();

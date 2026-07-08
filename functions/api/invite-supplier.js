@@ -12,7 +12,7 @@
  */
 
 const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-const DEFAULT_FROM = `مجموعة الذيابي — بوابة الموردين <notifications@${SENDER_DOMAIN}>`;
+const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 const REGISTER_URL = 'https://aldeyabi.com/suppliers';
 
