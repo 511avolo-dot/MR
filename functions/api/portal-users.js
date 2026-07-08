@@ -141,6 +141,19 @@ export async function onRequestPost({ request, env }) {
     if (!email || !password || !displayName) return json({ error: 'حقول ناقصة' }, 400);
     const realEmail = String(email).trim().toLowerCase();
     if (!COMPANY_EMAIL_RE.test(realEmail)) return json({ error: 'بريد إلكتروني غير صالح' }, 400);
+    // سياسة النطاق: @<allowed_email_domain> (الافتراضي aldeyabi.com) أو قائمة بيضاء
+    // يعتمدها الأدمن مسبقاً — القرار من الإعدادات الخادمية لا من العميل.
+    {
+      const sr = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_settings?key=eq.portal_settings&select=value`, {
+        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+      });
+      const srows = sr.ok ? await sr.json().catch(() => []) : [];
+      const val = (srows && srows[0] && srows[0].value) || {};
+      const domain = String(val.allowed_email_domain || 'aldeyabi.com').toLowerCase();
+      const wl = Array.isArray(val.email_whitelist) ? val.email_whitelist : [];
+      const allowed = realEmail.endsWith('@' + domain) || wl.some((w) => String(w || '').trim().toLowerCase() === realEmail);
+      if (!allowed) return json({ error: `البريد خارج نطاق الشركة (@${domain}) وغير مُدرَج في القائمة البيضاء المعتمَدة` }, 400);
+    }
     if (String(password).length < 6) return json({ error: 'كلمة السر 6 أحرف على الأقل' }, 400);
     if (await api.emailExists(realEmail)) return json({ error: 'هذا البريد مسجّل مسبقاً في البوابة' }, 409);
 
@@ -244,10 +257,18 @@ export async function onRequestPost({ request, env }) {
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
     if (username === callerUsername) return json({ error: 'لا يمكنك حذف حسابك' }, 400);
-    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
+    const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email,role,active`, {
       headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
     const rows0 = r0.ok ? await r0.json() : [];
+    // منع حذف آخر أدمن نشط (لئلّا تبقى البوابة بلا مدير) — دفاع في العمق فوق RPC القاعدة.
+    if (rows0 && rows0[0] && rows0[0].role === 'admin' && rows0[0].active !== false) {
+      const ra = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?role=eq.admin&active=eq.true&select=username`, {
+        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
+      });
+      const admins = ra.ok ? await ra.json().catch(() => []) : [];
+      if (Array.isArray(admins) && admins.length <= 1) return json({ error: 'لا يمكن حذف آخر أدمن نشط للبوابة' }, 400);
+    }
     const email0 = rows0 && rows0[0] && rows0[0].email;
     if (email0) {
       const u = await api.findAuthUserByEmail(email0);

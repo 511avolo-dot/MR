@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS portal_doa (
   committee_required  BOOLEAN NOT NULL DEFAULT false,
   award_role_key      TEXT NOT NULL,                        -- مفتاح صلاحية معتمِد التعميد لهذه الشريحة
   po_role_key         TEXT NOT NULL DEFAULT 'can_manage_procurement',
+  po_committee        BOOLEAN NOT NULL DEFAULT false,       -- سلسلة أمر الشراء تشمل اللجنة المصغّرة
+  po_finance          BOOLEAN NOT NULL DEFAULT false,       -- ... والمدير المالي
+  po_gm               BOOLEAN NOT NULL DEFAULT false,       -- ... والمدير العام
   label               TEXT,
   note                TEXT,
   priority            INT NOT NULL DEFAULT 100
@@ -728,12 +731,15 @@ END $fn$;
 -- قرار مرحلة (اعتماد/رفض/إرجاع) — الدورة الأولى. مطابق تماماً لمنطق pr_transition
 -- المُثبَت أمنياً (فصل مهام، تفويض، قفل صفوف، تحديث ذرّي).
 DROP FUNCTION IF EXISTS portal_pr_transition(text, text, text);
-CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL)
+DROP FUNCTION IF EXISTS portal_pr_transition(text, text, text, date);
+CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text,
+    p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL, p_return_to_seq int DEFAULT 0)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE
   v_me text := portal_username();
   v_req portal_requests%ROWTYPE;
   v_stage portal_approvals%ROWTYPE;
+  v_target portal_approvals%ROWTYPE;
   v_pending int; v_next_seq int; v_decision text; v_status text; v_phase text;
   v_ok boolean := false; v_intended text; v_perm boolean;
 BEGIN
@@ -791,6 +797,35 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'action', 'defer', 'status', 'on_hold');
   END IF;
 
+  -- ═══ الإرجاع المرن إلى مرحلة سابقة (p_return_to_seq > 0) — الباب: توجيه المالك ═══
+  -- المعتمِد يختار مرحلة سابقة يعود إليها الطلب؛ تُصفَّر تلك المرحلة وكل ما بعدها إلى
+  -- pending فيعود in_review على المرحلة الهدف. من عاد إليه الطلب يستطيع بدوره إرجاعه
+  -- لمن سبقه (الآلية نفسها تعمل تراكمياً عبر النداءات).
+  IF p_action = 'return' AND coalesce(p_return_to_seq, 0) > 0 THEN
+    IF p_return_to_seq >= v_stage.seq THEN
+      RAISE EXCEPTION 'الإرجاع يكون لمرحلة سابقة فقط';
+    END IF;
+    SELECT * INTO v_target FROM portal_approvals
+      WHERE request_id = p_request_id AND seq = p_return_to_seq;
+    IF NOT FOUND THEN RAISE EXCEPTION 'المرحلة الهدف غير موجودة'; END IF;
+
+    PERFORM set_config('app.portal_transition', '1', true);
+    -- أعد فتح المرحلة الهدف وكل ما بعدها (بما فيها المرحلة الحالية) إلى pending.
+    UPDATE portal_approvals SET decision = 'pending', approver = NULL, comment = NULL,
+           acted_at = NULL, channel = 'portal'
+      WHERE request_id = p_request_id AND seq >= p_return_to_seq;
+    UPDATE portal_requests SET status = 'in_review', phase = 'requisition',
+           current_seq = p_return_to_seq, updated_at = now(), updated_by = v_me
+      WHERE id = p_request_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+
+    PERFORM portal_audit_write(p_request_id, 'stage_returned', v_me, 'portal',
+      jsonb_build_object('from_seq', v_stage.seq, 'from_stage', v_stage.stage_label,
+                         'to_seq', p_return_to_seq, 'to_stage', v_target.stage_label, 'comment', p_comment));
+    RETURN jsonb_build_object('ok', true, 'action', 'return', 'decision', 'returned',
+      'status', 'in_review', 'finalized', false, 'seq', v_stage.seq, 'return_to_seq', p_return_to_seq);
+  END IF;
+
   v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
 
   SELECT count(*) INTO v_pending FROM portal_approvals WHERE request_id = p_request_id AND decision = 'pending';
@@ -823,6 +858,9 @@ BEGIN
                              'finalized', v_status <> 'in_review', 'seq', v_stage.seq);
 END $fn$;
 
+REVOKE ALL ON FUNCTION portal_pr_transition(text, text, text, date, int) FROM public;
+GRANT EXECUTE ON FUNCTION portal_pr_transition(text, text, text, date, int) TO authenticated;
+
 
 -- ═══════════════════════ 6) التسعير + التعميد (الدورة الثانية) ═══════════════════════
 
@@ -848,6 +886,56 @@ BEGIN
 END $fn$;
 
 -- ترسية: يختار عرضاً فائزاً، يطابق مصفوفة DoA بالقيمة، ويبني سلسلة اعتماد التعميد.
+-- ═══ سلسلة اعتماد أمر الشراء: جدول + حارس + بنّاء (انظر db/portal-migrations/007-doa-po-chain.sql) ═══
+CREATE TABLE IF NOT EXISTS portal_po_approvals (
+  id            BIGSERIAL PRIMARY KEY,
+  request_id    TEXT NOT NULL REFERENCES portal_requests(id) ON DELETE CASCADE,
+  seq           INT NOT NULL,
+  stage_label   TEXT,
+  kind          TEXT,
+  role_key      TEXT,
+  approver      TEXT,
+  decision      TEXT NOT NULL DEFAULT 'pending',
+  comment       TEXT,
+  acted_at      TIMESTAMPTZ,
+  channel       TEXT NOT NULL DEFAULT 'portal',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (request_id, seq)
+);
+CREATE OR REPLACE FUNCTION portal_po_approvals_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF portal_is_privileged() THEN RETURN COALESCE(NEW, OLD); END IF;
+  IF current_setting('app.portal_transition', true) = '1' THEN RETURN COALESCE(NEW, OLD); END IF;
+  IF portal_is_admin() THEN RETURN COALESCE(NEW, OLD); END IF;
+  RAISE EXCEPTION 'سلسلة أمر الشراء تُدار عبر دوال البوابة فقط';
+END $fn$;
+DROP TRIGGER IF EXISTS trg_portal_po_appr_guard ON portal_po_approvals;
+CREATE TRIGGER trg_portal_po_appr_guard BEFORE INSERT OR UPDATE OR DELETE ON portal_po_approvals
+  FOR EACH ROW EXECUTE FUNCTION portal_po_approvals_guard();
+ALTER TABLE portal_po_approvals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "auth_all" ON portal_po_approvals;
+CREATE POLICY "auth_all" ON portal_po_approvals FOR ALL TO authenticated USING (true) WITH CHECK (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON portal_po_approvals TO authenticated;
+GRANT ALL ON portal_po_approvals TO service_role;
+
+CREATE OR REPLACE FUNCTION portal_build_po_chain(p_request_id text, p_total numeric) RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE d portal_doa%ROWTYPE; v_seq int := 0;
+BEGIN
+  SELECT * INTO d FROM portal_doa WHERE max_value IS NULL OR p_total <= max_value ORDER BY priority ASC LIMIT 1;
+  DELETE FROM portal_po_approvals WHERE request_id = p_request_id;
+  IF d.po_committee THEN v_seq := v_seq + 1;
+    INSERT INTO portal_po_approvals(request_id,seq,stage_label,kind,role_key) VALUES (p_request_id,v_seq,'اعتماد اللجنة المصغّرة','committee','can_approve_committee'); END IF;
+  IF d.po_finance THEN v_seq := v_seq + 1;
+    INSERT INTO portal_po_approvals(request_id,seq,stage_label,kind,role_key) VALUES (p_request_id,v_seq,'اعتماد المدير المالي','finance','can_approve_finance'); END IF;
+  IF d.po_gm THEN v_seq := v_seq + 1;
+    INSERT INTO portal_po_approvals(request_id,seq,stage_label,kind,role_key) VALUES (p_request_id,v_seq,'اعتماد المدير العام','gm','can_manage_users'); END IF;
+  RETURN v_seq;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_build_po_chain(text,numeric) FROM public;
+GRANT EXECUTE ON FUNCTION portal_build_po_chain(text,numeric) TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION portal_award(p_request_id text, p_winner_offer_id bigint, p_reason text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE
@@ -901,7 +989,7 @@ DECLARE
   v_me text := portal_username();
   v_req portal_requests%ROWTYPE;
   v_stage portal_award_approvals%ROWTYPE;
-  v_perm boolean; v_decision text; v_status text; v_phase text;
+  v_perm boolean; v_decision text; v_status text; v_phase text; v_po_stages int;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   IF p_action NOT IN ('approve','reject') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
@@ -934,10 +1022,18 @@ BEGIN
     WHERE request_id = p_request_id AND seq = v_stage.seq;
 
   IF p_action = 'approve' THEN
-    v_status := 'awarded'; v_phase := 'payment';
     UPDATE portal_award SET status = 'approved' WHERE request_id = p_request_id;
-    UPDATE portal_requests SET status = v_status, phase = v_phase, po_issued_by = v_me, po_issued_at = now(), updated_at = now(), updated_by = v_me
-      WHERE id = p_request_id;
+    -- بناء سلسلة اعتماد أمر الشراء حسب شريحة القيمة (0–25K = 0 مراحل → إصدار مباشر)
+    v_po_stages := portal_build_po_chain(p_request_id, (SELECT coalesce(winner_total,0) FROM portal_award WHERE request_id = p_request_id));
+    IF v_po_stages = 0 THEN
+      v_status := 'awarded'; v_phase := 'payment';
+      UPDATE portal_requests SET status = v_status, phase = v_phase, po_issued_by = v_me, po_issued_at = now(), updated_at = now(), updated_by = v_me
+        WHERE id = p_request_id;
+    ELSE
+      v_status := 'po_review'; v_phase := 'po_review';
+      UPDATE portal_requests SET status = v_status, phase = v_phase, current_seq = 1, updated_at = now(), updated_by = v_me
+        WHERE id = p_request_id;
+    END IF;
   ELSE
     v_status := 'pricing'; v_phase := 'pricing'; -- يعود للتسعير لاختيار عرض آخر
     UPDATE portal_award SET status = 'rejected' WHERE request_id = p_request_id;
@@ -949,6 +1045,71 @@ BEGIN
   PERFORM portal_audit_write(p_request_id, 'award_' || v_decision, v_me, 'portal', jsonb_build_object('comment', p_comment));
   RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
 END $fn$;
+
+
+-- ═══ سلسلة اعتماد أمر الشراء (portal_po_transition) — انظر db/portal-migrations/007-doa-po-chain.sql ═══
+CREATE OR REPLACE FUNCTION portal_po_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_stage portal_po_approvals%ROWTYPE;
+        v_perm boolean; v_remaining int; v_committee jsonb;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'po_review' THEN RAISE EXCEPTION 'الطلب ليس بانتظار اعتماد أمر الشراء'; END IF;
+  IF v_req.requester = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)'; END IF;
+
+  SELECT * INTO v_stage FROM portal_po_approvals WHERE request_id = p_request_id AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'لا توجد مرحلة أمر شراء معلّقة'; END IF;
+
+  IF v_stage.kind = 'committee' THEN
+    SELECT value INTO v_committee FROM portal_settings WHERE key = 'committee_members';
+    IF NOT ( portal_is_admin()
+             OR coalesce((SELECT (permissions ->> 'can_approve_committee')::boolean FROM portal_users WHERE username = v_me), false)
+             OR (v_committee IS NOT NULL AND v_committee ? v_me) ) THEN
+      RAISE EXCEPTION 'لست عضواً في اللجنة المصغّرة';
+    END IF;
+  ELSE
+    SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm FROM portal_users WHERE username = v_me;
+    IF NOT coalesce(v_perm,false) AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
+  END IF;
+
+  IF NOT portal_is_admin() THEN
+    IF EXISTS (SELECT 1 FROM portal_po_approvals WHERE request_id = p_request_id AND approver = v_me AND decision = 'approved') THEN
+      RAISE EXCEPTION 'لا تعتمد أكثر من مرحلة في أمر الشراء نفسه (فصل المهام)';
+    END IF;
+    IF EXISTS (SELECT 1 FROM portal_award WHERE request_id = p_request_id AND awarded_by = v_me) THEN
+      RAISE EXCEPTION 'من رسا التعميد لا يعتمد أمر شرائه (فصل المهام)';
+    END IF;
+  END IF;
+
+  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  IF p_action = 'approve' THEN
+    UPDATE portal_po_approvals SET decision = 'approved', approver = v_me, comment = p_comment, acted_at = now()
+      WHERE request_id = p_request_id AND seq = v_stage.seq;
+    SELECT count(*) INTO v_remaining FROM portal_po_approvals WHERE request_id = p_request_id AND decision = 'pending';
+    IF v_remaining = 0 THEN
+      UPDATE portal_requests SET status = 'awarded', phase = 'payment', po_issued_by = v_me, po_issued_at = now(),
+             current_seq = 0, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+    ELSE
+      UPDATE portal_requests SET current_seq = v_stage.seq + 1, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+    END IF;
+  ELSE
+    UPDATE portal_po_approvals SET decision = CASE p_action WHEN 'reject' THEN 'rejected' ELSE 'returned' END,
+           approver = v_me, comment = p_comment, acted_at = now() WHERE request_id = p_request_id AND seq = v_stage.seq;
+    UPDATE portal_award SET status = 'rejected' WHERE request_id = p_request_id;
+    UPDATE portal_requests SET status = 'pricing', phase = 'pricing', updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'po_' || p_action, v_me, 'portal', jsonb_build_object('comment', p_comment, 'stage', v_stage.stage_label));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', (SELECT status FROM portal_requests WHERE id = p_request_id));
+END $fn$;
+REVOKE ALL ON FUNCTION portal_po_transition(text, text, text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_po_transition(text, text, text) TO authenticated;
 
 
 -- ═══════════════════════ 7) الصرف ═══════════════════════
@@ -996,12 +1157,13 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'id', v_id);
 END $fn$;
 
-CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text, p_comment text DEFAULT NULL)
+DROP FUNCTION IF EXISTS portal_payment_transition(bigint, text, text);
+CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text, p_comment text DEFAULT NULL, p_return_to text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_me text := portal_username(); v_pay portal_payments%ROWTYPE; v_status text;
 BEGIN
   IF v_me IS NULL OR NOT portal_has_perm('can_disburse') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  IF p_action NOT IN ('approve','reject','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
 
   SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'طلب الصرف غير موجود'; END IF;
@@ -1014,14 +1176,19 @@ BEGIN
     PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_payments SET status = v_status, approved_by = v_me, approved_at = now(), comment = p_comment WHERE id = p_payment_id;
     PERFORM set_config('app.portal_transition', '0', true);
-  ELSIF p_action = 'reject' THEN
+  ELSIF p_action IN ('reject','return') THEN
     IF v_pay.status <> 'pending_pay' THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
-    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض'; END IF;
-    v_status := 'rejected';
+    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع'; END IF;
+    -- الإرجاع = رفض غير نهائي مع توجيه: يعود الطلب إلى awarded فيُعيد المشتريات إصدار
+    -- طلب الصرف (بعد معالجة ملاحظة المالية). الوجهة تُحفظ في التدقيق للإشعار/التتبّع.
+    v_status := CASE p_action WHEN 'return' THEN 'returned' ELSE 'rejected' END;
     PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_payments SET status = v_status, comment = p_comment WHERE id = p_payment_id;
     UPDATE portal_requests SET status = 'awarded', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
     PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+      jsonb_build_object('payment_id', p_payment_id, 'return_to', p_return_to, 'comment', p_comment));
+    RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
   ELSE -- disburse
     IF v_pay.status <> 'approved_pay' THEN RAISE EXCEPTION 'يلزم اعتماد الصرف أولاً'; END IF;
     -- فصل المهام (maker-checker على تحرير المال): من اعتمد الصرف لا ينفّذه بنفسه.
@@ -1036,6 +1203,9 @@ BEGIN
   PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal', jsonb_build_object('payment_id', p_payment_id));
   RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
 END $fn$;
+
+REVOKE ALL ON FUNCTION portal_payment_transition(bigint, text, text, text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint, text, text, text) TO authenticated;
 
 
 -- ═══════════════════════ 8) الاستلام (GRN) ═══════════════════════
@@ -1085,9 +1255,15 @@ BEGIN
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
   IF v_req.status IN ('closed','cancelled') THEN RAISE EXCEPTION 'لا يمكن إلغاء طلب مُغلق'; END IF;
-  IF v_req.requester <> v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  IF v_req.requester = v_me AND v_req.status NOT IN ('draft','in_review','returned') AND NOT portal_is_admin() THEN
-    RAISE EXCEPTION 'لا يمكنك إلغاء الطلب بعد بدء التعميد — تواصل مع الإدارة';
+  -- من يُلغي: الأدمن/المشتريات (أي وقت) — أو المُقدّم قبل بدء التعميد فقط. (الباب 7 + سيناريو 6-5)
+  IF NOT (
+        portal_is_admin()
+        OR portal_has_perm('can_manage_procurement')
+        OR portal_has_perm('can_approve_award')
+        OR portal_has_perm('can_issue_po')
+        OR (v_req.requester = v_me AND v_req.status IN ('draft','in_review','returned'))
+     ) THEN
+    RAISE EXCEPTION 'غير مصرّح بإلغاء هذا الطلب في حالته الحالية';
   END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
@@ -1197,6 +1373,35 @@ BEGIN
     'request', jsonb_build_object('id', v_req.id, 'title', v_req.title, 'department_id', v_req.department_id,
                                    'requester', v_req.requester, 'requester_name', v_req.requester_name));
 END $fn$;
+
+
+-- ═══ إعادة تقديم الطلب المُعاد (returned → in_review) — انظر db/portal-migrations/005-resubmit.sql ═══
+CREATE OR REPLACE FUNCTION portal_resubmit_request(p_request_id text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_first int;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'returned' THEN RAISE EXCEPTION 'يمكن إعادة تقديم الطلبات المُعادة فقط'; END IF;
+  IF v_req.requester <> v_me AND NOT portal_is_admin() THEN
+    RAISE EXCEPTION 'إعادة التقديم تقتصر على مُقدّم الطلب';
+  END IF;
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_approvals
+     SET decision='pending', approver=NULL, comment=NULL, acted_at=NULL, channel='portal'
+   WHERE request_id = p_request_id;
+  SELECT min(seq) INTO v_first FROM portal_approvals WHERE request_id = p_request_id;
+  UPDATE portal_requests
+     SET status='in_review', phase='requisition', current_seq = coalesce(v_first,1),
+         updated_at=now(), updated_by=v_me
+   WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition','0',true);
+  PERFORM portal_audit_write(p_request_id,'resubmitted',v_me,'portal',jsonb_build_object('comment',p_comment));
+  RETURN jsonb_build_object('ok',true,'status','in_review');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_resubmit_request(text,text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_resubmit_request(text,text) TO authenticated;
 
 
 -- ═══════════════════════ 10) SLA/تصعيد (اختياري — pg_cron إن توفّر) ═══════════════════════
@@ -1459,33 +1664,189 @@ DROP POLICY IF EXISTS "own_notifications" ON portal_notifications;
 CREATE POLICY "own_notifications" ON portal_notifications FOR ALL TO authenticated
   USING (recipient = portal_username()) WITH CHECK (recipient = portal_username());
 
--- التدقيق: قراءة فقط للمصادَق عليهم؛ الكتابة عبر الدالة portal_audit_write فقط
--- (SECURITY DEFINER)، والتعديل/الحذف ممنوعان كلياً بالمحرس أعلاه.
+-- ═══ فرض نطاق الرؤية (H1 — الهجرة 009): السياسات المُنطاقة تستبدل auth_all ═══
+-- الجداول المعامَلاتية تُقرأ حسب نطاق المستخدم (own/sector/all) + رؤية المعتمِد
+-- للطلبات المعنيّة به. الكتابة عبر RPC (SECURITY DEFINER يتجاوز RLS) والمحارس.
+-- الدوال SECURITY DEFINER لتتجاوز استعلاماتها RLS (تمنع التكرار اللانهائي).
+CREATE OR REPLACE FUNCTION portal_my_scope() RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT CASE WHEN portal_is_admin() THEN 'all'
+              ELSE coalesce((SELECT j.scope FROM portal_users u
+                             LEFT JOIN portal_jobs j ON j.key = u.job_key
+                             WHERE u.username = portal_username()), 'own') END;
+$fn$;
+CREATE OR REPLACE FUNCTION portal_my_sector() RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT d.sector FROM portal_users u
+    JOIN portal_departments d ON d.id = u.department_id
+   WHERE u.username = portal_username();
+$fn$;
+CREATE OR REPLACE FUNCTION portal_can_see_request(p_id text, p_requester text, p_dept text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT
+    portal_is_admin()
+    OR portal_my_scope() = 'all'
+    OR p_requester = portal_username()
+    OR (portal_my_scope() = 'sector' AND EXISTS (
+          SELECT 1 FROM portal_departments d
+           WHERE d.id = p_dept AND d.sector IS NOT DISTINCT FROM portal_my_sector()))
+    OR EXISTS (SELECT 1 FROM portal_approvals a
+                WHERE a.request_id = p_id AND a.approver = portal_username());
+$fn$;
+CREATE OR REPLACE FUNCTION portal_can_see_request(p_id text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT portal_can_see_request(r.id, r.requester, r.department_id)
+    FROM portal_requests r WHERE r.id = p_id;
+$fn$;
+REVOKE ALL ON FUNCTION portal_my_scope() FROM public;
+REVOKE ALL ON FUNCTION portal_my_sector() FROM public;
+REVOKE ALL ON FUNCTION portal_can_see_request(text, text, text) FROM public;
+REVOKE ALL ON FUNCTION portal_can_see_request(text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_my_scope() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION portal_my_sector() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION portal_can_see_request(text, text, text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION portal_can_see_request(text) TO authenticated, service_role;
+
+-- SELECT مُنطاق + INSERT/UPDATE/DELETE عام (تبقى المحارس deny-by-default هي مدافع
+-- الكتابة كما كانت؛ لا نضعف شيئاً — فقط نُقيّد القراءة). سياسات لكل أمر لأن FOR ALL
+-- عامة تُلغي تقييد SELECT (السياسات المسموحة تُدمج بـOR).
+DROP POLICY IF EXISTS "auth_all"   ON portal_requests;
+DROP POLICY IF EXISTS "see_scoped" ON portal_requests;
+DROP POLICY IF EXISTS "wr_ins" ON portal_requests;
+DROP POLICY IF EXISTS "wr_upd" ON portal_requests;
+DROP POLICY IF EXISTS "wr_del" ON portal_requests;
+CREATE POLICY "see_scoped" ON portal_requests FOR SELECT TO authenticated
+  USING (portal_can_see_request(id, requester, department_id));
+CREATE POLICY "wr_ins" ON portal_requests FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "wr_upd" ON portal_requests FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "wr_del" ON portal_requests FOR DELETE TO authenticated USING (true);
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'portal_request_items','portal_approvals','portal_offers','portal_award',
+    'portal_award_approvals','portal_po_approvals','portal_payments','portal_receipts'
+  ] LOOP
+    EXECUTE format('DROP POLICY IF EXISTS "auth_all" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "see_by_request" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "wr_ins" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "wr_upd" ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "wr_del" ON %I', t);
+    EXECUTE format('CREATE POLICY "see_by_request" ON %I FOR SELECT TO authenticated USING (portal_can_see_request(request_id))', t);
+    EXECUTE format('CREATE POLICY "wr_ins" ON %I FOR INSERT TO authenticated WITH CHECK (true)', t);
+    EXECUTE format('CREATE POLICY "wr_upd" ON %I FOR UPDATE TO authenticated USING (true) WITH CHECK (true)', t);
+    EXECUTE format('CREATE POLICY "wr_del" ON %I FOR DELETE TO authenticated USING (true)', t);
+  END LOOP;
+END $$;
+
+-- التدقيق: الأدمن يرى الكل؛ غيره يرى تدقيق الطلبات المرئية له فقط.
 DROP POLICY IF EXISTS "audit_read" ON portal_audit;
-CREATE POLICY "audit_read" ON portal_audit FOR SELECT TO authenticated USING (true);
+CREATE POLICY "audit_read" ON portal_audit FOR SELECT TO authenticated
+  USING (portal_is_admin() OR (request_id IS NOT NULL AND portal_can_see_request(request_id)));
 
 
 -- ═══════════════════════ 12) بيانات أوّلية (DoA افتراضية — قابلة للتعديل من الإدارة) ═══════════════════════
 
-INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, label, note, priority)
-SELECT 500, 1, false, 'can_manage_procurement', 'can_manage_procurement', 'أقل من 500', 'عرض واحد', 10
-WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = 'أقل من 500');
+-- مصفوفة DoA (المواصفات الجديدة): التعميد دائماً مدير المشتريات؛ اعتماد أمر الشراء يكبر بالقيمة.
+INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, po_committee, po_finance, po_gm, label, note, priority)
+SELECT 25000, 1, false, 'can_approve_award', 'can_manage_procurement', false, false, false, '0 – 25,000', 'اعتماد مدير المشتريات (تعميد + أمر شراء)', 10
+WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '0 – 25,000');
 
-INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, label, note, priority)
-SELECT 100000, 3, false, 'can_manage_procurement', 'can_manage_procurement', '500 – 100,000', '٣ عروض', 20
-WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '500 – 100,000');
+INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, po_committee, po_finance, po_gm, label, note, priority)
+SELECT 150000, 3, true, 'can_approve_award', 'can_manage_procurement', true, false, false, '25,001 – 150,000', 'أمر الشراء: مدير المشتريات + اللجنة', 20
+WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '25,001 – 150,000');
 
-INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, label, note, priority)
-SELECT 500000, 3, true, 'can_manage_users', 'can_manage_procurement', '100,001 – 500,000', '٣ عروض + لجنة (اعتماد المدير العام)', 30
-WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '100,001 – 500,000');
+INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, po_committee, po_finance, po_gm, label, note, priority)
+SELECT 250000, 3, true, 'can_approve_award', 'can_manage_procurement', true, true, false, '150,001 – 250,000', 'أمر الشراء: + المدير المالي', 30
+WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '150,001 – 250,000');
 
-INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, label, note, priority)
-SELECT NULL, 3, true, 'can_manage_users', 'can_manage_procurement', 'أكثر من 500,000', 'مناقصة رسمية (اعتماد المدير العام)', 40
+INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, po_committee, po_finance, po_gm, label, note, priority)
+SELECT 500000, 3, true, 'can_approve_award', 'can_manage_procurement', true, true, true, '250,001 – 500,000', 'أمر الشراء: + المدير العام', 40
+WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = '250,001 – 500,000');
+
+INSERT INTO portal_doa (max_value, quotes_required, committee_required, award_role_key, po_role_key, po_committee, po_finance, po_gm, label, note, priority)
+SELECT NULL, 3, true, 'can_approve_award', 'can_manage_procurement', true, true, true, 'أكثر من 500,000', 'مناقصة رسمية — كل الاعتمادات + المدير العام', 50
 WHERE NOT EXISTS (SELECT 1 FROM portal_doa WHERE label = 'أكثر من 500,000');
 
--- ملاحظة: award_role_key='can_manage_users' يعني عملياً «الأدمن/المدير العام» بما أن
--- الأدمن يملك كل الصلاحيات ضمناً عبر portal_has_perm(). يمكن للإدارة إضافة صلاحية
--- مخصّصة (مثلاً can_approve_gm) لاحقاً من لوحة الوظائف دون تعديل الكود.
+-- أعضاء اللجنة المصغّرة (يحدّدهم الأدمن لاحقاً من المستخدمين المسجّلين)
+INSERT INTO portal_settings (key, value)
+SELECT 'committee_members', '[]'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM portal_settings WHERE key = 'committee_members');
+
+-- ملاحظة: التعميد = can_approve_award (مدير المشتريات). اعتماد أمر الشراء يُبنى تلقائياً
+-- حسب الشريحة عبر portal_build_po_chain (لجنة/مالية/عام). can_approve_committee يُمنح لأعضاء اللجنة.
+
+-- ═══ بوابة الدعوات + تقييد النطاق البريدي (الهجرة 010) ═══
+CREATE TABLE IF NOT EXISTS portal_invitations (
+  id            BIGSERIAL PRIMARY KEY,
+  token         TEXT UNIQUE NOT NULL,
+  email         TEXT NOT NULL,
+  display_name  TEXT,
+  job_key       TEXT REFERENCES portal_jobs(key),
+  department_id TEXT REFERENCES portal_departments(id),
+  role          TEXT NOT NULL DEFAULT 'user',
+  status        TEXT NOT NULL DEFAULT 'pending',
+  invited_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days'),
+  accepted_at   TIMESTAMPTZ,
+  accepted_user TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_portal_inv_email  ON portal_invitations(lower(email));
+CREATE INDEX IF NOT EXISTS idx_portal_inv_status ON portal_invitations(status);
+ALTER TABLE portal_invitations ENABLE ROW LEVEL SECURITY;    -- بلا سياسة = خادم فقط
+REVOKE ALL ON portal_invitations FROM authenticated, anon;
+GRANT ALL ON portal_invitations TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE portal_invitations_id_seq TO service_role;
+
+INSERT INTO portal_settings(key, value) VALUES ('portal_settings', '{}'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+UPDATE portal_settings SET value = value || jsonb_build_object('allowed_email_domain','aldeyabi.com')
+  WHERE key='portal_settings' AND NOT (value ? 'allowed_email_domain');
+UPDATE portal_settings SET value = value || jsonb_build_object('email_whitelist','[]'::jsonb)
+  WHERE key='portal_settings' AND NOT (value ? 'email_whitelist');
+
+CREATE OR REPLACE FUNCTION portal_email_allowed(p_email text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  WITH s AS (SELECT value FROM portal_settings WHERE key='portal_settings')
+  SELECT
+    lower(trim(coalesce(p_email,''))) <> ''
+    AND (
+      lower(trim(p_email)) LIKE ('%@' || lower(coalesce((SELECT value->>'allowed_email_domain' FROM s), 'aldeyabi.com')))
+      OR EXISTS (
+        SELECT 1 FROM s, jsonb_array_elements_text(coalesce((SELECT value->'email_whitelist' FROM s), '[]'::jsonb)) w
+        WHERE lower(trim(w)) = lower(trim(p_email))
+      )
+    );
+$fn$;
+REVOKE ALL ON FUNCTION portal_email_allowed(text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_email_allowed(text) TO authenticated, service_role;
+
+-- ═══ حذف المستخدم بأمان (الهجرة 011): أدمن فقط + لا حذف للذات/آخر أدمن + فك FK ═══
+CREATE OR REPLACE FUNCTION portal_delete_user(p_username text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_role text; v_active boolean; v_admins int;
+BEGIN
+  IF v_me IS NULL OR NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_username IS NULL OR p_username = v_me THEN RAISE EXCEPTION 'لا يمكنك حذف حسابك'; END IF;
+  SELECT role, active INTO v_role, v_active FROM portal_users WHERE username = p_username FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
+  IF v_role = 'admin' AND v_active THEN
+    PERFORM pg_advisory_xact_lock(hashtext('portal_last_admin'));
+    SELECT count(*) INTO v_admins FROM portal_users WHERE role = 'admin' AND active;
+    IF v_admins <= 1 THEN RAISE EXCEPTION 'لا يمكن حذف آخر أدمن نشط للبوابة'; END IF;
+  END IF;
+  UPDATE portal_users       SET delegate_to  = NULL WHERE delegate_to  = p_username;
+  UPDATE portal_users       SET manager_user = NULL WHERE manager_user = p_username;
+  UPDATE portal_departments SET manager_user = NULL WHERE manager_user = p_username;
+  DELETE FROM portal_users WHERE username = p_username;
+  PERFORM portal_audit_write(NULL, 'user_deleted', v_me, 'portal',
+    jsonb_build_object('deleted_user', p_username, 'role', v_role));
+  RETURN jsonb_build_object('ok', true, 'deleted', p_username);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_delete_user(text) FROM public;
+GRANT EXECUTE ON FUNCTION portal_delete_user(text) TO authenticated;
 
 
 -- ═══════════════════════ 13) بذور المرجع + نموذج الوظائف (المرحلة 1) ═══════════════════════
@@ -1739,7 +2100,7 @@ DECLARE
   v_me text := portal_username(); v_holders int; v_k text;
   v_allowed text[] := ARRAY['can_approve_stage','can_approve_award','can_issue_po','can_manage_procurement',
     'can_approve_finance','can_disburse','can_create','can_edit','can_manage_users','can_see_finance',
-    'can_verify_stock','can_manage_company'];
+    'can_verify_stock','can_manage_company','can_approve_committee'];
 BEGIN
   IF NOT (portal_is_admin() OR portal_has_perm('can_manage_users') OR portal_is_privileged()) THEN
     RAISE EXCEPTION 'تعديل الوظائف يتطلّب صلاحية «إدارة المستخدمين»';

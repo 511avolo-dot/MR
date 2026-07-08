@@ -27,15 +27,16 @@ export const AUTH_EMAIL_MAP = { abdullah: 'abdullah@aldeyabi.com', mostafa: 'sup
 // النطاق الموثّق للإرسال في Resend (Verified sending domain). يجب أن يكون عنوان
 // المُرسِل من هذا النطاق وإلا يرفض Resend الإرسال.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-// المُرسِل على النطاق الموثّق suppliers.aldeyabi.com (لكل الرسائل: استلام/قبول/رفض/تعديل).
-export const DEFAULT_FROM = `noreply@${SENDER_DOMAIN}`;
+// اسم مُرسِل موحّد «Aldeyabi Group» بلا no-reply (يظهر باسم الشركة للموردين ويحسّن
+// التسليم). أي عنوان @suppliers.aldeyabi.com صالح للإرسال؛ الردود إلى صندوق حقيقي.
+export const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 // عنوان ردّ حقيقي يستقبل الرسائل (نطاق الإرسال subdomain قد لا يستقبل) — يرفع ثقة صندوق الوارد.
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
-// عنوان المُرسِل: نستخدم NOTIFY_FROM فقط إذا كان من النطاق الموثّق؛ وإلا الافتراضي الصحيح
-// (يضمن الإرسال حتى لو بقي NOTIFY_FROM على النطاق القديم @aldeyabi.com أو فارغاً).
+// نستخدم NOTIFY_FROM فقط إن كان من النطاق الموثّق ولا يحوي no-reply؛ وإلا الافتراضي الصحيح.
 export function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();
-  return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+  if (f && f.toLowerCase().includes('@' + SENDER_DOMAIN) && !/no-?reply/i.test(f)) return f;
+  return DEFAULT_FROM;
 }
 // عنوان الردّ: قيمة البيئة إن وُجدت، وإلا بريد حقيقي افتراضي (لا نترك الرسالة بلا Reply-To).
 export function replyTo(env) {

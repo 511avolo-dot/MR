@@ -17,7 +17,11 @@
  * ════════════════════════════════════════════════════════════════════════
  */
 
-export const BRAND = { navy: '#0B1B36', gold: '#B8923D', ink: '#1f2937', soft: '#6b7280', line: '#e6e8ee', wash: '#f6f4ee' };
+// اللوحة الباردة — موحّدة مع واجهة البوابة (purchase-portal.html): كحلي #16243d،
+// ذهبي #c2a063، خلفية #f2f4f8، حدود #e2e7ef، سطح ثانوي #f7f9fc.
+export const BRAND = { navy: '#16243d', gold: '#c2a063', ink: '#1f2937', soft: '#5d6b80', line: '#e2e7ef', wash: '#f2f4f8', surface: '#f7f9fc' };
+// خط أحادي المسافة لأرقام «دفتر القيد» (معرّفات الطلبات) — نفس هوية البوابة.
+export const MONO = "'IBM Plex Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
 
 export function esc(s) {
   return String(s == null ? '' : s)
@@ -28,11 +32,15 @@ export function esc(s) {
 // نفس النطاق الموثّق للإرسال في Resend المستخدَم فعلياً للنظام (مشروع Resend واحد
 // للشركة) — القوالب والمحتوى مستقلة بالكامل، فقط المُرسِل التقني مشترك.
 export const SENDER_DOMAIN = 'suppliers.aldeyabi.com';
-export const DEFAULT_FROM = `noreply@${SENDER_DOMAIN}`;
+// مُرسِل غير «no-reply» (توصية Resend لتحسين التسليم وتقليل السبام). الردود تذهب إلى
+// DEFAULT_REPLY_TO (صندوق حقيقي). أي عنوان @suppliers.aldeyabi.com صالح للإرسال.
+export const DEFAULT_FROM = `Aldeyabi Group <notifications@${SENDER_DOMAIN}>`;
 export const DEFAULT_REPLY_TO = 'supply@aldeyabi.com';
 export function fromAddress(env) {
   const f = String((env && env.NOTIFY_FROM) || '').trim();
-  return f.toLowerCase().includes('@' + SENDER_DOMAIN) ? f : DEFAULT_FROM;
+  // نتجاهل أي إعداد يحوي no-reply/noreply (يضرّ بالتسليم) ونرجع للمُرسِل الجيّد.
+  if (f && f.toLowerCase().includes('@' + SENDER_DOMAIN) && !/no-?reply/i.test(f)) return f;
+  return DEFAULT_FROM;
 }
 export function replyTo(env) {
   const r = String((env && env.NOTIFY_REPLY_TO) || '').trim();
@@ -211,8 +219,8 @@ function emailShell(inner, ev) {
 <body style="margin:0;background:${B.wash};font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:${B.ink}">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${B.wash};padding:22px 12px"><tr><td align="center">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 10px 40px -16px rgba(11,27,54,.35)">
-      <tr><td style="background:linear-gradient(135deg,${B.navy},#16315c);padding:22px 30px" align="center">
-        <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">AL-DEYABI GROUP · مجموعة الذيابي</div>
+      <tr><td style="background:linear-gradient(135deg,${B.navy},#22355a);padding:24px 30px" align="center">
+        <div style="color:#E9D9B4;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase">AL-DEYABI GROUP · مجموعة الذيابي</div>
         <div style="color:#fff;font-size:19px;font-weight:800;margin-top:8px">بوابة طلبات الشراء</div>
       </td></tr>
       <tr><td style="height:3px;background:${B.gold}"></td></tr>
@@ -234,7 +242,7 @@ function reqMetaBox(req, deptLabel) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 6px"><tr>
     <td style="background:${B.wash};border:1px solid ${B.line};border-radius:12px;padding:12px 16px" align="center">
       <span style="font-size:12px;color:${B.soft}">رقم الطلب</span><br>
-      <span dir="ltr" style="font-size:17px;font-weight:800;color:${B.navy};letter-spacing:.05em">${esc(req.id)}</span>
+      <span dir="ltr" style="font-size:17px;font-weight:700;color:${B.navy};letter-spacing:.04em;font-family:${MONO}">${esc(req.id)}</span>
       <div style="font-size:12px;color:${B.soft};margin-top:6px">${esc(req.title || 'طلب شراء')}${deptLabel ? ' · القسم: ' + esc(deptLabel) : ''}${req.requester_name ? ' · الطالب: ' + esc(req.requester_name) : ''}</div>
     </td></tr></table>`;
 }
