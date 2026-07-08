@@ -1,7 +1,6 @@
--- تشغيل كل هجرات التصليب (005 → 012) بالترتيب. آمن + idempotent (إضافة فقط).
+-- تشغيل كل هجرات التصليب (005 → 015) بالترتيب. آمن + idempotent (إضافة فقط).
 -- المكان: Supabase → مشروع mwbjoysuybgbrvfrprex → SQL Editor → الصق الكل → Run.
--- من شغّل 005–011 سابقاً: يكفيه تشغيل 012 وحده (في نهاية الملف).
-
+-- من شغّل حتى 012 سابقاً: يكفيه 013+014+015 (آخر ثلاث كتل في هذا الملف).
 
 -- ═══ 005-resubmit.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -788,4 +787,175 @@ BEGIN
     jsonb_build_object('deleted_user', p_username, 'role', v_role));
   RETURN jsonb_build_object('ok', true, 'deleted', p_username);
 END $fn$;
+
+
+-- ═══ 013-committee-mgmt.sql ═══
+-- ═══════════════════════════════════════════════════════════════════════════
+--  الهجرة 013 — تخصيص اللجنة المصغّرة (م1b)
+--  المواصفات: لا توجد طريقة للأدمن لتعيين أعضاء اللجنة المصغّرة التي تعتمد أمر
+--  الشراء في الشريحة >25 ألف. اللجنة تُقرأ في portal_po_transition من إعداد
+--  committee_members (مصفوفة أسماء مستخدمين) أو صلاحية can_approve_committee.
+--  هنا نضيف RPC آمنة (أدمن فقط) لضبط القائمة + تحقّق أن كل عضو مستخدم نشط + تدقيق.
+--  idempotent. شغّلها في Supabase mwbjoysuybgbrvfrprex بعد 012.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION portal_set_committee(p_members jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_valid jsonb;
+BEGIN
+  IF v_me IS NULL OR NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح — إدارة اللجنة للأدمن فقط'; END IF;
+  IF p_members IS NULL OR jsonb_typeof(p_members) <> 'array' THEN RAISE EXCEPTION 'صيغة القائمة غير صالحة'; END IF;
+  -- أبقِ فقط الأعضاء الذين هم مستخدمون نشطون (تجاهل أي اسم غير صالح) + إزالة التكرار.
+  SELECT coalesce(jsonb_agg(DISTINCT u.username), '[]'::jsonb) INTO v_valid
+    FROM jsonb_array_elements_text(p_members) m
+    JOIN portal_users u ON u.username = m AND u.active;
+
+  INSERT INTO portal_settings(key, value) VALUES ('committee_members', v_valid)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+  PERFORM portal_audit_write(NULL, 'committee_set', v_me, 'portal', jsonb_build_object('members', v_valid));
+  RETURN jsonb_build_object('ok', true, 'members', v_valid);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_set_committee(jsonb) FROM public;
+GRANT EXECUTE ON FUNCTION portal_set_committee(jsonb) TO authenticated;
+
+
+-- ═══ 014-sla-role-holders.sql ═══
+-- ═══════════════════════════════════════════════════════════════════════════
+--  الهجرة 014 — تصليب تصعيد SLA (م3/م4: فجوة approval-12 المؤكَّدة)
+--  المشكلة: للمراحل المبنية على role_key (المالية/المشتريات) portal_resolve_stage
+--  يعيد NULL، فكان التذكير يصل للأدمن فقط لا للمعتمِدين الفعليين. أيضاً الجدولة
+--  كانت تعتمد pg_cron حصراً (إن لم تكن مفعّلة في المشروع فالتصعيد ميت).
+--  الحلّ: (أ) عند غياب معتمِد محدَّد نُخطر كل حاملي role_key النشطين (مع التفويض).
+--  (ب) الواجهة تستدعي portal_run_sla «كسولاً» عند تحميل مشتريات/أدمن — الخانق
+--  الداخلي last_escalation_at يمنع التكرار، فالاستدعاء الكسول آمن ورخيص.
+--  idempotent. شغّلها في Supabase mwbjoysuybgbrvfrprex بعد 013.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION portal_run_sla() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_req RECORD; v_stage portal_approvals%ROWTYPE; v_intended text; v_deleg text; v_cnt int := 0; v_h numeric := portal_sla_hours();
+BEGIN
+  FOR v_req IN SELECT * FROM portal_requests
+      WHERE status = 'in_review' AND stage_due_at < now()
+        AND (last_escalation_at IS NULL OR last_escalation_at < now() - make_interval(hours => v_h::int))
+  LOOP
+    SELECT * INTO v_stage FROM portal_approvals WHERE request_id = v_req.id AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+    CONTINUE WHEN NOT FOUND;
+    v_intended := portal_resolve_stage(v_req.id, v_stage);
+    v_deleg := NULL;
+    IF v_intended IS NOT NULL THEN
+      SELECT delegate_to INTO v_deleg FROM portal_users WHERE username = v_intended AND is_away = true;
+    END IF;
+
+    IF v_intended IS NOT NULL THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        VALUES ('ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||v_intended,
+                v_intended, 'system', 'تذكير: طلب متأخّر بانتظار اعتمادك', v_req.title, 'inbox')
+        ON CONFLICT (id) DO NOTHING;
+    ELSIF v_stage.role_key IS NOT NULL THEN
+      -- مرحلة دور (مالية/مشتريات...): أخطر كل حاملي الصلاحية النشطين + مفوَّضي الغائبين منهم.
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.username,
+               u.username, 'system', 'تذكير: طلب متأخّر بانتظار اعتماد مرحلتك ('||coalesce(v_stage.stage_label,'')||')', v_req.title, 'inbox'
+        FROM portal_users u
+        WHERE u.active AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.delegate_to,
+               u.delegate_to, 'system', 'تفويض: طلب متأخّر بانتظار اعتماد مرحلة ('||coalesce(v_stage.stage_label,'')||') بالنيابة', v_req.title, 'inbox'
+        FROM portal_users u
+        WHERE u.active AND u.is_away AND u.delegate_to IS NOT NULL
+          AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+    IF v_deleg IS NOT NULL THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        VALUES ('ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||v_deleg,
+                v_deleg, 'system', 'تفويض: طلب متأخّر بانتظار اعتمادك (بالنيابة)', v_req.title, 'inbox')
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+    INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+      SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||username,
+             username, 'system', 'تصعيد SLA: طلب متأخّر', v_req.title, 'inbox'
+      FROM portal_users WHERE role = 'admin' AND active = true
+      ON CONFLICT (id) DO NOTHING;
+
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_requests SET escalations = escalations + 1,
+      escalated_at = coalesce(escalated_at, now()), last_escalation_at = now() WHERE id = v_req.id;
+    PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(v_req.id, 'escalated', NULL, 'system', jsonb_build_object('intended', v_intended, 'stage_label', v_stage.stage_label));
+    v_cnt := v_cnt + 1;
+  END LOOP;
+  RETURN v_cnt;
+END $fn$;
+
+-- الاستدعاء الكسول من الواجهة (مشتريات/أدمن): مقيَّد بصلاحية تشغيلية — ليس عاماً.
+CREATE OR REPLACE FUNCTION portal_sla_tick() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement') OR portal_has_perm('can_disburse')) THEN
+    RETURN 0;  -- صامت: لا خطأ في الواجهة لغير المخوَّلين
+  END IF;
+  RETURN portal_run_sla();
+END $fn$;
+REVOKE ALL ON FUNCTION portal_sla_tick() FROM public;
+GRANT EXECUTE ON FUNCTION portal_sla_tick() TO authenticated;
+
+
+-- ═══ 015-pending-approver-visibility.sql ═══
+-- ═══════════════════════════════════════════════════════════════════════════
+--  الهجرة 015 — رؤية المعتمِد المنتظَر (إغلاق ثغرة حجب حقيقية من فحص السيناريوهات)
+--  المشكلة المكتشفة: portal_can_see_request كانت تمنح الرؤية للمالك/القطاع/all/
+--  «معتمِد شارك فعلاً» — لكن **المعتمِد المقصود للمرحلة المعلّقة** ذا النطاق own
+--  (مدير قسم بلا وظيفة، مفوَّض موظف عن غائب، عضو لجنة موظف) لا يرى الطلب الذي
+--  ينتظر اعتماده أصلاً، فلا يستطيع فتحه ولا اعتماده من الواجهة.
+--  الحلّ: توسيع الرؤية لتشمل من تستهدفه أي مرحلة معلّقة في السلاسل الثلاث
+--  (الحاجة/التعميد/أمر الشراء) مباشرةً أو تفويضاً — دون توسيع عام.
+--  idempotent. شغّلها في Supabase mwbjoysuybgbrvfrprex بعد 014.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION portal_can_see_request(p_id text, p_requester text, p_dept text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT
+    portal_is_admin()
+    OR portal_my_scope() = 'all'
+    OR p_requester = portal_username()
+    OR (portal_my_scope() = 'sector' AND portal_my_sector() IS NOT NULL AND EXISTS (
+          SELECT 1 FROM portal_departments d
+           WHERE d.id = p_dept AND d.sector = portal_my_sector()))
+    -- معتمِد شارك فعلاً في سلسلة الحاجة
+    OR EXISTS (SELECT 1 FROM portal_approvals a
+                WHERE a.request_id = p_id AND a.approver = portal_username())
+    -- (015) المعتمِد المقصود لمرحلة معلّقة في سلسلة الحاجة (مباشرة)
+    OR EXISTS (SELECT 1 FROM portal_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( a.approver = portal_username()
+                        OR (a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+                        OR (a.resolver = 'dept_manager' AND EXISTS (
+                              SELECT 1 FROM portal_departments d
+                               WHERE d.id = p_dept AND d.manager_user = portal_username())) ))
+    -- (015) المفوَّض عن معتمِد غائب لمرحلة معلّقة
+    OR EXISTS (SELECT 1
+                 FROM portal_approvals a
+                 JOIN portal_users u ON u.is_away AND u.delegate_to = portal_username()
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( a.approver = u.username
+                        OR (a.role_key IS NOT NULL AND coalesce((u.permissions ->> a.role_key)::boolean, false))
+                        OR (a.resolver = 'dept_manager' AND EXISTS (
+                              SELECT 1 FROM portal_departments d
+                               WHERE d.id = p_dept AND d.manager_user = u.username)) ))
+    -- (015) معتمِد معلّق في سلسلة اعتماد التعميد
+    OR EXISTS (SELECT 1 FROM portal_award_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+    -- (015) معتمِد معلّق في سلسلة أمر الشراء (صلاحية أو عضوية اللجنة المصغّرة)
+    OR EXISTS (SELECT 1 FROM portal_po_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( (a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+                        OR (a.kind = 'committee' AND EXISTS (
+                              SELECT 1 FROM portal_settings s
+                               WHERE s.key = 'committee_members' AND s.value ? portal_username())) ));
+$fn$;
 

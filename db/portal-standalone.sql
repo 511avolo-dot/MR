@@ -1596,6 +1596,21 @@ BEGIN
         VALUES ('ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||v_intended,
                 v_intended, 'system', 'تذكير: طلب متأخّر بانتظار اعتمادك', v_req.title, 'inbox')
         ON CONFLICT (id) DO NOTHING;
+    ELSIF v_stage.role_key IS NOT NULL THEN
+      -- (014) مرحلة دور: أخطر كل حاملي الصلاحية النشطين + مفوَّضي الغائبين منهم.
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.username,
+               u.username, 'system', 'تذكير: طلب متأخّر بانتظار اعتماد مرحلتك ('||coalesce(v_stage.stage_label,'')||')', v_req.title, 'inbox'
+        FROM portal_users u
+        WHERE u.active AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.delegate_to,
+               u.delegate_to, 'system', 'تفويض: طلب متأخّر بانتظار اعتماد مرحلة ('||coalesce(v_stage.stage_label,'')||') بالنيابة', v_req.title, 'inbox'
+        FROM portal_users u
+        WHERE u.active AND u.is_away AND u.delegate_to IS NOT NULL
+          AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
     END IF;
     IF v_deleg IS NOT NULL THEN
       INSERT INTO portal_notifications(id, recipient, type, title, body, link)
@@ -1609,13 +1624,27 @@ BEGIN
       FROM portal_users WHERE role = 'admin' AND active = true
       ON CONFLICT (id) DO NOTHING;
 
+    PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_requests SET escalations = escalations + 1,
       escalated_at = coalesce(escalated_at, now()), last_escalation_at = now() WHERE id = v_req.id;
+    PERFORM set_config('app.portal_transition', '0', true);
     PERFORM portal_audit_write(v_req.id, 'escalated', NULL, 'system', jsonb_build_object('intended', v_intended, 'stage_label', v_stage.stage_label));
     v_cnt := v_cnt + 1;
   END LOOP;
   RETURN v_cnt;
 END $fn$;
+
+-- (014) الاستدعاء الكسول من الواجهة (مشتريات/مالية/أدمن) — الخانق الداخلي يمنع التكرار.
+CREATE OR REPLACE FUNCTION portal_sla_tick() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement') OR portal_has_perm('can_disburse')) THEN
+    RETURN 0;
+  END IF;
+  RETURN portal_run_sla();
+END $fn$;
+REVOKE ALL ON FUNCTION portal_sla_tick() FROM public;
+GRANT EXECUTE ON FUNCTION portal_sla_tick() TO authenticated;
 
 DO $$
 BEGIN
@@ -1691,7 +1720,36 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
           SELECT 1 FROM portal_departments d
            WHERE d.id = p_dept AND d.sector = portal_my_sector()))
     OR EXISTS (SELECT 1 FROM portal_approvals a
-                WHERE a.request_id = p_id AND a.approver = portal_username());
+                WHERE a.request_id = p_id AND a.approver = portal_username())
+    -- (015) المعتمِد المقصود لمرحلة معلّقة في سلسلة الحاجة (مباشرة)
+    OR EXISTS (SELECT 1 FROM portal_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( a.approver = portal_username()
+                        OR (a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+                        OR (a.resolver = 'dept_manager' AND EXISTS (
+                              SELECT 1 FROM portal_departments d
+                               WHERE d.id = p_dept AND d.manager_user = portal_username())) ))
+    -- (015) المفوَّض عن معتمِد غائب لمرحلة معلّقة
+    OR EXISTS (SELECT 1
+                 FROM portal_approvals a
+                 JOIN portal_users u ON u.is_away AND u.delegate_to = portal_username()
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( a.approver = u.username
+                        OR (a.role_key IS NOT NULL AND coalesce((u.permissions ->> a.role_key)::boolean, false))
+                        OR (a.resolver = 'dept_manager' AND EXISTS (
+                              SELECT 1 FROM portal_departments d
+                               WHERE d.id = p_dept AND d.manager_user = u.username)) ))
+    -- (015) معتمِد معلّق في سلسلة اعتماد التعميد
+    OR EXISTS (SELECT 1 FROM portal_award_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+    -- (015) معتمِد معلّق في سلسلة أمر الشراء (صلاحية أو عضوية اللجنة المصغّرة)
+    OR EXISTS (SELECT 1 FROM portal_po_approvals a
+                WHERE a.request_id = p_id AND a.decision = 'pending'
+                  AND ( (a.role_key IS NOT NULL AND portal_has_perm(a.role_key))
+                        OR (a.kind = 'committee' AND EXISTS (
+                              SELECT 1 FROM portal_settings s
+                               WHERE s.key = 'committee_members' AND s.value ? portal_username())) ));
 $fn$;
 CREATE OR REPLACE FUNCTION portal_can_see_request(p_id text)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
