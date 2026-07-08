@@ -1,13 +1,9 @@
--- ═══════════════════════════════════════════════════════════════════════════
---  تشغيل كل هجرات تصليب الإنتاج دفعة واحدة (005 → 011) بالترتيب الصحيح.
---  آمن: كل الهجرات idempotent (إضافة فقط، لا حذف يدوي) — يمكن تشغيله أكثر من مرة.
---  المكان: Supabase → المشروع mwbjoysuybgbrvfrprex → SQL Editor → الصق الكل → Run.
--- ═══════════════════════════════════════════════════════════════════════════
+-- تشغيل كل هجرات التصليب (005 → 012) بالترتيب. آمن + idempotent (إضافة فقط).
+-- المكان: Supabase → مشروع mwbjoysuybgbrvfrprex → SQL Editor → الصق الكل → Run.
+-- من شغّل 005–011 سابقاً: يكفيه تشغيل 012 وحده (في نهاية الملف).
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  005-resubmit.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 005-resubmit.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 005 — إعادة تقديم الطلب المُعاد (returned → in_review)
 --  تُصلح المانع B2: كانت الواجهة تنادي portal_submit_request التي ترفض غير
@@ -48,9 +44,7 @@ REVOKE ALL ON FUNCTION portal_resubmit_request(text,text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_resubmit_request(text,text) TO authenticated;
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  006-guard-alignment.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 006-guard-alignment.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 006 — مواءمة حارس الإلغاء مع المواصفات (الباب 7 + سيناريو 6-5)
 --  المواصفات: «بصلاحية المشتريات/الأدمن في أي وقت، أو مقدّم الطلب قبل بدء التزويد».
@@ -89,9 +83,7 @@ BEGIN
 END $fn$;
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  007-doa-po-chain.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 007-doa-po-chain.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 007 — مصفوفة DoA الجديدة + سلسلة اعتماد أمر الشراء متعددة المراحل
 --  ──────────────────────────────────────────────────────────────────────────
@@ -318,9 +310,7 @@ REVOKE ALL ON FUNCTION portal_po_transition(text, text, text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_po_transition(text, text, text) TO authenticated;
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  008-flexible-return.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 008-flexible-return.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 008 — الإرجاع المرن (اختيار مَن يعود له الطلب) — الدورة الأولى
 --  المواصفات (توجيه المالك): «الرفض أو الموافقة أو الإعادة، واختيار الشخص أو
@@ -525,9 +515,7 @@ REVOKE ALL ON FUNCTION portal_payment_transition(bigint, text, text, text) FROM 
 GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint, text, text, text) TO authenticated;
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  009-visibility-rls.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 009-visibility-rls.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 009 — فرض نطاق الرؤية على مستوى قاعدة البيانات (RLS) — H1
 --  المواصفات (نظام لشركة كبيرة): كل مستخدم يرى فقط ما يخصّه حسب نطاق وظيفته:
@@ -634,9 +622,7 @@ CREATE POLICY "audit_read" ON portal_audit FOR SELECT TO authenticated
   USING (portal_is_admin() OR (request_id IS NOT NULL AND portal_can_see_request(request_id)));
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  010-invitations.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 010-invitations.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 010 — بوابة الدعوات + تقييد النطاق البريدي (D)
 --  المواصفات (توجيه المالك): روابط تسجيل للموظفين، بريد @aldeyabi حصراً، رفض أي
@@ -704,9 +690,7 @@ REVOKE ALL ON FUNCTION portal_email_allowed(text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_email_allowed(text) TO authenticated, service_role;
 
 
--- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  011-delete-user.sql
--- ╚══════════════════════════════════════════════════════════════════════════╝
+-- ═══ 011-delete-user.sql ═══
 -- ═══════════════════════════════════════════════════════════════════════════
 --  الهجرة 011 — حذف المستخدم بأمان (E) — portal_delete_user
 --  RPC ذرّية بحمايات على مستوى القاعدة (دفاع في العمق فوق تحقّق الخادم):
@@ -750,4 +734,58 @@ END $fn$;
 
 REVOKE ALL ON FUNCTION portal_delete_user(text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_delete_user(text) TO authenticated;
+
+
+-- ═══ 012-audit-hardening.sql ═══
+-- ═══════════════════════════════════════════════════════════════════════════
+--  الهجرة 012 — إصلاحات ما بعد المراجعة الأمنية/الجودة
+--  (1) نطاق الرؤية: مدير قطاع بلا قسم (department_id=NULL) كان portal_my_sector()
+--      يرجع NULL فيطابق كل الأقسام ذات القطاع NULL → رؤية أوسع من المفترض. نُقيّده
+--      بأن يكون قطاع المستخدم غير NULL (وإلا يسقط إلى own عبر بقية شروط الرؤية).
+--  (2) حذف المستخدم: portal_requests.requester = NOT NULL FK بلا ON DELETE، فحذف
+--      مستخدم له طلبات يفشل بانتهاك FK. الصواب حوكمياً (سلامة التدقيق): منع الحذف
+--      الصلب لمن له سجلّ معاملات وتوجيهه إلى «تعطيل الحساب» بدلاً منه.
+--  idempotent (CREATE OR REPLACE). شغّلها في Supabase mwbjoysuybgbrvfrprex بعد 011.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- (1) رؤية الطلب — تقييد فرع القطاع بألّا يكون قطاع المستخدم NULL.
+CREATE OR REPLACE FUNCTION portal_can_see_request(p_id text, p_requester text, p_dept text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT
+    portal_is_admin()
+    OR portal_my_scope() = 'all'
+    OR p_requester = portal_username()
+    OR (portal_my_scope() = 'sector' AND portal_my_sector() IS NOT NULL AND EXISTS (
+          SELECT 1 FROM portal_departments d
+           WHERE d.id = p_dept AND d.sector = portal_my_sector()))
+    OR EXISTS (SELECT 1 FROM portal_approvals a
+                WHERE a.request_id = p_id AND a.approver = portal_username());
+$fn$;
+
+-- (2) حذف المستخدم — منع الحذف الصلب لمن له طلبات (سلامة التدقيق) + توجيه للتعطيل.
+CREATE OR REPLACE FUNCTION portal_delete_user(p_username text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_role text; v_active boolean; v_admins int;
+BEGIN
+  IF v_me IS NULL OR NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_username IS NULL OR p_username = v_me THEN RAISE EXCEPTION 'لا يمكنك حذف حسابك'; END IF;
+  SELECT role, active INTO v_role, v_active FROM portal_users WHERE username = p_username FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
+  IF v_role = 'admin' AND v_active THEN
+    PERFORM pg_advisory_xact_lock(hashtext('portal_last_admin'));
+    SELECT count(*) INTO v_admins FROM portal_users WHERE role = 'admin' AND active;
+    IF v_admins <= 1 THEN RAISE EXCEPTION 'لا يمكن حذف آخر أدمن نشط للبوابة'; END IF;
+  END IF;
+  -- سلامة التدقيق: لا حذف صلب لمن له سجلّ معاملات (طلبات) — يُعطَّل حسابه بدلاً من ذلك.
+  IF EXISTS (SELECT 1 FROM portal_requests WHERE requester = p_username) THEN
+    RAISE EXCEPTION 'لا يمكن حذف مستخدم له طلبات مسجّلة (سلامة التدقيق) — عطّل حسابه بدلاً من الحذف';
+  END IF;
+  UPDATE portal_users       SET delegate_to  = NULL WHERE delegate_to  = p_username;
+  UPDATE portal_users       SET manager_user = NULL WHERE manager_user = p_username;
+  UPDATE portal_departments SET manager_user = NULL WHERE manager_user = p_username;
+  DELETE FROM portal_users WHERE username = p_username;
+  PERFORM portal_audit_write(NULL, 'user_deleted', v_me, 'portal',
+    jsonb_build_object('deleted_user', p_username, 'role', v_role));
+  RETURN jsonb_build_object('ok', true, 'deleted', p_username);
+END $fn$;
 
