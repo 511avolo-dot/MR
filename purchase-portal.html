@@ -3226,9 +3226,33 @@ decide = async function(reqId,action,comment,returnToSeq){
   toast(action==='approve'?'تم الاعتماد':action==='reject'?'تم الرفض':action==='defer'?'أُجّل مالياً':'أُعيد للتعديل','ok');
   if(action==='approve') pa_notify('request',reqId,(res&&res.finalized)?'approved':'stage');
   else if(action==='reject') pa_notify('request',reqId,'rejected',cmt);
-  else if(action==='return') pa_notify('request',reqId,'returned',cmt);
+  /* إرجاع مرن لمرحلة سابقة: الحالة تبقى in_review فالحدث الصحيح 'stage' (يُخطر معتمِد
+     المرحلة المُعاد إليها بأزرار قراره)؛ 'returned' فقط عند العودة للمقدّم (seq=0). */
+  else if(action==='return') pa_notify('request',reqId,(returnToSeq&&returnToSeq>0)?'stage':'returned',cmt);
   await pa_after(reqId);
 };
+
+/* م4: حفظ «المفوَّض عند الغياب» فعلياً (كان نسخة توضيحية بالذاكرة تضيع عند التحديث) */
+setDelegate = async function(k,v){
+  var val=v||null;
+  var q=SB.from('portal_users').update({delegate_to:val}).eq('username',k);
+  var r=await q; if(r.error){ toast(pa_err(r.error),'err'); return; }
+  if(USERS[k]) USERS[k].delegate=val;
+  toast('حُفظ المفوَّض عند الغياب','ok');
+};
+
+/* م4: إخفاء «رفع طلب» عمّن لا يملك صلاحية الإنشاء (الحارس الخادمي قائم — هذا UX) */
+var _pa_navAllowed = navAllowed;
+navAllowed = function(k){
+  if(k==='new'){ var a=accessOf(ME)||{}; return !!(isAdmin() || (a.can&&a.can.create)); }
+  return _pa_navAllowed(k);
+};
+
+/* م4: نبضة SLA كسولة — مشتريات/مالية/أدمن يشغّلون التصعيد عند التحميل (خانق داخلي في القاعدة) */
+async function pa_slaTick(){
+  try{ var a=accessOf(ME)||{}; if(!(isAdmin()||(a.can&&(a.can.manageRfq||a.can.disburse)))) return;
+       await SB.rpc('portal_sla_tick'); }catch(e){}
+}
 
 /* ══════ بوابة الدعوات (D) — تبويب إداري: دعوة موظف + قائمة بيضاء @aldeyabi ══════ */
 var PA_INVITES=null, PA_WL=[], PA_DOMAIN='aldeyabi.com', PA_INV_LOADING=false;
@@ -3343,6 +3367,7 @@ loadAll = async function(){
   try{ Object.keys(USERS).forEach(function(u){ var p=USERS[u].perms||{};
     p.can_approve_l1=!!p.can_approve_stage; p.can_approve_l2=!!p.can_manage_users;
     p.can_manage_rfq=!!p.can_manage_procurement; USERS[u].perms=p; }); }catch(e){}
+  pa_slaTick();   /* م4: نبضة تصعيد SLA كسولة (لا تُعطّل التحميل — fire and forget) */
 };
 
 /* م1c: تبديل صلاحية فردية يحفظ فعلياً في القاعدة (عبر خادم الأدمن) بالمفاتيح الحيّة */
