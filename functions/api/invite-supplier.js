@@ -8,7 +8,7 @@
  * POST /api/invite-supplier   { email, name?, token }
  *   - token يجب أن يطابق env.INVITE_TOKEN (حماية من الإساءة/السبام).
  *   - same-origin فقط.
- *   - المُرسِل: noreply@suppliers.aldeyabi.com (النطاق الموثّق) — reply-to: supply@aldeyabi.com.
+ *   - المُرسِل: Aldeyabi Group <notifications@suppliers.aldeyabi.com> (النطاق الموثّق) — reply-to: supply@aldeyabi.com.
  */
 
 const SENDER_DOMAIN = 'suppliers.aldeyabi.com';

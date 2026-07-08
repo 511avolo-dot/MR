@@ -8,7 +8,7 @@
  *   SUPABASE_URL                رابط مشروع Supabase
  *   SUPABASE_SERVICE_ROLE_KEY   مفتاح service_role (سرّ — لقراءة بريد المتقدّم فقط)
  *   RESEND_API_KEY              مفتاح Resend (https://resend.com) لإرسال البريد
- *   NOTIFY_FROM (اختياري)       المُرسِل من النطاق الموثّق، مثل: "طلبات الذيابي <noreply@suppliers.aldeyabi.com>"
+ *   NOTIFY_FROM (اختياري)       المُرسِل من النطاق الموثّق، مثل: "Aldeyabi Group <notifications@suppliers.aldeyabi.com>" (يُتجاهَل أي no-reply)
  *                               (إن لم يُضبط أو كان من نطاق غير موثّق، يستخدم الكود مُرسِلاً افتراضياً صحيحاً)
  *   NOTIFY_REPLY_TO (اختياري)   بريد الرد، مثل supply@aldeyabi.com
  *
