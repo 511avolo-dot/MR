@@ -1191,8 +1191,9 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
   ELSE -- disburse
     IF v_pay.status <> 'approved_pay' THEN RAISE EXCEPTION 'يلزم اعتماد الصرف أولاً'; END IF;
-    -- فصل المهام (maker-checker على تحرير المال): من اعتمد الصرف لا ينفّذه بنفسه.
+    -- فصل المهام الثلاثي (maker-checker على تحرير المال): لا المعتمِد ولا الطالب ينفّذه.
     IF v_pay.approved_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ اعتمدته بنفسك (فصل المهام)'; END IF;
+    IF v_pay.requested_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ طلبته بنفسك (فصل المهام الثلاثي)'; END IF;
     v_status := 'disbursed';
     PERFORM set_config('app.portal_transition', '1', true);
     UPDATE portal_payments SET status = v_status, disbursed_by = v_me, disbursed_at = now() WHERE id = p_payment_id;

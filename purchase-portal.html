@@ -2752,11 +2752,17 @@ async function loadAll(){
 
     /* دورة حياة المشتريات (proc) — تُبنى فقط بعد تجاوز اعتماد الحاجة */
     const offers=offBy[r.id]||[]; const award=awardBy[r.id]||null; const payments=payBy[r.id]||[]; const receipts=rcBy[r.id]||[];
+    /* تعميد مرفوض ≠ تعميد نشط: بعد رفض التعميد/أمر الشراء تبقى القاعدة على pricing —
+       فيجب ألّا يُشتقّ طور 'award' من صف مرفوض (وإلا تنكسر إعادة التسعير/التعميد). */
+    const activeAward=(award && award.status!=='rejected')?award:null;
+    /* صرف مرفوض/مُعاد ≠ صرف نشط: بعد الرفض/الإرجاع يعود الطلب awarded (phase=payment) —
+       فيجب ألّا يُشتقّ طور 'payment' من صف مرفوض/مُعاد، بل يعود لطور 'po' ليظهر زر «إصدار صرف». */
+    const activePayments=payments.filter(function(p){ return p && p.status!=='rejected' && p.status!=='returned'; });
     const hasProc=['pricing','award','po_review','payment','receipt','closed'].includes(r.phase)
       || ['pricing','award_review','po_review','awarded','payment_pending','receipt_pending','closed'].includes(r.status)
       || offers.length>0 || !!award;
     if(hasProc){
-      const phase=pa_procPhase(r,offers,award,payments);
+      const phase=pa_procPhase(r,offers,activeAward,activePayments);
       const proc={ phase, supplierList:[], quotesRequired:(r.quotes_required||pa_quotesRule(req.estTotal)),
         offers:{}, events:[], _offerIdByKey:{} };
       offers.forEach(o=>{ const k=pa_offerKey(o); proc.supplierList.push(k);
@@ -2775,7 +2781,7 @@ async function loadAll(){
         user:(a.decision!=='pending'&&a.approver)?a.approver:pa_resolveApprover(a.role_key,a.approver),
         decision:a.decision, actedAt:pa_ms(a.acted_at), actor:a.approver||null, comment:a.comment||null })) : null;
       if(r.po_issued_at) proc.po={ no:'P.O-DG26-'+r.id.slice(-4), issuedAt:pa_ms(r.po_issued_at), issuedBy:r.po_issued_by };
-      if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
+      if(activePayments.length){ proc.payment=pa_mapPayment(activePayments[activePayments.length-1]); }
       const anyRecv=items.some(it=>it.received>0);
       if(receipts.length||anyRecv||phase==='receipt'||phase==='closed'){
         const complete=items.length>0 && items.every(it=>it.received>=it.qty);
@@ -2917,7 +2923,7 @@ async function payApprove(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
   if(!pid){ toast('لا يوجد طلب صرف قيد المراجعة','err'); return; }
   try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'approve',p_comment:null}); }catch(e){ return; }
-  toast('اعتُمد الصرف — نفّذ التحويل ثم انقر «تم الصرف»','ok'); await pa_after(id);
+  toast('اعتُمد الصرف — نفّذ التحويل ثم انقر «تم الصرف»','ok'); pa_notify('payment',id,'approved'); await pa_after(id);
 }
 async function disburse(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
@@ -2929,7 +2935,7 @@ async function confirmPayReject(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
   const reason=($('payrej-reason')||{}).value||''; if(!reason.trim()){ toast('السبب مطلوب','err'); return; } if(!pid) return;
   try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'reject',p_comment:reason.trim()}); }catch(e){ return; }
-  closeModal(); toast('رُفض طلب الصرف','ok'); await pa_after(id);
+  closeModal(); toast('رُفض طلب الصرف','ok'); pa_notify('payment',id,'rejected',reason.trim()); await pa_after(id);
 }
 async function confirmPayReturn(id){
   /* إجراء «إرجاع» مستقل: يعيد الطلب لحالة awarded ليُعيد المشتريات إصدار الصرف، مع حفظ الوجهة. */
@@ -2937,7 +2943,7 @@ async function confirmPayReturn(id){
   const reason=($('payret-reason')||{}).value||''; const to=($('payret-to')||{}).value||'procurement';
   if(!reason.trim()){ toast('الملاحظة مطلوبة','err'); return; } if(!pid) return;
   try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'return',p_comment:reason.trim(),p_return_to:to}); }catch(e){ return; }
-  closeModal(); toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); await pa_after(id);
+  closeModal(); toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); pa_notify('payment',id,'returned',reason.trim()); await pa_after(id);
 }
 async function resubmitPayment(id){ toPayment(id); }
 async function confirmReceive(id){
@@ -3175,6 +3181,11 @@ myTasks = function(){
         var active = r.proc.poChain.slice(0,idx).every(function(x){return x.decision==='approved';});
         if(active && pa_canApprovePo(s)) t.push({ r:r, label:'اعتماد أمر شراء بانتظارك', ic:'clipboard', sub:s.label||'' });
       }
+    }
+    /* استلام منتظر: يُوجَّه لحامل can_verify_stock (المستودع) لا للمقدّم — canReceive يطابق الخادم */
+    if(r && r.proc && r.proc.phase==='receipt' && typeof canReceive==='function' && canReceive(r)){
+      var already=t.some(function(x){return x.r===r && x.ic==='box';});
+      if(!already) t.push({ r:r, label:'استلام منتظر', ic:'box', sub:'تسجيل استلام البنود' });
     }
   });
   return t;

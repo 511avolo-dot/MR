@@ -130,6 +130,15 @@ export async function onRequestPost({ request, env }) {
         if (req.status !== 'payment_pending') return json({ skipped: true, reason: 'status_mismatch' });
         const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_disburse' });
         res = await notifyInfo(env, base, req, deptLabel, 'payment_pending', origin, recips);
+      } else if (event === 'approved') {
+        // بعد اعتماد الصرف: أخطر المشتريات (لمتابعة التنفيذ) — الطلب لا يزال payment_pending.
+        const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_manage_procurement' });
+        res = await notifyInfo(env, base, req, deptLabel, 'payment_approved', origin, recips, 'اعتُمد طلب الصرف — بانتظار تنفيذ التحويل');
+      } else if (event === 'rejected' || event === 'returned') {
+        // عاد الطلب إلى awarded ليُعيد المشتريات إصدار الصرف — أخطر حاملي can_manage_procurement.
+        if (req.status !== 'awarded') return json({ skipped: true, reason: 'status_mismatch' });
+        const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_manage_procurement' });
+        res = await notifyInfo(env, base, req, deptLabel, event, origin, recips, comment || (event === 'returned' ? 'أُعيد طلب الصرف — يلزم إعادة الإصدار' : 'رُفض طلب الصرف'));
       } else if (event === 'disbursed') {
         if (req.status !== 'receipt_pending') return json({ skipped: true, reason: 'status_mismatch' });
         res = await notifyResult(env, base, req, deptLabel, 'disbursed', origin, comment);
