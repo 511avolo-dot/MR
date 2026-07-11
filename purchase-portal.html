@@ -2650,8 +2650,9 @@ function pa_status(s){
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
 async function loadAll(){
+  window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
-  if(!session) return false;
+  if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
   const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
     SB.from('portal_users').select('*'),
@@ -2672,6 +2673,11 @@ async function loadAll(){
     SB.from('portal_audit').select('*').order('id'),
     SB.from('portal_po_approvals').select('*').order('seq')
   ]);
+
+  /* تشخيص: سجّل أي خطأ استعلام في الـConsole (يكشف جدولاً ناقصاً أو حجب RLS أو صلاحية) */
+  var _paQ={portal_users:uR,portal_departments:dR,portal_jobs:jR,portal_doa:doaR,portal_workflows:wfR,portal_suppliers:supR,portal_settings:setR,portal_requests:reqR,portal_request_items:itR,portal_approvals:apR,portal_offers:ofR,portal_award:awR,portal_award_approvals:aaR,portal_payments:payR,portal_receipts:rcR,portal_audit:auR,portal_po_approvals:poR};
+  Object.keys(_paQ).forEach(function(k){ if(_paQ[k]&&_paQ[k].error) console.error('[portal] خطأ قراءة '+k+':', _paQ[k].error); });
+  if(uR.error){ window.__paReason='خطأ قراءة جدول المستخدمين: '+(uR.error.message||uR.error.code||'غير معروف')+' (تحقّق من الهجرات/RLS)'; return false; }
 
   /* الأقسام */
   DEPTS={}; (dR.data||[]).forEach(d=>{ DEPTS[d.id]={n:d.name_ar,sector:d.sector,mgr:d.manager_user,active:d.active!==false}; });
@@ -2703,9 +2709,10 @@ async function loadAll(){
 
   /* الهوية: من جلسة Supabase بمطابقة البريد */
   const email=(session.user.email||'').toLowerCase();
+  console.log('[portal] بريد الجلسة:', email, '| صفوف المستخدمين المقروءة:', (uR.data||[]).length);
   const meRow=(uR.data||[]).find(u=>(u.email||'').toLowerCase()===email);
-  if(!meRow){ toast('لا يوجد حساب بوابة مطابق لبريدك — راجع الإدارة','err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
-  if(meRow.active===false){ toast('حسابك موقوف — راجع الإدارة','err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
+  if(!meRow){ window.__paReason='لا يوجد حساب مطابق لبريد جلستك ('+(email||'فارغ')+') — صفوف مقروءة: '+(uR.data||[]).length+(((uR.data||[]).length===0)?' → RLS يحجب القراءة أو الجدول فارغ':' → البريد لا يطابق أي صف'); toast(window.__paReason,'err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
+  if(meRow.active===false){ window.__paReason='حسابك موقوف (active=false) — راجع الإدارة'; toast(window.__paReason,'err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
   ME=meRow.username;
 
   /* فهرسة صفوف التفاصيل حسب الطلب */
@@ -2837,7 +2844,7 @@ async function doLogin(){
   const password=($('pa-pass')||{}).value||'';
   const err=$('pa-lg-err'); if(err)err.textContent=''; const btn=$('pa-lg-btn'); if(btn)btn.disabled=true;
   try{ const {error}=await SB.auth.signInWithPassword({email,password}); if(error)throw error;
-    const ok=await loadAll(); if(!ok){ if(err&&!err.textContent)err.textContent='تعذّر تحميل الحساب'; return; }
+    const ok=await loadAll(); if(!ok){ if(err)err.textContent=(window.__paReason||'تعذّر تحميل الحساب'); return; }
     pa_hideLogin(); VIEW='overview'; CURRENT=null; render(); toast('مرحباً '+uName(ME),'ok');
   }catch(e){ const raw=String((e&&(e.message||e.error_description))||'خطأ'); if(err)err.textContent=/invalid/i.test(raw)?'البريد أو كلمة المرور غير صحيحة':('تعذّر الدخول: '+raw); }
   finally{ if(btn)btn.disabled=false; } }
