@@ -106,21 +106,27 @@ function sb(env) {
 }
 
 // عدد الأدمن النشطين (لحماية «آخر أدمن نشط» في الحذف/التعطيل/التخفيض).
+// يفشل مغلقاً: عند تعذّر القراءة يُرجع { ok:false } كي يوقِف المستدعي العملية الخطرة
+// بدل تجاوز الحماية (خلل شبكي لحظي كان قد يسمح بإزالة آخر أدمن → قفل البوابة).
 async function activeAdminCount(env) {
   const r = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?role=eq.admin&active=eq.true&select=username`, {
     headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
   });
-  const rows = r.ok ? await r.json().catch(() => []) : [];
-  return Array.isArray(rows) ? rows.length : 999;
+  if (!r.ok) return { ok: false };
+  const rows = await r.json().catch(() => null);
+  if (!Array.isArray(rows)) return { ok: false };
+  return { ok: true, count: rows.length };
 }
-// هل الهدف أدمن نشط؟ (نقرأ الدور والحالة الحاليّين قبل أي تعديل خطر).
+// هل الهدف أدمن نشط؟ (نقرأ الدور والحالة الحاليّين قبل أي تعديل خطر). يفشل مغلقاً.
 async function targetAdminState(env, username) {
   const r = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=role,active`, {
     headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
   });
-  const rows = r.ok ? await r.json().catch(() => []) : [];
-  const u = rows && rows[0];
-  return { isAdmin: !!(u && u.role === 'admin'), isActive: !!(u && u.active !== false) };
+  if (!r.ok) return { ok: false };
+  const rows = await r.json().catch(() => null);
+  if (!Array.isArray(rows)) return { ok: false };
+  const u = rows[0];
+  return { ok: true, isAdmin: !!(u && u.role === 'admin'), isActive: !!(u && u.active !== false) };
 }
 
 export async function onRequestGet({ env }) {
@@ -236,8 +242,11 @@ export async function onRequestPost({ request, env }) {
     // منع تخفيض دور آخر أدمن نشط (يُبقي البوابة بلا مدير).
     if (patch.role === 'user') {
       const t = await targetAdminState(env, username);
-      if (t.isAdmin && t.isActive && (await activeAdminCount(env)) <= 1) {
-        return json({ error: 'لا يمكن تخفيض دور آخر أدمن نشط للبوابة' }, 400);
+      if (!t.ok) return json({ error: 'تعذّر التحقّق من حالة المستخدم — أعد المحاولة' }, 503);
+      if (t.isAdmin && t.isActive) {
+        const c = await activeAdminCount(env);
+        if (!c.ok) return json({ error: 'تعذّر التحقّق من عدد المدراء — أعد المحاولة' }, 503);
+        if (c.count <= 1) return json({ error: 'لا يمكن تخفيض دور آخر أدمن نشط للبوابة' }, 400);
       }
     }
     const r = await api.restWrite('PATCH', `portal_users?username=eq.${encodeURIComponent(username)}`, patch);
@@ -251,8 +260,11 @@ export async function onRequestPost({ request, env }) {
     // منع تعطيل آخر أدمن نشط (يُبقي البوابة بلا مدير).
     if (!active) {
       const t = await targetAdminState(env, username);
-      if (t.isAdmin && t.isActive && (await activeAdminCount(env)) <= 1) {
-        return json({ error: 'لا يمكن تعطيل آخر أدمن نشط للبوابة' }, 400);
+      if (!t.ok) return json({ error: 'تعذّر التحقّق من حالة المستخدم — أعد المحاولة' }, 503);
+      if (t.isAdmin && t.isActive) {
+        const c = await activeAdminCount(env);
+        if (!c.ok) return json({ error: 'تعذّر التحقّق من عدد المدراء — أعد المحاولة' }, 503);
+        if (c.count <= 1) return json({ error: 'لا يمكن تعطيل آخر أدمن نشط للبوابة' }, 400);
       }
     }
     const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email`, {
@@ -292,14 +304,14 @@ export async function onRequestPost({ request, env }) {
     const r0 = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?username=eq.${encodeURIComponent(username)}&select=email,role,active`, {
       headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
     });
-    const rows0 = r0.ok ? await r0.json() : [];
-    // منع حذف آخر أدمن نشط (لئلّا تبقى البوابة بلا مدير) — دفاع في العمق فوق RPC القاعدة.
-    if (rows0 && rows0[0] && rows0[0].role === 'admin' && rows0[0].active !== false) {
-      const ra = await fetch(`${PORTAL_URL(env)}/rest/v1/portal_users?role=eq.admin&active=eq.true&select=username`, {
-        headers: { apikey: PORTAL_KEY(env), Authorization: `Bearer ${PORTAL_KEY(env)}` },
-      });
-      const admins = ra.ok ? await ra.json().catch(() => []) : [];
-      if (Array.isArray(admins) && admins.length <= 1) return json({ error: 'لا يمكن حذف آخر أدمن نشط للبوابة' }, 400);
+    if (!r0.ok) return json({ error: 'تعذّر التحقّق من حالة المستخدم — أعد المحاولة' }, 503);
+    const rows0 = await r0.json().catch(() => null);
+    if (!Array.isArray(rows0)) return json({ error: 'تعذّر التحقّق من حالة المستخدم — أعد المحاولة' }, 503);
+    // منع حذف آخر أدمن نشط (لئلّا تبقى البوابة بلا مدير) — دفاع في العمق فوق RPC القاعدة. يفشل مغلقاً.
+    if (rows0[0] && rows0[0].role === 'admin' && rows0[0].active !== false) {
+      const c = await activeAdminCount(env);
+      if (!c.ok) return json({ error: 'تعذّر التحقّق من عدد المدراء — أعد المحاولة' }, 503);
+      if (c.count <= 1) return json({ error: 'لا يمكن حذف آخر أدمن نشط للبوابة' }, 400);
     }
     // سلامة التدقيق: لا حذف صلب لمن له طلبات مسجّلة (FK requester = NOT NULL) —
     // يُعطَّل حسابه بدلاً من ذلك (setActive:false يحفظ السجلّ والمراجع).
