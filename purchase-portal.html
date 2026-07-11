@@ -2709,10 +2709,12 @@ async function loadAll(){
 
   /* الهوية: من جلسة Supabase بمطابقة البريد */
   const email=(session.user.email||'').toLowerCase();
-  console.log('[portal] بريد الجلسة:', email, '| صفوف المستخدمين المقروءة:', (uR.data||[]).length);
+  var _paEmails=(uR.data||[]).map(function(u){return u.email;});
+  var _paMatch=(uR.data||[]).some(function(u){return (u.email||'').toLowerCase()===email;});
+  console.log('[portal] بريد الجلسة(JSON):', JSON.stringify(email), '| تطابق:', _paMatch, '| صفوف:', (uR.data||[]).length, '| الإيميلات المخزّنة:', JSON.stringify(_paEmails));
   const meRow=(uR.data||[]).find(u=>(u.email||'').toLowerCase()===email);
-  if(!meRow){ window.__paReason='لا يوجد حساب مطابق لبريد جلستك ('+(email||'فارغ')+') — صفوف مقروءة: '+(uR.data||[]).length+(((uR.data||[]).length===0)?' → RLS يحجب القراءة أو الجدول فارغ':' → البريد لا يطابق أي صف'); toast(window.__paReason,'err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
-  if(meRow.active===false){ window.__paReason='حسابك موقوف (active=false) — راجع الإدارة'; toast(window.__paReason,'err'); try{await SB.auth.signOut();}catch(e){} ME=null; return false; }
+  if(!meRow){ try{await SB.auth.signOut();}catch(e){} window.__paReason='لا يوجد صف مطابق لبريد جلستك ('+(email||'فارغ')+') — صفوف مقروءة: '+(uR.data||[]).length+'؛ الإيميلات: '+JSON.stringify(_paEmails); ME=null; return false; }
+  if(meRow.active===false){ try{await SB.auth.signOut();}catch(e){} window.__paReason='حسابك موقوف (active=false) — راجع الإدارة'; ME=null; return false; }
   ME=meRow.username;
 
   /* فهرسة صفوف التفاصيل حسب الطلب */
