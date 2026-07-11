@@ -3381,7 +3381,7 @@ adminMatrix = function(){ return committeePanel() + _pa_adminMatrix(); };
 /* حمّل قائمة اللجنة مع كل تحميل بيانات — كي يرى العضو زرّ اعتماده ومهمّته دون فتح الإدارة */
 var _pa_loadAll_c = loadAll;
 loadAll = async function(){
-  await _pa_loadAll_c();
+  var _ok=await _pa_loadAll_c();   /* لا بدّ من التقاط نتيجة الأصل وإرجاعها — وإلا رجعت undefined فيفشل الدخول */
   try{ var r=await SB.from('portal_settings').select('value').eq('key','committee_members').maybeSingle();
        PA_COMMITTEE=(r.data&&Array.isArray(r.data.value))?r.data.value:(PA_COMMITTEE||[]); }catch(e){}
   /* م1c: أسماء عرض متوافقة — مربّعات PERM_DEFS المرجعية تقرأ مفاتيح قديمة؛ نضيف
@@ -3390,6 +3390,7 @@ loadAll = async function(){
     p.can_approve_l1=!!p.can_approve_stage; p.can_approve_l2=!!p.can_manage_users;
     p.can_manage_rfq=!!p.can_manage_procurement; USERS[u].perms=p; }); }catch(e){}
   pa_slaTick();   /* م4: نبضة تصعيد SLA كسولة (لا تُعطّل التحميل — fire and forget) */
+  return _ok;
 };
 
 /* م1c: تبديل صلاحية فردية يحفظ فعلياً في القاعدة (عبر خادم الأدمن) بالمفاتيح الحيّة */
