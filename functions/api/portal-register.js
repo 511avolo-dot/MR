@@ -105,6 +105,8 @@ export async function onRequestPost({ request, env }) {
   if (!au.ok && !/already|exists|registered/i.test(JSON.stringify(auData))) {
     console.error('[portal-register] auth create failed'); return json({ error: 'تعذّر إنشاء حساب الدخول' }, 400);
   }
+  // هل أنشأنا حساب Auth جديداً للتوّ؟ (لا نلمس حساباً كان موجوداً مسبقاً عند التراجع)
+  const authCreatedId = (au.ok && auData && auData.id) ? auData.id : null;
 
   // أنشئ ملف portal_users (gm = أدمن كما النموذج؛ وإلا حسب دور الدعوة).
   const role = (job && job.key === 'gm') ? 'admin' : (inv.role === 'admin' ? 'admin' : 'user');
@@ -116,7 +118,12 @@ export async function onRequestPost({ request, env }) {
       job_key: job ? job.key : null, created_by: inv.invited_by || 'invite',
     }),
   });
-  if (!pr.ok) { const t = await pr.text().catch(() => ''); console.error('[portal-register] profile insert failed:', t); return json({ error: 'تعذّر حفظ الملف التعريفي' }, 400); }
+  if (!pr.ok) {
+    const t = await pr.text().catch(() => ''); console.error('[portal-register] profile insert failed:', t);
+    // تراجع: احذف حساب Auth الذي أنشأناه للتوّ كي لا يبقى يتيماً يمنع إعادة التسجيل بنفس البريد.
+    if (authCreatedId) { try { await fetch(`${base}/auth/v1/admin/users/${authCreatedId}`, { method: 'DELETE', headers }); } catch (e) {} }
+    return json({ error: 'تعذّر حفظ الملف التعريفي' }, 400);
+  }
 
   await fetch(`${base}/rest/v1/portal_invitations?id=eq.${inv.id}`, {
     method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
