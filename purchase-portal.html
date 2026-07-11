@@ -2781,7 +2781,9 @@ async function loadAll(){
         user:(a.decision!=='pending'&&a.approver)?a.approver:pa_resolveApprover(a.role_key,a.approver),
         decision:a.decision, actedAt:pa_ms(a.acted_at), actor:a.approver||null, comment:a.comment||null })) : null;
       if(r.po_issued_at) proc.po={ no:'P.O-DG26-'+r.id.slice(-4), issuedAt:pa_ms(r.po_issued_at), issuedBy:r.po_issued_by };
-      if(activePayments.length){ proc.payment=pa_mapPayment(activePayments[activePayments.length-1]); }
+      /* الطور يُشتقّ من activePayments (يُقصي المرفوض/المُعاد)، أمّا العرض فمن كامل payments
+         كي تظهر بطاقة الصرف المُعاد/المرفوض + مهمتها + سبب الإرجاع في المخطّط الزمني (انحدار مُصلَح). */
+      if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
       const anyRecv=items.some(it=>it.received>0);
       if(receipts.length||anyRecv||phase==='receipt'||phase==='closed'){
         const complete=items.length>0 && items.every(it=>it.received>=it.qty);

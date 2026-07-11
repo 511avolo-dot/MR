@@ -1646,6 +1646,9 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION portal_sla_tick() FROM public;
 GRANT EXECUTE ON FUNCTION portal_sla_tick() TO authenticated;
+-- (017) portal_run_sla تُستدعى داخلياً فقط عبر portal_sla_tick/pg_cron — تُسحب من PUBLIC.
+REVOKE ALL ON FUNCTION portal_run_sla() FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_run_sla() FROM anon, authenticated;
 
 DO $$
 BEGIN
