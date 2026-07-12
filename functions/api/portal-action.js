@@ -15,7 +15,7 @@
 import {
   BRAND, esc, svcHeaders, loadRequest, deptName, loadApprovals, currentPendingStage,
   readToken, notifyPending, notifyResult, notifyProcurement,
-  portalUrl, portalConfigured,
+  portalUrl, portalConfigured, publicOrigin,
 } from './_portal-shared.js';
 
 const emailConfigured = (env) =>
@@ -130,7 +130,9 @@ export async function onRequestPost({ request, env }) {
   if (!data || data.error) return errPage(ERR_AR[data && data.error] || 'تعذّر إتمام الطلب.', (data && data.code) || 400);
 
   // بريد المتابعة (أفضل جهد — لا يُفشل القرار إن تعذّر).
-  let origin = ''; try { origin = url0(request); } catch (_) {}
+  // الأصل من PUBLIC_ORIGIN أولاً (لا من ترويسة يتحكّم بها المهاجم) — يمنع تسريب رمز
+  // الاعتماد التالي إلى خادم مهاجم عبر انتحال Origin/Referer في رابط البريد المُرسَل.
+  let origin = ''; try { origin = publicOrigin(env, url0(request)); } catch (_) {}
   try {
     const reqRow = data.request;
     const deptLabel = await deptName(env, base, reqRow.department_id);

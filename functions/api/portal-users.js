@@ -151,7 +151,7 @@ export async function onRequestPost({ request, env }) {
 
   // 2) تأكّد أنه أدمن نشط في portal_users (مطابق لشرط portal_is_admin() في القاعدة)
   const callerProfile = await api.getPortalProfileByEmail(caller.email || '');
-  if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.active === false) {
+  if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.active !== true) {
     return json({ error: 'هذه العملية متاحة لأدمن البوابة فقط' }, 403);
   }
   const callerUsername = callerProfile.username;

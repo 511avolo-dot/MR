@@ -50,7 +50,7 @@ async function verifyAdmin(env, base, jwt) {
   const rows = await pr.json().catch(() => []);
   const e = String(u.email).toLowerCase();
   const prof = (rows || []).find((x) => String(x.email).toLowerCase() === e);
-  if (!prof || prof.role !== 'admin' || prof.active === false) return null;
+  if (!prof || prof.role !== 'admin' || prof.active !== true) return null;
   return prof;
 }
 

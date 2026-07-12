@@ -48,7 +48,7 @@ async function verifyPortalStaff(env, base, jwt) {
     const resp = await fetch(`${base}/rest/v1/portal_users?email=ilike.${encodeURIComponent(safe)}&select=username,active`, { headers: svc });
     if (!resp.ok) return { ok: false, reason: 'تعذّر التحقّق من قائمة المستخدمين' };
     const rows = await resp.json();
-    const match = (Array.isArray(rows) ? rows : []).find((x) => x.active !== false);
+    const match = (Array.isArray(rows) ? rows : []).find((x) => x.active === true);
     if (!match) return { ok: false, reason: `بريد جلستك (${email}) لا يطابق أي مستخدم بوابة نشط` };
     return { ok: true, username: match.username };
   } catch (_) { return { ok: false, reason: 'خطأ غير متوقّع أثناء التحقّق' }; }
