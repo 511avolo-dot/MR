@@ -3007,6 +3007,7 @@ const _ic = {
   gosi:     `<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   chamber:  `<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
   natl_addr:`<svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  iban_cert:`<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="12" y2="15"/></svg>`,
   municipal:`<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>`,
   quality:  `<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>`,
   safety:   `<svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
@@ -3019,6 +3020,7 @@ const REQUIRED_DOCS = [
   {id:'gosi',       name:'شهادة التأمينات (GOSI)',     hint:'الشهادة السارية',      icon:_ic.gosi},
   {id:'chamber',    name:'شهادة الغرفة التجارية',      hint:'عضوية سارية المفعول',  icon:_ic.chamber},
   {id:'natl_addr',  name:'وثيقة العنوان الوطني',       hint:'من البريد السعودي',    icon:_ic.natl_addr},
+  {id:'iban_cert',  name:'شهادة الآيبان',              hint:'من البنك — تؤكّد الآيبان واسم صاحب الحساب', icon:_ic.iban_cert},
 ];
 const OPTIONAL_DOCS = [
   {id:'municipal', name:'رخصة البلدية / الترخيص الصناعي', hint:'إن وجد',       icon:_ic.municipal},
@@ -3144,7 +3146,7 @@ async function loadResumeData() {
 }
 
 function showResumeBanner(rv) {
-  const DOC_NAMES_R = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية'};
+  const DOC_NAMES_R = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية'};
   const SEC_NAMES_R = {general_info:'المعلومات العامة', contact_info:'بيانات التواصل', activity_info:'النشاط والخدمات'};
   const docsList = (rv.fields || []).map(f => DOC_NAMES_R[f] || f).join('، ');
   const secsList = (rv.sections || []).map(s => SEC_NAMES_R[s] || s).join('، ');
@@ -3538,6 +3540,7 @@ function normalizeExtracted(data){
     if (numId.includes(k)) { v = String(v).replace(/[^0-9]/g,''); if (!v) continue; }
     else if (dates.includes(k)) { const m = String(v).match(/\d{4}-\d{2}-\d{2}/); if (!m) continue; v = m[0]; }
     else if (nums.includes(k)) { const n = Number(String(v).replace(/[^0-9.]/g,'')); if (!isFinite(n) || n <= 0) continue; v = n; }
+    else if (k === 'iban') { v = String(v).replace(/\s+/g,'').toUpperCase(); if (!/^SA\d{22}$/.test(v)) continue; }
     if (v !== '' && v != null) out[k] = v;
   }
   // حارس: أسقط أي بيانات تعود للجهة الحكومية المُصدِرة لا للشركة مقدِّمة الطلب
@@ -3565,7 +3568,8 @@ const FIELD_AUTHORITY = {
   commercial_reg:/سجل|تجاري|commercial/i, legal_name_ar:/سجل|تجاري|commercial/i,
   legal_name_en:/سجل|تجاري|commercial/i, entity_type:/سجل|تجاري|commercial/i,
   cr_issue_date:/سجل|تجاري|commercial/i, cr_expiry_date:/سجل|تجاري|commercial/i,
-  established_date:/سجل|تجاري|commercial/i
+  established_date:/سجل|تجاري|commercial/i,
+  iban:/آيبان|ايبان|iban|بنك|bank/i, bank_name:/آيبان|ايبان|iban|بنك|bank/i, account_holder:/آيبان|ايبان|iban|بنك|bank/i
 };
 
 async function extractAllDocs() {
@@ -3670,6 +3674,7 @@ function buildExtractionPrompt(docType) {
   else if (/تأمين|gosi/i.test(d)) focus = 'PRIMARY field for this document: gosi_number.';
   else if (/غرفة|chamber/i.test(d)) focus = 'PRIMARY fields for this document: chamber, chamber_membership, chamber_expiry.';
   else if (/عنوان|وطني|address|national/i.test(d)) focus = 'PRIMARY fields for this document: address (full line), district, city, postal_code, po_box.';
+  else if (/آيبان|ايبان|iban|بنك|bank|حساب/i.test(d)) focus = 'PRIMARY fields for this document (a bank IBAN certificate "شهادة الآيبان"): iban (the Saudi IBAN — SA followed by 22 digits), bank_name (the bank name), account_holder (the account owner name).';
 
   return `You are an expert OCR + data-extraction assistant for a Saudi supplier-registration system.
 The document type is "${docType}". It may be ARABIC, ENGLISH, or BILINGUAL. Saudi official documents (Commercial Registration "السجل التجاري", ZATCA/VAT "شهادة ضريبية", GOSI "التأمينات", Chamber "الغرفة التجارية", National Address "العنوان الوطني") are usually bilingual — read BOTH languages and cross-check.
@@ -3688,6 +3693,7 @@ Rules:
 - Dates: output Gregorian as strict YYYY-MM-DD. If only a Hijri (هجري) date exists, convert it to Gregorian; also keep the raw Hijri text in established_hijri when present. If both Gregorian and Hijri are shown, use Gregorian for the date fields.
 - entity_type: normalize to EXACTLY one of: "مؤسسة فردية", "شركة ذات مسؤولية محدودة", "شركة مساهمة", "فرع شركة أجنبية" — or null.
 - address = the full national address line (building no., street, district, city). district/city/postal_code separately too if shown.
+- iban = the Saudi IBAN exactly as printed; output as "SA" followed by 22 digits with NO spaces (24 chars total). account_holder = the bank-account owner's name. bank_name = the bank's name. Take these ONLY from a bank/IBAN certificate.
 
 Return ONLY valid JSON (no markdown, no commentary):
 {
@@ -3711,6 +3717,9 @@ Return ONLY valid JSON (no markdown, no commentary):
   "address": "string|null",
   "postal_code": "string|null",
   "po_box": "string|null",
+  "iban": "string (SA + 22 digits)|null",
+  "bank_name": "string|null",
+  "account_holder": "string|null",
   "phone": "string|null",
   "fax": "string|null",
   "email": "string|null",
@@ -3792,6 +3801,9 @@ function fillFromAI(data) {
     'f-address':        data.address,
     'f-postal':         data.postal_code,
     'f-pobox':          data.po_box,
+    'f-bank-name':      data.bank_name,
+    'f-account-holder': data.account_holder,
+    'f-iban':           data.iban,
     'f-phone':          data.phone,
     'f-fax':            data.fax,
     'f-email':          data.email,
