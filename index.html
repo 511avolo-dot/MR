@@ -21350,7 +21350,7 @@ async function openRegDetail(jsonStr) {
   if (st === 'needs_revision' && r.review_notes) {
     let rv = {};
     try { rv = JSON.parse(r.review_notes); } catch(e) { rv = {general: r.review_notes}; }
-    const DOC_NAMES_REV = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية'};
+    const DOC_NAMES_REV = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية'};
     const SECTION_NAMES = {'general_info':'المعلومات العامة', 'contact_info':'بيانات التواصل', 'activity_info':'النشاط والخدمات'};
     const resumeUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/, '/')}register.html?resume=${encodeURIComponent(r.id)}${r.revision_token ? '&t=' + r.revision_token : ''}`;
     const fieldsList = (rv.fields || []).map(f => DOC_NAMES_REV[f] || f).join('، ');
@@ -21469,7 +21469,7 @@ async function openRegDetail(jsonStr) {
 
   // Documents
   const docPaths = r.doc_paths || {};
-  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
   if (Object.keys(docPaths).length) {
     // Generate signed URLs (valid 1 hour) — bucket is private
     const docEntries = await Promise.all(
@@ -21550,7 +21550,7 @@ async function openRegDetail(jsonStr) {
         <div style="margin-bottom:10px">
           <div style="font-size:12px;font-weight:600;color:#78350f;margin-bottom:6px">الوثائق:</div>
           <div style="display:flex;flex-wrap:wrap;gap:8px">
-            ${['cr:السجل التجاري','vat:شهادة الزكاة/VAT','gosi:شهادة التأمينات','chamber:الغرفة التجارية','natl_addr:العنوان الوطني','municipal:رخصة البلدية'].map(d => {
+            ${['cr:السجل التجاري','vat:شهادة الزكاة/VAT','gosi:شهادة التأمينات','chamber:الغرفة التجارية','natl_addr:العنوان الوطني','iban_cert:شهادة الآيبان','municipal:رخصة البلدية'].map(d => {
               const [id, label] = d.split(':');
               return `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid #fcd34d">
                 <input type="checkbox" class="rev-doc-cb" value="${id}"> ${label}
@@ -21875,7 +21875,7 @@ async function downloadAllDocs(reg) {
     toast('warn', 'لا توجد وثائق لتحميلها');
     return;
   }
-  const DOC_NAMES_DL = {cr:'السجل التجاري', vat:'شهادة الزكاة_VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  const DOC_NAMES_DL = {cr:'السجل التجاري', vat:'شهادة الزكاة_VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
   const supplierName = (reg.legal_name_ar || reg.id || 'مورد').replace(/[\s\/\\:*?"<>|]/g, '_');
   const docEntries = Object.entries(reg.doc_paths);
 
