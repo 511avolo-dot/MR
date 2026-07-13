@@ -2773,7 +2773,8 @@ async function loadAll(){
         offers:{}, events:[], _offerIdByKey:{} };
       offers.forEach(o=>{ const k=pa_offerKey(o); proc.supplierList.push(k);
         proc.offers[k]={ items:pa_distribute(o.total,items), total:Number(o.total)||0,
-          deliveryDays:o.delivery_days||0, paymentTerms:(o.payment_days!=null?(o.payment_days+' يوم'):'—'), quality:o.quality||null };
+          deliveryDays:o.delivery_days||0, paymentTerms:(o.payment_days!=null?(o.payment_days+' يوم'):'—'), quality:o.quality||null,
+          quotePdfKey:o.quote_pdf_key||null };
         proc._offerIdByKey[k]=o.id; });
       if(award){ let wk=null; if(award.winner_offer_id!=null){ const wo=offers.find(x=>x.id===award.winner_offer_id); if(wo) wk=pa_offerKey(wo); }
         proc.winner=wk; proc.winnerTotal=Number(award.winner_total)||0; proc.awardReason=award.award_reason||null; proc.awardedLowest=null; }
@@ -3188,10 +3189,77 @@ procWorkspace = function(r){
       + '<button class="btn btn-gold btn-sm" onclick="openOfferForm(\''+r.id+'\')">'+ic('plus',14)+' إضافة عرض مورد</button>'
       + '</div>';
   }
+  /* لوحة ملفات عروض الأسعار (PDF) — تظهر عند وجود مرفقات في التسعير/المقارنة */
+  if(r && r.proc && (r.proc.phase==='pricing' || r.proc.phase==='comparison' || r.proc.phase==='award_review')){ html += pa_quotePanel(r); }
   /* طور اعتماد أمر الشراء (سلسلة حسب القيمة) — غير معروف للمرجع فنحقنه */
   if(r && r.proc && r.proc.phase==='po_review'){ html += poReviewPanel(r); }
   return html;
 };
+
+/* ══════ عارض عروض الأسعار PDF (R2 عبر /api/portal-quote) — احترافي + جنباً إلى جنب ══════ */
+(function(){ try{ var s=document.createElement('style'); s.textContent=
+  '.modal.modal-wide{max-width:min(1200px,96vw);width:96vw}'
+ +'.paq-wrap{display:flex;gap:12px;flex-wrap:nowrap;overflow-x:auto;max-height:78vh;padding:2px}'
+ +'.paq-pane{flex:1 1 0;min-width:320px;display:flex;flex-direction:column;border:1px solid var(--line,#e2e6ee);border-radius:12px;overflow:hidden;background:#fff}'
+ +'.paq-h{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg,#f2f4f8);border-bottom:1px solid var(--line,#e2e6ee)}'
+ +'.paq-nm{font-weight:800;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+ +'.paq-tot{font-weight:700;font-size:12.5px;color:var(--gold-3,#8a6a30);white-space:nowrap}'
+ +'.paq-dl{font-size:12px;font-weight:700;color:#22375a;text-decoration:none;white-space:nowrap}'
+ +'.paq-body{flex:1;min-height:62vh;background:#525659;display:flex;align-items:center;justify-content:center}'
+ +'.paq-frame{width:100%;height:100%;min-height:62vh;border:0;background:#fff}'
+ +'.paq-load{padding:24px;text-align:center;color:#e2e6ee;font-size:13px}'
+ +'@media(max-width:720px){.paq-wrap{flex-wrap:wrap}.paq-pane{min-width:100%}}';
+  document.head.appendChild(s); }catch(e){} })();
+
+function pa_quotePanel(r){
+  var p=r.proc||{}; var list=(p.supplierList||[]).filter(function(sid){ return p.offers[sid] && p.offers[sid].quotePdfKey; });
+  if(!list.length) return '';
+  var chips=list.map(function(sid){ var nm=((SUPPLIERS[sid]||{}).n)||sid;
+    return '<button class="btn btn-ghost btn-sm" style="margin:3px" onclick="openQuoteViewer(\''+r.id+'\',[\''+encodeURIComponent(sid)+'\'])">📄 '+esc(nm)+'</button>'; }).join('');
+  var side=list.length>1 ? '<button class="btn btn-gold btn-sm" style="margin:3px" onclick="openQuoteViewer(\''+r.id+'\',null)">🗂 عرض الكل جنباً إلى جنب</button>' : '';
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">📄</span>ملفات عروض الأسعار (PDF)</div>'
+    + '<div class="muted" style="font-size:12px;margin-bottom:8px">اضغط اسم المورد لعرض ملف عرضه داخل النظام، أو قارن العروض جنباً إلى جنب.</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:2px">'+chips+' '+side+'</div></div>';
+}
+
+async function pa_sessionToken(){ try{ var s=await SB.auth.getSession(); return (s&&s.data&&s.data.session&&s.data.session.access_token)||''; }catch(e){ return ''; } }
+async function pa_uploadQuote(reqId, file){
+  var tok=await pa_sessionToken(); if(!tok) throw new Error('الجلسة غير صالحة — أعد الدخول');
+  var resp=await fetch('/api/portal-quote?request_id='+encodeURIComponent(reqId), { method:'POST', headers:{ 'Authorization':'Bearer '+tok, 'Content-Type':'application/pdf' }, body:file });
+  var j=await resp.json().catch(function(){ return {}; });
+  if(!resp.ok || !j.key) throw new Error(j.error||'تعذّر رفع ملف العرض');
+  return j.key;
+}
+async function pa_quoteBlobUrl(key){
+  var tok=await pa_sessionToken(); if(!tok) throw new Error('الجلسة');
+  var resp=await fetch('/api/portal-quote?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
+  if(!resp.ok) throw new Error('تعذّر جلب الملف');
+  return URL.createObjectURL(await resp.blob());
+}
+var _paQuoteUrls=[];
+function pa_money(n){ try{ return (Number(n)||0).toLocaleString('en-US'); }catch(e){ return String(n||0); } }
+async function openQuoteViewer(reqId, sids){
+  var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.proc){ toast('الطلب غير موجود','err'); return; }
+  var p=r.proc;
+  var keys=(sids? sids.map(function(s){ return decodeURIComponent(s); }) : (p.supplierList||[])).filter(function(sid){ return p.offers[sid] && p.offers[sid].quotePdfKey; });
+  if(!keys.length){ toast('لا يوجد ملف عرض لهذا المورد','err'); return; }
+  var panes=keys.map(function(sid,i){ var o=p.offers[sid]; var nm=((SUPPLIERS[sid]||{}).n)||sid;
+    return '<div class="paq-pane"><div class="paq-h"><div class="paq-nm">'+esc(nm)+'</div><div class="paq-tot">'+pa_money(o.total)+' ر.س</div><a class="paq-dl" id="paq-dl-'+i+'" target="_blank" rel="noopener">تنزيل</a></div>'
+      +'<div class="paq-body" id="paq-body-'+i+'"><div class="paq-load">⏳ جارٍ تحميل الملف…</div></div></div>'; }).join('');
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">📄</div><div><h3>عروض الأسعار — '+esc(r.id)+'</h3><div class="ms">'+esc(r.title||'')+' · '+keys.length+' عرض'+(keys.length>1?' — مقارنة جنباً إلى جنب':'')+'</div></div></div>'
+    +'<div class="modal-body paq-wrap">'+panes+'</div>'
+    +'<div class="modal-foot"><button class="btn btn-ghost" onclick="closeQuoteViewer()">إغلاق</button></div>';
+  try{ $('modal').classList.add('modal-wide'); }catch(e){}
+  $('overlay').classList.add('show');
+  _paQuoteUrls.forEach(function(u){ try{ URL.revokeObjectURL(u); }catch(e){} }); _paQuoteUrls=[];
+  keys.forEach(function(sid,i){ (async function(){
+    try{ var url=await pa_quoteBlobUrl(p.offers[sid].quotePdfKey); _paQuoteUrls.push(url);
+      var body=$('paq-body-'+i); if(body) body.innerHTML='<iframe class="paq-frame" src="'+url+'"></iframe>';
+      var dl=$('paq-dl-'+i); if(dl){ dl.href=url; dl.setAttribute('download','عرض-'+((SUPPLIERS[sid]||{}).n||sid)+'.pdf'); }
+    }catch(e){ var b=$('paq-body-'+i); if(b) b.innerHTML='<div class="paq-load" style="color:#ffb4ae">تعذّر تحميل الملف</div>'; }
+  })(); });
+}
+function closeQuoteViewer(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){} _paQuoteUrls.forEach(function(u){ try{ URL.revokeObjectURL(u); }catch(e){} }); _paQuoteUrls=[]; closeModal(); }
 function openOfferForm(reqId){
   var supList = Object.keys(SUPPLIERS||{}).map(function(k){ return '<option value="'+esc((SUPPLIERS[k]||{}).n||'')+'"></option>'; }).join('');
   $('modal').innerHTML = '<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('cart',22)+'</div><div><h3>إضافة عرض مورد</h3><div class="ms">الإجمالي قبل الضريبة وشروط التوريد</div></div></div>'
@@ -3201,7 +3269,8 @@ function openOfferForm(reqId){
     + '<div style="display:flex;gap:10px;margin-top:10px"><div style="flex:1"><label>مدة التوريد (يوم)</label><input class="input num" id="of-deliv" type="number" min="0" placeholder="0"></div>'
     + '<div style="flex:1"><label>مهلة السداد (يوم)</label><input class="input num" id="of-pay" type="number" min="0" placeholder="0"></div></div>'
     + '<label style="margin-top:10px">ملاحظة (اختياري)</label><input class="input" id="of-note" placeholder="ضمان / جودة / شروط">'
-    + '<div class="modal-foot"><button class="btn btn-gold" onclick="submitOffer(\''+reqId+'\')">'+ic('check',15)+' حفظ العرض</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>'
+    + '<label style="margin-top:10px">ملف عرض السعر (PDF — اختياري)</label><input class="input" id="of-pdf" type="file" accept="application/pdf" style="padding:8px">'
+    + '<div class="modal-foot"><button class="btn btn-gold" id="of-save-btn" onclick="submitOffer(\''+reqId+'\')">'+ic('check',15)+' حفظ العرض</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>'
     + '</div>';
   $('overlay').classList.add('show'); setTimeout(function(){ var e=$('of-sup'); if(e)e.focus(); },60);
 }
@@ -3213,9 +3282,19 @@ async function submitOffer(reqId){
   var note=(($('of-note')||{}).value||'').trim()||null;
   if(!sup){ toast('اسم المورد مطلوب','err'); return; }
   if(!(total>0)){ toast('الإجمالي مطلوب','err'); return; }
-  try{ await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:note}); }
-  catch(e){ return; }
-  closeModal(); toast('أُضيف العرض','ok'); await pa_after(reqId);
+  var fileEl=$('of-pdf'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file){
+    if(file.type!=='application/pdf'){ toast('ملف العرض يجب أن يكون PDF','err'); return; }
+    if(file.size>10*1024*1024){ toast('حجم ملف العرض يتجاوز 10 ميجابايت','err'); return; }
+  }
+  var btn=$('of-save-btn'); if(btn) btn.disabled=true;
+  var key=null;
+  try{
+    if(file){ key=await pa_uploadQuote(reqId,file); }
+    await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:note,p_quote_pdf_key:key});
+  }
+  catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر حفظ العرض'),'err'); return; }
+  closeModal(); toast('أُضيف العرض'+(key?' مع ملف العرض':''),'ok'); await pa_after(reqId);
 }
 
 /* مواءمة حارس الاستلام: الواجهة تطابق الخادم (can_verify_stock/أدمن فقط) — فصل مهام صحيح، لا زر يفشل */

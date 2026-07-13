@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS portal_offers (
   payment_days    INT,
   note            TEXT,
   entered_by      TEXT,
+  quote_pdf_key   TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_portal_offers_req ON portal_offers(request_id);
@@ -865,7 +866,8 @@ GRANT EXECUTE ON FUNCTION portal_pr_transition(text, text, text, date, int) TO a
 -- ═══════════════════════ 6) التسعير + التعميد (الدورة الثانية) ═══════════════════════
 
 CREATE OR REPLACE FUNCTION portal_submit_offer(p_request_id text, p_supplier text, p_total numeric,
-    p_delivery_days int DEFAULT NULL, p_quality int DEFAULT NULL, p_payment_days int DEFAULT NULL, p_note text DEFAULT NULL)
+    p_delivery_days int DEFAULT NULL, p_quality int DEFAULT NULL, p_payment_days int DEFAULT NULL,
+    p_note text DEFAULT NULL, p_quote_pdf_key text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_me text := portal_username(); v_phase text; v_id bigint;
 BEGIN
@@ -876,14 +878,17 @@ BEGIN
   IF coalesce(p_supplier,'') = '' OR coalesce(p_total,0) <= 0 THEN RAISE EXCEPTION 'بيانات العرض غير مكتملة'; END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
-  INSERT INTO portal_offers(request_id, supplier_name, total, delivery_days, quality, payment_days, note, entered_by)
-    VALUES (p_request_id, p_supplier, p_total, p_delivery_days, p_quality, p_payment_days, p_note, v_me)
+  INSERT INTO portal_offers(request_id, supplier_name, total, delivery_days, quality, payment_days, note, entered_by, quote_pdf_key)
+    VALUES (p_request_id, p_supplier, p_total, p_delivery_days, p_quality, p_payment_days, p_note, v_me,
+            nullif(trim(coalesce(p_quote_pdf_key,'')),''))
     RETURNING id INTO v_id;
   PERFORM set_config('app.portal_transition', '0', true);
 
-  PERFORM portal_audit_write(p_request_id, 'offer_added', v_me, 'portal', jsonb_build_object('supplier', p_supplier, 'total', p_total));
+  PERFORM portal_audit_write(p_request_id, 'offer_added', v_me, 'portal',
+    jsonb_build_object('supplier', p_supplier, 'total', p_total, 'has_pdf', (nullif(trim(coalesce(p_quote_pdf_key,'')),'') IS NOT NULL)));
   RETURN jsonb_build_object('ok', true, 'id', v_id);
 END $fn$;
+GRANT EXECUTE ON FUNCTION portal_submit_offer(text, text, numeric, int, int, int, text, text) TO authenticated;
 
 -- ترسية: يختار عرضاً فائزاً، يطابق مصفوفة DoA بالقيمة، ويبني سلسلة اعتماد التعميد.
 -- ═══ سلسلة اعتماد أمر الشراء: جدول + حارس + بنّاء (انظر db/portal-migrations/007-doa-po-chain.sql) ═══
