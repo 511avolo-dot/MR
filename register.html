@@ -3902,13 +3902,15 @@ async function _step1NextImpl() {
     if (filled > 0) {
       banner.className = 'autofill-banner autofill-success';
       bannerMsg.textContent = `تم تعبئة ${filled} حقلاً تلقائياً من وثائقك — يرجى المراجعة والتأكيد`;
-    } else {
+      banner.style.display = 'flex';
+    } else if (AI_AVAILABLE) {
       banner.className = 'autofill-banner autofill-manual';
-      bannerMsg.textContent = !AI_AVAILABLE
-        ? 'القراءة الذكية للوثائق غير مفعّلة حالياً (لم يُضبط مفتاح الذكاء على الخادم GEMINI_API_KEY). يرجى تعبئة البيانات يدوياً.'
-        : 'تعذّر استخراج البيانات من الوثائق تلقائياً — يرجى تعبئة بيانات المنشأة يدوياً.';
+      bannerMsg.textContent = 'تعذّر استخراج البيانات من الوثائق تلقائياً — يرجى تعبئة بيانات المنشأة يدوياً.';
+      banner.style.display = 'flex';
+    } else {
+      // الذكاء غير مفعّل على الخادم — لا نُظهر أي تنبيه تقني للمورد؛ يُكمل التعبئة يدوياً بلا رسالة مربكة.
+      banner.style.display = 'none';
     }
-    banner.style.display = 'flex';
   }
   goStep(2);
 }
@@ -4386,7 +4388,6 @@ const DICT = {
   'يرجى الانتظار — نحلل المستندات لتعبئة النموذج تلقائياً':'Please wait — we are analyzing the documents to auto-fill the form',
   'تم تحديث طلبك بنجاح وإعادة إرساله للمراجعة. سيتواصل معك فريق المشتريات قريباً.':'Your application has been updated and resubmitted for review. The procurement team will contact you soon.',
   'تعذّر استخراج البيانات من الوثائق تلقائياً — يرجى تعبئة بيانات المنشأة يدوياً.':'Could not auto-extract data from documents — please fill in the company details manually.',
-  'القراءة الذكية للوثائق غير مفعّلة حالياً (لم يُضبط مفتاح الذكاء على الخادم GEMINI_API_KEY). يرجى تعبئة البيانات يدوياً.':'Smart document reading is currently disabled (server GEMINI_API_KEY not set). Please fill in the data manually.',
   'حدث خطأ أثناء الإرسال:':'An error occurred during submission:','فشل قراءة الملف':'Failed to read file','فشل استدعاء الذكاء الاصطناعي':'AI request failed','تعذّر الاتصال':'Connection failed',
   // Validation
   'يرجى رفع الوثائق الإلزامية:':'Please upload the mandatory documents:','يرجى رفع الوثائق المطلوب تعديلها:':'Please upload the documents requested for revision:',
