@@ -110,7 +110,7 @@ export async function onRequestGet({ request, env }) {
     const r = await fetch(`${base}/rest/v1/rpc/portal_can_see_request`, {
       method: 'POST',
       headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_request_id: reqId }),
+      body: JSON.stringify({ p_id: reqId }),
     });
     if (r.ok && (await r.json()) === false) return new Response('forbidden', { status: 403 });
   } catch (_) { /* best-effort */ }
