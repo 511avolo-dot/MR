@@ -8090,6 +8090,10 @@ async function _loadSupplierRegLink(sup) {
         ['العنوان', reg.address], ['الرمز البريدي', reg.postal_code], ['ص.ب', reg.po_box],
         ['هاتف المنشأة', reg.phone], ['الفاكس', reg.fax], ['البريد الإلكتروني', reg.email], ['الموقع الإلكتروني', reg.website],
       ]),
+      rsect('البيانات البنكية', [
+        ['اسم البنك', reg.bank_name], ['اسم صاحب الحساب', reg.account_holder],
+        ['رقم الآيبان (IBAN)', reg.iban], ['رقم الحساب', reg.account_number],
+      ]),
       rsect('التواصل', [
         ['الشخص الرئيسي', reg.contact_name], ['منصبه', reg.contact_title], ['جواله', reg.contact_mobile], ['بريده الإلكتروني', reg.contact_email],
         ['مسؤول المبيعات', reg.sales_name], ['جوال المبيعات', reg.sales_mobile], ['مسؤول المالية', reg.finance_name], ['جوال المالية', reg.finance_mobile],
@@ -12877,6 +12881,10 @@ CREATE TABLE IF NOT EXISTS proc_supplier_registrations (
   vat_number         TEXT,
   zakat_number       TEXT,
   gosi_number        TEXT,
+  bank_name          TEXT,
+  account_holder     TEXT,
+  account_number     TEXT,
+  iban               TEXT,
   address            TEXT,
   po_box             TEXT,
   postal_code        TEXT,
