@@ -4168,6 +4168,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <div class="detail-meta-row"><span class="detail-meta-label">البريد</span><span class="detail-meta-value" id="sd-email">—</span></div>
         <div class="detail-meta-row"><span class="detail-meta-label">السجل التجاري</span><span class="detail-meta-value" id="sd-cr">—</span></div>
         <div class="detail-meta-row"><span class="detail-meta-label">الرقم الضريبي</span><span class="detail-meta-value" id="sd-tax">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">اسم البنك</span><span class="detail-meta-value" id="sd-bank-name">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">اسم صاحب الحساب</span><span class="detail-meta-value" id="sd-account-holder">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">رقم الآيبان</span><span class="detail-meta-value" id="sd-iban" dir="ltr" style="unicode-bidi:isolate;text-align:right">—</span></div>
+        <div class="detail-meta-row"><span class="detail-meta-label">رقم الحساب</span><span class="detail-meta-value" id="sd-account-number" dir="ltr" style="unicode-bidi:isolate;text-align:right">—</span></div>
       </div>
       <div id="sd-reg-extra"></div>
       <div class="chart-header" style="margin-bottom:10px">
@@ -4264,6 +4268,26 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         <div class="form-field">
           <label class="form-label">الرقم الضريبي</label>
           <input type="text" class="form-input" id="sf-tax" placeholder="3XXXXXXXXX0003" dir="ltr">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">اسم البنك</label>
+          <input type="text" class="form-input" id="sf-bank-name" placeholder="مثال: مصرف الراجحي">
+        </div>
+        <div class="form-field">
+          <label class="form-label">اسم صاحب الحساب</label>
+          <input type="text" class="form-input" id="sf-account-holder" placeholder="يُفضّل مطابقته للاسم القانوني">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label class="form-label">رقم الحساب</label>
+          <input type="text" class="form-input" id="sf-account-number" dir="ltr">
+        </div>
+        <div class="form-field">
+          <label class="form-label">رقم الآيبان (IBAN)</label>
+          <input type="text" class="form-input" id="sf-iban" placeholder="SA0000000000000000000000" dir="ltr" maxlength="34">
         </div>
       </div>
       <div class="form-row full">
@@ -6968,13 +6992,16 @@ async function exportSupabaseCSV(table){
       name: s.name, specialty: s.specialty||'', contact: s.contact||'',
       phone: s.phone||'', mobile: s.mobile||'', email: s.email||'',
       address: s.address||'', commercial_reg: s.commercial_reg||'',
-      tax_id: s.tax_id||'', notes: s.notes||''
+      tax_id: s.tax_id||'', bank_name: s.bank_name||'', account_holder: s.account_holder||'',
+      account_number: s.account_number||'', iban: s.iban||'', notes: s.notes||''
     }));
     cols = [
       {key:'id',label:'id'},{key:'name',label:'name'},{key:'specialty',label:'specialty'},
       {key:'contact',label:'contact'},{key:'phone',label:'phone'},{key:'mobile',label:'mobile'},
       {key:'email',label:'email'},{key:'address',label:'address'},
       {key:'commercial_reg',label:'commercial_reg'},{key:'tax_id',label:'tax_id'},
+      {key:'bank_name',label:'bank_name'},{key:'account_holder',label:'account_holder'},
+      {key:'account_number',label:'account_number'},{key:'iban',label:'iban'},
       {key:'notes',label:'notes'}
     ];
     filename = 'proc_suppliers.csv';
@@ -8018,6 +8045,10 @@ function openSupplierDetail(name){
   document.getElementById('sd-email').textContent = sup?.email||'—';
   document.getElementById('sd-cr').textContent = sup?.commercial_reg||'—';
   document.getElementById('sd-tax').textContent = sup?.tax_id||'—';
+  document.getElementById('sd-bank-name').textContent = sup?.bank_name||'—';
+  document.getElementById('sd-account-holder').textContent = sup?.account_holder||'—';
+  document.getElementById('sd-iban').textContent = sup?.iban||'—';
+  document.getElementById('sd-account-number').textContent = sup?.account_number||'—';
   // History records for this supplier
   const records = STATE.history.filter(h=>h.supplier===name);
   const total = records.reduce((s,h)=>s+(Number(h.price)||0),0);
@@ -8190,7 +8221,7 @@ function openAddSupplier(){
   document.getElementById('sf-title').textContent = 'مورد جديد';
   document.getElementById('sf-save-text').textContent = 'حفظ المورد';
   // Clear form
-  ['sf-name','sf-specialty','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-notes'].forEach(id=>{
+  ['sf-name','sf-specialty','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-bank-name','sf-account-holder','sf-account-number','sf-iban','sf-notes'].forEach(id=>{
     document.getElementById(id).value='';
   });
   // Populate specialties datalist
@@ -8216,6 +8247,10 @@ function openEditSupplier(supplier){
   document.getElementById('sf-address').value = supplier.address||'';
   document.getElementById('sf-cr').value = supplier.commercial_reg||'';
   document.getElementById('sf-tax').value = supplier.tax_id||'';
+  document.getElementById('sf-bank-name').value = supplier.bank_name||'';
+  document.getElementById('sf-account-holder').value = supplier.account_holder||'';
+  document.getElementById('sf-account-number').value = supplier.account_number||'';
+  document.getElementById('sf-iban').value = supplier.iban||'';
   document.getElementById('sf-notes').value = supplier.notes||'';
   // Populate specialties datalist
   const dl = document.getElementById('specialties-list');
@@ -8258,6 +8293,10 @@ async function saveSupplierForm(){
   const address = document.getElementById('sf-address').value.trim();
   const commercial_reg = document.getElementById('sf-cr').value.trim();
   const tax_id = document.getElementById('sf-tax').value.trim();
+  const bank_name = document.getElementById('sf-bank-name').value.trim();
+  const account_holder = document.getElementById('sf-account-holder').value.trim();
+  const account_number = document.getElementById('sf-account-number').value.trim();
+  const iban = document.getElementById('sf-iban').value.replace(/\s+/g,'').toUpperCase();
   const notes = document.getElementById('sf-notes').value.trim();
 
   if(!name){ toast('error','بيانات ناقصة','اسم المورد مطلوب'); return }
@@ -8270,9 +8309,10 @@ async function saveSupplierForm(){
       name: sup.name, specialty: sup.specialty, contact: sup.contact,
       phone: sup.phone, mobile: sup.mobile, email: sup.email,
       address: sup.address, commercial_reg: sup.commercial_reg,
-      tax_id: sup.tax_id, notes: sup.notes
+      tax_id: sup.tax_id, bank_name: sup.bank_name, account_holder: sup.account_holder,
+      account_number: sup.account_number, iban: sup.iban, notes: sup.notes
     };
-    const updates = {name, specialty, contact, phone, mobile, email, address, commercial_reg, tax_id, notes};
+    const updates = {name, specialty, contact, phone, mobile, email, address, commercial_reg, tax_id, bank_name, account_holder, account_number, iban, notes};
     Object.assign(sup, updates);
     // If name changed and there are history records, propagate
     if(oldName !== name){
@@ -8307,7 +8347,7 @@ async function saveSupplierForm(){
     const id = 'sup_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
     const newSup = {
       id, name, specialty, contact, phone, mobile, email, address,
-      commercial_reg, tax_id, notes,
+      commercial_reg, tax_id, bank_name, account_holder, account_number, iban, notes,
       offers_count: 0,
       _user: true
     };
@@ -9790,6 +9830,10 @@ async function buildSupplierReport(supplierName){
           ${supplier.specialty ? `<div class="print-info-item"><div class="print-info-label">التخصص</div><div class="print-info-value">${escapeHtml(supplier.specialty)}</div></div>` : ''}
           ${supplier.tax_id && supplier.tax_id !== '—' ? `<div class="print-info-item"><div class="print-info-label">الرقم الضريبي</div><div class="print-info-value" dir="ltr">${escapeHtml(supplier.tax_id)}</div></div>` : ''}
           ${supplier.commercial_reg && supplier.commercial_reg !== '—' ? `<div class="print-info-item"><div class="print-info-label">السجل التجاري</div><div class="print-info-value" dir="ltr">${escapeHtml(supplier.commercial_reg)}</div></div>` : ''}
+          ${supplier.bank_name && supplier.bank_name !== '—' ? `<div class="print-info-item"><div class="print-info-label">اسم البنك</div><div class="print-info-value">${escapeHtml(supplier.bank_name)}</div></div>` : ''}
+          ${supplier.account_holder && supplier.account_holder !== '—' ? `<div class="print-info-item"><div class="print-info-label">اسم صاحب الحساب</div><div class="print-info-value">${escapeHtml(supplier.account_holder)}</div></div>` : ''}
+          ${supplier.iban && supplier.iban !== '—' ? `<div class="print-info-item"><div class="print-info-label">الآيبان</div><div class="print-info-value" dir="ltr">${escapeHtml(supplier.iban)}</div></div>` : ''}
+          ${supplier.account_number && supplier.account_number !== '—' ? `<div class="print-info-item"><div class="print-info-label">رقم الحساب</div><div class="print-info-value" dir="ltr">${escapeHtml(supplier.account_number)}</div></div>` : ''}
         </div>
       </div>
 
@@ -12657,6 +12701,10 @@ CREATE TABLE IF NOT EXISTS proc_suppliers (
   commercial_reg TEXT,
   tax_id TEXT,
   notes TEXT,
+  bank_name TEXT,
+  account_holder TEXT,
+  account_number TEXT,
+  iban TEXT,
   created_by TEXT,
   updated_by TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -12664,6 +12712,10 @@ CREATE TABLE IF NOT EXISTS proc_suppliers (
 );
 ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS created_by TEXT;
 ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS updated_by TEXT;
+ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS bank_name TEXT;
+ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS account_holder TEXT;
+ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS account_number TEXT;
+ALTER TABLE proc_suppliers ADD COLUMN IF NOT EXISTS iban TEXT;
 
 -- 3) جدول سجل الأسعار
 CREATE TABLE IF NOT EXISTS proc_history (
@@ -13109,6 +13161,8 @@ window.CLOUD = {
         contact: sup.contact||null, phone: sup.phone||null, mobile: sup.mobile||null,
         email: sup.email||null, address: sup.address||null,
         commercial_reg: sup.commercial_reg||null, tax_id: sup.tax_id||null,
+        bank_name: sup.bank_name||null, account_holder: sup.account_holder||null,
+        account_number: sup.account_number||null, iban: sup.iban||null,
         notes: sup.notes||null, updated_at: new Date().toISOString(),
         created_by: currentUser, updated_by: currentUser
       };
@@ -13124,6 +13178,8 @@ window.CLOUD = {
         contact: sup.contact||null, phone: sup.phone||null, mobile: sup.mobile||null,
         email: sup.email||null, address: sup.address||null,
         commercial_reg: sup.commercial_reg||null, tax_id: sup.tax_id||null,
+        bank_name: sup.bank_name||null, account_holder: sup.account_holder||null,
+        account_number: sup.account_number||null, iban: sup.iban||null,
         notes: sup.notes||null, updated_at: new Date().toISOString(),
         updated_by: currentUser
       };
@@ -13247,6 +13303,8 @@ window.CLOUD = {
         contact: s.contact||null, phone: s.phone||null, mobile: s.mobile||null,
         email: s.email||null, address: s.address||null,
         commercial_reg: s.commercial_reg||null, tax_id: s.tax_id||null,
+        bank_name: s.bank_name||null, account_holder: s.account_holder||null,
+        account_number: s.account_number||null, iban: s.iban||null,
         notes: s.notes||null, updated_at: new Date().toISOString()
       }));
       // Deduplicate by name (since suppliers.name is UNIQUE in DB)
@@ -15337,7 +15395,10 @@ function init(){
       {key:'contact',label:'جهة الاتصال'},{key:'phone',label:'الهاتف'},
       {key:'mobile',label:'الجوال'},{key:'email',label:'البريد'},
       {key:'address',label:'العنوان'},{key:'commercial_reg',label:'السجل التجاري'},
-      {key:'tax_id',label:'الرقم الضريبي'},{key:'offers_count',label:'عدد العروض'}
+      {key:'tax_id',label:'الرقم الضريبي'},
+      {key:'bank_name',label:'اسم البنك'},{key:'account_holder',label:'اسم صاحب الحساب'},
+      {key:'account_number',label:'رقم الحساب'},{key:'iban',label:'الآيبان'},
+      {key:'offers_count',label:'عدد العروض'}
     ], {title:'دليل الموردين', sheetName:'الموردون'});
   });
   document.getElementById('sf-save').addEventListener('click',saveSupplierForm);
@@ -21680,8 +21741,21 @@ async function approveRegistration(reg) {
     let suppId = null, alreadyExisted = false;
     if (reg.commercial_reg) {
       const {data: existing} = await CLOUD.client.from('proc_suppliers')
-        .select('id').eq('commercial_reg', reg.commercial_reg).maybeSingle();
-      if (existing && existing.id) { suppId = existing.id; alreadyExisted = true; }
+        .select('id,bank_name,account_holder,account_number,iban').eq('commercial_reg', reg.commercial_reg).maybeSingle();
+      if (existing && existing.id) {
+        suppId = existing.id; alreadyExisted = true;
+        // fill-if-empty: انسخ البنكية من الطلب إلى المورد القائم للحقول الفارغة فقط (لا مسح للقائم)
+        const bankFill = {};
+        if (!existing.bank_name      && reg.bank_name)      bankFill.bank_name      = reg.bank_name;
+        if (!existing.account_holder && reg.account_holder) bankFill.account_holder = reg.account_holder;
+        if (!existing.account_number && reg.account_number) bankFill.account_number = reg.account_number;
+        if (!existing.iban           && reg.iban)           bankFill.iban           = reg.iban;
+        if (Object.keys(bankFill).length) {
+          bankFill.updated_by = STATE.currentUser?.username || null;
+          bankFill.updated_at = new Date().toISOString();
+          await CLOUD.client.from('proc_suppliers').update(bankFill).eq('id', suppId);
+        }
+      }
     }
     if (!suppId) {
       // Create supplier in proc_suppliers
@@ -21697,6 +21771,10 @@ async function approveRegistration(reg) {
         address:        reg.address,
         commercial_reg: reg.commercial_reg,
         tax_id:         reg.vat_number || reg.zakat_number,
+        bank_name:      reg.bank_name || null,
+        account_holder: reg.account_holder || null,
+        account_number: reg.account_number || null,
+        iban:           reg.iban || null,
         notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
         created_by:     STATE.currentUser?.username || null,
         updated_by:     STATE.currentUser?.username || null,
