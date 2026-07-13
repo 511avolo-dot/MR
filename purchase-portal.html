@@ -3189,8 +3189,10 @@ procWorkspace = function(r){
       + '<button class="btn btn-gold btn-sm" onclick="openOfferForm(\''+r.id+'\')">'+ic('plus',14)+' إضافة عرض مورد</button>'
       + '</div>';
   }
-  /* لوحة ملفات عروض الأسعار (PDF) — تظهر عند وجود مرفقات في التسعير/المقارنة */
-  if(r && r.proc && (r.proc.phase==='pricing' || r.proc.phase==='comparison' || r.proc.phase==='award_review')){ html += pa_quotePanel(r); }
+  /* لوحة ملفات عروض الأسعار (PDF) — تظهر في كل الأطوار عند وجود مرفقات:
+     التسعير/المقارنة، مراجعة التعميد، اعتماد أمر الشراء، مراجعة الصرف (المالية)، وحتى الأرشيف بعد الإقفال.
+     (pa_quotePanel يرجع '' إن لا مرفقات، فآمن في أي طور.) */
+  if(r && r.proc){ html += pa_quotePanel(r); }
   /* طور اعتماد أمر الشراء (سلسلة حسب القيمة) — غير معروف للمرجع فنحقنه */
   if(r && r.proc && r.proc.phase==='po_review'){ html += poReviewPanel(r); }
   return html;
