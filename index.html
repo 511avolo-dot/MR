@@ -21440,6 +21440,12 @@ async function openRegDetail(jsonStr) {
       ['البريد الإلكتروني', r.email],
       ['الموقع الإلكتروني', r.website],
     ]),
+    sect('البيانات البنكية', [
+      ['اسم البنك', r.bank_name],
+      ['اسم صاحب الحساب', r.account_holder],
+      ['رقم الآيبان (IBAN)', r.iban],
+      ['رقم الحساب', r.account_number],
+    ]),
     sect('التواصل', [
       ['الشخص الرئيسي', r.contact_name],
       ['منصبه', r.contact_title],
