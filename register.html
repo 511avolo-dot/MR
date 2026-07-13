@@ -2476,7 +2476,28 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
       </div>
 
       <hr class="section-sep">
-      <div class="section-label">العنوان وبيانات التواصل</div>
+      <div class="section-label">البيانات البنكية</div>
+      <div class="form-row cols-3">
+        <div class="field">
+          <label>اسم البنك</label>
+          <input type="text" id="f-bank-name" placeholder="مثال: مصرف الراجحي">
+        </div>
+        <div class="field">
+          <label>اسم صاحب الحساب</label>
+          <input type="text" id="f-account-holder" placeholder="يُفضّل مطابقته للاسم القانوني">
+        </div>
+        <div class="field">
+          <label>رقم الحساب</label>
+          <input type="text" id="f-account-number" dir="ltr">
+        </div>
+      </div>
+      <div class="form-row col-1">
+        <div class="field">
+          <label>رقم الآيبان (IBAN)</label>
+          <input type="text" id="f-iban" dir="ltr" placeholder="SA0000000000000000000000" maxlength="34" oninput="ibanCheck()">
+          <div id="f-iban-hint" style="display:none;font-size:11.5px;margin-top:5px;color:#b4453f">الآيبان السعودي يبدأ بـ SA ويتكوّن من 24 خانة (SA + 22 رقماً).</div>
+        </div>
+      </div>
       <div class="form-row col-1">
         <div class="field">
           <label>العنوان الوطني (المدينة - الحي - الشارع - رقم المبنى) <span class="req">*</span></label>
@@ -3173,6 +3194,10 @@ function prefillForm(data) {
   setVal('f-vat', data.vat_number);
   setVal('f-zakat', data.zakat_number);
   setVal('f-gosi', data.gosi_number);
+  setVal('f-bank-name', data.bank_name);
+  setVal('f-account-holder', data.account_holder);
+  setVal('f-account-number', data.account_number);
+  setVal('f-iban', data.iban);
   setVal('f-address', data.address);
   setVal('f-pobox', data.po_box);
   setVal('f-postal', data.postal_code);
@@ -3960,6 +3985,13 @@ function renderSummary() {
 /* ════════════════════════════════════
    SUBMIT
    ════════════════════════════════════ */
+function ibanCheck(){
+  var el=document.getElementById('f-iban'), hint=document.getElementById('f-iban-hint'); if(!el) return;
+  var v=(el.value||'').replace(/\s+/g,'').toUpperCase();
+  var bad = v.length>0 && !/^SA\d{22}$/.test(v);
+  if(hint) hint.style.display = bad ? 'block' : 'none';
+  el.style.borderColor = bad ? '#b4453f' : '';
+}
 async function submitForm() {
   // Validate compliance
   const chks = document.querySelectorAll('.comp-chk');
@@ -3972,6 +4004,12 @@ async function submitForm() {
   if (!repName)  { toast('warn','يرجى إدخال اسم ممثل المنشأة المفوض بالتوقيع'); return; }
   if (!repTitle) { toast('warn','يرجى إدخال منصب ممثل المنشأة'); return; }
   if (!repId)    { toast('warn','يرجى إدخال رقم هوية / إقامة ممثل المنشأة'); return; }
+
+  // البيانات البنكية اختيارية، لكن إن أُدخل الآيبان فيجب أن يكون سعودياً صحيحاً (SA + 22 رقماً)
+  const ibanRaw = (document.getElementById('f-iban')?.value || '').replace(/\s+/g,'').toUpperCase();
+  if (ibanRaw && !/^SA\d{22}$/.test(ibanRaw)) {
+    toast('warn','رقم الآيبان غير صحيح — يجب أن يبدأ بـ SA ويتكوّن من 24 خانة (SA + 22 رقماً)'); return;
+  }
 
   // امنع إرسال مستند منتهي الصلاحية (تاريخ انتهاء في الماضي)
   if (!_validateExpiryDates()) return;
@@ -4096,6 +4134,11 @@ async function submitForm() {
       vat_number:         getVal('f-vat'),
       zakat_number:       getVal('f-zakat'),
       gosi_number:        getVal('f-gosi'),
+      // البيانات البنكية
+      bank_name:          getVal('f-bank-name'),
+      account_holder:     getVal('f-account-holder') || getVal('f-legal-ar'),
+      account_number:     getVal('f-account-number'),
+      iban:               (getVal('f-iban') || '').replace(/\s+/g, '').toUpperCase(),
       address:            getVal('f-address'),
       po_box:             getVal('f-pobox'),
       postal_code:        getVal('f-postal'),
