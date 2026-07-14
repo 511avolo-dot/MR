@@ -2655,7 +2655,7 @@ async function loadAll(){
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2668,6 +2668,7 @@ async function loadAll(){
     SB.from('portal_approvals').select('*').order('seq'),
     SB.from('portal_offers').select('*').order('id'),
     SB.from('portal_offer_items').select('*'),   /* أسعار البنود لكل مورد (هجرة 022) — قد يفشل قبل تطبيقها فنتحمّله */
+    SB.from('portal_award_lines').select('*'),    /* بنود الترسية المجزّأة (هجرة 024) — يُتحمَّل غيابه */
     SB.from('portal_award').select('*'),
     SB.from('portal_award_approvals').select('*').order('seq'),
     SB.from('portal_payments').select('*').order('id'),
@@ -2677,6 +2678,9 @@ async function loadAll(){
   ]);
   /* خريطة أسعار البنود: offer_id → { item_seq: unit_price }. تتحمّل غياب الجدول (قبل الهجرة 022). */
   const oiByOffer={}; if(oiR && !oiR.error){ (oiR.data||[]).forEach(x=>{ (oiByOffer[x.offer_id]=oiByOffer[x.offer_id]||{})[x.item_seq]=Number(x.unit_price)||0; }); }
+  /* بنود الترسية المجزّأة: request_id → [{seq, offerId, supplierName, qty, unitPrice, lineTotal}] (هجرة 024). */
+  const alByReq={}; if(alR && !alR.error){ (alR.data||[]).forEach(x=>{ (alByReq[x.request_id]=alByReq[x.request_id]||[]).push(
+    {seq:x.item_seq, offerId:x.offer_id, supplierName:x.supplier_name, qty:Number(x.qty)||0, unitPrice:Number(x.unit_price)||0, lineTotal:Number(x.line_total)||0}); }); }
 
   /* تشخيص: سجّل أي خطأ استعلام في الـConsole (يكشف جدولاً ناقصاً أو حجب RLS أو صلاحية) */
   var _paQ={portal_users:uR,portal_departments:dR,portal_jobs:jR,portal_doa:doaR,portal_workflows:wfR,portal_suppliers:supR,portal_settings:setR,portal_requests:reqR,portal_request_items:itR,portal_approvals:apR,portal_offers:ofR,portal_award:awR,portal_award_approvals:aaR,portal_payments:payR,portal_receipts:rcR,portal_audit:auR,portal_po_approvals:poR};
@@ -2799,6 +2803,19 @@ async function loadAll(){
       /* الطور يُشتقّ من activePayments (يُقصي المرفوض/المُعاد)، أمّا العرض فمن كامل payments
          كي تظهر بطاقة الصرف المُعاد/المرفوض + مهمتها + سبب الإرجاع في المخطّط الزمني (انحدار مُصلَح). */
       if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
+      /* ── الترسية المجزّأة (النموذج أ): بنود الترسية + أنصبة الموردين + دفعة كل مورد ── */
+      const aLines=alByReq[r.id]||[]; proc.isSplit=aLines.length>0;
+      if(proc.isSplit){
+        proc.awardLines=aLines.slice().sort((a,b)=>(a.seq||0)-(b.seq||0));
+        const oidToSid={}; offers.forEach(o=>{ oidToSid[o.id]=pa_offerKey(o); });
+        const sliceMap={};
+        aLines.forEach(l=>{ const s=sliceMap[l.offerId]=sliceMap[l.offerId]||{offerId:l.offerId, sid:oidToSid[l.offerId], supplierName:l.supplierName, sliceTotal:0, seqs:[]};
+          s.sliceTotal+=l.lineTotal; s.seqs.push(l.seq); });
+        proc.slices=Object.keys(sliceMap).map(k=>{ const s=sliceMap[k]; const sid=s.sid;
+          const sup=SUPPLIERS[sid]||{}; s.iban=sup.iban||'';
+          const pay=payments.filter(p=>p.award_offer_id===s.offerId).slice(-1)[0];
+          s.payment=pay?pa_mapPayment(pay):null; return s; });
+      }
       const anyRecv=items.some(it=>it.received>0);
       if(receipts.length||anyRecv||phase==='receipt'||phase==='closed'){
         const complete=items.length>0 && items.every(it=>it.received>=it.qty);
@@ -3103,7 +3120,10 @@ async function confirmReceive(id){
 }
 /* عرض مستندات الصرف/الاستلام: نلحق أزرار «عرض المستند» بلوحتَي الصرف والاستلام (المجمّدتان) عبر تغليف. */
 var _pa_refPaymentPreview = (typeof paymentPreview==='function')?paymentPreview:null;
-if(_pa_refPaymentPreview){ paymentPreview=function(r){ var html=_pa_refPaymentPreview(r);
+if(_pa_refPaymentPreview){ paymentPreview=function(r){
+  /* الترسية المجزّأة: لوحة صرف لكل مورد بدل عرض الصرف المفرد */
+  if(r&&r.proc&&r.proc.isSplit){ return pa_splitPaymentPanel(r); }
+  var html=_pa_refPaymentPreview(r);
   var pk=r&&r.proc&&r.proc.payment&&r.proc.payment.proofKey;
   if(pk){ html+='<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">📄</span>محضر/سند الصرف</div>'
     +'<div class="muted" style="font-size:12px;margin-bottom:8px">سند إثبات تنفيذ الصرف (تحويل/قبض) — يُعرض داخل النظام.</div>'
@@ -3374,6 +3394,94 @@ function pa_splitMap(r){ var p=r.proc; var m=_paSplit[r.id]=_paSplit[r.id]||{};
 function pa_splitTotal(r){ var p=r.proc,m=_paSplit[r.id]||{},s=0; r.items.forEach(function(it,i){ var sid=m[it.seq]; var v=sid&&p.offers[sid]?p.offers[sid].items[i]:null; if(v!=null) s+=(it.qty||0)*v; }); return s; }
 function pa_awardCell(reqId,seq,sid){ (_paSplit[reqId]=_paSplit[reqId]||{})[seq]=sid; try{ openDetail(reqId,true); }catch(e){ render(); } }
 function pa_splitReset(reqId){ delete _paSplit[reqId]; try{ openDetail(reqId,true); }catch(e){ render(); } }
+/* عدد الموردين في الاختيار الحالي (لإظهار زر التعميد المجزّأ فقط عند تعدّدهم فعلاً) */
+function pa_splitSuppliers(r){ var m=_paSplit[r.id]||{}; var set={}; (r.items||[]).forEach(function(it){ if(m[it.seq]) set[m[it.seq]]=1; }); return Object.keys(set); }
+/* تعميد مجزّأ: يرسل خريطة بند→عرض إلى portal_award_split (النموذج أ) */
+async function awardSplit(reqId){
+  var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.proc){ return; }
+  var m=_paSplit[reqId]||{}; var p=r.proc; var lines=[]; var missing=false;
+  (r.items||[]).forEach(function(it){ var sid=m[it.seq]; var oid=sid&&p._offerIdByKey?p._offerIdByKey[sid]:null;
+    if(oid==null){ missing=true; return; } lines.push({seq:it.seq, offer_id:oid}); });
+  if(missing){ toast('اختر مورداً لكل بند أولاً','err'); return; }
+  var sups=pa_splitSuppliers(r);
+  if(sups.length<2){ toast('التعميد المجزّأ يتطلّب موردين مختلفين على الأقل — أو استخدم «تعميد» مورد واحد','err'); return; }
+  if(!confirm('تعميد مجزّأ: '+sups.length+' موردين حسب اختيارك للبنود. سيبدأ اعتماد التعميد بالقيمة الإجمالية. متابعة؟')) return;
+  try{ await pa_rpc('portal_award_split',{p_request_id:reqId,p_lines:lines,p_reason:null}); }catch(e){ return; }
+  toast('بدأ اعتماد التعميد المجزّأ ('+sups.length+' موردين) ✦','ok'); pa_notify('award',reqId,'pending'); await pa_after(reqId);
+}
+
+/* ══════ لوحة الصرف المجزّأ (النموذج أ): دفعة مستقلة لكل مورد بآيبانه ══════ */
+function pa_vat(){ return (PSET&&PSET.vat!=null)?Number(PSET.vat):15; }
+function pa_sliceMax(t){ return Math.round((Number(t)||0)*(1+pa_vat()/100)); }
+function pa_splitPaymentPanel(r){
+  var p=r.proc; var slices=p.slices||[]; var canDisb=!!((USERS[ME]||{}).perms||{}).can_disburse||isAdmin();
+  var canReq=canDisb || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq) || isAdmin();
+  var done=slices.filter(function(s){ return s.payment&&s.payment.status==='disbursed'; }).length;
+  var head='<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>الصرف المجزّأ حسب الموردين <span class="muted" style="font-weight:400;font-size:12px">('+done+' من '+slices.length+' مورد)</span></div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">لكل مورد فائز دفعة مستقلة بآيبانه، بسقف نصيبه شاملاً الضريبة. ينتقل للاستلام بعد صرف كل الموردين.</div>';
+  var cards=slices.map(function(s){
+    var pay=s.payment; var st=pay?pay.status:null; var mx=pa_sliceMax(s.sliceTotal);
+    var badge = st==='disbursed'?'<span class="badge ok">صُرف</span>' : st==='approved_pay'?'<span class="badge gold">مُعتمَد — بانتظار التنفيذ</span>' : (st==='pending'||st==='pending_pay')?'<span class="badge">بانتظار الاعتماد</span>' : (st==='returned'||st==='rejected')?'<span class="chip" style="color:var(--danger)">مُعاد/مرفوض — أعِد الإصدار</span>' : '<span class="chip">لم يُصرف بعد</span>';
+    var acts='';
+    if(!pay || st==='returned' || st==='rejected'){ if(canReq) acts='<button class="btn btn-gold btn-sm" onclick="pa_issueSplitPayment(\''+r.id+'\','+s.offerId+')">'+ic('money',13)+' إصدار صرف</button>'; }
+    else if(st==='pending'||st==='pending_pay'){ if(canDisb) acts='<button class="btn btn-gold btn-sm" onclick="pa_paymentApproveId(\''+r.id+'\','+pay._id+')">'+ic('check',13)+' اعتماد الصرف</button>'; else acts='<span class="chip">'+ic('clock',12)+' بانتظار المالية</span>'; }
+    else if(st==='approved_pay'){ if(canDisb) acts='<button class="btn btn-gold btn-sm" onclick="pa_disburseId(\''+r.id+'\','+pay._id+')">'+ic('check',13)+' تنفيذ الصرف</button>'; }
+    else if(st==='disbursed'){ var pk=pay.proofKey; acts=(pk?'<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pk)+'\')">📄 سند الصرف</button>':'<span class="chip" style="color:var(--ok)">'+ic('check',12)+' تمّ الصرف</span>'); }
+    return '<div style="border:1px solid var(--line,#e2e6ee);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+      +'<div><div style="font-weight:800">'+esc(s.supplierName||s.sid)+'</div>'
+      +'<div class="muted" style="font-size:11.5px">نصيبه: '+money(s.sliceTotal)+' · بالضريبة: <b>'+money(mx)+'</b>'+(s.iban?(' · آيبان: <span dir="ltr" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">'+esc(s.iban)+'</span>'):' · <span style="color:var(--danger)">لا آيبان مسجّل</span>')+'</div></div>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+badge+acts+'</div></div></div>';
+  }).join('');
+  return head+cards+'</div>';
+}
+async function pa_issueSplitPayment(reqId, offerId){
+  var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.proc){ return; }
+  var s=(r.proc.slices||[]).find(function(x){ return x.offerId===offerId; }); if(!s){ toast('المورد غير موجود','err'); return; }
+  var mx=pa_sliceMax(s.sliceTotal);
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('money',22)+'</div><div><h3>إصدار صرف — '+esc(s.supplierName||'')+'</h3><div class="ms">دفعة مستقلة بآيبان المورد (بسقف نصيبه شاملاً الضريبة)</div></div></div>'
+    +'<div class="modal-body">'
+    +'<div class="mini-req"><div class="r"><span class="l">نصيب المورد (قبل الضريبة)</span><b>'+money(s.sliceTotal)+'</b></div><div class="r"><span class="l">السقف شامل الضريبة</span><b>'+money(mx)+'</b></div></div>'
+    +'<label style="margin-top:8px">المبلغ (ر.س، شامل الضريبة)</label><input class="input num" id="sp-amt" type="number" min="1" value="'+mx+'">'
+    +'<label style="margin-top:10px">اسم صاحب الحساب</label><input class="input" id="sp-acc" value="'+esc(s.supplierName||'')+'">'
+    +'<label style="margin-top:10px">آيبان المورد (SA+22)</label><input class="input" id="sp-iban" dir="ltr" placeholder="SA.." value="'+esc(s.iban||'')+'">'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="sp-btn" onclick="pa_confirmSplitPayment(\''+reqId+'\','+offerId+')">'+ic('check',15)+' إصدار الصرف</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_confirmSplitPayment(reqId, offerId){
+  var amt=Number(($('sp-amt')||{}).value||0);
+  var acc=(($('sp-acc')||{}).value||'').trim();
+  var iban=(($('sp-iban')||{}).value||'').replace(/\s+/g,'').toUpperCase();
+  if(!(amt>0)){ toast('المبلغ مطلوب','err'); return; }
+  if(!/^SA\d{22}$/.test(iban)){ toast('آيبان غير صحيح — SA + 22 رقماً','err'); return; }
+  if(!acc){ toast('اسم صاحب الحساب مطلوب','err'); return; }
+  var btn=$('sp-btn'); if(btn) btn.disabled=true;
+  try{ await pa_rpc('portal_payment_request',{p_request_id:reqId,p_kind:'bank',p_amount:amt,p_custody_to:null,p_details:{account_name:acc,iban:iban},p_offer_id:offerId}); }
+  catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر إصدار الصرف'),'err'); return; }
+  closeModal(); toast('صدر صرف المورد وأُحيل للاعتماد ✓','ok'); pa_notify('payment',reqId,'pending'); await pa_after(reqId);
+}
+async function pa_paymentApproveId(reqId, pid){
+  try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'approve',p_comment:null,p_return_to:null,p_details:null}); }catch(e){ return; }
+  toast('اعتُمد الصرف — نفّذ التحويل ثم «تنفيذ الصرف»','ok'); pa_notify('payment',reqId,'approved'); await pa_after(reqId);
+}
+/* تنفيذ صرف دفعة بعينها (بمعرّفها) مع إرفاق السند — نفس نافذة disburse لكن لمعرّف محدّد */
+function pa_disburseId(reqId, pid){
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--ok-bg);color:var(--ok)">'+ic('money',22)+'</div><div><h3>تنفيذ الصرف</h3><div class="ms">أرفِق محضر/سند الصرف (اختياري) ثم أكّد</div></div></div>'
+    +'<div class="modal-body"><label>محضر/سند الصرف <span class="muted" style="font-weight:400">(PDF أو صورة)</span></label>'
+    +'<label id="db-drop" for="db-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:13px 15px;cursor:pointer;margin-bottom:6px;font-weight:700;font-size:13px"><span style="font-size:20px">📎</span><span id="db-fn">اضغط لاختيار سند الصرف</span></label>'
+    +'<input id="db-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_dbFile()">'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="db-btn" onclick="pa_doDisburseId(\''+reqId+'\','+pid+')">'+ic('check',15)+' تأكيد تنفيذ الصرف</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_doDisburseId(reqId, pid){
+  var fileEl=$('db-file'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file&&!pa_docValidate(file)) return;
+  var btn=$('db-btn'); if(btn) btn.disabled=true; var details=null;
+  try{ if(file){ var key=await pa_docUpload('pay',reqId,file); details={proof_key:key}; }
+    await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'disburse',p_comment:null,p_return_to:null,p_details:details});
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر تنفيذ الصرف'),'err'); return; }
+  closeModal(); toast('سُجّل «تم الصرف»'+(details?' مع السند':'')+' ✦','ok'); pa_notify('payment',reqId,'disbursed'); await pa_after(reqId);
+}
 
 var _pa_refComparisonPanel = (typeof comparisonPanel==='function')?comparisonPanel:null;
 comparisonPanel = function(r){
@@ -3408,8 +3516,10 @@ comparisonPanel = function(r){
     +'<div class="muted" style="font-size:11.5px;margin:-4px 0 10px;display:flex;gap:10px;flex-wrap:wrap"><span>'+ic('scale',13)+' اضغط أي خلية لاختيار مورد ذلك البند (يُظهر وفر التجزئة).</span><button class="btn btn-ghost btn-sm" onclick="pa_splitReset(\''+r.id+'\')">↺ إعادة للأقل لكل بند</button></div>'
     +summary
     +'<div class="holder-banner" style="margin:4px 0 0">'+ic('award',22)+'<div class="hb-txt"><div class="t">التوصية — الأقل إجمالاً من مورد واحد</div><div class="v">'+avatar((SUPPLIERS[win]||{}).n||win,'sm')+' '+esc((SUPPLIERS[win]||{}).n||win)+' <span class="badge gold">'+money(winTotal)+'</span></div></div><div class="chip">'+ic('scale',13)+' '+esc(d.label||'')+'</div></div>'
-    +'<div class="muted" style="font-size:11.5px;margin:12px 0 8px">'+ic('scale',13)+' لك تعميد غير الأقل عند مبرّر موثّق (جودة/ضمان/توريد). <b>التنفيذ المجزّأ الفعلي (توريد وصرف لكل مورد) مرحلة تالية بعد إقرار الحوكمة</b> — حالياً التعميد لمورد واحد.</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+awardBtns+'</div>'
+    +'<div class="muted" style="font-size:11.5px;margin:12px 0 8px">'+ic('scale',13)+' لك تعميد غير الأقل عند مبرّر موثّق (جودة/ضمان/توريد)، أو <b>تعميد مجزّأ</b> حسب اختيارك للبنود أعلاه (توريد وصرف مستقل لكل مورد بآيبانه).</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+awardBtns
+    +((pa_splitSuppliers(r).length>1)?'<button class="btn btn-gold btn-sm" onclick="awardSplit(\''+r.id+'\')" style="border:1px dashed var(--gold-3,#8a6a30)">'+ic('scale',13)+' تعميد مجزّأ ('+pa_splitSuppliers(r).length+' موردين حسب الاختيار)</button>':'')
+    +'</div>'
     +(enough?'':'<div class="chip" style="margin-top:10px;color:var(--danger);border-color:var(--danger-line)">'+ic('alert',13)+' يلزم '+p.quotesRequired+' عروض حسب الحوكمة — توجد '+cols.length+' فقط</div>');
 };
 
