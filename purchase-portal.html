@@ -3308,7 +3308,7 @@ function pa_qsFrame(){
   if(_qs.frame) return _qs.frame;
   var wrap=document.createElement('div'); wrap.id='qs-embed';
   wrap.style.cssText='position:fixed;inset:0;z-index:9998;display:none;background:transparent';
-  var f=document.createElement('iframe'); f.id='qs-frame'; f.title='عارض عروض الأسعار'; f.src='/portal-quote-suite.html';
+  var f=document.createElement('iframe'); f.id='qs-frame'; f.title='عارض عروض الأسعار'; f.src='/portal-quote-suite';
   f.style.cssText='width:100%;height:100%;border:0;background:transparent';
   wrap.appendChild(f); document.body.appendChild(wrap); _qs.wrap=wrap; _qs.frame=f; return f;
 }
