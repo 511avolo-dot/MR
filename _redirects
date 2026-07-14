@@ -1,6 +1,7 @@
 /register.html /register.html 200
 /requests.html /requests.html 200
 /rfq.html /rfq.html 200
+/portal-quote-suite.html /portal-quote-suite.html 200
 /q/* /rfq.html 200
 /q /rfq.html 200
 /portal /purchase-portal.html 200
