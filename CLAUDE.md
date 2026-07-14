@@ -103,6 +103,25 @@
 issuePO→can_issue_po، manageRfq→can_manage_procurement، disburse→can_disburse، create→can_create،
 edit→can_edit، manageUsers→can_manage_users، see.finance→can_see_finance.
 
+### التسعير/المقارنة بالبنود + مستندات الصرف/الاستلام (2026-07-14 — الفرع `claude/modest-goldberg-2p0gjn`، مُختبَر E2E محلياً)
+**هجرتان جديدتان — شغّلهما في Supabase بعد 021 بالترتيب (022 ثم 023)، ومدمجتان في `portal-standalone.sql`:**
+- **022 (`db/portal-migrations/022-offer-item-prices.sql`):** جدول `portal_offer_items(offer_id,item_seq,unit_price)`
+  مقفل (portal_locked_guard) + سياسة SELECT برؤية الطلب. توسيع `portal_submit_offer` بمعامل تاسع `p_items jsonb`
+  (`[{seq,price}]`) فيحسب الإجمالي = مجموع (كمية البند × سعره) ويخزّن الأسعار البندية. التوقيع النهائي 9 معاملات.
+- **023 (`db/portal-migrations/023-disbursement-receipt-docs.sql`):** عمود `portal_receipts.doc_key` +
+  `portal_payment_transition` اكتسب معاملاً خامساً `p_details jsonb` (يدمج `proof_key` محضر الصرف عند التنفيذ/الاعتماد) +
+  `portal_record_receipt` اكتسب `p_doc_key` (مشهد/محضر الاستلام). فصل المهام الثلاثي والحوكمة كما هي.
+**الخلفية:** `functions/api/portal-doc.js` — رفع/عرض PDF أو صورة في R2 (يعيد استخدام حاوية `QUOTES_BUCKET`)
+بمفاتيح `docs/pay/…` (صلاحية can_disburse) و`docs/grn/…` (can_verify_stock) + تحقّق رؤية الطلب.
+**الواجهة (المُحوِّل فقط):** `loadAll` يجلب `portal_offer_items` ويحقن أسعار البنود الحقيقية في `proc.offers[].items`
+(بند غير مُسعّر = null)؛ إدخال العرض inline صار بالبنود (سعر لكل بند + إجمالي تلقائي + PDF إثباتاً)؛ **تغليف
+`comparisonPanel`** بمصفوفة بنود × موردين (أرخص لكل بند + نقر خلية لاختيار مورد البند بصرياً + بطاقات وفر التجزئة)؛
+نافذتا تنفيذ الصرف/الاستلام ترفعان المستند؛ أزرار عرض المستندات في لوحتَي الصرف والاستلام. أُزيل عارض iframe
+الهشّ (استُعيد العارض المحلّي داخل #modal). اختبار محلي: PostgreSQL + stub Supabase — أسعار البنود/الإجمالي،
+فصل مهام الصرف، تخزين مفاتيح المستندات، الإقفال بعد الاستلام الكامل، وسلبيات الصلاحية = **كلها نجحت**.
+**⚠️ التنفيذ المجزّأ الفعلي** (أمر شراء/صرف/استلام لكل مورد فائز + DoA لكل نصيب) **لم يُبنَ** — يحتاج قرار المالك
+(سلسلة مستقلة لكل مورد [الموصى به] أم مُجمّعة). حالياً المصفوفة أداة اختيار بصرية والتعميد يبقى لمورد واحد.
+
 ---
 
 ## حالة النشر الحالية (النظام 3) — حدّثها مع كل تقدّم
