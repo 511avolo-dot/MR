@@ -2630,6 +2630,7 @@ function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pe
   else if(pay.kind==='custody'){ m.kindLabel='عهدة نقدية — '+uName(pay.custody_to); m.custody={to:pay.custody_to}; }
   else { m.kindLabel='آجل'; m.credit={dueDate:d.due_date||'',terms:d.terms||''}; }
   if(pay.status==='rejected'){ m.rejectReason=pay.comment||''; m.status='rejected'; }
+  m.proofKey=(d.proof_key||null);   /* محضر/سند الصرف في R2 (docs/pay/…) */
   return m; }
 
 function pa_procPhase(r,offers,award,payments){
@@ -2654,7 +2655,7 @@ async function loadAll(){
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2666,6 +2667,7 @@ async function loadAll(){
     SB.from('portal_request_items').select('*').order('seq'),
     SB.from('portal_approvals').select('*').order('seq'),
     SB.from('portal_offers').select('*').order('id'),
+    SB.from('portal_offer_items').select('*'),   /* أسعار البنود لكل مورد (هجرة 022) — قد يفشل قبل تطبيقها فنتحمّله */
     SB.from('portal_award').select('*'),
     SB.from('portal_award_approvals').select('*').order('seq'),
     SB.from('portal_payments').select('*').order('id'),
@@ -2673,6 +2675,8 @@ async function loadAll(){
     SB.from('portal_audit').select('*').order('id'),
     SB.from('portal_po_approvals').select('*').order('seq')
   ]);
+  /* خريطة أسعار البنود: offer_id → { item_seq: unit_price }. تتحمّل غياب الجدول (قبل الهجرة 022). */
+  const oiByOffer={}; if(oiR && !oiR.error){ (oiR.data||[]).forEach(x=>{ (oiByOffer[x.offer_id]=oiByOffer[x.offer_id]||{})[x.item_seq]=Number(x.unit_price)||0; }); }
 
   /* تشخيص: سجّل أي خطأ استعلام في الـConsole (يكشف جدولاً ناقصاً أو حجب RLS أو صلاحية) */
   var _paQ={portal_users:uR,portal_departments:dR,portal_jobs:jR,portal_doa:doaR,portal_workflows:wfR,portal_suppliers:supR,portal_settings:setR,portal_requests:reqR,portal_request_items:itR,portal_approvals:apR,portal_offers:ofR,portal_award:awR,portal_award_approvals:aaR,portal_payments:payR,portal_receipts:rcR,portal_audit:auR,portal_po_approvals:poR};
@@ -2772,7 +2776,11 @@ async function loadAll(){
       const proc={ phase, supplierList:[], quotesRequired:(r.quotes_required||pa_quotesRule(req.estTotal)),
         offers:{}, events:[], _offerIdByKey:{} };
       offers.forEach(o=>{ const k=pa_offerKey(o); proc.supplierList.push(k);
-        proc.offers[k]={ items:pa_distribute(o.total,items), total:Number(o.total)||0,
+        /* أسعار البنود: الحقيقية من portal_offer_items إن وُجدت (هجرة 022)، وإلا توزيع تناسبي للتوافق الخلفي. */
+        const pm=oiByOffer[o.id]; const byItem=!!(pm && Object.keys(pm).length);
+        /* عند التسعير بالبنود: البند غير المُسعّر = null (يظهر «—» ولا يُحسب أرخص) لا صفر. */
+        const itemPrices=byItem ? items.map(it=>(pm[it.seq]!=null?Number(pm[it.seq]):null)) : pa_distribute(o.total,items);
+        proc.offers[k]={ items:itemPrices, byItem, total:Number(o.total)||0,
           deliveryDays:o.delivery_days||0, paymentTerms:(o.payment_days!=null?(o.payment_days+' يوم'):'—'), quality:o.quality||null,
           quotePdfKey:o.quote_pdf_key||null };
         proc._offerIdByKey[k]=o.id; });
@@ -2799,6 +2807,8 @@ async function loadAll(){
         proc.recv=items.map(it=>({recvCum:it.received}));
         req.receiptComplete=complete;
       }
+      /* مشاهد/محاضر الاستلام المرفقة (docs/grn/…) لعرضها/تنزيلها */
+      proc.receiptDocs=(receipts||[]).filter(x=>x.doc_key).map(x=>({key:x.doc_key,by:x.received_by,at:pa_ms(x.received_at)}));
       req.proc=proc; req.phase=phase;
     } else {
       req.phase=(r.phase==='closed')?'closed':'need';
@@ -3017,11 +3027,35 @@ async function payApprove(id){
   try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'approve',p_comment:null}); }catch(e){ return; }
   toast('اعتُمد الصرف — نفّذ التحويل ثم انقر «تم الصرف»','ok'); pa_notify('payment',id,'approved'); await pa_after(id);
 }
-async function disburse(id){
+/* تنفيذ الصرف: نافذة مختصرة لإرفاق «محضر/سند الصرف» (تحويل بنكي/سند قبض) إثباتاً — اختياري لكن موصى به. */
+function disburse(id){
+  const r=REQS.find(x=>x.id===id); const p=r&&r.proc; const pay=p&&p.payment;
+  if(!pay||!pay._id){ toast('لا يوجد طلب صرف','err'); return; }
+  const amt=pay.amount||0;
+  $('modal').innerHTML=`<div class="modal-head"><div class="mi info" style="background:var(--ok-bg);color:var(--ok)">${ic('money',22)}</div><div><h3>تنفيذ الصرف</h3><div class="ms">أرفِق محضر/سند الصرف إثباتاً (اختياري) ثم أكّد التنفيذ</div></div></div>
+    <div class="modal-body">
+      <div class="mini-req"><div class="r"><span class="l">المبلغ</span><b>${money(amt)}</b></div><div class="r"><span class="l">النوع</span><b>${esc(pay.kindLabel||'')}</b></div></div>
+      <label style="margin-top:8px">محضر/سند الصرف <span class="muted" style="font-weight:400">(PDF أو صورة — سند تحويل/قبض)</span></label>
+      <label id="db-drop" for="db-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:13px 15px;cursor:pointer;margin-bottom:6px;font-weight:700;font-size:13px">
+        <span style="font-size:20px">📎</span><span id="db-fn">اضغط لاختيار سند الصرف (PDF/صورة)</span></label>
+      <input id="db-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_dbFile()">
+      <div class="modal-foot"><button class="btn btn-gold" id="db-btn" onclick="pa_doDisburse('${id}')">${ic('check',15)} تأكيد تنفيذ الصرف</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div>
+    </div>`;
+  $('overlay').classList.add('show');
+}
+function pa_dbFile(){ var i=$('db-file'),n=$('db-fn'),d=$('db-drop'); if(!i||!n)return; var f=i.files&&i.files[0];
+  if(f){ if(!pa_docValidate(f)){ i.value=''; return; } n.textContent='✓ '+f.name; if(d){ d.style.borderStyle='solid'; d.style.background='rgba(46,125,91,.12)'; d.style.borderColor='var(--ok,#2e7d5b)'; d.style.color='var(--ok,#2e7d5b)'; } }
+  else { n.textContent='اضغط لاختيار سند الصرف (PDF/صورة)'; } }
+async function pa_doDisburse(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
   if(!pid){ toast('لا يوجد طلب صرف','err'); return; }
-  try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'disburse',p_comment:null}); }catch(e){ return; }
-  toast('سُجّل «تم الصرف» ✦','ok'); pa_notify('payment',id,'disbursed'); await pa_after(id);
+  const fileEl=$('db-file'); const file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file&&!pa_docValidate(file)) return;
+  const btn=$('db-btn'); if(btn) btn.disabled=true; let details=null;
+  try{ if(file){ const key=await pa_docUpload('pay',id,file); details={proof_key:key}; }
+    await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'disburse',p_comment:null,p_return_to:null,p_details:details});
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر تنفيذ الصرف'),'err'); return; }
+  closeModal(); toast('سُجّل «تم الصرف»'+(details?' مع سند الإثبات':'')+' ✦','ok'); pa_notify('payment',id,'disbursed'); await pa_after(id);
 }
 async function confirmPayReject(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
@@ -3038,13 +3072,51 @@ async function confirmPayReturn(id){
   closeModal(); toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); pa_notify('payment',id,'returned',reason.trim()); await pa_after(id);
 }
 async function resubmitPayment(id){ toPayment(id); }
+/* توسيع نافذة الاستلام: حقن حقل إرفاق «مشهد/محضر الاستلام» قبل أزرار النافذة (التصميم المجمّد سليم). */
+var _pa_refOpenReceiveModal = openReceiveModal;
+openReceiveModal = function(id){
+  _pa_refOpenReceiveModal(id);
+  try{
+    var m=$('modal'); var body=m&&m.querySelector('.modal-body'); var foot=body&&body.querySelector('.modal-foot');
+    if(body&&foot&&!$('rc-file')){
+      var wrap=document.createElement('div'); wrap.style.margin='4px 0 2px';
+      wrap.innerHTML='<label style="margin-top:8px">مشهد/محضر الاستلام <span class="muted" style="font-weight:400">(PDF أو صورة — إثبات التوريد)</span></label>'
+        +'<label id="rc-drop" for="rc-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:12px 15px;cursor:pointer;font-weight:700;font-size:13px"><span style="font-size:20px">📎</span><span id="rc-fn">اضغط لاختيار مشهد الاستلام (PDF/صورة)</span></label>'
+        +'<input id="rc-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_rcFile()">';
+      body.insertBefore(wrap, foot);
+    }
+  }catch(e){}
+};
+function pa_rcFile(){ var i=$('rc-file'),n=$('rc-fn'),d=$('rc-drop'); if(!i||!n)return; var f=i.files&&i.files[0];
+  if(f){ if(!pa_docValidate(f)){ i.value=''; return; } n.textContent='✓ '+f.name; if(d){ d.style.borderStyle='solid'; d.style.background='rgba(46,125,91,.12)'; d.style.borderColor='var(--ok,#2e7d5b)'; d.style.color='var(--ok,#2e7d5b)'; } }
+  else { n.textContent='اضغط لاختيار مشهد الاستلام (PDF/صورة)'; } }
 async function confirmReceive(id){
   const r=REQS.find(x=>x.id===id); if(!r){ return; }
   const lines=[]; r.items.forEach((it,i)=>{ const add=+(($('rv-'+i)||{}).value)||0; if(add>0) lines.push({item_id:it._id,qty:add}); });
   if(!lines.length){ toast('أدخِل كمية مستلمة واحدة على الأقل','err'); return; }
-  let res; try{ res=await pa_rpc('portal_record_receipt',{p_request_id:id,p_lines:lines,p_note:null}); }catch(e){ return; }
+  const fileEl=$('rc-file'); const file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file&&!pa_docValidate(file)) return;
+  let docKey=null, res;
+  try{ if(file){ docKey=await pa_docUpload('grn',id,file); }
+    res=await pa_rpc('portal_record_receipt',{p_request_id:id,p_lines:lines,p_note:null,p_doc_key:docKey}); }catch(e){ return; }
   closeModal(); toast((res&&res.remaining>0)?'سُجّل استلام جزئي — يمكن استكماله لاحقاً':'سُجّل الاستلام الكامل ✦','ok'); pa_notify('receipt',id,(res&&res.remaining>0)?'recorded':'closed'); await pa_after(id);
 }
+/* عرض مستندات الصرف/الاستلام: نلحق أزرار «عرض المستند» بلوحتَي الصرف والاستلام (المجمّدتان) عبر تغليف. */
+var _pa_refPaymentPreview = (typeof paymentPreview==='function')?paymentPreview:null;
+if(_pa_refPaymentPreview){ paymentPreview=function(r){ var html=_pa_refPaymentPreview(r);
+  var pk=r&&r.proc&&r.proc.payment&&r.proc.payment.proofKey;
+  if(pk){ html+='<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">📄</span>محضر/سند الصرف</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">سند إثبات تنفيذ الصرف (تحويل/قبض) — يُعرض داخل النظام.</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pk)+'\')">📄 عرض سند الصرف</button></div>'; }
+  return html; }; }
+var _pa_refGrnPreview = (typeof grnPreview==='function')?grnPreview:null;
+if(_pa_refGrnPreview){ grnPreview=function(r){ var html=_pa_refGrnPreview(r);
+  var docs=(r&&r.proc&&r.proc.receiptDocs)||[];
+  if(docs.length){ var chips=docs.map(function(d,i){ return '<button class="btn btn-ghost btn-sm" style="margin:3px" onclick="pa_docView(\''+esc(d.key)+'\')">📄 مشهد استلام '+(i+1)+'</button>'; }).join('');
+    html+='<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">📄</span>مشاهد/محاضر الاستلام</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">مستندات إثبات التوريد المرفقة مع الاستلام — تُعرض داخل النظام.</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:2px">'+chips+'</div></div>'; }
+  return html; }; }
 async function closeReq(id){
   /* الاستلام الكامل يُقفل المعاملة تلقائياً في portal_record_receipt — نعيد التحميل ونؤكّد. */
   await loadAll(); const r=REQS.find(x=>x.id===id);
@@ -3194,35 +3266,69 @@ procWorkspace = function(r){
   return html;
 };
 
-/* إدخال العروض inline (بلا نافذة منبثقة): صفّ واحد — مورد + إجمالي + توريد/سداد + PDF + حفظ */
+/* إدخال العرض بالبنود (inline، بلا نافذة): مورد + PDF إثبات + سعر وحدة لكل بند + إجمالي محسوب تلقائياً.
+   يُرسَل عبر portal_submit_offer(p_items=[{seq,price}])؛ الخادم يحسب الإجمالي = مجموع (كمية البند × سعره). */
 function pa_offersInline(r){
   var supList=Object.keys(SUPPLIERS||{}).map(function(k){ return '<option value="'+esc((SUPPLIERS[k]||{}).n||'')+'">'; }).join('');
   var need=Number((r.proc||{}).quotesRequired)||0; var have=((r.proc||{}).supplierList||[]).length;
   var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
-  return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
+  var head='<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
    + '<div class="sec-title"><span class="ico">'+ic('plus',16)+'</span>إضافة عرض مورد <span class="muted" style="font-weight:400;font-size:12px">('+have+(need?(' من '+need+' مطلوبة'):'')+')</span></div>'
-   + '<div class="muted" style="font-size:12px;margin-bottom:9px">أدخِل العرض هنا مباشرةً — الاسم والإجمالي وأرفِق ملف الـPDF ثم «حفظ». كرّرها لكل مورد بلا نوافذ.</div>'
-   + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">'
-   +   '<div style="flex:2;min-width:150px"><label '+L+'>المورد *</label><input class="input" id="qa-sup" list="qa-sups" placeholder="اسم المورد" autocomplete="off"><datalist id="qa-sups">'+supList+'</datalist></div>'
-   +   '<div style="flex:1;min-width:95px"><label '+L+'>الإجمالي (ر.س) *</label><input class="input num" id="qa-total" type="number" min="1" placeholder="0"></div>'
+   + '<div class="muted" style="font-size:12px;margin-bottom:11px">أدخِل <b>سعر الوحدة لكل بند</b> — يُحسب الإجمالي تلقائياً — وأرفِق ملف عرض المورد (PDF) إثباتاً، ثم «حفظ». اترك البند فارغاً إن لم يُسعّره المورد.</div>'
+   + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">'
+   +   '<div style="flex:2;min-width:160px"><label '+L+'>المورد *</label><input class="input" id="qa-sup" list="qa-sups" placeholder="اسم المورد" autocomplete="off"><datalist id="qa-sups">'+supList+'</datalist></div>'
    +   '<div style="flex:1;min-width:72px"><label '+L+'>توريد (يوم)</label><input class="input num" id="qa-deliv" type="number" min="0" placeholder="0"></div>'
    +   '<div style="flex:1;min-width:72px"><label '+L+'>سداد (يوم)</label><input class="input num" id="qa-pay" type="number" min="0" placeholder="0"></div>'
-   +   '<div><label '+L+'>ملف PDF</label><label class="btn btn-ghost btn-sm" for="qa-pdf" style="cursor:pointer;display:block;white-space:nowrap"><span id="qa-pdfn">📎 اختر ملفاً</span></label><input id="qa-pdf" type="file" accept="application/pdf" style="display:none" onchange="pa_qaFile()"></div>'
-   +   '<button class="btn btn-gold btn-sm" id="qa-save" onclick="pa_quickAdd(\''+r.id+'\')">'+ic('check',14)+' حفظ العرض</button>'
-   + '</div></div>';
+   +   '<div><label '+L+'>ملف العرض (PDF)</label><label class="btn btn-ghost btn-sm" for="qa-pdf" style="cursor:pointer;display:block;white-space:nowrap"><span id="qa-pdfn">📎 اختر ملفاً</span></label><input id="qa-pdf" type="file" accept="application/pdf" style="display:none" onchange="pa_qaFile()"></div>'
+   + '</div>';
+  var body;
+  if(r.items && r.items.length){
+    var rows=r.items.map(function(it){
+      return '<tr><td style="padding:7px 9px">'+esc(it.desc)+'</td>'
+        +'<td class="num" style="text-align:end;padding:7px 9px;white-space:nowrap">'+(Number(it.qty)||0).toLocaleString('en-US')+' <span class="muted" style="font-size:10.5px">'+esc(it.unit||'')+'</span></td>'
+        +'<td style="padding:5px 9px"><input class="input num" id="qa-p-'+it.seq+'" type="number" min="0" step="any" placeholder="0.00" style="max-width:110px;text-align:end" oninput="pa_qaCalc(\''+r.id+'\')"></td>'
+        +'<td class="num" id="qa-lt-'+it.seq+'" style="text-align:end;padding:7px 9px;font-weight:700;color:var(--ink,#1b2333)">0</td></tr>';
+    }).join('');
+    body='<div style="overflow-x:auto"><table style="width:100%"><thead><tr>'
+      +'<th style="text-align:start;min-width:150px">البند</th><th style="text-align:end">الكمية</th>'
+      +'<th style="text-align:start">سعر الوحدة (ر.س)</th><th style="text-align:end">إجمالي البند</th></tr></thead><tbody>'+rows+'</tbody>'
+      +'<tfoot><tr style="background:var(--surface-2,#f2f4f8)"><td colspan="3" style="text-align:start;font-weight:800;padding:9px">الإجمالي (قبل الضريبة)</td>'
+      +'<td class="num" id="qa-gt" style="text-align:end;font-weight:800;padding:9px;color:var(--gold-3,#8a6a30)">0</td></tr></tfoot></table></div>';
+  } else {
+    /* لا بنود مسجّلة للطلب → إدخال إجمالي واحد (توافق خلفي) */
+    body='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end"><div style="flex:1;min-width:120px"><label '+L+'>الإجمالي (ر.س) *</label>'
+      +'<input class="input num" id="qa-total" type="number" min="1" step="any" placeholder="0"></div></div>';
+  }
+  return head+body
+   + '<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-gold btn-sm" id="qa-save" onclick="pa_quickAdd(\''+r.id+'\')">'+ic('check',14)+' حفظ العرض</button></div>'
+   + '</div>';
 }
 function pa_qaFile(){ var i=$('qa-pdf'),n=$('qa-pdfn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>16?f.name.slice(0,14)+'…':f.name)):'📎 اختر ملفاً'; } }
+/* حساب حيّ: إجمالي كل بند = كمية × سعر، ومجموعها الإجمالي الكلي. */
+function pa_qaCalc(reqId){ var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.items) return 0;
+  var gt=0; r.items.forEach(function(it){ var el=$('qa-p-'+it.seq); var v=el?Number(el.value):0; if(!(v>0))v=0;
+    var lt=Math.round((Number(it.qty)||0)*v); gt+=lt; var c=$('qa-lt-'+it.seq); if(c) c.textContent=lt.toLocaleString('en-US'); });
+  var g=$('qa-gt'); if(g) g.textContent=gt.toLocaleString('en-US'); return gt; }
 async function pa_quickAdd(reqId){
-  var sup=(($('qa-sup')||{}).value||'').trim(); var total=Number(($('qa-total')||{}).value||0);
+  var r=(REQS||[]).find(function(x){ return x.id===reqId; });
+  var sup=(($('qa-sup')||{}).value||'').trim();
   var deliv=Number(($('qa-deliv')||{}).value||0)||null; var pay=Number(($('qa-pay')||{}).value||0)||null;
-  if(!sup){ toast('اسم المورد مطلوب','err'); return; } if(!(total>0)){ toast('الإجمالي مطلوب','err'); return; }
+  if(!sup){ toast('اسم المورد مطلوب','err'); return; }
+  var items=null, total=0;
+  if(r && r.items && r.items.length){
+    items=[]; r.items.forEach(function(it){ var el=$('qa-p-'+it.seq); var v=el?Number(el.value):0; if(v>0){ items.push({seq:it.seq,price:v}); total+=Math.round((Number(it.qty)||0)*v); } });
+    if(!items.length){ toast('أدخِل سعر بند واحد على الأقل','err'); return; }
+  } else {
+    total=Number(($('qa-total')||{}).value||0);
+    if(!(total>0)){ toast('الإجمالي مطلوب','err'); return; }
+  }
   var fileEl=$('qa-pdf'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
   if(file){ if(file.type!=='application/pdf'){ toast('الملف يجب أن يكون PDF','err'); return; } if(file.size>10*1024*1024){ toast('حجم الملف يتجاوز 10 ميجابايت','err'); return; } }
   var btn=$('qa-save'); if(btn) btn.disabled=true; var key=null;
   try{ if(file){ key=await pa_uploadQuote(reqId,file); }
-    await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:null,p_quote_pdf_key:key});
+    await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:null,p_quote_pdf_key:key,p_items:items});
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر حفظ العرض'),'err'); return; }
-  toast('أُضيف العرض'+(key?' مع الملف':''),'ok'); await pa_after(reqId);
+  toast('أُضيف العرض'+(items?' بالبنود':'')+(key?' مع الملف':''),'ok'); await pa_after(reqId);
 }
 
 /* ══════ عارض عروض الأسعار PDF (R2 عبر /api/portal-quote) — احترافي + جنباً إلى جنب ══════ */
@@ -3285,6 +3391,35 @@ async function pa_quoteBlobUrl(key){
   if(!resp.ok) throw new Error('تعذّر جلب الملف');
   return URL.createObjectURL(await resp.blob());
 }
+/* ══════ مستندات الصرف/الاستلام (R2 عبر /api/portal-doc): محضر صرف (pay) + مشهد استلام (grn) ══════ */
+async function pa_docUpload(kind, reqId, file){
+  var tok=await pa_sessionToken(); if(!tok) throw new Error('الجلسة غير صالحة — أعد الدخول');
+  var resp=await fetch('/api/portal-doc?kind='+encodeURIComponent(kind)+'&request_id='+encodeURIComponent(reqId),
+    { method:'POST', headers:{ 'Authorization':'Bearer '+tok, 'Content-Type':(file.type||'application/octet-stream') }, body:file });
+  var j=await resp.json().catch(function(){ return {}; });
+  if(!resp.ok || !j.key) throw new Error(j.error||'تعذّر رفع المستند');
+  return j.key;
+}
+function pa_docValidate(file){ if(!file) return true;
+  var ok=/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type||'');
+  if(!ok){ toast('المستند يجب أن يكون PDF أو صورة (JPG/PNG)','err'); return false; }
+  if(file.size>10*1024*1024){ toast('حجم المستند يتجاوز 10 ميجابايت','err'); return false; } return true; }
+/* يفتح مستند صرف/استلام inline في نافذة النظام (blob، لا رابط R2 مكشوف) */
+async function pa_docView(key){
+  var tok=await pa_sessionToken(); if(!tok){ toast('الجلسة غير صالحة','err'); return; }
+  try{ var resp=await fetch('/api/portal-doc?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
+    if(!resp.ok) throw 0; var url=URL.createObjectURL(await resp.blob());
+    $('modal').classList.add('modal-wide');
+    $('modal').innerHTML='<div class="pqv"><div class="pqv-bar"><h3>مستند</h3><div style="flex:1"></div>'
+      +'<a class="pqv-mini" href="'+url+'" target="_blank" rel="noopener" title="فتح في تبويب">⤢</a>'
+      +'<a class="pqv-mini" href="'+url+'" download title="تنزيل">⬇</a>'
+      +'<button class="pqv-mini" onclick="pa_docClose()" title="إغلاق">✕</button></div>'
+      +'<div class="pqv-canvas"><div class="pqv-grid single"><div class="pqv-pane"><iframe class="pqv-frame" src="'+url+'"></iframe></div></div></div></div>';
+    _paDocUrl=url; $('overlay').classList.add('show');
+  }catch(e){ toast('تعذّر فتح المستند','err'); }
+}
+var _paDocUrl=null;
+function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){} if(_paDocUrl){ try{ URL.revokeObjectURL(_paDocUrl); }catch(e){} _paDocUrl=null; } closeModal(); }
 function pa_money(n){ try{ return (Number(n)||0).toLocaleString('en-US'); }catch(e){ return String(n||0); } }
 var _pqv=null;
 function pa_qvBest(p,keys){ var m=Infinity; keys.forEach(function(k){ var t=Number((p.offers[k]||{}).total)||Infinity; if(t<m)m=t; }); return m; }
@@ -3327,52 +3462,10 @@ function pa_qvMode(m){ if(!_pqv)return; _pqv.mode=m; pa_qvRender(); }
 function pa_qvPick(i){ if(!_pqv)return; _pqv.active=i; _pqv.mode='single'; pa_qvRender(); }
 function closeQuoteViewer(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){} if(_pqv){ Object.keys(_pqv.urls).forEach(function(k){ var u=_pqv.urls[k]; if(u&&u!=='ERR'){ try{ URL.revokeObjectURL(u); }catch(e){} } }); } _pqv=null; closeModal(); }
 
-/* ══════ الخطوة 1: عارض Claude Design معزول (iframe نفس النطاق) — يستبدل العارض أعلاه ══════
-   عزل تام لـCSS/JS داخل iframe؛ نحقن الخطّافات عبر contentWindow (same-origin)، ونخفي لوحة
-   التصميم وتبويب البنود (حتى المرحلة أ). العارض يبقى في المُحوِّل فقط — التصميم المجمّد سليم. */
-var _qs = { wrap:null, frame:null };
-function pa_qsFrame(){
-  if(_qs.frame) return _qs.frame;
-  var wrap=document.createElement('div'); wrap.id='qs-embed';
-  wrap.style.cssText='position:fixed;inset:0;z-index:9998;display:none;background:transparent';
-  var f=document.createElement('iframe'); f.id='qs-frame'; f.title='عارض عروض الأسعار'; f.src='/portal-quote-suite';
-  f.style.cssText='width:100%;height:100%;border:0;background:transparent';
-  wrap.appendChild(f); document.body.appendChild(wrap); _qs.wrap=wrap; _qs.frame=f; return f;
-}
-function pa_qsShow(){ if(_qs.wrap) _qs.wrap.style.display='block'; }
-function pa_qsHide(){ if(_qs.wrap) _qs.wrap.style.display='none'; }
-async function pa_quoteBytes(key){
-  var tok=await pa_sessionToken(); if(!tok) throw new Error('الجلسة غير صالحة');
-  var resp=await fetch('/api/portal-quote?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
-  if(!resp.ok) throw new Error('تعذّر جلب الملف'); return await resp.arrayBuffer();
-}
-function pa_buildQuotes(r){
-  var p=r.proc||{}, out={};
-  (p.supplierList||[]).forEach(function(sid){ var o=p.offers[sid]; if(!o||!o.quotePdfKey) return;
-    out[sid]={ supplierName:((SUPPLIERS[sid]||{}).n)||sid, total:Number(o.total)||0,
-      deliveryDays:Number(o.deliveryDays)||0, paymentDays:parseInt(o.paymentTerms,10)||0, quotePdfKey:o.quotePdfKey }; });
-  return out;
-}
-function pa_qsInject(w){
-  try{ if(!w.document.getElementById('qs-inject')){ var st=w.document.createElement('style'); st.id='qs-inject';
-    st.textContent='html,body{background:transparent!important}.topbar,.wrap{display:none!important}#segItems{display:none!important}';
-    w.document.head.appendChild(st); } }catch(e){}
-  w.enableItems=false;
-  w.getQuoteUrl=function(key){ return pa_quoteBytes(key).then(function(buf){ return w.URL.createObjectURL(new w.Blob([buf],{type:'application/pdf'})); }); };
-  if(!w.__qsPatched && typeof w.closeQuoteViewer==='function'){ var oc=w.closeQuoteViewer; w.closeQuoteViewer=function(){ try{oc();}catch(e){} pa_qsHide(); }; w.__qsPatched=true; }
-}
-openQuoteViewer = function(reqId, sids){
-  var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.proc){ toast('الطلب غير موجود','err'); return; }
-  var f=pa_qsFrame();
-  var go=function(){ var w=f.contentWindow; if(!w||typeof w.openQuoteViewer!=='function'){ toast('تعذّر تحميل العارض','err'); return; }
-    try{ pa_qsInject(w); w.QUOTES=pa_buildQuotes(r);
-      var keys=(sids ? sids.map(function(s){ return decodeURIComponent(s); }) : Object.keys(w.QUOTES)).filter(function(k){ return w.QUOTES[k]; });
-      if(!keys.length){ toast('لا يوجد ملف عرض','err'); return; }
-      pa_qsShow(); w.openQuoteViewer(reqId, keys);
-    }catch(e){ toast('تعذّر فتح العارض','err'); pa_qsHide(); } };
-  if(f.contentWindow && typeof f.contentWindow.openQuoteViewer==='function') go();
-  else f.addEventListener('load', function h(){ f.removeEventListener('load',h); setTimeout(go,40); });
-};
+/* ملاحظة: أُزيل عارض iframe (Claude Design suite) — كان هشّاً (لا تُفتح الخانات لتعذّر الحقن عبر
+   contentWindow في بعض الحالات). العارض الفعّال هو العارض المحلّي داخل #modal أعلاه (openQuoteViewer/
+   pa_qvRender) — مفرد + جنباً إلى جنب — يعمل بملفات R2 حقيقية مباشرةً دون إطار وسيط. مقارنة أسعار
+   البنود تظهر في لوحة المقارنة (comparisonPanel) بأسعار البنود الحقيقية من portal_offer_items. */
 function openOfferForm(reqId){
   var supList = Object.keys(SUPPLIERS||{}).map(function(k){ return '<option value="'+esc((SUPPLIERS[k]||{}).n||'')+'"></option>'; }).join('');
   $('modal').innerHTML = '<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('cart',22)+'</div><div><h3>إضافة عرض مورد</h3><div class="ms">ارفع ملف عرض المورد (PDF) واكتب بياناته</div></div></div>'
