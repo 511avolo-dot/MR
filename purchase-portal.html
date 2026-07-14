@@ -2804,7 +2804,7 @@ async function loadAll(){
          كي تظهر بطاقة الصرف المُعاد/المرفوض + مهمتها + سبب الإرجاع في المخطّط الزمني (انحدار مُصلَح). */
       if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
       /* ── الترسية المجزّأة (النموذج أ): بنود الترسية + أنصبة الموردين + دفعة كل مورد ── */
-      const aLines=alByReq[r.id]||[]; proc.isSplit=aLines.length>0;
+      const aLines=alByReq[r.id]||[]; proc.isSplit=(aLines.length>0 && !!activeAward);  /* لا split إلا مع تعميد نشط (لا يتأثّر بترسية مرفوضة) */
       if(proc.isSplit){
         proc.awardLines=aLines.slice().sort((a,b)=>(a.seq||0)-(b.seq||0));
         const oidToSid={}; offers.forEach(o=>{ oidToSid[o.id]=pa_offerKey(o); });
@@ -3482,6 +3482,28 @@ async function pa_doDisburseId(reqId, pid){
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر تنفيذ الصرف'),'err'); return; }
   closeModal(); toast('سُجّل «تم الصرف»'+(details?' مع السند':'')+' ✦','ok'); pa_notify('payment',reqId,'disbursed'); await pa_after(reqId);
 }
+
+/* لوحة اعتماد التعميد المجزّأ: تعرض كل الموردين الفائزين بأنصبتهم (لا المورد المهيمن فقط)
+   + سلسلة الاعتماد بالقيمة الإجمالية. التعميد المفرد يبقى بلوحته الأصلية. */
+var _pa_refAwardPanel = (typeof awardPanel==='function')?awardPanel:null;
+if(_pa_refAwardPanel){ awardPanel=function(r){
+  if(!(r&&r.proc&&r.proc.isSplit)) return _pa_refAwardPanel(r);
+  var p=r.proc; var slices=p.slices||[]; var agg=slices.reduce(function(a,s){ return a+s.sliceTotal; },0);
+  var sup=slices.map(function(s){ return '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px dashed var(--line,#e2e6ee)"><span>'+esc(s.supplierName||s.sid)+' <span class="muted" style="font-size:11px">('+(s.seqs?s.seqs.length:0)+' بنود)</span></span><b>'+money(s.sliceTotal)+'</b></div>'; }).join('');
+  var chain=(p.awardChain||[]).map(function(s,i){ var prevDone=p.awardChain.slice(0,i).every(function(x){ return x.decision==='approved'; }); var st=s.decision==='approved'?'done':(prevDone?'active':'wait'); var canAct=canApproveAward(ME)&&(ME===s.user||isAdmin());
+    return '<div class="par-row"><div class="av sm" style="background:'+(st==='done'?'linear-gradient(155deg,#36916b,#2e7d5b)':st==='active'?'linear-gradient(155deg,#c2a063,#a37f43)':'#cdc4b2')+';color:#fff">'+(st==='done'?'✓':s.seq)+'</div><div class="nm" style="flex:1">'+esc(s.label)+'<div class="rl muted" style="font-size:10.5px;font-weight:500">'+esc(uName(s.user))+'</div></div>'+(st==='active'?(canAct?'<button class="btn btn-gold btn-sm" onclick="approveAward(\''+r.id+'\')">'+ic('check',13)+' اعتماد</button>':'<span class="chip">'+ic('eye',12)+' بانتظار '+esc(uName(s.user))+'</span>'):st==='done'?'<span class="badge ok" style="font-size:10px">معتمد</span>':'<span class="chip">بالانتظار</span>')+'</div>'; }).join('');
+  return '<div class="holder-banner" style="margin:0 0 14px">'+ic('scale',22)+'<div class="hb-txt"><div class="t">ترسية مجزّأة — '+slices.length+' موردين</div><div class="v">الإجمالي <span class="badge gold">'+money(agg)+'</span></div></div><div class="chip">'+ic('scale',13)+' الاعتماد وأمر الشراء على الإجمالي</div></div>'
+    +'<div class="card" style="margin-bottom:12px"><div class="sec-title"><span class="ico">'+ic('cart',15)+'</span>الموردون الفائزون بالبنود</div>'+sup+'</div>'
+    +'<div style="font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:8px">سلسلة اعتماد التعميد</div>'+chain;
+}; }
+/* عدّاد تبويب الصرف: يشمل دفعات الموردين المجزّأة القابلة للإجراء (تنبيه المالية) */
+var _pa_refDisburseCount = (typeof disburseCount==='function')?disburseCount:null;
+if(_pa_refDisburseCount){ disburseCount=function(){
+  return (REQS||[]).reduce(function(n,r){ var p=r.proc; if(!p) return n;
+    if(p.isSplit){ return n + (p.slices||[]).filter(function(s){ return s.payment && ['pending','pending_pay','approved_pay'].indexOf(s.payment.status)>=0; }).length; }
+    return n + ((p.payment && ['pending','approved_pay'].indexOf(p.payment.status)>=0)?1:0);
+  },0);
+}; }
 
 var _pa_refComparisonPanel = (typeof comparisonPanel==='function')?comparisonPanel:null;
 comparisonPanel = function(r){
