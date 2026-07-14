@@ -51,7 +51,7 @@ async function hasPerm(env, base, jwt, perm) {
     const r = await fetch(`${base}/rest/v1/rpc/portal_has_perm`, {
       method: 'POST',
       headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_perm: perm }),
+      body: JSON.stringify({ p_key: perm }),
     });
     if (!r.ok) return false;
     return (await r.json()) === true;
