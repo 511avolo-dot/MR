@@ -184,6 +184,12 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
 **⚠️ هجرات جديدة يجب تطبيقها حيّاً بعد 028 بالترتيب: `029` → `030`.** مدمجتان في `portal-standalone.sql` (تنصيب نظيف).
 **متغيّر Cloudflare جديد للتفعيل: `CRON_SECRET`** (قيمة عشوائية طويلة، Production).
 
+- **حزمة اختبار دائمة + CI (P0 #3 — شبكة أمان آلية):** نُقلت الاختبارات من scratchpad المؤقت إلى المستودع في
+  `db/portal-tests/` (`00_roles.sql` + `10_outbox.sql` + `11_security.sql` + `run.sh` + README) بصيغة **تأكيدات**
+  (`RAISE EXCEPTION` + `ON_ERROR_STOP`) فتُفشِل البناء تلقائياً. workflow `.github/workflows/portal-tests.yml`
+  يشغّلها بحاوية PostgreSQL 16 على كل PR/دفع يمسّ البوابة (يحمّل `portal-standalone.sql` كاملاً ثم 15 تأكيداً:
+  8 صادر + 7 أمان). **مُتحقَّق محلياً: خروج 0.** أي هجرة لاحقة بمنطق حرِج ⇒ أضِف ملف تأكيدات هنا.
+
 ---
 
 ## ⏩ حالة الجلسة السابقة (2026-07-15) — نقطة الاستئناف لأي جلسة جديدة
