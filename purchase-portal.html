@@ -2630,6 +2630,7 @@ function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pe
   else if(pay.kind==='custody'){ m.kindLabel='عهدة نقدية — '+uName(pay.custody_to); m.custody={to:pay.custody_to}; }
   else { m.kindLabel='آجل'; m.credit={dueDate:d.due_date||'',terms:d.terms||''}; }
   if(pay.status==='rejected'){ m.rejectReason=pay.comment||''; m.status='rejected'; }
+  if(st==='returned'){ m.returnReason=pay.comment||''; }
   m.proofKey=(d.proof_key||null);   /* محضر/سند الصرف في R2 (docs/pay/…) */
   return m; }
 
@@ -3301,6 +3302,56 @@ printDossier=function(id){ var r=REQS.find(function(x){return x.id===id;}); if(!
   document.getElementById('print-root').innerHTML=parts.map(function(el,i){return (i?'<div style="page-break-before:always"></div>':'')+el.outerHTML;}).join('')+pFooter(id,'الملف الكامل');
   window.print();
 };
+
+/* ══════ نظام إرجاع ذكي: سطح واضح «أُعيد إليك للتعديل» عبر كل الدورات (لا نظام صامت) ══════
+   يشتقّ سياق الإرجاع النشط (من أعاد + الملاحظة + إلى مَن + المطلوب) من حالة الطلب وسجلّ التدقيق،
+   ويعرضه كلافتة بارزة + مهمة في مركز المهام. يغطّي: اعتماد الحاجة (→المقدّم)، رفض التعميد/إرجاع أمر
+   الشراء (→المشتريات لإعادة التسعير/التعميد)، وإرجاع الصرف (→المشتريات لإعادة الإصدار). */
+function pa_lastReturn(r){
+  var p=r&&r.proc;
+  /* (1) إرجاع طلب الصرف → المشتريات */
+  if(p && p.payment && p.payment.status==='returned'){
+    return {src:'payment', cycle:'طلب الصرف', reason:(p.payment.returnReason||''), by:'المالية', target:'proc',
+      act:'عالِج الملاحظة ثم أعِد إصدار طلب الصرف (زرّ إعادة الإصدار في لوحة الصرف)'};
+  }
+  /* (2) اعتماد الحاجة مُعاد → المقدّم (أو مرحلة سابقة عبر الإرجاع المرن) */
+  if(r.status==='returned'){
+    var st=(r.chain||[]).filter(function(s){return s.decision==='returned';}).slice(-1)[0];
+    return {src:'need', cycle:'اعتماد الحاجة', reason:(st&&st.comment)||'', by:(st&&st.actor)?uName(st.actor):'', target:'need',
+      act:'عدّل الطلب ثم أعِد التقديم'};
+  }
+  /* (3) رفض التعميد / إرجاع أمر الشراء → المشتريات (الطلب عاد للتسعير) */
+  if(p && r.phase==='pricing'){
+    var BR={po_return:'اعتماد أمر الشراء', po_reject:'اعتماد أمر الشراء', po_returned:'اعتماد أمر الشراء', rejected:'اعتماد التعميد'};
+    var best=null; (r.events||[]).forEach(function(e){ if(BR[e.event]){ if(!best||(e.at||0)>=(best.at||0)) best={cycle:BR[e.event], reason:e.comment||'', by:e.actor||'', at:e.at}; } });
+    if(best){ best.src='pricing'; best.target='proc'; best.act='راجع مقارنة الأسعار وأعِد التعميد (أو أعِد الطلب للمقدّم/مدير القطاع عبر «إلغاء وإعادة» عند تغيّر المواصفات)'; return best; }
+  }
+  return null;
+}
+function pa_canProc(){ return !!((accessOf(ME).can&&accessOf(ME).can.manageRfq)||isAdmin()); }
+function returnBanner(r){
+  if(!r||r.status==='cancelled'||r.phase==='closed') return '';
+  var b=pa_lastReturn(r); if(!b) return '';
+  var isMine = (b.target==='need') ? (ME===r.requester||isAdmin()) : pa_canProc();
+  return '<div class="holder-banner" style="border-color:var(--warn-line,#e0c48a);background:var(--warn-bg,#fdf6e6);margin-bottom:16px">'+ic('undo',24)
+    +'<div class="hb-txt"><div class="v" style="color:var(--warn,#a9802f);font-weight:800">'+(isMine?'⚠ أُعيد إليك للتعديل':'أُعيد للتعديل')+' — '+esc(b.cycle)+'</div>'
+    +'<div class="t" style="margin-top:3px">'+(b.by?('من: <b>'+esc(b.by)+'</b> · '):'')+'الملاحظة: <b>'+esc(b.reason||'—')+'</b></div>'
+    +(isMine?'<div class="t" style="margin-top:5px;color:var(--ink)">'+ic('info',12)+' المطلوب: '+esc(b.act)+'</div>':'')
+    +'</div></div>';
+}
+/* لافتة الإرجاع تُلحق أعلى لافتة الحائز (holderBanner مُستدعاة في تفاصيل الطلب) */
+var _pa_refHolderBanner=(typeof holderBanner==='function')?holderBanner:null;
+if(_pa_refHolderBanner){ holderBanner=function(r){ return returnBanner(r)+_pa_refHolderBanner(r); }; }
+/* مركز المهام: أضف «مُعاد إليك» للمشتريات عند رفض التعميد/إرجاع أمر الشراء (المُعالَجات الأخرى مغطّاة أصلاً) */
+var _pa_refMyTasks=(typeof myTasks==='function')?myTasks:null;
+if(_pa_refMyTasks){ myTasks=function(){ var t=_pa_refMyTasks();
+  (REQS||[]).forEach(function(r){ if(r.status==='cancelled'||r.phase==='closed') return;
+    var b=pa_lastReturn(r); if(b && b.src==='pricing' && pa_canProc()){
+      t.push({r:r,label:'مُعاد إليك — '+b.cycle,ic:'undo',sub:(b.reason||'راجع وأعِد التعميد'),urgent:false});
+    }
+  });
+  return t;
+}; }
 
 /* (4) تعطيل ميزات النسخ المحلي التجريبية بأمان (البيانات في Supabase لا localStorage) */
 try{ confirmImport=function(){ toast('الاستيراد غير متاح في النسخة الحيّة — البيانات محفوظة في Supabase','err'); try{closeModal();}catch(e){} }; }catch(e){}
