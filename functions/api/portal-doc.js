@@ -16,9 +16,10 @@
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const KEY_RE = /^docs\/(pay|grn)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
+const KEY_RE = /^docs\/(pay|grn|inst)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
-const KIND_PERM = { pay: 'can_disburse', grn: 'can_verify_stock' };
+// pay=محضر صرف (مالية) · grn=مشهد استلام (مستودع) · inst=مرفق دفعة مستحقة (مشتريات)
+const KIND_PERM = { pay: 'can_disburse', grn: 'can_verify_stock', inst: 'can_manage_procurement' };
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {

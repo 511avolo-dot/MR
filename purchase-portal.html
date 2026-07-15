@@ -2816,6 +2816,17 @@ async function loadAll(){
           const pay=payments.filter(p=>p.award_offer_id===s.offerId).slice(-1)[0];
           s.payment=pay?pa_mapPayment(pay):null; return s; });
       }
+      /* ── الدفعات على مراحل (النموذج د): مصروف/متبقٍّ + قائمة الدفعات ── */
+      proc.installment=(!!r.pay_installments && !proc.isSplit);
+      if(proc.installment && activeAward){
+        const vat=(PSET&&PSET.vat!=null)?Number(PSET.vat):15;
+        proc.instTotal=Math.round((Number(proc.winnerTotal)||0)*(1+vat/100));
+        const live=payments.filter(p=>['pending_pay','approved_pay','disbursed'].includes(p.status));
+        proc.instDisbursed=payments.filter(p=>p.status==='disbursed').reduce((a,p)=>a+(Number(p.amount)||0),0);
+        proc.instCommitted=live.reduce((a,p)=>a+(Number(p.amount)||0),0);
+        proc.instRemaining=Math.max(0,proc.instTotal-proc.instCommitted);
+        proc.installments=payments.slice().sort((a,b)=>(a.id||0)-(b.id||0)).map(p=>pa_mapPayment(p));
+      }
       const anyRecv=items.some(it=>it.received>0);
       if(receipts.length||anyRecv||phase==='receipt'||phase==='closed'){
         const complete=items.length>0 && items.every(it=>it.received>=it.qty);
@@ -3121,9 +3132,16 @@ async function confirmReceive(id){
 /* عرض مستندات الصرف/الاستلام: نلحق أزرار «عرض المستند» بلوحتَي الصرف والاستلام (المجمّدتان) عبر تغليف. */
 var _pa_refPaymentPreview = (typeof paymentPreview==='function')?paymentPreview:null;
 if(_pa_refPaymentPreview){ paymentPreview=function(r){
-  /* الترسية المجزّأة: لوحة صرف لكل مورد بدل عرض الصرف المفرد */
+  /* الترسية المجزّأة: لوحة صرف لكل مورد */
   if(r&&r.proc&&r.proc.isSplit){ return pa_splitPaymentPanel(r); }
+  /* الدفعات على مراحل: لوحة متابعة الدفعات */
+  if(r&&r.proc&&r.proc.installment){ return pa_installmentPanel(r); }
   var html=_pa_refPaymentPreview(r);
+  /* خيار تفعيل «الصرف على دفعات» — قبل بدء أي صرف، لمن يدير المشتريات */
+  var pp=r&&r.proc;
+  if(pp && pp.phase==='payment' && !pp.isSplit && !(pp.payment) && ((accessOf(ME).can&&accessOf(ME).can.manageRfq)||isAdmin())){
+    html+='<div class="card" style="margin-top:12px;border-color:var(--gold-soft)"><div class="muted" style="font-size:12px;margin-bottom:8px">'+ic('money',13)+' هل الاتفاق مع المورد على <b>الصرف على دفعات</b> (مراحل مستحقة)؟ فعّله لرفع دفعات متعددة ومتابعة المصروف/المتبقّي.</div><button class="btn btn-ghost btn-sm" onclick="pa_toggleInstallments(\''+r.id+'\',true)">'+ic('money',13)+' تفعيل الصرف على دفعات</button></div>';
+  }
   var pk=r&&r.proc&&r.proc.payment&&r.proc.payment.proofKey;
   if(pk){ html+='<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">📄</span>محضر/سند الصرف</div>'
     +'<div class="muted" style="font-size:12px;margin-bottom:8px">سند إثبات تنفيذ الصرف (تحويل/قبض) — يُعرض داخل النظام.</div>'
@@ -3501,9 +3519,73 @@ var _pa_refDisburseCount = (typeof disburseCount==='function')?disburseCount:nul
 if(_pa_refDisburseCount){ disburseCount=function(){
   return (REQS||[]).reduce(function(n,r){ var p=r.proc; if(!p) return n;
     if(p.isSplit){ return n + (p.slices||[]).filter(function(s){ return s.payment && ['pending','pending_pay','approved_pay'].indexOf(s.payment.status)>=0; }).length; }
+    if(p.installment){ return n + (p.installments||[]).filter(function(x){ return ['pending','pending_pay','approved_pay'].indexOf(x.status)>=0; }).length; }
     return n + ((p.payment && ['pending','approved_pay'].indexOf(p.payment.status)>=0)?1:0);
   },0);
 }; }
+
+/* ══════ الدفعات على مراحل (القسم د): لوحة متابعة (مصروف/متبقٍّ) + رفع دفعة مستحقة + اعتماد/تنفيذ ══════ */
+async function pa_toggleInstallments(reqId,on){
+  try{ await pa_rpc('portal_set_installments',{p_request_id:reqId,p_on:!!on}); }catch(e){ return; }
+  toast(on?'فُعّل الصرف على دفعات':'أُلغي وضع الدفعات','ok'); await pa_after(reqId);
+}
+function pa_installmentPanel(r){
+  var p=r.proc; var canDisb=!!(((USERS[ME]||{}).perms)||{}).can_disburse||isAdmin();
+  var canReq=canDisb || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq) || isAdmin();
+  var total=p.instTotal||0, disb=p.instDisbursed||0, committed=p.instCommitted||0, rem=p.instRemaining||0;
+  var pct=total>0?Math.min(100,Math.round(disb/total*100)):0;
+  var winNm=((SUPPLIERS[p.winner]||{}).n)||p.winner||'';
+  var head='<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>الصرف على دفعات — '+esc(winNm)+'</div>'
+    +'<div class="paim-sum" style="margin:6px 0 12px">'
+    +'<div class="paim-card"><div class="paim-ck">إجمالي المستحق (بالضريبة)</div><div class="paim-cv neutral">'+pa_money(total)+' <small>ر.س</small></div></div>'
+    +'<div class="paim-card good"><div class="paim-ck">المصروف</div><div class="paim-cv">'+pa_money(disb)+' <small>ر.س</small></div><div class="paim-cx">'+pct+'٪ من الإجمالي</div></div>'
+    +'<div class="paim-card award"><div class="paim-ck">المتبقّي</div><div class="paim-cv">'+pa_money(rem)+' <small>ر.س</small></div>'+(committed>disb?('<div class="paim-cx">قيد الاعتماد/التنفيذ: '+pa_money(committed-disb)+'</div>'):'')+'</div>'
+    +'</div>'
+    +'<div style="height:8px;background:var(--surface-2,#f2f4f8);border-radius:20px;overflow:hidden;margin-bottom:12px"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#2e8f5f,#37b183)"></div></div>';
+  var rows=(p.installments||[]).map(function(pay,i){ var st=pay.status; var mx=pa_sliceMax? null:null;
+    var badge = st==='disbursed'?'<span class="badge ok">صُرف</span>' : st==='approved_pay'?'<span class="badge gold">مُعتمَد — بانتظار التنفيذ</span>' : (st==='pending'||st==='pending_pay')?'<span class="badge">بانتظار اعتماد المالية</span>' : '<span class="chip" style="color:var(--danger)">مُعاد/مرفوض</span>';
+    var acts='';
+    if(st==='pending'||st==='pending_pay'){ if(canDisb) acts='<button class="btn btn-gold btn-sm" onclick="pa_paymentApproveId(\''+r.id+'\','+pay._id+')">'+ic('check',13)+' اعتماد</button>'; }
+    else if(st==='approved_pay'){ if(canDisb) acts='<button class="btn btn-gold btn-sm" onclick="pa_disburseId(\''+r.id+'\','+pay._id+')">'+ic('check',13)+' تنفيذ الصرف</button>'; }
+    else if(st==='disbursed'){ acts=(pay.proofKey?'<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pay.proofKey)+'\')">📄 سند الصرف</button>':''); }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border:1px solid var(--line,#e2e6ee);border-radius:10px;padding:9px 12px;margin-bottom:8px"><div><b>الدفعة '+(i+1)+'</b> · '+pa_money(pay.amount)+' ر.س <span class="muted" style="font-size:11px">'+esc(pay.kindLabel||'')+'</span></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+badge+acts+'</div></div>'; }).join('');
+  var footer='';
+  if(rem>0 && canReq){ footer='<button class="btn btn-gold btn-sm" onclick="pa_issueInstallment(\''+r.id+'\')">'+ic('money',13)+' رفع دفعة مستحقة للمالية</button>'; }
+  else if(rem<=0){ footer='<span class="chip" style="color:var(--ok)">'+ic('check',12)+' اكتمل سداد كامل القيمة</span>'; }
+  return head+(rows||'<div class="muted" style="font-size:12px;margin-bottom:8px">لا دفعات بعد — ارفع أول دفعة مستحقة.</div>')+'<div style="margin-top:6px">'+footer+'</div></div>';
+}
+function pa_issueInstallment(reqId){
+  var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.proc){ return; }
+  var p=r.proc; var rem=p.instRemaining||0; var sup=SUPPLIERS[p.winner]||{};
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('money',22)+'</div><div><h3>رفع دفعة مستحقة</h3><div class="ms">للمالية — مع مرفق (زيارة/محضر استلام) حسب الاتفاق</div></div></div>'
+    +'<div class="modal-body">'
+    +'<div class="mini-req"><div class="r"><span class="l">المتبقّي من المستحق</span><b>'+money(rem)+'</b></div></div>'
+    +'<label style="margin-top:8px">مبلغ الدفعة (ر.س، شامل الضريبة)</label><input class="input num" id="in-amt" type="number" min="1" max="'+rem+'" value="'+rem+'">'
+    +'<label style="margin-top:10px">اسم صاحب الحساب</label><input class="input" id="in-acc" value="'+esc(sup.n||'')+'">'
+    +'<label style="margin-top:10px">آيبان المورد (SA+22)</label><input class="input" id="in-iban" dir="ltr" placeholder="SA.." value="'+esc(sup.iban||'')+'">'
+    +'<label style="margin-top:10px">المرفق <span class="muted" style="font-weight:400">(زيارة/محضر استلام — PDF أو صورة)</span></label>'
+    +'<label id="in-drop" for="in-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:12px 15px;cursor:pointer;font-weight:700;font-size:13px"><span style="font-size:20px">📎</span><span id="in-fn">اختر المرفق</span></label>'
+    +'<input id="in-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_inFile()">'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="in-btn" onclick="pa_confirmInstallment(\''+reqId+'\')">'+ic('check',15)+' رفع الدفعة للمالية</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+function pa_inFile(){ var i=$('in-file'),n=$('in-fn'),d=$('in-drop'); if(!i||!n)return; var f=i.files&&i.files[0];
+  if(f){ if(!pa_docValidate(f)){ i.value=''; return; } n.textContent='✓ '+f.name; if(d){ d.style.borderStyle='solid'; d.style.background='rgba(46,125,91,.12)'; d.style.borderColor='var(--ok,#2e7d5b)'; d.style.color='var(--ok,#2e7d5b)'; } } else { n.textContent='اختر المرفق'; } }
+async function pa_confirmInstallment(reqId){
+  var amt=Number(($('in-amt')||{}).value||0);
+  var acc=(($('in-acc')||{}).value||'').trim();
+  var iban=(($('in-iban')||{}).value||'').replace(/\s+/g,'').toUpperCase();
+  if(!(amt>0)){ toast('المبلغ مطلوب','err'); return; }
+  if(!/^SA\d{22}$/.test(iban)){ toast('آيبان غير صحيح — SA + 22 رقماً','err'); return; }
+  if(!acc){ toast('اسم صاحب الحساب مطلوب','err'); return; }
+  var fileEl=$('in-file'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file&&!pa_docValidate(file)) return;
+  var btn=$('in-btn'); if(btn) btn.disabled=true; var det={account_name:acc,iban:iban};
+  try{ if(file){ var key=await pa_docUpload('inst',reqId,file); det.proof_key=key; }
+    await pa_rpc('portal_payment_request',{p_request_id:reqId,p_kind:'bank',p_amount:amt,p_custody_to:null,p_details:det,p_offer_id:null});
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر رفع الدفعة'),'err'); return; }
+  closeModal(); toast('رُفعت الدفعة للمالية للسداد ✓','ok'); pa_notify('payment',reqId,'pending'); await pa_after(reqId);
+}
 
 var _pa_refComparisonPanel = (typeof comparisonPanel==='function')?comparisonPanel:null;
 comparisonPanel = function(r){
