@@ -3352,6 +3352,28 @@ if(_pa_refMyTasks){ myTasks=function(){ var t=_pa_refMyTasks();
   });
   return t;
 }; }
+/* خيارات إرجاع واضحة لاعتماد الحاجة: «إلى مَن يعود؟» (المُقدّم أو أي مرحلة اعتماد سابقة) عبر p_return_to_seq */
+var _pa_refAskReason=(typeof askReason==='function')?askReason:null;
+if(_pa_refAskReason){ askReason=function(id,action){
+  if(action!=='return'){ return _pa_refAskReason(id,action); }
+  var r=(REQS||[]).find(function(x){return x.id===id;});
+  if(!r || r.status!=='in_review'){ return _pa_refAskReason(id,action); }
+  var cur=9999; (r.chain||[]).forEach(function(s){ if(cur===9999 && s.decision==='pending') cur=s.seq; });
+  var opts='<option value="0">المُقدّم — لتعديل الطلب وإعادة تقديمه من البداية</option>';
+  (r.chain||[]).forEach(function(s){ if(s.seq>0 && s.seq<cur && s.decision==='approved'){ opts+='<option value="'+s.seq+'">مرحلة سابقة: '+esc(s.label)+(s.actor?(' — '+esc(uName(s.actor))):'')+'</option>'; } });
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info">'+ic('undo',22)+'</div><div><h3>إرجاع الطلب للتعديل</h3><div class="ms">حدّد وجهة الإرجاع والملاحظة — يظهر للوجهة تنبيه واضح «أُعيد إليك»</div></div></div>'
+    +'<div class="modal-body">'
+    +'<label>إلى مَن يعود الطلب؟</label><select class="input" id="ret-to">'+opts+'</select>'
+    +'<div class="muted" style="font-size:11.5px;margin:4px 0 10px">الإرجاع للمُقدّم يعيد الطلب لبدايته؛ الإرجاع لمرحلة سابقة يوقفه عندها لإعادة قرارها فقط.</div>'
+    +'<label>سبب الإرجاع وما المطلوب تعديله <span style="color:var(--danger)">*</span></label><textarea id="ret-reason" rows="3" placeholder="مثال: عدّل الكمية في البند الثاني / أرفق مواصفات فنية..."></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-primary" onclick="pa_confirmReturn(\''+id+'\')">'+ic('undo',15)+' تأكيد الإرجاع</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}; }
+function pa_confirmReturn(id){
+  var to=Number(($('ret-to')||{}).value||0); var reason=(($('ret-reason')||{}).value||'').trim();
+  if(!reason){ var el=$('ret-reason'); if(el) el.style.borderColor='var(--danger)'; toast('سبب الإرجاع مطلوب','err'); return; }
+  closeModal(); decide(id,'return',reason,to);
+}
 
 /* (4) تعطيل ميزات النسخ المحلي التجريبية بأمان (البيانات في Supabase لا localStorage) */
 try{ confirmImport=function(){ toast('الاستيراد غير متاح في النسخة الحيّة — البيانات محفوظة في Supabase','err'); try{closeModal();}catch(e){} }; }catch(e){}
