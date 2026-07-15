@@ -337,6 +337,20 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   تأكّد `git diff --stat <branch>` فارغ → push main → ارجع للفرع.
 - الإصدار المباشر (النظام 2/1): `https://aldeyabi-procurement.pages.dev` (Cloudflare Pages).
 
+### ⚠️ نشر البوابة إلى main حين يكون التاريخ منفصلاً (no merge base)
+`main` وفرع البوابة قد لا يتشاركان سلفاً (أُعيد بناء التاريخ سابقاً؛ الـ«N كوميت على main» هي cherry-picks
+قديمة لعمل البوابة نفسه، والـ«82 سطر main-only» نسخ قديمة متجاوَزة بالفرع). **لا تستخدم force/reset أبداً**
+(يمحو تاريخ main). الفرع «مجموعة فائقة» من main (نسخ أحدث + هجرات جديدة) فلا عمل يُفقد — تحقّق دائماً:
+`comm -23 <(git ls-tree -r --name-only origin/main|sort) <(git ls-tree -r --name-only <branch>|sort)`
+**يجب أن يكون فارغاً** (لا ملف فريد على main). انشر بطريقة تحفظ التاريخ وتجعل الشجرة = الفرع:
+```
+git checkout -B main origin/main
+git checkout <branch> -- .    # أو: git merge -s ours --no-commit <branch> && git read-tree -m -u <branch>
+git diff --quiet <branch> && echo EMPTY   # بوابة إلزامية: يجب أن تكون فارغة قبل الكوميت
+git commit -m "deploy: نشر البوابة إلى main — الشجرة=الفرع، التاريخ محفوظ" && git push origin main   # fast-forward عادي، بلا force
+```
+(نُفِّذ فعلياً 2026-07-15: `cd8cf7a..c4972d5` — دفع عادي، التاريخ محفوظ، main==الفرع محتوىً، الهجرات 022→028 مسجّلة.)
+
 ## البريد (Resend)
 - النطاق الموثّق: `suppliers.aldeyabi.com`. المُرسِل: `noreply@suppliers.aldeyabi.com`. الردّ: `supply@aldeyabi.com`.
 - دوال البريد للنظام 2: `notify.js` + `_pr-shared.js` + `pr-action.js`. **لا تلمسها من أجل البوابة** — البوابة لها `portal-*` منفصلة.
