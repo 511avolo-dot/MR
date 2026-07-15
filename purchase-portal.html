@@ -3549,9 +3549,10 @@ function pa_installmentPanel(r){
     else if(st==='approved_pay'){ if(canDisb) acts='<button class="btn btn-gold btn-sm" onclick="pa_disburseId(\''+r.id+'\','+pay._id+')">'+ic('check',13)+' تنفيذ الصرف</button>'; }
     else if(st==='disbursed'){ acts=(pay.proofKey?'<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pay.proofKey)+'\')">📄 سند الصرف</button>':''); }
     return '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border:1px solid var(--line,#e2e6ee);border-radius:10px;padding:9px 12px;margin-bottom:8px"><div><b>الدفعة '+(i+1)+'</b> · '+pa_money(pay.amount)+' ر.س <span class="muted" style="font-size:11px">'+esc(pay.kindLabel||'')+'</span></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+badge+acts+'</div></div>'; }).join('');
-  var footer='';
+  var footer=''; var awaitFin=(p.installments||[]).some(function(x){ return ['pending','pending_pay'].indexOf(x.status)>=0; });
   if(rem>0 && canReq){ footer='<button class="btn btn-gold btn-sm" onclick="pa_issueInstallment(\''+r.id+'\')">'+ic('money',13)+' رفع دفعة مستحقة للمالية</button>'; }
   else if(rem<=0){ footer='<span class="chip" style="color:var(--ok)">'+ic('check',12)+' اكتمل سداد كامل القيمة</span>'; }
+  if(awaitFin && canReq){ footer+=' <button class="btn btn-ghost btn-sm" onclick="pa_addReminder(\''+r.id+'\')">⏰ تذكير المالية بالسداد</button>'; }
   return head+(rows||'<div class="muted" style="font-size:12px;margin-bottom:8px">لا دفعات بعد — ارفع أول دفعة مستحقة.</div>')+'<div style="margin-top:6px">'+footer+'</div></div>';
 }
 function pa_issueInstallment(reqId){
@@ -3586,6 +3587,51 @@ async function pa_confirmInstallment(reqId){
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر رفع الدفعة'),'err'); return; }
   closeModal(); toast('رُفعت الدفعة للمالية للسداد ✓','ok'); pa_notify('payment',reqId,'pending'); await pa_after(reqId);
 }
+/* تذكير المشتريات → المالية بدفعة مستحقة بانتظار السداد (إشعار + إيميل) */
+async function pa_addReminder(reqId){
+  try{ await pa_notify('payment',reqId,'reminder'); }catch(e){}
+  toast('أُرسل تذكير للمالية بالسداد ⏰','ok');
+}
+/* ══════ لوحة متابعة الصرف المشتركة (مالية + مشتريات): مصروف/متبقٍّ لكل طلب على دفعات/مجزّأ ══════ */
+function pa_payMonitorRow(r){
+  var p=r.proc; var typ, total, disb, committed, rem, extra='';
+  if(p.isSplit){ typ='مجزّأ'; total=(p.slices||[]).reduce(function(a,s){ return a+pa_sliceMax(s.sliceTotal); },0);
+    disb=(p.slices||[]).reduce(function(a,s){ return a+((s.payment&&s.payment.status==='disbursed')?(Number(s.payment.amount)||0):0); },0);
+    committed=(p.slices||[]).reduce(function(a,s){ return a+((s.payment&&['pending','pending_pay','approved_pay','disbursed'].indexOf(s.payment.status)>=0)?(Number(s.payment.amount)||0):0); },0);
+    var doneS=(p.slices||[]).filter(function(s){ return s.payment&&s.payment.status==='disbursed'; }).length;
+    extra=doneS+'/'+(p.slices||[]).length+' مورد';
+  } else { typ='دفعات'; total=p.instTotal||0; disb=p.instDisbursed||0; committed=p.instCommitted||0;
+    var doneI=(p.installments||[]).filter(function(x){ return x.status==='disbursed'; }).length; extra=doneI+' دفعة مصروفة'; }
+  rem=Math.max(0,total-committed);
+  var pct=total>0?Math.min(100,Math.round(disb/total*100)):0;
+  var pendAwaitFin=(p.isSplit?(p.slices||[]).some(function(s){ return s.payment&&['pending','pending_pay'].indexOf(s.payment.status)>=0; })
+                            :(p.installments||[]).some(function(x){ return ['pending','pending_pay'].indexOf(x.status)>=0; }));
+  var isProc=(accessOf(ME).can&&accessOf(ME).can.manageRfq)||isAdmin();
+  var act='<button class="btn btn-ghost btn-sm" onclick="openDetail(\''+r.id+'\',true)">'+ic('eye',12)+' فتح</button>'
+    +((isProc&&pendAwaitFin)?' <button class="btn btn-ghost btn-sm" onclick="pa_addReminder(\''+r.id+'\')">⏰ تذكير المالية</button>':'');
+  return '<tr><td><b dir="ltr" style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px">'+esc(r.id)+'</b><div class="muted" style="font-size:11px">'+esc(r.title||'')+'</div></td>'
+    +'<td class="center" style="text-align:center"><span class="chip">'+typ+'</span></td>'
+    +'<td class="num" style="text-align:end;font-family:ui-monospace,Menlo,monospace">'+pa_money(total)+'</td>'
+    +'<td class="num" style="text-align:end;font-family:ui-monospace,Menlo,monospace;color:var(--ok)">'+pa_money(disb)+'</td>'
+    +'<td class="num" style="text-align:end;font-family:ui-monospace,Menlo,monospace;color:var(--gold-3)">'+pa_money(rem)+'</td>'
+    +'<td style="min-width:90px"><div style="height:7px;background:var(--surface-2,#f2f4f8);border-radius:20px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#2e8f5f,#37b183)"></div></div><div class="muted" style="font-size:10px;text-align:center;margin-top:2px">'+pct+'٪ · '+extra+'</div></td>'
+    +'<td>'+act+'</td></tr>';
+}
+function pa_paymentsMonitor(){
+  var rows=(REQS||[]).filter(function(r){ var p=r.proc; return p && (p.isSplit||p.installment) && ['payment','receipt','po'].indexOf(p.phase)>=0 && p.phase!=='closed'; });
+  if(!rows.length) return '';
+  var body=rows.map(pa_payMonitorRow).join('');
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>متابعة الصرف على دفعات / المجزّأ <span class="muted" style="font-weight:400;font-size:12px">('+rows.length+' طلب)</span></div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">لكل طلب: الإجمالي المستحق، المصروف، والمتبقّي. المشتريات ترفع الدفعات وتذكّر المالية؛ المالية تعتمد وتصرف.</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th style="text-align:start">الطلب</th><th style="text-align:center">النوع</th><th style="text-align:end">الإجمالي</th><th style="text-align:end">المصروف</th><th style="text-align:end">المتبقّي</th><th>التقدّم</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
+}
+/* تبويب «متابعة الصرف» متاح للمالية والمشتريات؛ لوحة المتابعة تُصدَّر أعلى قائمة الصرف. */
+var _pa_refNavAllowed=(typeof navAllowed==='function')?navAllowed:null;
+if(_pa_refNavAllowed){ navAllowed=function(k){ if(k==='disburse') return canDisburse(ME) || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq) || isAdmin(); return _pa_refNavAllowed(k); }; }
+var _pa_refTabLabel=(typeof tabLabel==='function')?tabLabel:null;
+if(_pa_refTabLabel){ tabLabel=function(k,l){ if(k==='disburse') return 'متابعة الصرف'; return _pa_refTabLabel(k,l); }; }
+var _pa_refDisburseHTML=(typeof disburseHTML==='function')?disburseHTML:null;
+if(_pa_refDisburseHTML){ disburseHTML=function(){ var mon=pa_paymentsMonitor(); var base=''; try{ base=_pa_refDisburseHTML(); }catch(e){ base=''; } return mon+base; }; }
 
 var _pa_refComparisonPanel = (typeof comparisonPanel==='function')?comparisonPanel:null;
 comparisonPanel = function(r){
