@@ -208,6 +208,8 @@ const META = {
   award_rejected: ['رُفض التعميد', '#dc2626', '✕'],
   payment_pending:  ['طلب صرف بانتظار اعتمادك', '#d97706', '✎'],
   payment_approved: ['اعتُمد طلب الصرف', '#16a34a', '✓'],
+  payment_reminder: ['تذكير: دفعة مستحقة بانتظار السداد', '#d97706', '⏰'],
+  payment_disbursed_partial: ['صُرفت دفعة — تابع المورد', '#16a34a', '✓'],
   disbursed:        ['تم الصرف', '#16a34a', '✓'],
   receipt_recorded: ['تسجيل استلام جديد', '#2563eb', '📦'],
   closed:           ['أُغلق الطلب — اكتمل الاستلام', '#16a34a', '✓'],
@@ -306,6 +308,8 @@ export function buildResultEmail(event, req, deptLabel, origin, comment) {
 const PENDING_LINES = {
   award_pending:   'يوجد تعميد شراء بانتظار اعتمادك.',
   payment_pending: 'يوجد طلب صرف بانتظار اعتمادك.',
+  payment_reminder: 'تذكير من المشتريات: توجد دفعة مستحقة بانتظار السداد لهذا الطلب — نرجو التكرّم بمراجعتها وصرفها.',
+  payment_disbursed_partial: 'صُرفت دفعة لهذا الطلب — يُرجى متابعة المورد باستلام السداد والانتقال للدفعة التالية.',
   receipt_recorded: 'سُجِّل استلام جديد لبنود هذا الطلب.',
 };
 export function buildInfoEmail(event, req, deptLabel, origin, extra) {

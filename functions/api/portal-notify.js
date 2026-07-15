@@ -126,22 +126,36 @@ export async function onRequestPost({ request, env }) {
         return json({ error: 'حدث غير معروف' }, 400);
       }
     } else if (kind === 'payment') {
+      // ملاحظة: الترسية المجزّأة والدفعات على مراحل تُبقيان الطلب في status='awarded' أثناء الصرف —
+      // لذا نقبل 'awarded' بجانب 'payment_pending' كي تصل الإشعارات (لا تُخنَق كأنها عدم تطابق).
+      const inPayment = (s) => s === 'payment_pending' || s === 'awarded';
       if (event === 'pending') {
-        if (req.status !== 'payment_pending') return json({ skipped: true, reason: 'status_mismatch' });
+        if (!inPayment(req.status)) return json({ skipped: true, reason: 'status_mismatch' });
         const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_disburse' });
         res = await notifyInfo(env, base, req, deptLabel, 'payment_pending', origin, recips);
+      } else if (event === 'reminder') {
+        // تذكير المشتريات → المالية بدفعة مستحقة بانتظار السداد.
+        if (!inPayment(req.status)) return json({ skipped: true, reason: 'status_mismatch' });
+        const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_disburse' });
+        res = await notifyInfo(env, base, req, deptLabel, 'payment_reminder', origin, recips, comment || '');
       } else if (event === 'approved') {
-        // بعد اعتماد الصرف: أخطر المشتريات (لمتابعة التنفيذ) — الطلب لا يزال payment_pending.
         const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_manage_procurement' });
         res = await notifyInfo(env, base, req, deptLabel, 'payment_approved', origin, recips, 'اعتُمد طلب الصرف — بانتظار تنفيذ التحويل');
       } else if (event === 'rejected' || event === 'returned') {
-        // عاد الطلب إلى awarded ليُعيد المشتريات إصدار الصرف — أخطر حاملي can_manage_procurement.
-        if (req.status !== 'awarded') return json({ skipped: true, reason: 'status_mismatch' });
+        if (!inPayment(req.status)) return json({ skipped: true, reason: 'status_mismatch' });
         const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_manage_procurement' });
         res = await notifyInfo(env, base, req, deptLabel, event, origin, recips, comment || (event === 'returned' ? 'أُعيد طلب الصرف — يلزم إعادة الإصدار' : 'رُفض طلب الصرف'));
       } else if (event === 'disbursed') {
-        if (req.status !== 'receipt_pending') return json({ skipped: true, reason: 'status_mismatch' });
-        res = await notifyResult(env, base, req, deptLabel, 'disbursed', origin, comment);
+        if (req.status === 'receipt_pending') {
+          // اكتمل الصرف (مفرد أو آخر دفعة/مورد) → إشعار النتيجة المعتاد.
+          res = await notifyResult(env, base, req, deptLabel, 'disbursed', origin, comment);
+        } else if (inPayment(req.status)) {
+          // صرف دفعة/مورد جزئي (الطلب لا يزال في الصرف) → أخطر المشتريات لمتابعة المورد.
+          const recips = await resolveAwardStageApprovers(env, base, req, { role_key: 'can_manage_procurement' });
+          res = await notifyInfo(env, base, req, deptLabel, 'payment_disbursed_partial', origin, recips, comment || '');
+        } else {
+          return json({ skipped: true, reason: 'status_mismatch' });
+        }
       } else {
         return json({ error: 'حدث غير معروف' }, 400);
       }
