@@ -51,9 +51,9 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname LIKE 'portal\_%'
     AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE');
-  IF v_bad <> 'portal_audit_write, portal_create_token, portal_outbox_claim, portal_outbox_mark, portal_outbox_purge, portal_pr_transition_email, portal_run_sla'
+  IF v_bad <> 'portal_audit_write, portal_budget_committed, portal_create_token, portal_outbox_claim, portal_outbox_mark, portal_outbox_purge, portal_pr_transition_email, portal_run_sla'
     THEN RAISE EXCEPTION 'S7 fail: المجموعة الخادمية غير متوقّعة (%): %', v_cnt, v_bad; END IF;
-  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 7 دوال مقصودة، الباقي للمستخدم';
+  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 8 دوال مقصودة، الباقي للمستخدم';
 
   RAISE NOTICE '════ SECURITY: 7/7 PASS ════';
 END $t$;

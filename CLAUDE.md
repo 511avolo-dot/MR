@@ -189,6 +189,14 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   (`RAISE EXCEPTION` + `ON_ERROR_STOP`) فتُفشِل البناء تلقائياً. workflow `.github/workflows/portal-tests.yml`
   يشغّلها بحاوية PostgreSQL 16 على كل PR/دفع يمسّ البوابة (يحمّل `portal-standalone.sql` كاملاً ثم 15 تأكيداً:
   8 صادر + 7 أمان). **مُتحقَّق محلياً: خروج 0.** أي هجرة لاحقة بمنطق حرِج ⇒ أضِف ملف تأكيدات هنا.
+- **031 (`031-budget-control.sql`) — ضبط الميزانية (Commitment Control، P0):** جدول `portal_budgets`
+  (قسم × سنة مالية × مبلغ معتمد، قراءة للمالية/الأدمن/المشتريات عبر RLS، كتابة عبر RPC فقط) +
+  `portal_budget_set/delete/status` + `portal_budget_committed` (المرتبط = مجموع التعميدات النشطة شاملاً
+  الضريبة؛ المجزّأ بمجموع بنوده لا المهيمن وحده) + **مُشغِّل قيد مؤجَّل** `trg_portal_budget_enforce` على
+  `portal_award` يتحقّق عند تثبيت المعاملة (يلتقط الترسية المجزّأة كاملةً) دون لمس دوال الترسية. **خامل وآمن:**
+  بلا ميزانية معرّفة ⇒ لا إنفاذ؛ ومع ميزانية: مفتاح `budget_enforce` (حقل في JSON `portal_settings`) = 0 تحذير
+  غير مانع (افتراضي)، = 1 منع. اختبارها `12_budget.sql` (5 تأكيدات: المرتبط · المنع · التحذيري · بلا ميزانية · المجزّأ).
+  **⚠️ تطبَّق حيّاً بعد 030. التفعيل: `portal_budget_set` لكل قسم/سنة ثم ضبط `budget_enforce=1` في الإعدادات.**
 
 ---
 
