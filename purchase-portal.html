@@ -2766,7 +2766,7 @@ async function loadAll(){
       resubmitCount:0, _raw:r };
 
     /* دورة حياة المشتريات (proc) — تُبنى فقط بعد تجاوز اعتماد الحاجة */
-    const offers=offBy[r.id]||[]; const award=awardBy[r.id]||null; const payments=payBy[r.id]||[]; const receipts=rcBy[r.id]||[];
+    const offers=(offBy[r.id]||[]).filter(o=>!o.superseded); const award=awardBy[r.id]||null; const payments=payBy[r.id]||[]; const receipts=rcBy[r.id]||[];
     /* تعميد مرفوض ≠ تعميد نشط: بعد رفض التعميد/أمر الشراء تبقى القاعدة على pricing —
        فيجب ألّا يُشتقّ طور 'award' من صف مرفوض (وإلا تنكسر إعادة التسعير/التعميد). */
     const activeAward=(award && award.status!=='rejected')?award:null;
@@ -3374,6 +3374,22 @@ function pa_confirmReturn(id){
   if(!reason){ var el=$('ret-reason'); if(el) el.style.borderColor='var(--danger)'; toast('سبب الإرجاع مطلوب','err'); return; }
   closeModal(); decide(id,'return',reason,to);
 }
+/* إرجاع المشتريات الطلبَ للمقدّم من التسعير (تغيير المواصفات) — يُعلّم عروض الجولة superseded (هجرة 028) */
+function pa_bounceToRequester(id){
+  var r=(REQS||[]).find(function(x){return x.id===id;}); var n=(r&&r.proc&&r.proc.supplierList||[]).length;
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--warn-bg);color:var(--warn)">'+ic('undo',22)+'</div><div><h3>إرجاع الطلب للمقدّم لتعديل المواصفات</h3><div class="ms">يعود الطلب لصاحبه ليعدّله ثم يعيد تقديمه — تبدأ جولة تسعير جديدة</div></div></div>'
+    +'<div class="modal-body">'
+    +(n?'<div class="chip" style="color:var(--warn);border-color:var(--warn-line);margin-bottom:10px">'+ic('alert',13)+' سيُعلَّم '+n+' عرض/عروض الجولة الحالية «جولة سابقة» وتُستبعد من المقارنة (تبقى محفوظة في السجلّ).</div>':'')
+    +'<label>سبب الإرجاع وما المطلوب تعديله <span style="color:var(--danger)">*</span></label><textarea id="bnc-reason" rows="3" placeholder="مثال: المواصفة الفنية للبند الأول غير دقيقة — يرجى تحديد النوع/المقاس..."></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-primary" onclick="pa_confirmBounce(\''+id+'\')">'+ic('undo',15)+' إرجاع للمقدّم</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_confirmBounce(id){
+  var reason=(($('bnc-reason')||{}).value||'').trim();
+  if(!reason){ var el=$('bnc-reason'); if(el) el.style.borderColor='var(--danger)'; toast('سبب الإرجاع مطلوب','err'); return; }
+  try{ await pa_rpc('portal_bounce_to_requester',{p_request_id:id,p_reason:reason}); }catch(e){ return; }
+  closeModal(); toast('أُعيد الطلب للمقدّم لتعديل المواصفات','ok'); pa_notify('request',id,'returned',reason); await pa_after(id);
+}
 
 /* (4) تعطيل ميزات النسخ المحلي التجريبية بأمان (البيانات في Supabase لا localStorage) */
 try{ confirmImport=function(){ toast('الاستيراد غير متاح في النسخة الحيّة — البيانات محفوظة في Supabase','err'); try{closeModal();}catch(e){} }; }catch(e){}
@@ -3765,6 +3781,7 @@ comparisonPanel = function(r){
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+awardBtns
     +((pa_splitSuppliers(r).length>1)?'<button class="btn btn-gold btn-sm" onclick="awardSplit(\''+r.id+'\')" style="border:1px dashed var(--gold-3,#8a6a30)">'+ic('scale',13)+' تعميد مجزّأ ('+pa_splitSuppliers(r).length+' موردين حسب الاختيار)</button>':'')
     +'</div>'
+    +'<div class="muted" style="font-size:11.5px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line,#e2e6ee)">'+ic('undo',13)+' خطأ في مواصفات الطلب؟ <button class="btn btn-ghost btn-sm" onclick="pa_bounceToRequester(\''+r.id+'\')">'+ic('undo',12)+' إرجاع للمقدّم لتعديل المواصفات</button></div>'
     +(enough?'':'<div class="chip" style="margin-top:10px;color:var(--danger);border-color:var(--danger-line)">'+ic('alert',13)+' يلزم '+p.quotesRequired+' عروض حسب الحوكمة — توجد '+cols.length+' فقط</div>');
 };
 
