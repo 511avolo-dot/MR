@@ -2651,12 +2651,13 @@ function pa_status(s){
   return 'approved'; /* pricing|award_review|awarded|payment_pending|receipt_pending|closed → معتمد + phase */ }
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
+var BUDGETS=[], IBANCHG=[];   /* الميزانيات (031) + طلبات تغيير الآيبان (032) — تُملأ في loadAll */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2677,8 +2678,16 @@ async function loadAll(){
     SB.from('portal_audit').select('*').order('id'),
     SB.from('portal_po_approvals').select('*').order('seq'),
     SB.from('portal_supplier_invoices').select('*').order('id'),  /* فواتير المورد (هجرة 033) — يُتحمَّل غيابه قبل التطبيق */
-    SB.from('portal_returns').select('*').order('id')             /* المرتجعات + إشعار مدين (هجرة 034) — يُتحمَّل غيابه */
+    SB.from('portal_returns').select('*').order('id'),            /* المرتجعات + إشعار مدين (هجرة 034) — يُتحمَّل غيابه */
+    SB.from('portal_budgets').select('*'),                        /* الميزانيات (هجرة 031) — يُتحمَّل غيابه */
+    SB.from('portal_supplier_iban_changes').select('*').order('id')  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
   ]);
+  /* الميزانيات: department_id|fiscal_year → amount (هجرة 031). window.__paBudOK للتفعيل. */
+  window.__paBudOK=!!(budR && !budR.error);
+  BUDGETS=(budR && !budR.error)?(budR.data||[]).map(x=>({id:x.id, dept:x.department_id, year:Number(x.fiscal_year)||0, amount:Number(x.amount)||0, note:x.note||''})):[];
+  /* طلبات تغيير الآيبان (هجرة 032). window.__paIbcOK للتفعيل. */
+  window.__paIbcOK=!!(ibcR && !ibcR.error);
+  IBANCHG=(ibcR && !ibcR.error)?(ibcR.data||[]).map(x=>({id:x.id, supplierId:x.supplier_id, oldIban:x.old_iban||'', newIban:x.new_iban||'', reason:x.reason||'', status:x.status||'pending', requestedBy:x.requested_by||'', decidedBy:x.decided_by||''})):[];
   /* خريطة أسعار البنود: offer_id → { item_seq: unit_price }. تتحمّل غياب الجدول (قبل الهجرة 022). */
   const oiByOffer={}; if(oiR && !oiR.error){ (oiR.data||[]).forEach(x=>{ (oiByOffer[x.offer_id]=oiByOffer[x.offer_id]||{})[x.item_seq]=Number(x.unit_price)||0; }); }
   /* بنود الترسية المجزّأة: request_id → [{seq, offerId, supplierName, qty, unitPrice, lineTotal}] (هجرة 024). */
@@ -3212,6 +3221,103 @@ async function pa_confirmReturn(reqId){
     await pa_rpc('portal_return_record',{p_request_id:reqId,p_lines:[{seq:1,qty:qty,unit_price:price}],p_reason:reason,p_supplier_name:sup||null,p_doc_key:docKey});
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر تسجيل المرتجع'),'err'); return; }
   closeModal(); toast('سُجّل المرتجع وأُصدر إشعار مدين ✓','ok'); await pa_after(reqId);
+}
+
+/* ══════ تبويبا الإدارة: الميزانيات (031) + بيانات المورد البنكية/الآيبان (032) ══════ */
+if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
+  adminHTML=function(){
+    if(typeof isAdmin==='function' && !isAdmin()) return _pa_refAdminHTML();
+    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban'){
+      var body = ADMIN_TAB==='budget'? pa_budgetSection() : pa_ibanSection();
+      var bar='<div class="filters">'+pa_adminExtraBtns(true)+'</div>';
+      return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية</div></div></div>'
+        +'<div class="filters"><button class="fbtn" onclick="setAdminTab(\'accounts\')">'+ic('undo',15)+' رجوع لأقسام الإدارة</button></div>'+bar+body;
+    }
+    var html=_pa_refAdminHTML();
+    var idx=html.indexOf('class="filters"'); if(idx>=0){ var close=html.indexOf('</div>', idx); if(close>=0){ html=html.slice(0,close)+pa_adminExtraBtns(false)+html.slice(close); } }
+    return html;
+  };
+}
+function pa_adminExtraBtns(activeCtx){
+  return '<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
+    +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>';
+}
+function pa_budgetSection(){
+  if(!window.__paBudOK) return '<div class="card"><div class="muted" style="padding:8px 0">إدارة الميزانيات تتطلّب تطبيق الهجرة 031 على القاعدة الحيّة.</div></div>';
+  var yr = window.__paBudYear || new Date().getFullYear();
+  var comm={}; (REQS||[]).forEach(function(r){ var p=r.proc||{}; if(!(p.isSplit||(Number(p.winnerTotal)||0)>0)) return;
+    var y=r.createdAt?new Date(r.createdAt).getFullYear():yr; if(y!==yr) return; var d=r.deptId||'—'; comm[d]=(comm[d]||0)+pa_awardTotalOf(r); });
+  var deptOpts=Object.entries(DEPTS).map(function(e){ return '<option value="'+e[0]+'">'+esc(e[1].n)+' — '+esc(e[1].sector||'')+'</option>'; }).join('');
+  var rows=Object.entries(DEPTS).map(function(e){ var dk=e[0], d=e[1]; var b=BUDGETS.find(function(x){return x.dept===dk && x.year===yr;});
+    var amt=b?b.amount:0; var c=comm[dk]||0; var avail=amt-c; var over=amt>0 && c>amt;
+    return '<div class="bar-row"><span class="bl">'+esc(d.n)+'</span>'
+      +'<span style="min-width:120px;text-align:left">'+ (amt>0?money(amt):'<span class="muted">—</span>') +'</span>'
+      +'<span style="min-width:120px;text-align:left">'+money(c)+'</span>'
+      +'<b style="min-width:120px;text-align:left;color:'+(over?'var(--danger)':(amt>0?'var(--ok)':'var(--muted)'))+'">'+(amt>0?money(avail):'—')+'</b></div>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('scale',16)+'</span>تحديد ميزانية قسم</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">تُقارَن بالمرتبط (التعميدات شاملة الضريبة). الإنفاذ المانع يُفعَّل بمفتاح <code>budget_enforce=1</code> في الإعدادات.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">'
+    +'<div style="flex:1;min-width:160px"><label style="font-size:11px">القسم</label><select class="input" id="bud-dept">'+deptOpts+'</select></div>'
+    +'<div style="width:110px"><label style="font-size:11px">السنة</label><input class="input num" id="bud-year" type="number" value="'+yr+'"></div>'
+    +'<div style="width:160px"><label style="font-size:11px">المبلغ (ر.س)</label><input class="input num" id="bud-amt" type="number" min="0"></div>'
+    +'<button class="btn btn-gold" onclick="pa_saveBudget()">'+ic('check',15)+' حفظ الميزانية</button></div></div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('layers',16)+'</span>الميزانية مقابل المرتبط — سنة '+yr+'</div>'
+    +'<div class="bar-row" style="font-weight:700;color:var(--muted)"><span class="bl">القسم</span><span style="min-width:120px;text-align:left">المعتمد</span><span style="min-width:120px;text-align:left">المرتبط</span><span style="min-width:120px;text-align:left">المتاح</span></div>'
+    +rows+'</div>';
+}
+async function pa_saveBudget(){
+  var dept=($('bud-dept')||{}).value||''; var year=parseInt(($('bud-year')||{}).value||'0',10); var amt=Number(($('bud-amt')||{}).value||0);
+  if(!dept){ toast('اختر القسم','err'); return; }
+  if(!(year>2000)){ toast('سنة غير صالحة','err'); return; }
+  if(!(amt>=0)){ toast('مبلغ غير صالح','err'); return; }
+  try{ await pa_rpc('portal_budget_set',{p_dept:dept,p_year:year,p_amount:amt,p_note:null}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر حفظ الميزانية'),'err'); return; }
+  window.__paBudYear=year; toast('حُفظت الميزانية ✓','ok'); await loadAll(); render();
+}
+function pa_ibanSection(){
+  if(!window.__paIbcOK) return '<div class="card"><div class="muted" style="padding:8px 0">ضبط تغيير الآيبان يتطلّب تطبيق الهجرة 032 على القاعدة الحيّة.</div></div>';
+  var pending=(IBANCHG||[]).filter(function(x){return x.status==='pending';});
+  var supById={}; Object.keys(SUPPLIERS||{}).forEach(function(k){ var s=SUPPLIERS[k]; if(s&&s._sid!=null) supById[s._sid]={n:s.n,iban:s.iban}; });
+  var pRows=pending.map(function(x){ var s=supById[x.supplierId]||{}; var mine=x.requestedBy===((USERS[ME]||{}).n||ME) || x.requestedBy===ME;
+    return '<div style="border:1px solid var(--line,#e2e6ee);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+      +'<div style="font-weight:800">'+esc(s.n||('مورد #'+x.supplierId))+'</div>'
+      +'<div class="muted" style="font-size:11.5px" dir="ltr">من: '+esc(x.oldIban||'—')+' ← إلى: <b>'+esc(x.newIban)+'</b></div>'
+      +'<div class="muted" style="font-size:11.5px">السبب: '+esc(x.reason||'—')+' · طلبه: '+esc(uName(x.requestedBy)||x.requestedBy)+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:8px">'
+      +'<button class="btn btn-gold btn-sm" onclick="pa_approveIban('+x.id+')">'+ic('check',13)+' اعتماد التغيير</button>'
+      +'<button class="btn btn-danger btn-sm" onclick="pa_rejectIban('+x.id+')">'+ic('x',13)+' رفض</button></div>'
+      +'<div class="muted" style="font-size:11px;margin-top:5px">فصل مهام: من طلب التغيير لا يعتمده.</div></div>';
+  }).join('')||'<div class="muted" style="font-size:12px">لا طلبات تغيير معلّقة.</div>';
+  var supOpts=Object.keys(SUPPLIERS||{}).map(function(k){ var s=SUPPLIERS[k]; return (s&&s._sid!=null)?('<option value="'+s._sid+'">'+esc(s.n)+'</option>'):''; }).join('');
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('cart',16)+'</span>طلب تغيير آيبان مورد</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">تغيير البيانات البنكية يتطلّب اعتماداً مزدوجاً (وقاية احتيال). يُفعَّل الإلزام بمفتاح <code>iban_change_control=1</code>.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">'
+    +'<div style="flex:1;min-width:180px"><label style="font-size:11px">المورد</label><select class="input" id="ibc-sup">'+supOpts+'</select></div>'
+    +'<div style="flex:1;min-width:200px"><label style="font-size:11px">الآيبان الجديد (SA+22)</label><input class="input" id="ibc-iban" dir="ltr" placeholder="SA.."></div></div>'
+    +'<label style="font-size:11px;margin-top:8px">السبب</label><input class="input" id="ibc-reason" placeholder="سبب تغيير الحساب البنكي">'
+    +'<div style="margin-top:10px"><button class="btn btn-gold" onclick="pa_requestIbanChange()">'+ic('check',15)+' تقديم طلب التغيير</button></div></div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('clock',16)+'</span>طلبات معلّقة ('+pending.length+')</div>'+pRows+'</div>';
+}
+async function pa_requestIbanChange(){
+  var sid=parseInt(($('ibc-sup')||{}).value||'0',10);
+  var iban=(($('ibc-iban')||{}).value||'').replace(/\s+/g,'').toUpperCase();
+  var reason=(($('ibc-reason')||{}).value||'').trim();
+  if(!(sid>0)){ toast('اختر المورد','err'); return; }
+  if(!/^SA\d{22}$/.test(iban)){ toast('آيبان غير صحيح — SA + 22 رقماً','err'); return; }
+  try{ await pa_rpc('portal_supplier_iban_request',{p_supplier_id:sid,p_new_iban:iban,p_reason:reason||null}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر تقديم الطلب'),'err'); return; }
+  toast('قُدّم طلب تغيير الآيبان للاعتماد ✓','ok'); await loadAll(); render();
+}
+async function pa_approveIban(id){
+  try{ await pa_rpc('portal_supplier_iban_approve',{p_change_id:id}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الاعتماد'),'err'); return; }
+  toast('اعتُمد تغيير الآيبان وطُبّق ✓','ok'); await loadAll(); render();
+}
+async function pa_rejectIban(id){
+  try{ await pa_rpc('portal_supplier_iban_reject',{p_change_id:id,p_note:null}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الرفض'),'err'); return; }
+  toast('رُفض طلب تغيير الآيبان','ok'); await loadAll(); render();
 }
 
 /* ══════ تبويب التقارير والتحليلات (من جانب العميل — تجميع من REQS المحمّلة) ══════ */
