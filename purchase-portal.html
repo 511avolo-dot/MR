@@ -2656,7 +2656,7 @@ async function loadAll(){
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2675,13 +2675,18 @@ async function loadAll(){
     SB.from('portal_payments').select('*').order('id'),
     SB.from('portal_receipts').select('*').order('received_at'),
     SB.from('portal_audit').select('*').order('id'),
-    SB.from('portal_po_approvals').select('*').order('seq')
+    SB.from('portal_po_approvals').select('*').order('seq'),
+    SB.from('portal_supplier_invoices').select('*').order('id')   /* فواتير المورد (هجرة 033) — يُتحمَّل غيابه قبل التطبيق */
   ]);
   /* خريطة أسعار البنود: offer_id → { item_seq: unit_price }. تتحمّل غياب الجدول (قبل الهجرة 022). */
   const oiByOffer={}; if(oiR && !oiR.error){ (oiR.data||[]).forEach(x=>{ (oiByOffer[x.offer_id]=oiByOffer[x.offer_id]||{})[x.item_seq]=Number(x.unit_price)||0; }); }
   /* بنود الترسية المجزّأة: request_id → [{seq, offerId, supplierName, qty, unitPrice, lineTotal}] (هجرة 024). */
   const alByReq={}; if(alR && !alR.error){ (alR.data||[]).forEach(x=>{ (alByReq[x.request_id]=alByReq[x.request_id]||[]).push(
     {seq:x.item_seq, offerId:x.offer_id, supplierName:x.supplier_name, qty:Number(x.qty)||0, unitPrice:Number(x.unit_price)||0, lineTotal:Number(x.line_total)||0}); }); }
+  /* فواتير المورد: request_id → [{id, supplierName, invoiceNo, invoiceDate, amount, docKey, recordedBy, recordedAt}] (هجرة 033، يُتحمَّل غيابه). */
+  window.__paInvOK=!!(invR && !invR.error);  /* الجدول متاح (بعد تطبيق 033) — تُظهر لوحة الفاتورة فقط حينها */
+  const invByReq={}; if(invR && !invR.error){ (invR.data||[]).forEach(x=>{ (invByReq[x.request_id]=invByReq[x.request_id]||[]).push(
+    {id:x.id, supplierName:x.supplier_name||'', invoiceNo:x.invoice_no||'', invoiceDate:x.invoice_date||null, amount:Number(x.amount)||0, docKey:x.doc_key||null, recordedBy:x.recorded_by||null, recordedAt:pa_ms(x.recorded_at)}); }); }
 
   /* تشخيص: سجّل أي خطأ استعلام في الـConsole (يكشف جدولاً ناقصاً أو حجب RLS أو صلاحية) */
   var _paQ={portal_users:uR,portal_departments:dR,portal_jobs:jR,portal_doa:doaR,portal_workflows:wfR,portal_suppliers:supR,portal_settings:setR,portal_requests:reqR,portal_request_items:itR,portal_approvals:apR,portal_offers:ofR,portal_award:awR,portal_award_approvals:aaR,portal_payments:payR,portal_receipts:rcR,portal_audit:auR,portal_po_approvals:poR};
@@ -2804,6 +2809,8 @@ async function loadAll(){
       /* الطور يُشتقّ من activePayments (يُقصي المرفوض/المُعاد)، أمّا العرض فمن كامل payments
          كي تظهر بطاقة الصرف المُعاد/المرفوض + مهمتها + سبب الإرجاع في المخطّط الزمني (انحدار مُصلَح). */
       if(payments.length){ proc.payment=pa_mapPayment(payments[payments.length-1]); }
+      /* فواتير المورد لهذا الطلب (المطابقة الثلاثية، هجرة 033) */
+      proc.invoices=invByReq[r.id]||[];
       /* ── الترسية المجزّأة (النموذج أ): بنود الترسية + أنصبة الموردين + دفعة كل مورد ── */
       const aLines=alByReq[r.id]||[]; proc.isSplit=(aLines.length>0 && !!activeAward);  /* لا split إلا مع تعميد نشط (لا يتأثّر بترسية مرفوضة) */
       if(proc.isSplit){
@@ -3147,7 +3154,72 @@ if(_pa_refPaymentPreview){ paymentPreview=function(r){
   if(pk){ html+='<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">📄</span>محضر/سند الصرف</div>'
     +'<div class="muted" style="font-size:12px;margin-bottom:8px">سند إثبات تنفيذ الصرف (تحويل/قبض) — يُعرض داخل النظام.</div>'
     +'<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pk)+'\')">📄 عرض سند الصرف</button></div>'; }
+  /* لوحة فواتير المورد + المطابقة الثلاثية (هجرة 033) */
+  html+=pa_invoicePanel(r);
   return html; }; }
+
+/* ══════ فواتير المورد + المطابقة الثلاثية (033): رفع أصل الفاتورة PDF + عرضه داخل النظام ══════ */
+function pa_awardTotalOf(r){ /* إجمالي أمر الشراء شاملاً الضريبة (المجزّأ بمجموع بنوده) */
+  var p=r&&r.proc; if(!p) return 0; var vat=1+pa_vat()/100;
+  if(p.isSplit && (p.awardLines||[]).length){ return Math.round(p.awardLines.reduce(function(a,l){return a+(Number(l.lineTotal)||0);},0)*vat); }
+  return Math.round((Number(p.winnerTotal)||0)*vat);
+}
+function pa_canInvoice(){ var a=accessOf(ME); return isAdmin() || !!(a.can&&a.can.manageRfq) || !!(a.see&&a.see.finance); }
+function pa_invoicePanel(r){
+  if(!window.__paInvOK) return '';   /* جدول الفواتير غير مطبَّق بعد (033) — لا تُظهر اللوحة */
+  var p=r&&r.proc; if(!p) return '';
+  /* تظهر بعد التعميد (وجود أمر شراء/تعميد) — حيث تبدأ المطابقة */
+  if(!(p.po || p.awardChain || p.isSplit || p.payment)) return '';
+  var invs=p.invoices||[]; var award=pa_awardTotalOf(r);
+  var invoiced=invs.reduce(function(a,x){return a+(Number(x.amount)||0);},0);
+  var received=!!p.grn || (p.phase==='closed');
+  var within=invoiced<=award*(1+ (Number((PSET&&PSET.three_way_tolerance_pct)||0))/100 );
+  var rows=invs.map(function(x){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line,#e2e6ee);border-radius:10px;padding:9px 12px;margin-bottom:7px;flex-wrap:wrap">'
+      +'<div><b>#'+esc(x.invoiceNo)+'</b> · '+money(x.amount)+(x.supplierName?(' · '+esc(x.supplierName)):'')+(x.invoiceDate?('<span class="muted" style="font-size:11px"> · '+esc(String(x.invoiceDate))+'</span>'):'')+'</div>'
+      +'<div>'+(x.docKey?('<button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(x.docKey)+'\')">📄 عرض الفاتورة</button>'):'<span class="chip muted">بلا مرفق</span>')+'</div></div>';
+  }).join('');
+  var match = invoiced>0 && within && received;
+  var status='<div class="mini-req" style="margin-bottom:10px"><div class="r"><span class="l">إجمالي أمر الشراء</span><b>'+money(award)+'</b></div>'
+    +'<div class="r"><span class="l">إجمالي الفواتير</span><b>'+money(invoiced)+'</b></div>'
+    +'<div class="r"><span class="l">الاستلام</span><b>'+(received?'<span style="color:var(--ok)">مُستلَم ✓</span>':'<span style="color:var(--danger)">لم يُسجَّل</span>')+'</b></div>'
+    +'<div class="r"><span class="l">المطابقة الثلاثية</span><b>'+(match?'<span style="color:var(--ok)">مطابقة ✓</span>':(invoiced>0&&!within?'<span style="color:var(--danger)">الفواتير تتجاوز أمر الشراء</span>':'<span style="color:var(--gold-3)">غير مكتملة</span>'))+'</b></div></div>';
+  var addBtn = pa_canInvoice()? '<button class="btn btn-gold btn-sm" onclick="pa_recordInvoice(\''+r.id+'\')">'+ic('plus',13)+' تسجيل فاتورة مورد + رفع الأصل</button>' : '';
+  return '<div class="card" style="margin-top:12px;border-color:var(--gold-soft)"><div class="sec-title"><span class="ico">'+ic('scale',16)+'</span>فواتير المورد والمطابقة الثلاثية</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">أصل الفاتورة (PDF/صورة) يُخزَّن ويُفتح داخل النظام. المطابقة الثلاثية تُقارن أمر الشراء ↔ الاستلام ↔ الفاتورة (تُفرَض على الصرف الآجل عند تفعيلها).</div>'
+    +status+(rows||'<div class="muted" style="font-size:12px;margin-bottom:8px">لا فواتير مسجّلة بعد.</div>')+addBtn+'</div>';
+}
+function pa_recordInvoice(reqId){
+  var r=(REQS||[]).find(function(x){return x.id===reqId;}); if(!r){ return; }
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('scale',22)+'</div><div><h3>تسجيل فاتورة مورد</h3><div class="ms">أرفِق أصل الفاتورة (PDF أو صورة) — يُخزَّن ويُفتح داخل النظام</div></div></div>'
+    +'<div class="modal-body">'
+    +'<label>رقم الفاتورة</label><input class="input" id="iv-no" placeholder="INV-...">'
+    +'<label style="margin-top:10px">المبلغ (ر.س، شامل الضريبة)</label><input class="input num" id="iv-amt" type="number" min="1">'
+    +'<label style="margin-top:10px">اسم المورد <span class="muted" style="font-weight:400">(لكشف التكرار)</span></label><input class="input" id="iv-sup" placeholder="اسم المورد">'
+    +'<label style="margin-top:10px">تاريخ الفاتورة <span class="muted" style="font-weight:400">(اختياري)</span></label><input class="input" id="iv-date" type="date">'
+    +'<label style="margin-top:10px">أصل الفاتورة <span class="muted" style="font-weight:400">(PDF أو صورة)</span></label>'
+    +'<label id="iv-drop" for="iv-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:13px 15px;cursor:pointer;margin-bottom:6px;font-weight:700;font-size:13px"><span style="font-size:20px">📎</span><span id="iv-fn">اضغط لاختيار ملف الفاتورة</span></label>'
+    +'<input id="iv-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_ivFile()">'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="iv-btn" onclick="pa_confirmInvoice(\''+reqId+'\')">'+ic('check',15)+' تسجيل الفاتورة</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+function pa_ivFile(){ var i=$('iv-file'),n=$('iv-fn'),d=$('iv-drop'); var f=i&&i.files&&i.files[0];
+  if(f){ if(!pa_docValidate(f)){ i.value=''; return; } n.textContent='✓ '+f.name; if(d){ d.style.borderStyle='solid'; d.style.background='rgba(46,125,91,.12)'; d.style.borderColor='var(--ok,#2e7d5b)'; d.style.color='var(--ok,#2e7d5b)'; } } else { n.textContent='اضغط لاختيار ملف الفاتورة'; } }
+async function pa_confirmInvoice(reqId){
+  var no=(($('iv-no')||{}).value||'').trim();
+  var amt=Number(($('iv-amt')||{}).value||0);
+  var sup=(($('iv-sup')||{}).value||'').trim();
+  var dt=(($('iv-date')||{}).value||'').trim()||null;
+  var fileEl=$('iv-file'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(!no){ toast('رقم الفاتورة مطلوب','err'); return; }
+  if(!(amt>0)){ toast('مبلغ الفاتورة مطلوب','err'); return; }
+  if(file&&!pa_docValidate(file)) return;
+  var btn=$('iv-btn'); if(btn) btn.disabled=true; var docKey=null;
+  try{ if(file){ docKey=await pa_docUpload('inv',reqId,file); }
+    await pa_rpc('portal_invoice_record',{p_request_id:reqId,p_invoice_no:no,p_amount:amt,p_supplier_name:sup||null,p_invoice_date:dt,p_doc_key:docKey,p_note:null});
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر تسجيل الفاتورة'),'err'); return; }
+  closeModal(); toast('سُجّلت الفاتورة'+(docKey?' مع الأصل':'')+' ✓','ok'); await pa_after(reqId);
+}
 var _pa_refGrnPreview = (typeof grnPreview==='function')?grnPreview:null;
 if(_pa_refGrnPreview){ grnPreview=function(r){ var html=_pa_refGrnPreview(r);
   var docs=(r&&r.proc&&r.proc.receiptDocs)||[];

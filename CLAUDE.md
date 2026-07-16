@@ -216,6 +216,11 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   **رفع أصل الفاتورة PDF:** `portal-doc.js` اكتسب نوع `inv` (صلاحية `can_manage_procurement` أو `can_see_finance`)
   → يُخزَّن في R2 (`docs/inv/…`) ويُفتح داخل النظام لكل من يرى الطلب. اختبارها `14_three_way.sql` (7 تأكيدات).
   **⚠️ تطبَّق حيّاً بعد 032. الترتيب الكامل الجديد: 029→030→031→032→033. الحزمة: 32/32 PASS.**
+  **واجهة الفاتورة (المُحوِّل فقط، السطور 2556+):** `loadAll` يجلب `portal_supplier_invoices` (متسامح مع غيابه)
+  ويضبط `window.__paInvOK`؛ لوحة `pa_invoicePanel` مُحقونة في مُغلِّف `paymentPreview` — تعرض المطابقة الثلاثية
+  (أمر الشراء/الاستلام/الفواتير) + قائمة الفواتير بزرّ «عرض الفاتورة» (pa_docView على doc_key) + «تسجيل فاتورة +
+  رفع الأصل» (pa_recordInvoice → pa_docUpload('inv') + portal_invoice_record). **لا تظهر اللوحة إلا بعد تطبيق 033
+  حيّاً** (بوابة __paInvOK). السلامة النحوية مُتحقَّقة؛ **تحتاج معاينة بصرية على Cloudflare (لا يمكن اختبار المتصفّح محلياً).**
 
 ---
 
