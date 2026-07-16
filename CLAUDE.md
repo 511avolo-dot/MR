@@ -174,6 +174,8 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   دون لمس أيٍّ من الـ80 دالة) + `portal_outbox_claim` (FOR UPDATE SKIP LOCKED، خادم فقط) + `portal_outbox_mark`
   (نجاح⇒sent، فشل⇒تراجع أُسّي 2ⁿ دقيقة بحدّ 60 ثم dead-letter عند 6 محاولات) + `portal_outbox_purge`.
   عامل التسليم: **`functions/api/portal-outbox-drain.js`** (يعيد استخدام `_portal-shared`، محميّ بـ`CRON_SECRET`).
+  **يشغّل أيضاً `portal_run_sla` (تصعيد SLA مجدوَل)** فلم يعد التصعيد يعتمد على زيارة الواجهة؛ إشعارات
+  التصعيد تُلتقط في الصادر وتُرسَل بنفس الدورة (بند P1 من التدقيق — SLA كسول → مجدوَل).
   **خامل حتى تفعيل المالك** (لا سلوك يتغيّر): يضيف `CRON_SECRET` + يربط Cron Trigger كل دقيقة، **وعند التحويل يزيل
   نداءات `pa_notify` الفورية من الواجهة** تفادياً لازدواج البريد.
 - **030 (`030-execute-hardening.sql`) — تصليب صلاحيات التنفيذ + search_path** (من مدقّق Supabase الحيّ: Public Can

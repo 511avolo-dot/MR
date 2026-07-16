@@ -1,13 +1,15 @@
 // ════════════════════════════════════════════════════════════════════════════
 //  functions/api/portal-outbox-drain.js
-//  عامل تسليم صندوق الصادر (Transactional Outbox worker) — البوابة (النظام 3).
+//  عامل الصيانة المجدوَل — البوابة (النظام 3): تصعيد SLA + تسليم صندوق الصادر.
 //
-//  الغرض: تحويل الإشعارات من fire-and-forget غير موثوق إلى تسليم مضمون بإعادة
-//  محاولة. يُستدعى دورياً (Cloudflare Cron Trigger كل دقيقة، أو أي مجدوِل خارجي،
-//  أو نبضة كسولة من الواجهة كخط دفاع ثانٍ). كل نداء:
-//    1) يسحب دفعة مستحقّة عبر RPC ذرّية (portal_outbox_claim، FOR UPDATE SKIP LOCKED).
+//  الغرض: تحويل الأشياء الحسّاسة للوقت من «نبضة كسولة تعتمد زيارة الواجهة» إلى
+//  تشغيل مجدوَل موثوق. يُستدعى دورياً (Cloudflare Cron Trigger كل دقيقة، أو أي
+//  مجدوِل خارجي، أو نبضة من الواجهة كخط دفاع ثانٍ). كل نداء:
+//    0) يشغّل تصعيد SLA (portal_run_sla) — لا يعتمد بعد الآن على فتح أحدهم للتطبيق.
+//    1) يسحب دفعة إشعارات مستحقّة عبر RPC ذرّية (portal_outbox_claim، FOR UPDATE SKIP LOCKED).
 //    2) يحلّ بريد المستلِم ويُرسل عبر Resend.
 //    3) يعلّم النتيجة (portal_outbox_mark): نجاح ⇒ sent؛ فشل ⇒ تراجع أُسّي / dead-letter.
+//  (إشعارات تصعيد SLA تُلتقط في portal_outbox عبر مُشغِّل 029 فتُرسَل في نفس الدورة.)
 //
 //  الحماية: سرّ مشترك CRON_SECRET (ترويسة Authorization: Bearer <secret> أو ?key=).
 //  يعيد استخدام PORTAL_SUPABASE_* وRESEND_API_KEY القائمة — لا متغيّر جديد سوى CRON_SECRET.
@@ -58,6 +60,20 @@ function emailHtml(env, row) {
   </div>`;
 }
 
+// تصعيد SLA المجدوَل: يستبدل الاعتماد على «نبضة كسولة من الواجهة». portal_run_sla
+// خادمية (service_role) ومخنوقة داخلياً (last_escalation_at) فآمنة للاستدعاء كل دقيقة.
+// إشعارات التصعيد التي تُنشئها تُلتقط في portal_outbox (مُشغِّل 029) فتُرسَل بنفس الدورة.
+async function runSla(env, base) {
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/portal_run_sla`, {
+      method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json' }, body: '{}',
+    });
+    if (!r.ok) return { ok: false, detail: (await r.text().catch(() => '')).slice(0, 200) };
+    const n = await r.json().catch(() => null);
+    return { ok: true, escalated: typeof n === 'number' ? n : 0 };
+  } catch (e) { return { ok: false, detail: String(e).slice(0, 200) }; }
+}
+
 async function claim(env, base, limit) {
   const r = await fetch(`${base}/rest/v1/rpc/portal_outbox_claim`, {
     method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json' },
@@ -83,9 +99,13 @@ async function drain({ request, env }) {
   let limit = 20;
   try { limit = Math.max(1, Math.min(100, parseInt(new URL(request.url).searchParams.get('limit') || '20', 10) || 20)); } catch (_) {}
 
+  // (1) تصعيد SLA المجدوَل أولاً — فتُلتقط إشعاراته في الصادر وتُرسَل في نفس هذه الدورة.
+  const sla = await runSla(env, base);
+
+  // (2) تسليم صندوق الصادر.
   let rows;
-  try { rows = await claim(env, base, limit); } catch (e) { return json({ error: 'claim_failed', detail: String(e).slice(0, 200) }, 502); }
-  if (!Array.isArray(rows) || !rows.length) return json({ ok: true, processed: 0 });
+  try { rows = await claim(env, base, limit); } catch (e) { return json({ error: 'claim_failed', detail: String(e).slice(0, 200), sla }, 502); }
+  if (!Array.isArray(rows) || !rows.length) return json({ ok: true, processed: 0, sla });
 
   let sent = 0, skipped = 0, failed = 0;
   for (const row of rows) {
@@ -100,7 +120,7 @@ async function drain({ request, env }) {
       await mark(env, base, row.id, false, String(e)); failed++;
     }
   }
-  return json({ ok: true, processed: rows.length, sent, skipped, failed });
+  return json({ ok: true, processed: rows.length, sent, skipped, failed, sla });
 }
 
 export const onRequestPost = drain;
