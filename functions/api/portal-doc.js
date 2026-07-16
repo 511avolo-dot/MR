@@ -16,15 +16,16 @@
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const KEY_RE = /^docs\/(pay|grn|inst|inv)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
+const KEY_RE = /^docs\/(pay|grn|inst|inv|ret)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
 // pay=محضر صرف (مالية) · grn=مشهد استلام (مستودع) · inst=مرفق دفعة (مشتريات) · inv=أصل فاتورة المورد (مشتريات/مالية)
-// القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع.
+// ret=محضر مرتجع/تالف (استلام/جودة أو مشتريات). القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع.
 const KIND_PERM = {
   pay:  ['can_disburse'],
   grn:  ['can_verify_stock'],
   inst: ['can_manage_procurement'],
   inv:  ['can_manage_procurement', 'can_see_finance'],
+  ret:  ['can_verify_stock', 'can_manage_procurement'],
 };
 
 function json(obj, status = 200) {
