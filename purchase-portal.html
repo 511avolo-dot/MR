@@ -2651,13 +2651,13 @@ function pa_status(s){
   return 'approved'; /* pricing|award_review|awarded|payment_pending|receipt_pending|closed → معتمد + phase */ }
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
-var BUDGETS=[], IBANCHG=[];   /* الميزانيات (031) + طلبات تغيير الآيبان (032) — تُملأ في loadAll */
+var BUDGETS=[], IBANCHG=[], CURRENCIES=[];   /* الميزانيات (031) + طلبات تغيير الآيبان (032) + العملات (035) — تُملأ في loadAll */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2680,8 +2680,12 @@ async function loadAll(){
     SB.from('portal_supplier_invoices').select('*').order('id'),  /* فواتير المورد (هجرة 033) — يُتحمَّل غيابه قبل التطبيق */
     SB.from('portal_returns').select('*').order('id'),            /* المرتجعات + إشعار مدين (هجرة 034) — يُتحمَّل غيابه */
     SB.from('portal_budgets').select('*'),                        /* الميزانيات (هجرة 031) — يُتحمَّل غيابه */
-    SB.from('portal_supplier_iban_changes').select('*').order('id')  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
+    SB.from('portal_supplier_iban_changes').select('*').order('id'),  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
+    SB.from('portal_currencies').select('*').order('code')            /* العملات (هجرة 035) — يُتحمَّل غيابه */
   ]);
+  /* العملات (هجرة 035). window.__paCurOK للتفعيل. */
+  window.__paCurOK=!!(curR && !curR.error);
+  CURRENCIES=(curR && !curR.error)?(curR.data||[]).map(x=>({code:x.code, name:x.name||'', rate:Number(x.rate_to_base)||1, active:x.active!==false})):[];
   /* الميزانيات: department_id|fiscal_year → amount (هجرة 031). window.__paBudOK للتفعيل. */
   window.__paBudOK=!!(budR && !budR.error);
   BUDGETS=(budR && !budR.error)?(budR.data||[]).map(x=>({id:x.id, dept:x.department_id, year:Number(x.fiscal_year)||0, amount:Number(x.amount)||0, note:x.note||''})):[];
@@ -3227,10 +3231,10 @@ async function pa_confirmReturn(reqId){
 if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
   adminHTML=function(){
     if(typeof isAdmin==='function' && !isAdmin()) return _pa_refAdminHTML();
-    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban'){
-      var body = ADMIN_TAB==='budget'? pa_budgetSection() : pa_ibanSection();
+    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency'){
+      var body = ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : pa_currencySection();
       var bar='<div class="filters">'+pa_adminExtraBtns(true)+'</div>';
-      return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية</div></div></div>'
+      return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية · العملات</div></div></div>'
         +'<div class="filters"><button class="fbtn" onclick="setAdminTab(\'accounts\')">'+ic('undo',15)+' رجوع لأقسام الإدارة</button></div>'+bar+body;
     }
     var html=_pa_refAdminHTML();
@@ -3240,7 +3244,47 @@ if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
 }
 function pa_adminExtraBtns(activeCtx){
   return '<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
-    +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>';
+    +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>'
+    +'<button class="fbtn '+(ADMIN_TAB==='currency'?'active':'')+'" onclick="setAdminTab(\'currency\')">'+ic('money',15)+' العملات وأسعار الصرف</button>';
+}
+function pa_baseCur(){ return (PSET&&PSET.base_currency)||'SAR'; }
+function pa_currencySection(){
+  if(!window.__paCurOK) return '<div class="card"><div class="muted" style="padding:8px 0">إدارة العملات تتطلّب تطبيق الهجرة 035 على القاعدة الحيّة.</div></div>';
+  var base=pa_baseCur();
+  var rows=(CURRENCIES||[]).slice().sort(function(a,b){return a.code<b.code?-1:1;}).map(function(c){
+    var isBase=c.code===base;
+    return '<div class="bar-row"><span class="bl"><b>'+esc(c.code)+'</b>'+(isBase?' <span class="badge gold">الأساس</span>':'')+' <span class="muted">'+esc(c.name||'')+'</span></span>'
+      +'<span style="min-width:120px;text-align:left">'+(c.rate)+'</span>'
+      +'<span style="min-width:70px;text-align:left">'+(c.active?'<span style="color:var(--ok)">مفعّلة</span>':'<span class="muted">معطّلة</span>')+'</span>'
+      +'<span style="min-width:70px;text-align:left">'+(isBase?'':'<button class="btn btn-danger btn-sm" onclick="pa_deleteCurrency(\''+esc(c.code)+'\')">'+ic('trash',13)+'</button>')+'</span></div>';
+  }).join('')||'<div class="muted" style="font-size:12px">لا عملات.</div>';
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>إضافة/تعديل عملة</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">السعر = قيمة وحدة العملة مقابل عملة الأساس ('+esc(base)+'). كل القيم تُحوَّل لعملة الأساس في الميزانية والتقارير والمطابقة.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">'
+    +'<div style="width:110px"><label style="font-size:11px">الرمز (ISO)</label><input class="input" id="cur-code" maxlength="3" dir="ltr" placeholder="USD" style="text-transform:uppercase"></div>'
+    +'<div style="flex:1;min-width:150px"><label style="font-size:11px">الاسم</label><input class="input" id="cur-name" placeholder="دولار أمريكي"></div>'
+    +'<div style="width:140px"><label style="font-size:11px">السعر مقابل '+esc(base)+'</label><input class="input num" id="cur-rate" type="number" step="0.0001" min="0" placeholder="3.75"></div>'
+    +'<label style="'+_pchk+'"><input type="checkbox" id="cur-active" checked> مفعّلة</label>'
+    +'<button class="btn btn-gold" onclick="pa_saveCurrency()">'+ic('check',15)+' حفظ</button></div></div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('scale',16)+'</span>العملات وأسعار الصرف</div>'
+    +'<div class="bar-row" style="font-weight:700;color:var(--muted)"><span class="bl">العملة</span><span style="min-width:120px;text-align:left">السعر</span><span style="min-width:70px;text-align:left">الحالة</span><span style="min-width:70px;text-align:left"></span></div>'
+    +rows+'</div>';
+}
+async function pa_saveCurrency(){
+  var code=(($('cur-code')||{}).value||'').trim().toUpperCase();
+  var name=(($('cur-name')||{}).value||'').trim();
+  var rate=Number(($('cur-rate')||{}).value||0);
+  var active=!!(($('cur-active')||{}).checked);
+  if(!/^[A-Z]{3}$/.test(code)){ toast('رمز عملة غير صالح (3 أحرف)','err'); return; }
+  if(!(rate>0)){ toast('سعر صرف غير صالح','err'); return; }
+  try{ await pa_rpc('portal_currency_set',{p_code:code,p_name:name||null,p_rate:rate,p_active:active}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر حفظ العملة'),'err'); return; }
+  toast('حُفظت العملة ✓','ok'); await loadAll(); render();
+}
+async function pa_deleteCurrency(code){
+  try{ await pa_rpc('portal_currency_delete',{p_code:code}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); return; }
+  toast('حُذفت العملة','ok'); await loadAll(); render();
 }
 function pa_budgetSection(){
   if(!window.__paBudOK) return '<div class="card"><div class="muted" style="padding:8px 0">إدارة الميزانيات تتطلّب تطبيق الهجرة 031 على القاعدة الحيّة.</div></div>';
