@@ -227,6 +227,19 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   **دمج في المطابقة الثلاثية:** `portal_three_way_status` والمُشغِّل صارا يحترمان **صافي المستحق = أمر الشراء −
   المرتجعات**. مستند المحضر: `portal-doc.js` نوع `ret`. اختبارها `15_returns.sql` (4 تأكيدات).
   **⚠️ الترتيب: 029→030→031→032→033→034. الحزمة: 36/36 PASS.** (واجهة المرتجعات: متابعة لاحقة.)
+- **035/036 (`035-multi-currency.sql` + `036-request-currency.sql`) — تعدّد العملات end-to-end:** جدول
+  `portal_currencies` (سعر مقابل الأساس) + بذرة SAR=1 + `base_currency` + `portal_currency_rate/set/delete`.
+  دوال القيمة (award_total/budget_committed/invoiced_total/returns_total) صارت **تحوّل بعملة الطلب لعملة
+  الأساس** فكل التجميعات موحّدة. 036: `portal_set_request_currency` (قبل التعميد). **خامل: كل البيانات SAR بسعر
+  1 = صفر تغيير.** الواجهة: تبويب إدارة «العملات» + مُنتقي عملة في تفاصيل الطلب. اختبار `16_currency.sql` (5).
+- **037 (`037-framework-contracts.sql`) — العقود الإطارية / أوامر شراء ممتدّة بدفعات (البند الكبير الأخير):**
+  جدول `portal_contracts` (سقف بعملة الأساس + مدة + حالة) + عمود `portal_requests.contract_id` (أمر سحب) +
+  `portal_contract_consumed/status/set/close` + `portal_link_request_contract`. **مُشغِّل قيد مؤجَّل
+  `trg_portal_contract_enforce`** يمنع تجاوز السقف/العقد المنتهي عند `contract_enforce=1` (وإلا تحذير). عدّة
+  أوامر سحب على العقد وكلٌّ يُصرف بدفعات (027). الواجهة: تبويب إدارة «العقود» + مُنتقي «ربط بعقد» في التفاصيل.
+  اختبار `17_contracts.sql` (5). **⚠️ الترتيب الكامل النهائي: 029→…→037. الحزمة: 46/46 PASS، خروج 0.**
+  **مفاتيح التفعيل التدريجي (كلها في JSON `portal_settings`، افتراضي 0): `budget_enforce` · `iban_change_control`
+  · `three_way_enforce`(+`three_way_tolerance_pct`) · `contract_enforce`.**
 - **تبويب التقارير والتحليلات (واجهة فقط، المُحوِّل عبر تغليف):** تبويب «التقارير» يُضاف بـ`TABS.push` +
   تغليف `navAllowed`/`render` (لا لمس منطقة التصميم 1–2555). `pa_reportsHTML` يجمّع من `REQS` المحمّلة:
   KPIs (الالتزام/المصروف/المتبقّي/الفواتير/المعمَّدة/الصرف المعلّق/المتأخرات) + أشرطة (الالتزام حسب القسم/أعلى
