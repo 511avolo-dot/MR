@@ -207,6 +207,15 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   أو = 1 (يُفرض المسار). اختبارها `13_supplier_iban.sql` (5 تأكيدات: مُطفأ لا يكسر · مُفعَّل يمنع المباشر ·
   مسار الاعتماد يطبّق · الحقول غير البنكية حرّة · الصلاحيات). **الحزمة كاملة: 25/25 PASS.**
   **التفعيل: ضبط `iban_change_control=1` + شاشة طلب/اعتماد في الواجهة (متابعة لاحقة).**
+- **033 (`033-three-way-match.sql`) — فاتورة المورد + المطابقة الثلاثية (P1):** جدول `portal_supplier_invoices`
+  (+ `doc_key` لأصل الفاتورة PDF + `UNIQUE(request_id,invoice_no)` + كشف الفاتورة المكرّرة عبر الطلبات) +
+  `portal_invoice_record` + `portal_three_way_status` (يقارن أمر الشراء ↔ المستلَم ↔ الفواتير) +
+  دالتا حساب `portal_award_total`/`portal_invoiced_total` (خادميتان). **الإنفاذ عبر مُشغِّل
+  `trg_portal_three_way_guard` على `portal_payments` — يُفرض على الصرف الآجل (`credit`) فقط؛ الكاش/العهدة
+  (مقدَّم) مستثنى احتراماً لشرط الدفع.** خامل: مفتاح `three_way_enforce` (0/1) + `three_way_tolerance_pct`.
+  **رفع أصل الفاتورة PDF:** `portal-doc.js` اكتسب نوع `inv` (صلاحية `can_manage_procurement` أو `can_see_finance`)
+  → يُخزَّن في R2 (`docs/inv/…`) ويُفتح داخل النظام لكل من يرى الطلب. اختبارها `14_three_way.sql` (7 تأكيدات).
+  **⚠️ تطبَّق حيّاً بعد 032. الترتيب الكامل الجديد: 029→030→031→032→033. الحزمة: 32/32 PASS.**
 
 ---
 
