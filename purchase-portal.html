@@ -3158,6 +3158,65 @@ if(_pa_refPaymentPreview){ paymentPreview=function(r){
   html+=pa_invoicePanel(r);
   return html; }; }
 
+/* ══════ تبويب التقارير والتحليلات (من جانب العميل — تجميع من REQS المحمّلة) ══════ */
+/* يُضاف كتبويب عبر تغليف من المُحوِّل دون لمس منطقة التصميم المرجعية. */
+try{ if(typeof TABS!=='undefined' && !TABS.some(function(t){return t[0]==='reports';})) TABS.push(['reports','التقارير','layers']); }catch(e){}
+if(typeof navAllowed==='function'){ var _pa_refNavAllowed=navAllowed;
+  navAllowed=function(k){ if(k==='reports'){ var a=accessOf(ME); return isAdmin() || !!(a.see&&a.see.finance) || !!(a.can&&a.can.manageRfq); } return _pa_refNavAllowed(k); }; }
+if(typeof render==='function'){ var _pa_refRender=render;
+  render=function(){ if(VIEW==='reports'){ renderNav(); var v=$('view'); if(v) v.innerHTML=pa_reportsHTML(); var tt=$('topbar-ttl'); if(tt) tt.textContent='التقارير والتحليلات'; window.scrollTo(0,0); try{saveState();}catch(e){} return; } return _pa_refRender.apply(this,arguments); }; }
+
+function pa_disbursedOf(r){ var p=r&&r.proc; if(!p) return 0; var s=0;
+  if(p.slices&&p.slices.length){ p.slices.forEach(function(x){ if(x.payment&&x.payment.status==='disbursed') s+=Number(x.payment.amount)||0; }); }
+  else if(p.installments&&p.installments.length){ p.installments.forEach(function(x){ if(x.status==='disbursed') s+=Number(x.amount)||0; }); }
+  else if(p.payment&&p.payment.status==='disbursed'){ s+=Number(p.payment.amount)||0; }
+  return s; }
+function pa_reportsHTML(){
+  var SCOPE=(typeof visibleReqs==='function')?visibleReqs(ME):(REQS||[]);
+  var vat=1+pa_vat()/100;
+  var committed=0, disbursed=0, invoiced=0, awardedCount=0;
+  var byDept={}, byStatus={}, bySup={};
+  SCOPE.forEach(function(r){
+    var p=r.proc||{};
+    byStatus[r.status]=(byStatus[r.status]||0)+1;
+    var hasAward=!!(p.isSplit || (Number(p.winnerTotal)||0)>0);
+    if(hasAward){ var c=pa_awardTotalOf(r); committed+=c; awardedCount++;
+      var dn=((DEPTS[r.deptId]||{}).n)||r.deptId||'—'; byDept[dn]=(byDept[dn]||0)+c;
+      if(p.isSplit && (p.awardLines||[]).length){ p.awardLines.forEach(function(l){ var nm=l.supplierName||'—'; bySup[nm]=(bySup[nm]||0)+(Number(l.lineTotal)||0)*vat; }); }
+      else if(p.winner){ var sn=((SUPPLIERS[p.winner]||{}).n)||p.winner; bySup[sn]=(bySup[sn]||0)+c; }
+    }
+    disbursed+=pa_disbursedOf(r);
+    (p.invoices||[]).forEach(function(x){ invoiced+=Number(x.amount)||0; });
+  });
+  var overdue=SCOPE.filter(function(r){ if(r.status!=='in_review') return false; var s=(typeof slaInfo==='function')?slaInfo(r):null; return s&&s.state==='overdue'; }).length;
+  var pendPay=(typeof disburseCount==='function')?disburseCount():0;
+  var outstanding=Math.max(0,committed-disbursed);
+
+  var kpi=function(v,l,i,cls){ return '<div class="kpi '+(cls||'')+'"><div class="kv">'+v+'</div><div class="kl">'+ic(i,14)+l+'</div></div>'; };
+  var bars=function(obj,fmtVal){ var e=Object.entries(obj).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+    if(!e.length) return '<div class="muted" style="padding:8px 0">لا يوجد</div>';
+    var mx=e[0][1]||1; return e.map(function(kv){ return '<div class="bar-row"><span class="bl">'+esc(kv[0])+'</span><div class="bw"><div class="bf" style="width:'+Math.round(kv[1]/mx*100)+'%"></div></div><b>'+(fmtVal?fmtVal(kv[1]):kv[1])+'</b></div>'; }).join(''); };
+  var statusLabels={draft:'مسودة',in_review:'قيد الاعتماد',approved:'معتمد',returned:'مُعاد',rejected:'مرفوض',pricing:'تسعير',awarded:'مُعمَّد',payment_pending:'صرف معلّق',receipt_pending:'استلام منتظر',closed:'مكتمل',cancelled:'ملغى'};
+  var byStatusLabeled={}; Object.keys(byStatus).forEach(function(k){ byStatusLabeled[statusLabels[k]||k]=byStatus[k]; });
+
+  return '<div class="pagehead"><div><h1>التقارير والتحليلات</h1><div class="sub">لمحة إدارية: الإنفاق والالتزام والصرف حسب القسم والمورد (النطاق المرئي لك)</div></div>'
+    +'<button class="btn btn-ghost" onclick="go(\'disburse\')">'+ic('money',15)+' الصرف</button></div>'
+    +'<div class="kpis">'
+    +kpi(money(committed),'إجمالي الالتزام (أوامر الشراء)','scale')
+    +kpi(money(disbursed),'إجمالي المصروف','money')
+    +kpi(money(outstanding),'المتبقّي (التزام − مصروف)','box','')
+    +kpi(money(invoiced),'إجمالي الفواتير المسجّلة','save')
+    +kpi(String(awardedCount),'طلبات معمَّدة','award')
+    +kpi(String(pendPay),'صرف بانتظار الإجراء','money',pendPay?'alert':'')
+    +kpi(String(overdue),'اعتمادات متأخّرة (SLA)','alert',overdue?'alert':'')
+    +'</div>'
+    +'<div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:4px">'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('layers',16)+'</span>الالتزام حسب القسم</div>'+bars(byDept,money)+'</div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('award',16)+'</span>أعلى الموردين التزاماً</div>'+bars(bySup,money)+'</div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>الطلبات حسب الحالة</div>'+bars(byStatusLabeled)+'</div>'
+    +'</div>';
+}
+
 /* ══════ فواتير المورد + المطابقة الثلاثية (033): رفع أصل الفاتورة PDF + عرضه داخل النظام ══════ */
 function pa_awardTotalOf(r){ /* إجمالي أمر الشراء شاملاً الضريبة (المجزّأ بمجموع بنوده) */
   var p=r&&r.proc; if(!p) return 0; var vat=1+pa_vat()/100;
