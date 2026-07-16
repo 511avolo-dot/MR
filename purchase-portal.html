@@ -2651,13 +2651,13 @@ function pa_status(s){
   return 'approved'; /* pricing|award_review|awarded|payment_pending|receipt_pending|closed → معتمد + phase */ }
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
-var BUDGETS=[], IBANCHG=[], CURRENCIES=[];   /* الميزانيات (031) + طلبات تغيير الآيبان (032) + العملات (035) — تُملأ في loadAll */
+var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2681,8 +2681,12 @@ async function loadAll(){
     SB.from('portal_returns').select('*').order('id'),            /* المرتجعات + إشعار مدين (هجرة 034) — يُتحمَّل غيابه */
     SB.from('portal_budgets').select('*'),                        /* الميزانيات (هجرة 031) — يُتحمَّل غيابه */
     SB.from('portal_supplier_iban_changes').select('*').order('id'),  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
-    SB.from('portal_currencies').select('*').order('code')            /* العملات (هجرة 035) — يُتحمَّل غيابه */
+    SB.from('portal_currencies').select('*').order('code'),           /* العملات (هجرة 035) — يُتحمَّل غيابه */
+    SB.from('portal_contracts').select('*').order('id')               /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
   ]);
+  /* العقود الإطارية (هجرة 037). window.__paCtrOK للتفعيل. */
+  window.__paCtrOK=!!(ctrR && !ctrR.error);
+  CONTRACTS=(ctrR && !ctrR.error)?(ctrR.data||[]).map(x=>({id:x.id, no:x.contract_no||'', title:x.title||'', supplier:x.supplier_name||'', ceiling:Number(x.ceiling)||0, currency:x.currency||'SAR', status:x.status||'active', start:x.start_date||null, end:x.end_date||null})):[];
   /* العملات (هجرة 035). window.__paCurOK للتفعيل. */
   window.__paCurOK=!!(curR && !curR.error);
   CURRENCIES=(curR && !curR.error)?(curR.data||[]).map(x=>({code:x.code, name:x.name||'', rate:Number(x.rate_to_base)||1, active:x.active!==false})):[];
@@ -2780,7 +2784,7 @@ async function loadAll(){
     const req={ id:r.id, title:r.title, deptId:r.department_id, dept:(DEPTS[r.department_id]||{}).n||'—',
       requester:r.requester, requesterName:r.requester_name||uName(r.requester), priority:r.priority||'متوسط',
       estTotal:Number(r.est_total)||0, createdAt:pa_ms(r.created_at), sector:(DEPTS[r.department_id]||{}).sector||'',
-      project:r.project||'', procType:r.proc_type||'normal', needBy:r.need_by||'', justif:r.justification||'', note:r.note||'', currency:r.currency||'SAR',
+      project:r.project||'', procType:r.proc_type||'normal', needBy:r.need_by||'', justif:r.justification||'', note:r.note||'', currency:r.currency||'SAR', contractId:r.contract_id||null,
       totalQty:items.reduce((a,it)=>a+(it.qty||0),0), wfName:(WORKFLOWS.find(w=>w.id===r.workflow_id)||{}).name||'',
       items, chain, status:pa_status(r.status), events,
       splitFlag:!!r.split_flag, holdReason:r.hold_reason||'', holdUntil:r.hold_until||null,
@@ -3231,8 +3235,8 @@ async function pa_confirmReturn(reqId){
 if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
   adminHTML=function(){
     if(typeof isAdmin==='function' && !isAdmin()) return _pa_refAdminHTML();
-    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency'){
-      var body = ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : pa_currencySection();
+    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency' || ADMIN_TAB==='contracts'){
+      var body = ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : ADMIN_TAB==='currency'? pa_currencySection() : pa_contractsSection();
       var bar='<div class="filters">'+pa_adminExtraBtns(true)+'</div>';
       return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية · العملات</div></div></div>'
         +'<div class="filters"><button class="fbtn" onclick="setAdminTab(\'accounts\')">'+ic('undo',15)+' رجوع لأقسام الإدارة</button></div>'+bar+body;
@@ -3245,7 +3249,49 @@ if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
 function pa_adminExtraBtns(activeCtx){
   return '<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>'
-    +'<button class="fbtn '+(ADMIN_TAB==='currency'?'active':'')+'" onclick="setAdminTab(\'currency\')">'+ic('money',15)+' العملات وأسعار الصرف</button>';
+    +'<button class="fbtn '+(ADMIN_TAB==='currency'?'active':'')+'" onclick="setAdminTab(\'currency\')">'+ic('money',15)+' العملات وأسعار الصرف</button>'
+    +'<button class="fbtn '+(ADMIN_TAB==='contracts'?'active':'')+'" onclick="setAdminTab(\'contracts\')">'+ic('save',15)+' العقود الإطارية</button>';
+}
+function pa_contractsSection(){
+  if(!window.__paCtrOK) return '<div class="card"><div class="muted" style="padding:8px 0">العقود الإطارية تتطلّب تطبيق الهجرة 037 على القاعدة الحيّة.</div></div>';
+  var used={}; (REQS||[]).forEach(function(r){ if(!r.contractId) return; var p=r.proc||{}; if(!(p.isSplit||(Number(p.winnerTotal)||0)>0)) return;
+    used[r.contractId]=(used[r.contractId]||0)+pa_awardTotalOf(r); });
+  var rels={}; (REQS||[]).forEach(function(r){ if(r.contractId && r.status!=='cancelled') rels[r.contractId]=(rels[r.contractId]||0)+1; });
+  var rows=(CONTRACTS||[]).map(function(c){ var u=used[c.id]||0; var avail=c.ceiling-u; var expired=c.end && (String(c.end)<new Date().toISOString().slice(0,10));
+    return '<div style="border:1px solid var(--line,#e2e6ee);border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+      +'<div><div style="font-weight:800">'+esc(c.title)+(c.no?(' <span class="muted" style="font-size:11px">#'+esc(c.no)+'</span>'):'')+' '+(c.status!=='active'?'<span class="badge">مُغلق</span>':(expired?'<span class="badge danger">منتهٍ</span>':'<span class="badge gold">نشط</span>'))+'</div>'
+      +'<div class="muted" style="font-size:11.5px">'+esc(c.supplier||'—')+' · '+(c.start||'')+' → '+(c.end||'')+' · '+esc(c.currency)+'</div></div>'
+      +'<div style="text-align:left"><div class="muted" style="font-size:11px">السقف '+money(c.ceiling)+' · مُستهلَك '+money(u)+'</div><div style="font-weight:800;color:'+(avail<0?'var(--danger)':'var(--ok)')+'">متاح '+money(avail)+'</div><div class="muted" style="font-size:11px">'+(rels[c.id]||0)+' أمر سحب</div></div></div>'
+      +(c.status==='active'?('<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="pa_closeContract('+c.id+')">'+ic('x',13)+' إغلاق العقد</button></div>'):'')+'</div>';
+  }).join('')||'<div class="muted" style="font-size:12px">لا عقود.</div>';
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('save',16)+'</span>عقد إطاري جديد</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">عقد بسقف إجمالي لمورد ولفترة؛ تُصدَر عليه عدّة أوامر سحب (طلبات) — كلٌّ قد يُصرف بدفعات. الإنفاذ المانع بمفتاح <code>contract_enforce=1</code>.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">'
+    +'<div style="flex:1;min-width:160px"><label style="font-size:11px">عنوان العقد</label><input class="input" id="ctr-title"></div>'
+    +'<div style="flex:1;min-width:140px"><label style="font-size:11px">المورد</label><input class="input" id="ctr-sup"></div>'
+    +'<div style="width:150px"><label style="font-size:11px">السقف (عملة الأساس)</label><input class="input num" id="ctr-ceil" type="number" min="0"></div></div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:8px">'
+    +'<div style="width:110px"><label style="font-size:11px">رقم العقد</label><input class="input" id="ctr-no" dir="ltr"></div>'
+    +'<div style="width:150px"><label style="font-size:11px">من</label><input class="input" id="ctr-start" type="date"></div>'
+    +'<div style="width:150px"><label style="font-size:11px">إلى</label><input class="input" id="ctr-end" type="date"></div>'
+    +'<button class="btn btn-gold" onclick="pa_saveContract()">'+ic('check',15)+' حفظ العقد</button></div></div>'
+    +'<div class="card"><div class="sec-title"><span class="ico">'+ic('scale',16)+'</span>العقود الإطارية وأوامر السحب</div>'+rows+'</div>';
+}
+async function pa_saveContract(){
+  var title=(($('ctr-title')||{}).value||'').trim(); var sup=(($('ctr-sup')||{}).value||'').trim();
+  var ceil=Number(($('ctr-ceil')||{}).value||0); var no=(($('ctr-no')||{}).value||'').trim();
+  var start=(($('ctr-start')||{}).value||'')||null; var end=(($('ctr-end')||{}).value||'')||null;
+  if(!title){ toast('عنوان العقد مطلوب','err'); return; }
+  if(!(ceil>=0)){ toast('سقف غير صالح','err'); return; }
+  try{ await pa_rpc('portal_contract_set',{p_id:null,p_title:title,p_supplier:sup||null,p_ceiling:ceil,p_start:start,p_end:end,p_no:no||null,p_currency:pa_baseCur(),p_note:null}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر حفظ العقد'),'err'); return; }
+  toast('حُفظ العقد الإطاري ✓','ok'); await loadAll(); render();
+}
+async function pa_closeContract(id){
+  try{ await pa_rpc('portal_contract_close',{p_id:id}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الإغلاق'),'err'); return; }
+  toast('أُغلق العقد','ok'); await loadAll(); render();
 }
 function pa_baseCur(){ return (PSET&&PSET.base_currency)||'SAR'; }
 function pa_currencySection(){
@@ -3289,7 +3335,29 @@ async function pa_deleteCurrency(code){
 
 /* ══════ مُنتقي عملة الطلب (036): يظهر في التفاصيل قبل التعميد لصاحب الطلب/المشتريات ══════ */
 if(typeof detailHTML==='function'){ var _pa_refDetailHTML=detailHTML;
-  detailHTML=function(id){ var html=_pa_refDetailHTML(id); try{ html += pa_currencyPicker(id); }catch(e){} return html; };
+  detailHTML=function(id){ var html=_pa_refDetailHTML(id); try{ html += pa_currencyPicker(id); }catch(e){} try{ html += pa_contractPicker(id); }catch(e){} return html; };
+}
+function pa_contractPicker(id){
+  if(!window.__paCtrOK) return '';
+  var r=(REQS||[]).find(function(x){return x.id===id;}); if(!r) return '';
+  var canLink = isAdmin() || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq);
+  if(!canLink) return '';
+  var early = (r.phase==='requisition'||r.phase==='pricing');
+  var linked=(CONTRACTS||[]).find(function(c){return c.id===r.contractId;});
+  if(!early && !linked) return '';
+  var actives=(CONTRACTS||[]).filter(function(c){ return c.status==='active' && !(c.end && String(c.end)<new Date().toISOString().slice(0,10)); });
+  var opts='<option value="">— بلا عقد (طلب مستقل) —</option>'+actives.map(function(c){ return '<option value="'+c.id+'" '+(c.id===r.contractId?'selected':'')+'>'+esc(c.title)+(c.supplier?(' — '+esc(c.supplier)):'')+'</option>'; }).join('');
+  var body = early
+    ? '<div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><select class="input" id="rc-ctr" style="max-width:280px">'+opts+'</select><button class="btn btn-ghost btn-sm" onclick="pa_linkContract(\''+esc(id)+'\')">'+ic('check',13)+' ربط</button></div>'
+    : ('<div class="muted" style="font-size:12.5px">مرتبط بالعقد: <b>'+esc((linked||{}).title||'')+'</b></div>');
+  return '<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">'+ic('save',16)+'</span>العقد الإطاري (أمر سحب)</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">اربط الطلب بعقد إطاري ليُحتسب أمر سحب على سقفه (قبل التعميد).</div>'+body+'</div>';
+}
+async function pa_linkContract(id){
+  var cid=(($('rc-ctr')||{}).value||'').trim();
+  try{ await pa_rpc('portal_link_request_contract',{p_request_id:id,p_contract_id:cid?Number(cid):null}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الربط'),'err'); return; }
+  toast(cid?'رُبط الطلب بالعقد ✓':'أُلغي ربط العقد','ok'); await pa_after(id);
 }
 function pa_currencyPicker(id){
   if(!window.__paCurOK) return '';
