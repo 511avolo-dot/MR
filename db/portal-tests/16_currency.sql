@@ -47,10 +47,16 @@ BEGIN
   IF round(v_comm) <> round(v_sar + v_usd) THEN RAISE EXCEPTION 'C4 fail: committed=% متوقّع=%', v_comm, v_sar+v_usd; END IF;
   RAISE NOTICE 'PASS C4 المرتبط يجمع بعملة الأساس = %', round(v_comm*100)/100;
 
+  -- C5: صلاحية تعيين عملة الطلب (036): anon محجوب / authenticated مسموح
+  IF has_function_privilege('anon','portal_set_request_currency(text,text)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','portal_set_request_currency(text,text)','EXECUTE')
+    THEN RAISE EXCEPTION 'C5 fail: صلاحيات portal_set_request_currency غير صحيحة'; END IF;
+  RAISE NOTICE 'PASS C5 صلاحية تعيين عملة الطلب سليمة';
+
   -- تنظيف
   DELETE FROM portal_award WHERE request_id LIKE 'REQ-CUR-%';
   DELETE FROM portal_requests WHERE id LIKE 'REQ-CUR-%';
   DELETE FROM portal_users WHERE username='cur_u';
   DELETE FROM portal_currencies WHERE code='USD';
-  RAISE NOTICE '════ CURRENCY: 4/4 PASS ════';
+  RAISE NOTICE '════ CURRENCY: 5/5 PASS ════';
 END $t$;

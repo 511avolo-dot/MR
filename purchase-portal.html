@@ -2780,7 +2780,7 @@ async function loadAll(){
     const req={ id:r.id, title:r.title, deptId:r.department_id, dept:(DEPTS[r.department_id]||{}).n||'—',
       requester:r.requester, requesterName:r.requester_name||uName(r.requester), priority:r.priority||'متوسط',
       estTotal:Number(r.est_total)||0, createdAt:pa_ms(r.created_at), sector:(DEPTS[r.department_id]||{}).sector||'',
-      project:r.project||'', procType:r.proc_type||'normal', needBy:r.need_by||'', justif:r.justification||'', note:r.note||'',
+      project:r.project||'', procType:r.proc_type||'normal', needBy:r.need_by||'', justif:r.justification||'', note:r.note||'', currency:r.currency||'SAR',
       totalQty:items.reduce((a,it)=>a+(it.qty||0),0), wfName:(WORKFLOWS.find(w=>w.id===r.workflow_id)||{}).name||'',
       items, chain, status:pa_status(r.status), events,
       splitFlag:!!r.split_flag, holdReason:r.hold_reason||'', holdUntil:r.hold_until||null,
@@ -3285,6 +3285,32 @@ async function pa_deleteCurrency(code){
   try{ await pa_rpc('portal_currency_delete',{p_code:code}); }
   catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); return; }
   toast('حُذفت العملة','ok'); await loadAll(); render();
+}
+
+/* ══════ مُنتقي عملة الطلب (036): يظهر في التفاصيل قبل التعميد لصاحب الطلب/المشتريات ══════ */
+if(typeof detailHTML==='function'){ var _pa_refDetailHTML=detailHTML;
+  detailHTML=function(id){ var html=_pa_refDetailHTML(id); try{ html += pa_currencyPicker(id); }catch(e){} return html; };
+}
+function pa_currencyPicker(id){
+  if(!window.__paCurOK) return '';
+  var actives=(CURRENCIES||[]).filter(function(c){return c.active;});
+  if(actives.length<2) return '';   /* لا فائدة إن كانت عملة واحدة (الأساس فقط) */
+  var r=(REQS||[]).find(function(x){return x.id===id;}); if(!r) return '';
+  if(!(r.phase==='requisition'||r.phase==='pricing')) return '';   /* قبل التعميد فقط */
+  var canSet = r.requester===ME || isAdmin() || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq);
+  if(!canSet) return '';
+  var cur = r.currency || pa_baseCur();
+  var opts = actives.map(function(c){ return '<option value="'+esc(c.code)+'" '+(c.code===cur?'selected':'')+'>'+esc(c.code)+' — '+esc(c.name||'')+'</option>'; }).join('');
+  return '<div class="card" style="margin-top:12px"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>عملة الطلب</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">تُحدَّد قبل التعميد. كل القيم تُحوَّل لعملة الأساس ('+esc(pa_baseCur())+') في الميزانية والتقارير والمطابقة.</div>'
+    +'<div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><select class="input" id="rc-cur" style="max-width:240px">'+opts+'</select>'
+    +'<button class="btn btn-ghost btn-sm" onclick="pa_setRequestCurrency(\''+esc(id)+'\')">'+ic('check',13)+' تعيين العملة</button></div></div>';
+}
+async function pa_setRequestCurrency(id){
+  var code=(($('rc-cur')||{}).value||'').trim().toUpperCase(); if(!code){ return; }
+  try{ await pa_rpc('portal_set_request_currency',{p_request_id:id,p_code:code}); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر تعيين العملة'),'err'); return; }
+  toast('حُدّدت عملة الطلب: '+code+' ✓','ok'); await pa_after(id);
 }
 function pa_budgetSection(){
   if(!window.__paBudOK) return '<div class="card"><div class="muted" style="padding:8px 0">إدارة الميزانيات تتطلّب تطبيق الهجرة 031 على القاعدة الحيّة.</div></div>';
