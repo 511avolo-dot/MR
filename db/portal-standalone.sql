@@ -54,8 +54,12 @@ CREATE TABLE IF NOT EXISTS portal_departments (
   active        BOOLEAN NOT NULL DEFAULT true,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-ALTER TABLE portal_users ADD CONSTRAINT portal_users_dept_fk
-  FOREIGN KEY (department_id) REFERENCES portal_departments(id) DEFERRABLE INITIALLY DEFERRED;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'portal_users_dept_fk') THEN
+    ALTER TABLE portal_users ADD CONSTRAINT portal_users_dept_fk
+      FOREIGN KEY (department_id) REFERENCES portal_departments(id) DEFERRABLE INITIALLY DEFERRED;
+  END IF;
+END $$;
 
 -- كتالوج الوظائف (نموذج مبسّط وقابل للتعديل من لوحة الإدارة — بديل خفيف
 -- لمصمّم السحب والإفلات؛ الصلاحية الفعلية دائماً من portal_users.permissions).
@@ -68,8 +72,12 @@ CREATE TABLE IF NOT EXISTS portal_jobs (
   description   TEXT,
   active        BOOLEAN NOT NULL DEFAULT true
 );
-ALTER TABLE portal_users ADD CONSTRAINT portal_users_job_fk
-  FOREIGN KEY (job_key) REFERENCES portal_jobs(key) DEFERRABLE INITIALLY DEFERRED;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'portal_users_job_fk') THEN
+    ALTER TABLE portal_users ADD CONSTRAINT portal_users_job_fk
+      FOREIGN KEY (job_key) REFERENCES portal_jobs(key) DEFERRABLE INITIALLY DEFERRED;
+  END IF;
+END $$;
 
 -- مصفوفة صلاحيات التعميد (DoA) — الدورة الثانية، حسب قيمة العرض الفائز.
 CREATE TABLE IF NOT EXISTS portal_doa (
