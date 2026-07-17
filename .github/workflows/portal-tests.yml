@@ -1,0 +1,45 @@
+name: portal-tests
+
+# حزمة اختبار بوابة المشتريات (النظام 3): تحمّل المخطّط الكامل في PostgreSQL 16
+# وتشغّل تأكيدات الصادر المعامَلاتي والتصليب الأمني على كل PR/دفع يمسّ البوابة.
+on:
+  pull_request:
+    paths:
+      - 'db/portal-standalone.sql'
+      - 'db/portal-migrations/**'
+      - 'db/portal-tests/**'
+      - 'functions/api/portal-*'
+      - '.github/workflows/portal-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'db/portal-standalone.sql'
+      - 'db/portal-migrations/**'
+      - 'db/portal-tests/**'
+      - 'functions/api/portal-*'
+      - '.github/workflows/portal-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: تشغيل حزمة اختبار البوابة
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash db/portal-tests/run.sh

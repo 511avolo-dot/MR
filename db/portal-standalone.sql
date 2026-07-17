@@ -54,8 +54,12 @@ CREATE TABLE IF NOT EXISTS portal_departments (
   active        BOOLEAN NOT NULL DEFAULT true,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-ALTER TABLE portal_users ADD CONSTRAINT portal_users_dept_fk
-  FOREIGN KEY (department_id) REFERENCES portal_departments(id) DEFERRABLE INITIALLY DEFERRED;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'portal_users_dept_fk') THEN
+    ALTER TABLE portal_users ADD CONSTRAINT portal_users_dept_fk
+      FOREIGN KEY (department_id) REFERENCES portal_departments(id) DEFERRABLE INITIALLY DEFERRED;
+  END IF;
+END $$;
 
 -- كتالوج الوظائف (نموذج مبسّط وقابل للتعديل من لوحة الإدارة — بديل خفيف
 -- لمصمّم السحب والإفلات؛ الصلاحية الفعلية دائماً من portal_users.permissions).
@@ -68,8 +72,12 @@ CREATE TABLE IF NOT EXISTS portal_jobs (
   description   TEXT,
   active        BOOLEAN NOT NULL DEFAULT true
 );
-ALTER TABLE portal_users ADD CONSTRAINT portal_users_job_fk
-  FOREIGN KEY (job_key) REFERENCES portal_jobs(key) DEFERRABLE INITIALLY DEFERRED;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'portal_users_job_fk') THEN
+    ALTER TABLE portal_users ADD CONSTRAINT portal_users_job_fk
+      FOREIGN KEY (job_key) REFERENCES portal_jobs(key) DEFERRABLE INITIALLY DEFERRED;
+  END IF;
+END $$;
 
 -- مصفوفة صلاحيات التعميد (DoA) — الدورة الثانية، حسب قيمة العرض الفائز.
 CREATE TABLE IF NOT EXISTS portal_doa (
@@ -3804,3 +3812,995 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION portal_bounce_to_requester(text, text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_bounce_to_requester(text, text) TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 029 (صندوق الصادر المعامَلاتي) — مطابقة لـ db/portal-migrations/029
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS portal_outbox (
+  id              BIGSERIAL PRIMARY KEY,
+  ntf_id          TEXT UNIQUE,
+  recipient       TEXT NOT NULL,
+  channel         TEXT NOT NULL DEFAULT 'email',
+  type            TEXT,
+  title           TEXT NOT NULL,
+  body            TEXT,
+  link            TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending',
+  attempts        INT  NOT NULL DEFAULT 0,
+  max_attempts    INT  NOT NULL DEFAULT 6,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_error      TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sent_at         TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_portal_outbox_due
+  ON portal_outbox (next_attempt_at) WHERE status = 'pending';
+ALTER TABLE portal_outbox ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON portal_outbox FROM anon, authenticated, PUBLIC;
+GRANT  SELECT, INSERT, UPDATE ON portal_outbox TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_outbox_id_seq TO service_role;
+
+CREATE OR REPLACE FUNCTION portal_outbox_enqueue() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  BEGIN
+    INSERT INTO portal_outbox (ntf_id, recipient, channel, type, title, body, link)
+    VALUES (NEW.id, NEW.recipient, 'email', NEW.type, NEW.title, NEW.body, NEW.link)
+    ON CONFLICT (ntf_id) DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'portal_outbox_enqueue تعذّر إدراج نيّة الإشعار %: %', NEW.id, SQLERRM;
+  END;
+  RETURN NEW;
+END $fn$;
+DROP TRIGGER IF EXISTS trg_portal_outbox_enqueue ON portal_notifications;
+CREATE TRIGGER trg_portal_outbox_enqueue
+  AFTER INSERT ON portal_notifications
+  FOR EACH ROW EXECUTE FUNCTION portal_outbox_enqueue();
+
+CREATE OR REPLACE FUNCTION portal_outbox_claim(p_limit int DEFAULT 20)
+RETURNS SETOF portal_outbox
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NOT (portal_is_service() OR session_user IN ('postgres','supabase_admin')) THEN
+    RAISE EXCEPTION 'portal_outbox_claim: صلاحية الخادم مطلوبة';
+  END IF;
+  RETURN QUERY
+  WITH due AS (
+    SELECT id FROM portal_outbox
+    WHERE status = 'pending' AND next_attempt_at <= now()
+    ORDER BY next_attempt_at
+    FOR UPDATE SKIP LOCKED
+    LIMIT GREATEST(1, LEAST(coalesce(p_limit,20), 100))
+  )
+  UPDATE portal_outbox o
+    SET status = 'processing', attempts = o.attempts + 1, updated_at = now()
+  FROM due WHERE o.id = due.id
+  RETURNING o.*;
+END $fn$;
+
+CREATE OR REPLACE FUNCTION portal_outbox_mark(p_id bigint, p_ok boolean, p_error text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_row portal_outbox%ROWTYPE; v_delay_min int;
+BEGIN
+  IF NOT (portal_is_service() OR session_user IN ('postgres','supabase_admin')) THEN
+    RAISE EXCEPTION 'portal_outbox_mark: صلاحية الخادم مطلوبة';
+  END IF;
+  SELECT * INTO v_row FROM portal_outbox WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','not_found'); END IF;
+  IF p_ok THEN
+    UPDATE portal_outbox SET status = 'sent', sent_at = now(), last_error = NULL, updated_at = now() WHERE id = p_id;
+    RETURN jsonb_build_object('ok', true, 'status', 'sent');
+  END IF;
+  IF v_row.attempts >= v_row.max_attempts THEN
+    UPDATE portal_outbox SET status = 'dead', last_error = p_error, updated_at = now() WHERE id = p_id;
+    RETURN jsonb_build_object('ok', false, 'status', 'dead', 'attempts', v_row.attempts);
+  END IF;
+  v_delay_min := LEAST(60, power(2, GREATEST(v_row.attempts,1))::int);
+  UPDATE portal_outbox
+    SET status = 'pending', next_attempt_at = now() + make_interval(mins => v_delay_min),
+        last_error = p_error, updated_at = now() WHERE id = p_id;
+  RETURN jsonb_build_object('ok', false, 'status', 'retry', 'retry_in_min', v_delay_min, 'attempts', v_row.attempts);
+END $fn$;
+
+REVOKE ALL ON FUNCTION portal_outbox_claim(int)                 FROM anon, authenticated, PUBLIC;
+REVOKE ALL ON FUNCTION portal_outbox_mark(bigint, boolean, text) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_outbox_claim(int)                 TO service_role;
+GRANT EXECUTE ON FUNCTION portal_outbox_mark(bigint, boolean, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION portal_outbox_purge(p_days int DEFAULT 30)
+RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_n int;
+BEGIN
+  IF NOT (portal_is_service() OR session_user IN ('postgres','supabase_admin')) THEN
+    RAISE EXCEPTION 'portal_outbox_purge: صلاحية الخادم مطلوبة';
+  END IF;
+  DELETE FROM portal_outbox
+    WHERE status = 'sent' AND sent_at < now() - make_interval(days => GREATEST(1, coalesce(p_days,30)));
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_outbox_purge(int) FROM anon, authenticated, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_outbox_purge(int) TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 030 (تصليب صلاحيات التنفيذ + search_path) — مطابقة لـ 030
+--  ⚠️ يجب أن تلي كل تعريفات الدوال (توضع آخر الملف عمداً).
+-- ═══════════════════════════════════════════════════════════════════════════
+DO $mig$
+DECLARE r record; v_revoked int := 0;
+BEGIN
+  FOR r IN
+    SELECT (p.oid::regprocedure)::text AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname LIKE 'portal\_%'
+      AND p.proacl IS NOT NULL
+      AND EXISTS (SELECT 1 FROM aclexplode(p.proacl) a JOIN pg_roles gr ON gr.oid = a.grantee
+                  WHERE a.privilege_type = 'EXECUTE' AND gr.rolname IN ('authenticated','service_role'))
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', r.sig);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon',   r.sig);
+    v_revoked := v_revoked + 1;
+  END LOOP;
+  RAISE NOTICE '030: سُحب EXECUTE العام عن % دالة portal_.', v_revoked;
+END $mig$;
+
+DO $mig$
+DECLARE r record; v_fixed int := 0;
+BEGIN
+  FOR r IN
+    SELECT (p.oid::regprocedure)::text AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname LIKE 'portal\_%' AND p.prosecdef = true
+      AND (p.proconfig IS NULL OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%'))
+  LOOP
+    EXECUTE format('ALTER FUNCTION %s SET search_path = public', r.sig);
+    v_fixed := v_fixed + 1;
+  END LOOP;
+  RAISE NOTICE '030: ثُبِّت search_path على % دالة DEFINER.', v_fixed;
+END $mig$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 031 (ضبط الميزانية — Commitment Control) — مطابقة لـ 031
+--  (تُوضع بعد 030 لأنها تحمل منحها الصريح؛ لا تحتاج إعادة معالجة التصليب.)
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS portal_budgets (
+  id            BIGSERIAL PRIMARY KEY,
+  department_id TEXT NOT NULL REFERENCES portal_departments(id),
+  fiscal_year   INT  NOT NULL,
+  amount        NUMERIC NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  note          TEXT,
+  active        BOOLEAN NOT NULL DEFAULT true,
+  updated_by    TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (department_id, fiscal_year)
+);
+ALTER TABLE portal_budgets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_budgets_read ON portal_budgets;
+CREATE POLICY portal_budgets_read ON portal_budgets FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement'));
+REVOKE ALL ON portal_budgets FROM anon, PUBLIC;
+GRANT  SELECT ON portal_budgets TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_budgets TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_budgets_id_seq TO service_role;
+
+CREATE OR REPLACE FUNCTION portal_budget_committed(p_dept text, p_year int)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(
+    COALESCE((SELECT sum(al.line_total) FROM portal_award_lines al WHERE al.request_id = a.request_id),
+             a.winner_total)
+    * (1 + portal_setting_num('vat', 15) / 100.0)
+  ), 0)
+  FROM portal_award a
+  JOIN portal_requests r ON r.id = a.request_id
+  WHERE a.status IN ('pending','approved')
+    AND r.department_id = p_dept
+    AND EXTRACT(YEAR FROM r.created_at)::int = p_year
+    AND coalesce(r.status,'') <> 'cancelled';
+$fn$;
+REVOKE ALL ON FUNCTION portal_budget_committed(text, int) FROM anon, authenticated, PUBLIC;
+
+CREATE OR REPLACE FUNCTION portal_budget_status(p_dept text, p_year int)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_amount numeric; v_committed numeric;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بعرض الميزانية';
+  END IF;
+  SELECT amount INTO v_amount FROM portal_budgets WHERE department_id=p_dept AND fiscal_year=p_year AND active;
+  v_committed := portal_budget_committed(p_dept, p_year);
+  RETURN jsonb_build_object(
+    'department', p_dept, 'fiscal_year', p_year,
+    'defined',   v_amount IS NOT NULL,
+    'amount',    coalesce(v_amount, 0),
+    'committed', v_committed,
+    'available', coalesce(v_amount, 0) - v_committed,
+    'enforced',  portal_setting_num('budget_enforce', 0) >= 1
+  );
+END $fn$;
+REVOKE ALL ON FUNCTION portal_budget_status(text, int) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_budget_status(text, int) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_budget_set(p_dept text, p_year int, p_amount numeric, p_note text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username();
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'غير مصرّح بإدارة الميزانية';
+  END IF;
+  IF p_amount IS NULL OR p_amount < 0 THEN RAISE EXCEPTION 'مبلغ الميزانية غير صالح'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = p_dept) THEN RAISE EXCEPTION 'قسم غير موجود'; END IF;
+  INSERT INTO portal_budgets (department_id, fiscal_year, amount, note, updated_by, updated_at)
+    VALUES (p_dept, p_year, p_amount, p_note, v_me, now())
+  ON CONFLICT (department_id, fiscal_year)
+    DO UPDATE SET amount = EXCLUDED.amount, note = EXCLUDED.note, active = true,
+                  updated_by = v_me, updated_at = now();
+  RETURN jsonb_build_object('ok', true, 'department', p_dept, 'fiscal_year', p_year, 'amount', p_amount);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_budget_set(text, int, numeric, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_budget_set(text, int, numeric, text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_budget_delete(p_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username();
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'غير مصرّح بإدارة الميزانية';
+  END IF;
+  DELETE FROM portal_budgets WHERE id = p_id;
+  RETURN jsonb_build_object('ok', true);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_budget_delete(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_budget_delete(bigint) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_budget_enforce() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_dept text; v_year int; v_budget numeric; v_committed numeric; v_enforce numeric;
+BEGIN
+  SELECT department_id, EXTRACT(YEAR FROM created_at)::int INTO v_dept, v_year
+    FROM portal_requests WHERE id = NEW.request_id;
+  IF v_dept IS NULL THEN RETURN NULL; END IF;
+  SELECT amount INTO v_budget FROM portal_budgets WHERE department_id=v_dept AND fiscal_year=v_year AND active;
+  IF v_budget IS NULL THEN RETURN NULL; END IF;
+  v_committed := portal_budget_committed(v_dept, v_year);
+  IF v_committed <= v_budget THEN RETURN NULL; END IF;
+  v_enforce := portal_setting_num('budget_enforce', 0);
+  IF v_enforce >= 1 THEN
+    RAISE EXCEPTION 'تجاوز الميزانية: القسم % سنة % — المرتبط % يتجاوز المعتمد % (المتاح %)',
+      v_dept, v_year, round(v_committed), round(v_budget), round(v_budget - v_committed);
+  ELSE
+    RAISE WARNING 'تحذير ميزانية (غير مانع): القسم % سنة % — المرتبط % يتجاوز المعتمد %',
+      v_dept, v_year, round(v_committed), round(v_budget);
+  END IF;
+  RETURN NULL;
+END $fn$;
+DROP TRIGGER IF EXISTS trg_portal_budget_enforce ON portal_award;
+CREATE CONSTRAINT TRIGGER trg_portal_budget_enforce
+  AFTER INSERT OR UPDATE ON portal_award
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION portal_budget_enforce();
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 032 (ضبط تغيير آيبان المورد) — مطابقة لـ db/portal-migrations/032
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول طلبات تغيير الآيبان (أثر تدقيق دائم) ───────────────────────────
+CREATE TABLE IF NOT EXISTS portal_supplier_iban_changes (
+  id            BIGSERIAL PRIMARY KEY,
+  supplier_id   BIGINT NOT NULL REFERENCES portal_suppliers(id) ON DELETE CASCADE,
+  old_iban      TEXT,
+  new_iban      TEXT NOT NULL,
+  reason        TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending',      -- pending | approved | rejected
+  requested_by  TEXT,
+  requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_by    TEXT,
+  decided_at    TIMESTAMPTZ,
+  decision_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_portal_iban_chg_supplier ON portal_supplier_iban_changes(supplier_id, status);
+
+ALTER TABLE portal_supplier_iban_changes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_iban_chg_read ON portal_supplier_iban_changes;
+CREATE POLICY portal_iban_chg_read ON portal_supplier_iban_changes FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement'));
+REVOKE ALL ON portal_supplier_iban_changes FROM anon, PUBLIC;
+GRANT  SELECT ON portal_supplier_iban_changes TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_supplier_iban_changes TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_supplier_iban_changes_id_seq TO service_role;
+
+-- ── (2) حارس الآيبان: يمنع التغيير المباشر عند التفعيل (إلا عبر علم الاعتماد) ──
+CREATE OR REPLACE FUNCTION portal_supplier_iban_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NEW.iban IS DISTINCT FROM OLD.iban
+     AND portal_setting_num('iban_change_control', 0) >= 1
+     AND coalesce(current_setting('app.iban_change_approved', true), '') <> '1'
+  THEN
+    RAISE EXCEPTION 'تغيير آيبان المورد يتطلّب طلب اعتماد مزدوج (فصل مهام) — عبر دوال البوابة';
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+-- يعمل قبل portal_config_guard منطقياً (كلاهما BEFORE؛ كلاهما يجب أن يمرّ).
+DROP TRIGGER IF EXISTS trg_portal_supplier_iban_guard ON portal_suppliers;
+CREATE TRIGGER trg_portal_supplier_iban_guard
+  BEFORE UPDATE ON portal_suppliers
+  FOR EACH ROW EXECUTE FUNCTION portal_supplier_iban_guard();
+
+-- ── (3) طلب تغيير الآيبان (مشتريات/مالية/أدمن) — لا يُطبَّق فوراً ─────────────
+CREATE OR REPLACE FUNCTION portal_supplier_iban_request(p_supplier_id bigint, p_new_iban text, p_reason text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_old text; v_new text; v_cid bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بطلب تغيير الآيبان';
+  END IF;
+  v_new := upper(regexp_replace(coalesce(p_new_iban,''), '\s+', '', 'g'));
+  IF v_new !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+  SELECT iban INTO v_old FROM portal_suppliers WHERE id = p_supplier_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المورد غير موجود'; END IF;
+  IF v_old IS NOT NULL AND upper(regexp_replace(v_old,'\s+','','g')) = v_new THEN
+    RAISE EXCEPTION 'الآيبان الجديد مطابق للحالي — لا تغيير';
+  END IF;
+  IF EXISTS (SELECT 1 FROM portal_supplier_iban_changes WHERE supplier_id = p_supplier_id AND status = 'pending') THEN
+    RAISE EXCEPTION 'يوجد طلب تغيير معلّق لهذا المورد — يُبتّ فيه أولاً';
+  END IF;
+  INSERT INTO portal_supplier_iban_changes(supplier_id, old_iban, new_iban, reason, requested_by)
+    VALUES (p_supplier_id, v_old, v_new, p_reason, v_me) RETURNING id INTO v_cid;
+  RETURN jsonb_build_object('ok', true, 'change_id', v_cid, 'status', 'pending');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_supplier_iban_request(bigint, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_supplier_iban_request(bigint, text, text) TO authenticated;
+
+-- ── (4) اعتماد التغيير (مالية/أدمن) — فصل مهام: المعتمِد ≠ الطالب ─────────────
+CREATE OR REPLACE FUNCTION portal_supplier_iban_approve(p_change_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_chg portal_supplier_iban_changes%ROWTYPE;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'اعتماد تغيير الآيبان صلاحية مالية/أدمن';
+  END IF;
+  SELECT * INTO v_chg FROM portal_supplier_iban_changes WHERE id = p_change_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب التغيير غير موجود'; END IF;
+  IF v_chg.status <> 'pending' THEN RAISE EXCEPTION 'الطلب ليس معلّقاً (%).', v_chg.status; END IF;
+  IF v_chg.requested_by IS NOT NULL AND v_chg.requested_by = v_me THEN
+    RAISE EXCEPTION 'فصل المهام: طالب التغيير لا يعتمده';
+  END IF;
+  -- تطبيق التغيير عبر العلمين (يتجاوز حارس الآيبان + config_guard بأمان)
+  PERFORM set_config('app.iban_change_approved', '1', true);
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_suppliers SET iban = v_chg.new_iban WHERE id = v_chg.supplier_id;
+  PERFORM set_config('app.iban_change_approved', '0', true);
+  PERFORM set_config('app.portal_transition', '0', true);
+  UPDATE portal_supplier_iban_changes
+    SET status = 'approved', decided_by = v_me, decided_at = now() WHERE id = p_change_id;
+  RETURN jsonb_build_object('ok', true, 'status', 'approved', 'supplier_id', v_chg.supplier_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_supplier_iban_approve(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_supplier_iban_approve(bigint) TO authenticated;
+
+-- ── (5) رفض التغيير (مالية/أدمن) ────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_supplier_iban_reject(p_change_id bigint, p_note text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_st text;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'رفض تغيير الآيبان صلاحية مالية/أدمن';
+  END IF;
+  SELECT status INTO v_st FROM portal_supplier_iban_changes WHERE id = p_change_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب التغيير غير موجود'; END IF;
+  IF v_st <> 'pending' THEN RAISE EXCEPTION 'الطلب ليس معلّقاً'; END IF;
+  UPDATE portal_supplier_iban_changes
+    SET status = 'rejected', decided_by = v_me, decided_at = now(), decision_note = p_note WHERE id = p_change_id;
+  RETURN jsonb_build_object('ok', true, 'status', 'rejected');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_supplier_iban_reject(bigint, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_supplier_iban_reject(bigint, text) TO authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 033 (فاتورة المورد + المطابقة الثلاثية) — مطابقة لـ 033
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول فواتير المورد ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_supplier_invoices (
+  id            BIGSERIAL PRIMARY KEY,
+  request_id    TEXT NOT NULL REFERENCES portal_requests(id) ON DELETE CASCADE,
+  supplier_name TEXT,
+  invoice_no    TEXT NOT NULL,
+  invoice_date  DATE,
+  amount        NUMERIC NOT NULL CHECK (amount > 0),
+  doc_key       TEXT,
+  note          TEXT,
+  recorded_by   TEXT,
+  recorded_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (request_id, invoice_no)
+);
+CREATE INDEX IF NOT EXISTS idx_portal_invoices_req ON portal_supplier_invoices(request_id);
+
+ALTER TABLE portal_supplier_invoices ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_invoices_read ON portal_supplier_invoices;
+CREATE POLICY portal_invoices_read ON portal_supplier_invoices FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+  OR portal_can_see_request(request_id));
+REVOKE ALL ON portal_supplier_invoices FROM anon, PUBLIC;
+GRANT  SELECT ON portal_supplier_invoices TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_supplier_invoices TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_supplier_invoices_id_seq TO service_role;
+
+-- ── (2) دوال حساب (خادمية) ──────────────────────────────────────────────────
+-- إجمالي أمر الشراء (التعميد) للطلب شاملاً الضريبة — المجزّأ بمجموع بنوده.
+CREATE OR REPLACE FUNCTION portal_award_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(
+    COALESCE((SELECT sum(line_total) FROM portal_award_lines WHERE request_id = p_request_id),
+             (SELECT winner_total FROM portal_award WHERE request_id = p_request_id AND status IN ('pending','approved'))),
+    0) * (1 + portal_setting_num('vat', 15) / 100.0);
+$fn$;
+REVOKE ALL ON FUNCTION portal_award_total(text) FROM anon, authenticated, PUBLIC;
+
+CREATE OR REPLACE FUNCTION portal_invoiced_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(amount), 0) FROM portal_supplier_invoices WHERE request_id = p_request_id;
+$fn$;
+REVOKE ALL ON FUNCTION portal_invoiced_total(text) FROM anon, authenticated, PUBLIC;
+
+-- ── (3) حالة المطابقة الثلاثية (للمالية/المشتريات/الأدمن أو صاحب الطلب) ──────
+CREATE OR REPLACE FUNCTION portal_three_way_status(p_request_id text)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_award numeric; v_inv numeric; v_recv boolean; v_tol numeric;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+          OR portal_can_see_request(p_request_id)) THEN
+    RAISE EXCEPTION 'غير مصرّح';
+  END IF;
+  v_award := portal_award_total(p_request_id);
+  v_inv   := portal_invoiced_total(p_request_id);
+  v_recv  := EXISTS (SELECT 1 FROM portal_receipts WHERE request_id = p_request_id);
+  v_tol   := portal_setting_num('three_way_tolerance_pct', 0);
+  RETURN jsonb_build_object(
+    'request_id', p_request_id,
+    'award_total', round(v_award, 2),
+    'invoiced_total', round(v_inv, 2),
+    'received', v_recv,
+    'variance', round(v_inv - v_award, 2),
+    'within_tolerance', v_inv <= v_award * (1 + v_tol/100.0),
+    'matched', v_recv AND v_inv > 0 AND v_inv <= v_award * (1 + v_tol/100.0),
+    'enforced', portal_setting_num('three_way_enforce', 0) >= 1
+  );
+END $fn$;
+REVOKE ALL ON FUNCTION portal_three_way_status(text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_three_way_status(text) TO authenticated;
+
+-- ── (4) تسجيل فاتورة مورد + كشف التكرار ─────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_invoice_record(
+    p_request_id text, p_invoice_no text, p_amount numeric,
+    p_supplier_name text DEFAULT NULL, p_invoice_date date DEFAULT NULL,
+    p_doc_key text DEFAULT NULL, p_note text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_no text := trim(coalesce(p_invoice_no,'')); v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بتسجيل الفاتورة';
+  END IF;
+  IF v_no = '' THEN RAISE EXCEPTION 'رقم الفاتورة مطلوب'; END IF;
+  IF p_amount IS NULL OR p_amount <= 0 THEN RAISE EXCEPTION 'مبلغ الفاتورة غير صالح'; END IF;
+  -- كشف الفاتورة المكرّرة: نفس رقم الفاتورة لنفس المورد على طلب آخر (منع ازدواج الصرف)
+  IF p_supplier_name IS NOT NULL AND EXISTS (
+      SELECT 1 FROM portal_supplier_invoices
+      WHERE invoice_no = v_no AND lower(coalesce(supplier_name,'')) = lower(p_supplier_name)
+        AND request_id <> p_request_id) THEN
+    RAISE EXCEPTION 'فاتورة مكرّرة: رقم % من المورد % مسجَّل على طلب آخر', v_no, p_supplier_name;
+  END IF;
+  INSERT INTO portal_supplier_invoices(request_id, supplier_name, invoice_no, invoice_date, amount, doc_key, note, recorded_by)
+    VALUES (p_request_id, p_supplier_name, v_no, p_invoice_date, p_amount, p_doc_key, p_note, v_me)
+    RETURNING id INTO v_id;
+  RETURN jsonb_build_object('ok', true, 'invoice_id', v_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_invoice_record(text, text, numeric, text, date, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_invoice_record(text, text, numeric, text, date, text, text) TO authenticated;
+
+-- ── (5) الإنفاذ: مُشغِّل على portal_payments (الصرف الآجل فقط) ────────────────
+CREATE OR REPLACE FUNCTION portal_three_way_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_award numeric; v_inv numeric; v_tol numeric;
+BEGIN
+  IF portal_setting_num('three_way_enforce', 0) < 1 THEN RETURN NEW; END IF;
+  IF NEW.kind <> 'credit' THEN RETURN NEW; END IF;   -- الكاش/العهدة (مقدَّم) مستثنى — يتبع شرط الدفع
+  IF NOT EXISTS (SELECT 1 FROM portal_receipts WHERE request_id = NEW.request_id) THEN
+    RAISE EXCEPTION 'المطابقة الثلاثية: لا يوجد استلام مسجّل — الصرف الآجل يتطلّب استلام البضاعة';
+  END IF;
+  v_inv := portal_invoiced_total(NEW.request_id);
+  IF v_inv <= 0 THEN RAISE EXCEPTION 'المطابقة الثلاثية: لا توجد فاتورة مورد مسجّلة للصرف الآجل'; END IF;
+  v_award := portal_award_total(NEW.request_id);
+  v_tol := portal_setting_num('three_way_tolerance_pct', 0);
+  IF v_inv > v_award * (1 + v_tol/100.0) THEN
+    RAISE EXCEPTION 'المطابقة الثلاثية: إجمالي الفواتير % يتجاوز أمر الشراء % (خارج التفاوت)',
+      round(v_inv), round(v_award);
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_portal_three_way_guard ON portal_payments;
+CREATE TRIGGER trg_portal_three_way_guard
+  BEFORE INSERT ON portal_payments
+  FOR EACH ROW EXECUTE FUNCTION portal_three_way_guard();
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 034 (المرتجعات + إشعار مدين + صافي المطابقة) — مطابقة لـ 034
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول المرتجعات + إشعار مدين ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_returns (
+  id            BIGSERIAL PRIMARY KEY,
+  request_id    TEXT NOT NULL REFERENCES portal_requests(id) ON DELETE CASCADE,
+  supplier_name TEXT,
+  reason        TEXT NOT NULL,
+  lines         JSONB,                                 -- [{seq, qty, unit_price, line_total}]
+  debit_amount  NUMERIC NOT NULL DEFAULT 0 CHECK (debit_amount >= 0),
+  debit_note_no TEXT,
+  doc_key       TEXT,                                  -- محضر المرتجع (PDF/صورة، R2 kind=ret)
+  status        TEXT NOT NULL DEFAULT 'issued',        -- issued | settled
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_portal_returns_req ON portal_returns(request_id);
+
+ALTER TABLE portal_returns ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_returns_read ON portal_returns;
+CREATE POLICY portal_returns_read ON portal_returns FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+  OR portal_has_perm('can_verify_stock') OR portal_can_see_request(request_id));
+REVOKE ALL ON portal_returns FROM anon, PUBLIC;
+GRANT  SELECT ON portal_returns TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_returns TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_returns_id_seq TO service_role;
+
+-- ── (2) مجموع المرتجعات (خادمية) ────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_returns_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(debit_amount), 0) FROM portal_returns WHERE request_id = p_request_id;
+$fn$;
+REVOKE ALL ON FUNCTION portal_returns_total(text) FROM anon, authenticated, PUBLIC;
+
+-- ── (3) تسجيل مرتجع + إشعار مدين (استلام/جودة أو مشتريات/أدمن) ────────────────
+CREATE OR REPLACE FUNCTION portal_return_record(
+    p_request_id text, p_lines jsonb, p_reason text,
+    p_supplier_name text DEFAULT NULL, p_doc_key text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_ln jsonb; v_amt numeric := 0; v_q numeric; v_p numeric;
+        v_lines jsonb := '[]'::jsonb; v_seq int; v_no text; v_n int; v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_verify_stock')
+                          OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بتسجيل مرتجع';
+  END IF;
+  IF coalesce(trim(p_reason),'') = '' THEN RAISE EXCEPTION 'سبب المرتجع مطلوب'; END IF;
+  IF p_lines IS NULL OR jsonb_typeof(p_lines) <> 'array' OR jsonb_array_length(p_lines) = 0 THEN
+    RAISE EXCEPTION 'بنود المرتجع مطلوبة';
+  END IF;
+  FOR v_ln IN SELECT * FROM jsonb_array_elements(p_lines) LOOP
+    v_seq := (v_ln->>'seq')::int;
+    v_q := coalesce((v_ln->>'qty')::numeric, 0);
+    v_p := coalesce((v_ln->>'unit_price')::numeric, 0);
+    IF v_q <= 0 THEN RAISE EXCEPTION 'كمية مرتجع غير صالحة (يجب أن تكون موجبة)'; END IF;
+    IF v_p < 0 THEN RAISE EXCEPTION 'سعر بند غير صالح'; END IF;
+    v_amt := v_amt + (v_q * v_p);
+    v_lines := v_lines || jsonb_build_object('seq', v_seq, 'qty', v_q, 'unit_price', v_p, 'line_total', v_q * v_p);
+  END LOOP;
+  -- رقم إشعار مدين تسلسلي للطلب
+  SELECT count(*) INTO v_n FROM portal_returns WHERE request_id = p_request_id;
+  v_no := 'DN-' || right(p_request_id, 4) || '-' || lpad((v_n + 1)::text, 2, '0');
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  INSERT INTO portal_returns(request_id, supplier_name, reason, lines, debit_amount, debit_note_no, doc_key, created_by)
+    VALUES (p_request_id, p_supplier_name, p_reason, v_lines, v_amt, v_no, p_doc_key, v_me)
+    RETURNING id INTO v_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  RETURN jsonb_build_object('ok', true, 'return_id', v_id, 'debit_note_no', v_no, 'debit_amount', round(v_amt, 2));
+END $fn$;
+REVOKE ALL ON FUNCTION portal_return_record(text, jsonb, text, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_return_record(text, jsonb, text, text, text) TO authenticated;
+
+-- ── (4) حالة المرتجعات (للعرض) ──────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_return_status(p_request_id text)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+          OR portal_has_perm('can_verify_stock') OR portal_can_see_request(p_request_id)) THEN
+    RAISE EXCEPTION 'غير مصرّح';
+  END IF;
+  RETURN jsonb_build_object(
+    'request_id', p_request_id,
+    'returns_total', round(portal_returns_total(p_request_id), 2),
+    'count', (SELECT count(*) FROM portal_returns WHERE request_id = p_request_id));
+END $fn$;
+REVOKE ALL ON FUNCTION portal_return_status(text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_return_status(text) TO authenticated;
+
+-- ── (5) دمج في المطابقة الثلاثية: صافي المستحق = أمر الشراء − المرتجعات ──────
+CREATE OR REPLACE FUNCTION portal_three_way_status(p_request_id text)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_award numeric; v_inv numeric; v_ret numeric; v_recv boolean; v_tol numeric; v_net numeric;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+          OR portal_can_see_request(p_request_id)) THEN
+    RAISE EXCEPTION 'غير مصرّح';
+  END IF;
+  v_award := portal_award_total(p_request_id);
+  v_inv   := portal_invoiced_total(p_request_id);
+  v_ret   := portal_returns_total(p_request_id);
+  v_recv  := EXISTS (SELECT 1 FROM portal_receipts WHERE request_id = p_request_id);
+  v_tol   := portal_setting_num('three_way_tolerance_pct', 0);
+  v_net   := v_award - v_ret;
+  RETURN jsonb_build_object(
+    'request_id', p_request_id,
+    'award_total', round(v_award, 2),
+    'returns_total', round(v_ret, 2),
+    'net_payable', round(v_net, 2),
+    'invoiced_total', round(v_inv, 2),
+    'received', v_recv,
+    'variance', round(v_inv - v_net, 2),
+    'within_tolerance', v_inv <= v_net * (1 + v_tol/100.0),
+    'matched', v_recv AND v_inv > 0 AND v_inv <= v_net * (1 + v_tol/100.0),
+    'enforced', portal_setting_num('three_way_enforce', 0) >= 1);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_three_way_status(text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_three_way_status(text) TO authenticated;
+
+-- ── (6) مُشغِّل الإنفاذ يحترم صافي المستحق (أمر الشراء − المرتجعات) ───────────
+CREATE OR REPLACE FUNCTION portal_three_way_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_net numeric; v_inv numeric; v_tol numeric;
+BEGIN
+  IF portal_setting_num('three_way_enforce', 0) < 1 THEN RETURN NEW; END IF;
+  IF NEW.kind <> 'credit' THEN RETURN NEW; END IF;   -- الكاش/العهدة (مقدَّم) مستثنى
+  IF NOT EXISTS (SELECT 1 FROM portal_receipts WHERE request_id = NEW.request_id) THEN
+    RAISE EXCEPTION 'المطابقة الثلاثية: لا يوجد استلام مسجّل — الصرف الآجل يتطلّب استلام البضاعة';
+  END IF;
+  v_inv := portal_invoiced_total(NEW.request_id);
+  IF v_inv <= 0 THEN RAISE EXCEPTION 'المطابقة الثلاثية: لا توجد فاتورة مورد مسجّلة للصرف الآجل'; END IF;
+  v_net := portal_award_total(NEW.request_id) - portal_returns_total(NEW.request_id);  -- صافي المستحق
+  v_tol := portal_setting_num('three_way_tolerance_pct', 0);
+  IF v_inv > v_net * (1 + v_tol/100.0) THEN
+    RAISE EXCEPTION 'المطابقة الثلاثية: إجمالي الفواتير % يتجاوز صافي المستحق % (أمر الشراء − المرتجعات، خارج التفاوت)',
+      round(v_inv), round(v_net);
+  END IF;
+  RETURN NEW;
+END $fn$;
+-- المُشغِّل نفسه معرّف في 033؛ إعادة تعريف الدالة تكفي (CREATE OR REPLACE).
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 035 (أساس تعدّد العملات) — مطابقة لـ db/portal-migrations/035
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول العملات + بذرة الأساس ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_currencies (
+  code         TEXT PRIMARY KEY,                          -- ISO: SAR, USD, EUR, AED...
+  name         TEXT,
+  rate_to_base NUMERIC NOT NULL DEFAULT 1 CHECK (rate_to_base > 0),
+  active       BOOLEAN NOT NULL DEFAULT true,
+  updated_by   TEXT,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO portal_currencies(code, name, rate_to_base, active)
+  VALUES ('SAR','ريال سعودي',1,true) ON CONFLICT (code) DO NOTHING;
+-- عملة الأساس في الإعدادات (افتراضي SAR)
+UPDATE portal_settings SET value = jsonb_set(coalesce(value,'{}'::jsonb),'{base_currency}', to_jsonb('SAR'::text), true)
+  WHERE key='portal_settings' AND NOT (coalesce(value,'{}'::jsonb) ? 'base_currency');
+
+-- العملات مرجع عام (قراءة لكل مسجَّل، كتابة عبر RPC فقط)
+ALTER TABLE portal_currencies ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_currencies_read ON portal_currencies;
+CREATE POLICY portal_currencies_read ON portal_currencies FOR SELECT TO authenticated USING (true);
+REVOKE ALL ON portal_currencies FROM anon, PUBLIC;
+GRANT  SELECT ON portal_currencies TO authenticated, anon;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_currencies TO service_role;
+
+-- ── (2) سعر التحويل لعملة الأساس (1 للأساس أو المفقود) ───────────────────────
+CREATE OR REPLACE FUNCTION portal_currency_rate(p_code text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE((SELECT rate_to_base FROM portal_currencies WHERE code = upper(coalesce(nullif(trim(p_code),''),'SAR'))), 1);
+$fn$;
+REVOKE ALL ON FUNCTION portal_currency_rate(text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_currency_rate(text) TO authenticated;
+
+-- ── (3) إدارة العملات (مالية/أدمن) ──────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_currency_set(p_code text, p_name text, p_rate numeric, p_active boolean DEFAULT true)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_code text := upper(trim(coalesce(p_code,'')));
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'إدارة العملات صلاحية مالية/أدمن';
+  END IF;
+  IF v_code !~ '^[A-Z]{3}$' THEN RAISE EXCEPTION 'رمز عملة غير صالح (3 أحرف ISO)'; END IF;
+  IF p_rate IS NULL OR p_rate <= 0 THEN RAISE EXCEPTION 'سعر الصرف غير صالح'; END IF;
+  INSERT INTO portal_currencies(code, name, rate_to_base, active, updated_by, updated_at)
+    VALUES (v_code, p_name, p_rate, coalesce(p_active,true), v_me, now())
+  ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, rate_to_base = EXCLUDED.rate_to_base,
+    active = EXCLUDED.active, updated_by = v_me, updated_at = now();
+  RETURN jsonb_build_object('ok', true, 'code', v_code, 'rate', p_rate);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_currency_set(text, text, numeric, boolean) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_currency_set(text, text, numeric, boolean) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_currency_delete(p_code text)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_code text := upper(trim(coalesce(p_code,''))); v_base text;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'إدارة العملات صلاحية مالية/أدمن';
+  END IF;
+  v_base := upper(coalesce((SELECT value->>'base_currency' FROM portal_settings WHERE key='portal_settings'),'SAR'));
+  IF v_code = v_base THEN RAISE EXCEPTION 'لا يمكن حذف عملة الأساس (%)', v_base; END IF;
+  DELETE FROM portal_currencies WHERE code = v_code;
+  RETURN jsonb_build_object('ok', true);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_currency_delete(text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_currency_delete(text) TO authenticated;
+
+-- ── (4) دوال القيمة صارت واعية بالعملة (تحويل لعملة الأساس) ──────────────────
+-- إجمالي أمر الشراء بعملة الأساس = (winner_total أو مجموع بنود المجزّأ) × الضريبة × سعر عملة الطلب.
+CREATE OR REPLACE FUNCTION portal_award_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(
+    COALESCE((SELECT sum(line_total) FROM portal_award_lines WHERE request_id = p_request_id),
+             (SELECT winner_total FROM portal_award WHERE request_id = p_request_id AND status IN ('pending','approved'))),
+    0)
+  * (1 + portal_setting_num('vat', 15) / 100.0)
+  * portal_currency_rate((SELECT currency FROM portal_requests WHERE id = p_request_id));
+$fn$;
+REVOKE ALL ON FUNCTION portal_award_total(text) FROM anon, authenticated, PUBLIC;
+
+-- المرتبط (الميزانية) بعملة الأساس = مجموع التعميدات النشطة × الضريبة × سعر عملة كل طلب.
+CREATE OR REPLACE FUNCTION portal_budget_committed(p_dept text, p_year int)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(
+    COALESCE((SELECT sum(al.line_total) FROM portal_award_lines al WHERE al.request_id = a.request_id),
+             a.winner_total)
+    * (1 + portal_setting_num('vat', 15) / 100.0)
+    * portal_currency_rate(r.currency)
+  ), 0)
+  FROM portal_award a
+  JOIN portal_requests r ON r.id = a.request_id
+  WHERE a.status IN ('pending','approved')
+    AND r.department_id = p_dept
+    AND EXTRACT(YEAR FROM r.created_at)::int = p_year
+    AND coalesce(r.status,'') <> 'cancelled';
+$fn$;
+REVOKE ALL ON FUNCTION portal_budget_committed(text, int) FROM anon, authenticated, PUBLIC;
+
+-- إجمالي الفواتير والمرتجعات بعملة الأساس (تُدخَل بعملة الطلب) — لاتّساق المطابقة الثلاثية.
+CREATE OR REPLACE FUNCTION portal_invoiced_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(amount), 0) * portal_currency_rate((SELECT currency FROM portal_requests WHERE id = p_request_id))
+  FROM portal_supplier_invoices WHERE request_id = p_request_id;
+$fn$;
+REVOKE ALL ON FUNCTION portal_invoiced_total(text) FROM anon, authenticated, PUBLIC;
+
+CREATE OR REPLACE FUNCTION portal_returns_total(p_request_id text)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(debit_amount), 0) * portal_currency_rate((SELECT currency FROM portal_requests WHERE id = p_request_id))
+  FROM portal_returns WHERE request_id = p_request_id;
+$fn$;
+REVOKE ALL ON FUNCTION portal_returns_total(text) FROM anon, authenticated, PUBLIC;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 036 (تعيين عملة الطلب) — مطابقة لـ db/portal-migrations/036
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE OR REPLACE FUNCTION portal_set_request_currency(p_request_id text, p_code text)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_code text := upper(trim(coalesce(p_code,'')));
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF NOT (v_req.requester = v_me OR portal_has_perm('can_manage_procurement') OR portal_is_admin()) THEN
+    RAISE EXCEPTION 'تعيين العملة: صاحب الطلب أو المشتريات فقط';
+  END IF;
+  IF v_req.phase NOT IN ('requisition','pricing') THEN
+    RAISE EXCEPTION 'تُحدَّد العملة قبل التعميد فقط (الطور الحالي: %)', v_req.phase;
+  END IF;
+  IF EXISTS (SELECT 1 FROM portal_award WHERE request_id = p_request_id AND status IN ('pending','approved')) THEN
+    RAISE EXCEPTION 'لا يمكن تغيير العملة بعد الترسية';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM portal_currencies WHERE code = v_code AND active) THEN
+    RAISE EXCEPTION 'عملة غير معرّفة أو غير مفعّلة: %', v_code;
+  END IF;
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_requests SET currency = v_code, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+  RETURN jsonb_build_object('ok', true, 'currency', v_code);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_set_request_currency(text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_set_request_currency(text, text) TO authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 037 (العقود الإطارية / أوامر الشراء الممتدّة) — مطابقة لـ 037
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول العقود الإطارية ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_contracts (
+  id            BIGSERIAL PRIMARY KEY,
+  contract_no   TEXT,
+  title         TEXT NOT NULL,
+  supplier_name TEXT,
+  start_date    DATE,
+  end_date      DATE,
+  ceiling       NUMERIC NOT NULL DEFAULT 0 CHECK (ceiling >= 0),  -- بعملة الأساس
+  currency      TEXT NOT NULL DEFAULT 'SAR',
+  status        TEXT NOT NULL DEFAULT 'active',                   -- active | closed
+  note          TEXT,
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_portal_contracts_status ON portal_contracts(status);
+
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS contract_id BIGINT REFERENCES portal_contracts(id);
+
+ALTER TABLE portal_contracts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_contracts_read ON portal_contracts;
+CREATE POLICY portal_contracts_read ON portal_contracts FOR SELECT TO authenticated USING (true);  -- مرجع للمشتريات/الكل
+REVOKE ALL ON portal_contracts FROM anon, PUBLIC;
+GRANT  SELECT ON portal_contracts TO authenticated, anon;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_contracts TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_contracts_id_seq TO service_role;
+
+-- ── (2) المُستهلَك من العقد (بعملة الأساس) ──────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_contract_consumed(p_contract_id bigint)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT COALESCE(SUM(portal_award_total(r.id)), 0)
+  FROM portal_requests r
+  WHERE r.contract_id = p_contract_id
+    AND coalesce(r.status,'') <> 'cancelled'
+    AND EXISTS (SELECT 1 FROM portal_award a WHERE a.request_id = r.id AND a.status IN ('pending','approved'));
+$fn$;
+REVOKE ALL ON FUNCTION portal_contract_consumed(bigint) FROM anon, authenticated, PUBLIC;
+
+-- ── (3) حالة العقد ──────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_contract_status(p_contract_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_c portal_contracts%ROWTYPE; v_used numeric;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement') OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'غير مصرّح';
+  END IF;
+  SELECT * INTO v_c FROM portal_contracts WHERE id = p_contract_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'العقد غير موجود'; END IF;
+  v_used := portal_contract_consumed(p_contract_id);
+  RETURN jsonb_build_object('id', p_contract_id, 'ceiling', round(v_c.ceiling,2), 'consumed', round(v_used,2),
+    'available', round(v_c.ceiling - v_used, 2), 'status', v_c.status,
+    'releases', (SELECT count(*) FROM portal_requests WHERE contract_id = p_contract_id AND coalesce(status,'') <> 'cancelled'),
+    'expired', (v_c.end_date IS NOT NULL AND v_c.end_date < current_date),
+    'enforced', portal_setting_num('contract_enforce', 0) >= 1);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_contract_status(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_contract_status(bigint) TO authenticated;
+
+-- ── (4) إدارة العقود (مشتريات/أدمن) ─────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_contract_set(p_id bigint, p_title text, p_supplier text, p_ceiling numeric,
+    p_start date, p_end date, p_no text DEFAULT NULL, p_currency text DEFAULT 'SAR', p_note text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'إدارة العقود صلاحية مشتريات/أدمن';
+  END IF;
+  IF coalesce(trim(p_title),'') = '' THEN RAISE EXCEPTION 'عنوان العقد مطلوب'; END IF;
+  IF p_ceiling IS NULL OR p_ceiling < 0 THEN RAISE EXCEPTION 'سقف غير صالح'; END IF;
+  IF p_end IS NOT NULL AND p_start IS NOT NULL AND p_end < p_start THEN RAISE EXCEPTION 'تاريخ النهاية قبل البداية'; END IF;
+  IF p_id IS NULL THEN
+    INSERT INTO portal_contracts(contract_no, title, supplier_name, ceiling, currency, start_date, end_date, note, created_by)
+      VALUES (p_no, p_title, p_supplier, p_ceiling, upper(coalesce(nullif(p_currency,''),'SAR')), p_start, p_end, p_note, v_me)
+      RETURNING id INTO v_id;
+  ELSE
+    UPDATE portal_contracts SET contract_no=p_no, title=p_title, supplier_name=p_supplier, ceiling=p_ceiling,
+      currency=upper(coalesce(nullif(p_currency,''),'SAR')), start_date=p_start, end_date=p_end, note=p_note
+      WHERE id=p_id RETURNING id INTO v_id;
+    IF v_id IS NULL THEN RAISE EXCEPTION 'العقد غير موجود'; END IF;
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'contract_id', v_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_contract_set(bigint, text, text, numeric, date, date, text, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_contract_set(bigint, text, text, numeric, date, date, text, text, text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_contract_close(p_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username();
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'إدارة العقود صلاحية مشتريات/أدمن';
+  END IF;
+  UPDATE portal_contracts SET status='closed' WHERE id=p_id;
+  RETURN jsonb_build_object('ok', true);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_contract_close(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_contract_close(bigint) TO authenticated;
+
+-- ── (5) ربط طلب بعقد (طلب سحب) — قبل التعميد ────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_link_request_contract(p_request_id text, p_contract_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_c portal_contracts%ROWTYPE;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'ربط الطلب بعقد صلاحية مشتريات/أدمن';
+  END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.phase NOT IN ('requisition','pricing') THEN RAISE EXCEPTION 'الربط قبل التعميد فقط'; END IF;
+  IF p_contract_id IS NOT NULL THEN
+    SELECT * INTO v_c FROM portal_contracts WHERE id = p_contract_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'العقد غير موجود'; END IF;
+    IF v_c.status <> 'active' THEN RAISE EXCEPTION 'العقد غير نشط'; END IF;
+    IF v_c.end_date IS NOT NULL AND v_c.end_date < current_date THEN RAISE EXCEPTION 'العقد منتهٍ'; END IF;
+  END IF;
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_requests SET contract_id = p_contract_id, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+  RETURN jsonb_build_object('ok', true, 'contract_id', p_contract_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_link_request_contract(text, bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_link_request_contract(text, bigint) TO authenticated;
+
+-- ── (6) الإنفاذ: مُشغِّل قيد مؤجَّل على portal_award ─────────────────────────
+CREATE OR REPLACE FUNCTION portal_contract_enforce() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_cid bigint; v_c portal_contracts%ROWTYPE; v_used numeric; v_enforce numeric;
+BEGIN
+  SELECT contract_id INTO v_cid FROM portal_requests WHERE id = NEW.request_id;
+  IF v_cid IS NULL THEN RETURN NULL; END IF;
+  SELECT * INTO v_c FROM portal_contracts WHERE id = v_cid;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  v_enforce := portal_setting_num('contract_enforce', 0);
+  IF v_c.end_date IS NOT NULL AND v_c.end_date < current_date THEN
+    IF v_enforce >= 1 THEN RAISE EXCEPTION 'العقد الإطاري % منتهٍ — لا سحب جديد', v_cid;
+    ELSE RAISE WARNING 'تحذير: تعميد على عقد إطاري منتهٍ (%)', v_cid; END IF;
+  END IF;
+  v_used := portal_contract_consumed(v_cid);
+  IF v_used > v_c.ceiling THEN
+    IF v_enforce >= 1 THEN
+      RAISE EXCEPTION 'تجاوز سقف العقد الإطاري %: المُستهلَك % يتجاوز السقف %', v_cid, round(v_used), round(v_c.ceiling);
+    ELSE
+      RAISE WARNING 'تحذير: تجاوز سقف العقد الإطاري % (% > %)', v_cid, round(v_used), round(v_c.ceiling);
+    END IF;
+  END IF;
+  RETURN NULL;
+END $fn$;
+DROP TRIGGER IF EXISTS trg_portal_contract_enforce ON portal_award;
+CREATE CONSTRAINT TRIGGER trg_portal_contract_enforce
+  AFTER INSERT OR UPDATE ON portal_award
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION portal_contract_enforce();
