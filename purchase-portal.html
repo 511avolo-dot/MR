@@ -3572,6 +3572,7 @@ async function pa_confirmInvoice(reqId){
   var fileEl=$('iv-file'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
   if(!no){ toast('رقم الفاتورة مطلوب','err'); return; }
   if(!(amt>0)){ toast('مبلغ الفاتورة مطلوب','err'); return; }
+  if(!sup){ toast('اسم المورد مطلوب (لكشف الفاتورة المكرّرة)','err'); return; }
   if(file&&!pa_docValidate(file)) return;
   var btn=$('iv-btn'); if(btn) btn.disabled=true; var docKey=null;
   try{ if(file){ docKey=await pa_docUpload('inv',reqId,file); }
@@ -3638,6 +3639,10 @@ async function addSupplier(){
   if(error){ toast(pa_err(error),'err'); return; } toast('أُضيف المورد ✦','ok'); await loadAll(); render();
 }
 async function setSupField(sk,f,v){ const s=SUPPLIERS[sk]; if(!s||s._transient) return; const col=(f==='n'?'name':f);
+  /* ضبط تغيير الآيبان (هجرة 032): عند التفعيل يُمنَع التعديل المباشر — وجِّه لمسار الطلب/الاعتماد المزدوج بدل خطأ الخادم الخام. */
+  if(f==='iban' && Number((typeof PSET!=='undefined'&&PSET.iban_change_control)||0)>=1){
+    toast('تغيير الآيبان يتطلّب اعتماداً مزدوجاً — استخدم «طلب تغيير الآيبان» في بطاقة المورد','err'); return;
+  }
   const {error}=await SB.from('portal_suppliers').update({[col]:(v||'').trim()}).eq('id',s._sid); if(error){ toast(pa_err(error),'err'); return; } toast('حُدّث المورد','ok');
 }
 function askDeleteSupplier(sk){ const s=SUPPLIERS[sk]; if(!s) return; const links=(typeof supplierLinked==='function')?supplierLinked(sk):0;
