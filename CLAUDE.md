@@ -191,6 +191,12 @@ loadAll يبني proc.isSplit/awardLines/slices. **مُختبَر E2E محليا
   (audit_write/create_token/pr_transition_email/run_sla + outbox×3)؛ **55 دالة بوابة تبقى للمستخدم المسجَّل** (الدورة سليمة).
 **⚠️ هجرات جديدة يجب تطبيقها حيّاً بعد 028 بالترتيب: `029` → `030`.** مدمجتان في `portal-standalone.sql` (تنصيب نظيف).
 **متغيّر Cloudflare جديد للتفعيل: `CRON_SECRET`** (قيمة عشوائية طويلة، Production).
+**✅ مُفعَّل حيّاً (2026-07-17): آلية جدولة الصادر = Cloudflare Cron Trigger (Worker `portal-outbox-cron`).**
+الإعداد القائم: `CRON_SECRET` على Pages Production + Worker بمعالج `scheduled` يطلب
+`POST https://aldeyabi-procurement.pages.dev/api/portal-outbox-drain` بترويسة `Authorization: Bearer <CRON_SECRET>`
+(المسار يقبل GET أيضاً بـ`?key=`) + سرّ الـWorker بنفس القيمة + Cron `* * * * *`. **مُتحقَّق حيّاً:** الاستدعاء
+المُصادَق يعيد `{"ok":true,"processed":0,"sla":{"ok":true,"escalated":0}}` وبلا مصادقة `401`. مفاتيح الإنفاذ
+الأربعة (`budget_enforce`/`three_way_enforce`/`iban_change_control`/`contract_enforce`) = 1 على القاعدة الحيّة.
 
 - **حزمة اختبار دائمة + CI (P0 #3 — شبكة أمان آلية):** نُقلت الاختبارات من scratchpad المؤقت إلى المستودع في
   `db/portal-tests/` (`00_roles.sql` + `10_outbox.sql` + `11_security.sql` + `run.sh` + README) بصيغة **تأكيدات**
