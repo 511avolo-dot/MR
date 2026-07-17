@@ -4306,6 +4306,8 @@ BEGIN
   END IF;
   IF v_no = '' THEN RAISE EXCEPTION 'رقم الفاتورة مطلوب'; END IF;
   IF p_amount IS NULL OR p_amount <= 0 THEN RAISE EXCEPTION 'مبلغ الفاتورة غير صالح'; END IF;
+  -- (039) اسم المورد إلزامي — كي يعمل كشف الفاتورة المكرّرة عبر الطلبات دائماً (لا يُتجاوَز بحذفه).
+  IF coalesce(trim(p_supplier_name),'') = '' THEN RAISE EXCEPTION 'اسم المورد مطلوب (لكشف الفاتورة المكرّرة)'; END IF;
   -- كشف الفاتورة المكرّرة: نفس رقم الفاتورة لنفس المورد على طلب آخر (منع ازدواج الصرف)
   IF p_supplier_name IS NOT NULL AND EXISTS (
       SELECT 1 FROM portal_supplier_invoices
@@ -4392,7 +4394,7 @@ CREATE OR REPLACE FUNCTION portal_return_record(
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_me text := portal_username(); v_ln jsonb; v_amt numeric := 0; v_q numeric; v_p numeric;
-        v_lines jsonb := '[]'::jsonb; v_seq int; v_no text; v_n int; v_id bigint;
+        v_lines jsonb := '[]'::jsonb; v_seq int; v_no text; v_n int; v_id bigint; v_recv numeric; v_prior numeric;
 BEGIN
   IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_verify_stock')
                           OR portal_has_perm('can_manage_procurement')) THEN
@@ -4408,6 +4410,17 @@ BEGIN
     v_p := coalesce((v_ln->>'unit_price')::numeric, 0);
     IF v_q <= 0 THEN RAISE EXCEPTION 'كمية مرتجع غير صالحة (يجب أن تكون موجبة)'; END IF;
     IF v_p < 0 THEN RAISE EXCEPTION 'سعر بند غير صالح'; END IF;
+    -- (039) تحقّق التكامل: البند من بنود الطلب، وكمية المرتجع (شاملةً المرتجعات السابقة لنفس البند)
+    -- لا تتجاوز المستلَم فعلاً — يمنع إشعار مدين مضخَّم/إرجاع بضاعة غير مستلَمة.
+    SELECT coalesce(received_qty,0) INTO v_recv FROM portal_request_items
+      WHERE request_id = p_request_id AND seq = v_seq;
+    IF v_recv IS NULL THEN RAISE EXCEPTION 'بند المرتجع % ليس من بنود الطلب', v_seq; END IF;
+    SELECT coalesce(sum((l->>'qty')::numeric),0) INTO v_prior
+      FROM portal_returns pr, jsonb_array_elements(coalesce(pr.lines,'[]'::jsonb)) l
+      WHERE pr.request_id = p_request_id AND (l->>'seq')::int = v_seq;
+    IF v_q + v_prior > v_recv THEN
+      RAISE EXCEPTION 'كمية المرتجع للبند % (%+سابقة %) تتجاوز المستلَم (%)', v_seq, v_q, v_prior, v_recv;
+    END IF;
     v_amt := v_amt + (v_q * v_p);
     v_lines := v_lines || jsonb_build_object('seq', v_seq, 'qty', v_q, 'unit_price', v_p, 'line_total', v_q * v_p);
   END LOOP;
