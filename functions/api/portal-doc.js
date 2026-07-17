@@ -124,16 +124,19 @@ export async function onRequestGet({ request, env }) {
   const key = String(new URL(request.url).searchParams.get('key') || '').trim();
   if (!KEY_RE.test(key)) return new Response('bad key', { status: 400 });
 
-  // دفاع في العمق: تحقّق أن المستخدم يرى الطلب صاحب الملف. مفتاح docs/<kind>/<reqId>/...
+  // تحقّق أن المستخدم يرى الطلب صاحب الملف — يفشل مغلقاً (لا يُبَثّ إلا بتأكيد رؤية صريح).
+  // مفتاح docs/<kind>/<reqId>/... — أي خطأ/تعذّر تحقّق ⇒ رفض (fail-closed).
   const reqId = key.split('/')[2];
+  let canSee = false;
   try {
     const r = await fetch(`${base}/rest/v1/rpc/portal_can_see_request`, {
       method: 'POST',
       headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ p_id: reqId }),
     });
-    if (r.ok && (await r.json()) === false) return new Response('forbidden', { status: 403 });
-  } catch (_) { /* best-effort */ }
+    if (r.ok) canSee = (await r.json()) === true;
+  } catch (_) { canSee = false; }
+  if (!canSee) return new Response('forbidden', { status: 403 });
 
   const obj = await env.QUOTES_BUCKET.get(key);
   if (!obj) return new Response('not found', { status: 404 });

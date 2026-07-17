@@ -3638,6 +3638,10 @@ async function addSupplier(){
   if(error){ toast(pa_err(error),'err'); return; } toast('أُضيف المورد ✦','ok'); await loadAll(); render();
 }
 async function setSupField(sk,f,v){ const s=SUPPLIERS[sk]; if(!s||s._transient) return; const col=(f==='n'?'name':f);
+  /* ضبط تغيير الآيبان (هجرة 032): عند التفعيل يُمنَع التعديل المباشر — وجِّه لمسار الطلب/الاعتماد المزدوج بدل خطأ الخادم الخام. */
+  if(f==='iban' && Number((typeof PSET!=='undefined'&&PSET.iban_change_control)||0)>=1){
+    toast('تغيير الآيبان يتطلّب اعتماداً مزدوجاً — استخدم «طلب تغيير الآيبان» في بطاقة المورد','err'); return;
+  }
   const {error}=await SB.from('portal_suppliers').update({[col]:(v||'').trim()}).eq('id',s._sid); if(error){ toast(pa_err(error),'err'); return; } toast('حُدّث المورد','ok');
 }
 function askDeleteSupplier(sk){ const s=SUPPLIERS[sk]; if(!s) return; const links=(typeof supplierLinked==='function')?supplierLinked(sk):0;

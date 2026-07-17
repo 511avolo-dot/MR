@@ -3094,7 +3094,7 @@ DECLARE
   v_line jsonb; v_seq int; v_oid bigint; v_up numeric; v_qty numeric;
   v_agg numeric := 0; v_item_count int; v_covered int; v_offer_count int;
   v_dom_offer bigint; v_dom_val numeric := -1; v_sup text;
-  v_suppliers int;
+  v_suppliers int; v_min_up numeric; v_non_lowest int := 0;
 BEGIN
   IF v_me IS NULL OR NOT portal_has_perm('can_manage_procurement') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
@@ -3128,6 +3128,11 @@ BEGIN
     -- سعر هذا المورد لهذا البند (يجب أن يكون مُسعّراً)
     SELECT unit_price INTO v_up FROM portal_offer_items WHERE offer_id = v_oid AND item_seq = v_seq;
     IF v_up IS NULL THEN RAISE EXCEPTION 'المورد لم يُسعّر البند % — لا يمكن ترسيته إليه', v_seq; END IF;
+    -- (038) رصد غير-الأقل لكل بند (غير مانع — أثر تدقيق حوكمي: كم بنداً رُسِّي لغير أرخص مُسعِّر له).
+    SELECT min(oi.unit_price) INTO v_min_up FROM portal_offer_items oi
+      JOIN portal_offers o ON o.id = oi.offer_id
+      WHERE o.request_id = p_request_id AND oi.item_seq = v_seq;
+    IF v_min_up IS NOT NULL AND v_up > v_min_up THEN v_non_lowest := v_non_lowest + 1; END IF;
     SELECT supplier_name INTO v_sup FROM portal_offers WHERE id = v_oid;
     INSERT INTO portal_award_lines(request_id, item_seq, offer_id, supplier_name, qty, unit_price, line_total)
       VALUES (p_request_id, v_seq, v_oid, v_sup, v_qty, v_up, round(v_qty * v_up));
@@ -3158,8 +3163,10 @@ BEGIN
   PERFORM set_config('app.portal_transition', '0', true);
 
   PERFORM portal_audit_write(p_request_id, 'awarded', v_me, 'portal',
-    jsonb_build_object('split', true, 'suppliers', v_suppliers, 'total', v_agg));
-  RETURN jsonb_build_object('ok', true, 'status', 'award_review', 'split', true, 'suppliers', v_suppliers, 'total', v_agg);
+    jsonb_build_object('split', true, 'suppliers', v_suppliers, 'total', v_agg,
+                       'non_lowest_items', v_non_lowest, 'reason', nullif(trim(coalesce(p_reason,'')),'')));
+  RETURN jsonb_build_object('ok', true, 'status', 'award_review', 'split', true, 'suppliers', v_suppliers,
+    'total', v_agg, 'non_lowest_items', v_non_lowest);
 END $fn$;
 GRANT EXECUTE ON FUNCTION portal_award_split(text, jsonb, text) TO authenticated;
 
