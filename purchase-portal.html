@@ -4173,8 +4173,8 @@ function pa_paymentsMonitor(){
     +'<div style="overflow-x:auto"><table style="width:100%"><thead><tr><th style="text-align:start">الطلب</th><th style="text-align:center">النوع</th><th style="text-align:end">الإجمالي</th><th style="text-align:end">المصروف</th><th style="text-align:end">المتبقّي</th><th>التقدّم</th><th></th></tr></thead><tbody>'+body+'</tbody></table></div></div>';
 }
 /* تبويب «متابعة الصرف» متاح للمالية والمشتريات؛ لوحة المتابعة تُصدَّر أعلى قائمة الصرف. */
-var _pa_refNavAllowed=(typeof navAllowed==='function')?navAllowed:null;
-if(_pa_refNavAllowed){ navAllowed=function(k){ if(k==='disburse') return canDisburse(ME) || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq) || isAdmin(); return _pa_refNavAllowed(k); }; }
+var _pa_refNavAllowed2=(typeof navAllowed==='function')?navAllowed:null;
+if(_pa_refNavAllowed2){ navAllowed=function(k){ if(k==='disburse') return canDisburse(ME) || !!(accessOf(ME).can&&accessOf(ME).can.manageRfq) || isAdmin(); return _pa_refNavAllowed2(k); }; }
 var _pa_refTabLabel=(typeof tabLabel==='function')?tabLabel:null;
 if(_pa_refTabLabel){ tabLabel=function(k,l){ if(k==='disburse') return 'متابعة الصرف'; return _pa_refTabLabel(k,l); }; }
 var _pa_refDisburseHTML=(typeof disburseHTML==='function')?disburseHTML:null;
@@ -4445,9 +4445,9 @@ async function confirmPoReject(id){
 }
 
 /* تنبيه مركز المهام: اعتماد أمر شراء معلّق للمعتمِد المخوَّل */
-var _pa_refMyTasks = myTasks;
+var _pa_refMyTasks2 = myTasks;
 myTasks = function(){
-  var t = _pa_refMyTasks() || [];
+  var t = _pa_refMyTasks2() || [];
   (REQS||[]).forEach(function(r){
     if(r && r.proc && r.proc.phase==='po_review' && r.proc.poChain && r.requester!==ME){
       var idx=-1; for(var i=0;i<r.proc.poChain.length;i++){ if(r.proc.poChain[i].decision==='pending'){ idx=i; break; } }
