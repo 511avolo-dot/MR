@@ -4824,3 +4824,37 @@ CREATE CONSTRAINT TRIGGER trg_portal_contract_enforce
   AFTER INSERT OR UPDATE ON portal_award
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION portal_contract_enforce();
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 040 — تصليب من مدقّق Supabase الحيّ (search_path + سحب anon + فهارس FK)
+-- ═══════════════════════════════════════════════════════════════════════════
+ALTER FUNCTION public.portal_audit_immutable() SET search_path = public;
+ALTER FUNCTION public.portal_gen_token()       SET search_path = public;
+ALTER FUNCTION public.portal_is_privileged()   SET search_path = public;
+ALTER FUNCTION public.portal_set_due()         SET search_path = public;
+
+DO $$
+DECLARE fn text;
+BEGIN
+  FOREACH fn IN ARRAY ARRAY[
+    'portal_budget_enforce()','portal_contract_enforce()',
+    'portal_supplier_iban_guard()','portal_three_way_guard()'
+  ] LOOP
+    EXECUTE 'REVOKE EXECUTE ON FUNCTION public.'||fn||' FROM anon';
+  END LOOP;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_portal_award_doa           ON portal_award(doa_id);
+CREATE INDEX IF NOT EXISTS idx_portal_award_winner_offer  ON portal_award(winner_offer_id);
+CREATE INDEX IF NOT EXISTS idx_portal_award_lines_offer   ON portal_award_lines(offer_id);
+CREATE INDEX IF NOT EXISTS idx_portal_depts_manager       ON portal_departments(manager_user);
+CREATE INDEX IF NOT EXISTS idx_portal_inv_dept            ON portal_invitations(department_id);
+CREATE INDEX IF NOT EXISTS idx_portal_inv_job             ON portal_invitations(job_key);
+CREATE INDEX IF NOT EXISTS idx_portal_pay_award_offer     ON portal_payments(award_offer_id);
+CREATE INDEX IF NOT EXISTS idx_portal_req_contract        ON portal_requests(contract_id);
+CREATE INDEX IF NOT EXISTS idx_portal_req_workflow        ON portal_requests(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_portal_users_delegate      ON portal_users(delegate_to);
+CREATE INDEX IF NOT EXISTS idx_portal_users_dept          ON portal_users(department_id);
+CREATE INDEX IF NOT EXISTS idx_portal_users_job           ON portal_users(job_key);
+CREATE INDEX IF NOT EXISTS idx_portal_users_manager       ON portal_users(manager_user);
+CREATE INDEX IF NOT EXISTS idx_portal_workflows_dept      ON portal_workflows(department_id);
