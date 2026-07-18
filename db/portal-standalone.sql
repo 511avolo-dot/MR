@@ -1974,8 +1974,8 @@ WHERE NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = 'LOG');
 
 -- الإدارة العليا
 INSERT INTO portal_jobs (key, title, category, scope, permissions, description, active)
-SELECT 'gm', 'المدير العام', 'الإدارة العليا', 'all', '{}'::jsonb,
-       'صلاحية كاملة على النظام: اعتماد أعلى الشرائح، إدارة المستخدمين والإعدادات.', true
+SELECT 'gm', 'المدير العام', 'الإدارة العليا', 'all', '{"can_manage_users":true}'::jsonb,
+       'اعتماد أعلى شرائح أمر الشراء + إدارة المستخدمين والإعدادات (بلا تصعيد صلاحيات). ليس أدمن نظام.', true
 WHERE NOT EXISTS (SELECT 1 FROM portal_jobs WHERE key = 'gm');
 
 -- المشتريات
@@ -2081,8 +2081,8 @@ SELECT 'warehouse', 'أمين مستودع', 'المستودع', 'all',
 WHERE NOT EXISTS (SELECT 1 FROM portal_jobs WHERE key = 'warehouse');
 
 INSERT INTO portal_jobs (key, title, category, scope, permissions, description, active)
-SELECT 'qc', 'مراقب جودة', 'الجودة', 'all', '{}'::jsonb,
-       'اطّلاع ومتابعة مطابقة المواصفات.', true
+SELECT 'qc', 'مراقب جودة', 'الجودة', 'all', '{"can_verify_stock":true}'::jsonb,
+       'فحص مطابقة المواصفات + تسجيل الاستلام والمرتجعات/التالف (إشعار مدين).', true
 WHERE NOT EXISTS (SELECT 1 FROM portal_jobs WHERE key = 'qc');
 
 
