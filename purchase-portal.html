@@ -3168,8 +3168,12 @@ async function confirmPayReturn(id){
   const r=REQS.find(x=>x.id===id); const pid=r&&r.proc&&r.proc.payment&&r.proc.payment._id;
   const reason=($('payret-reason')||{}).value||''; const to=($('payret-to')||{}).value||'procurement';
   if(!reason.trim()){ toast('الملاحظة مطلوبة','err'); return; } if(!pid) return;
-  try{ await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'return',p_comment:reason.trim(),p_return_to:to}); }catch(e){ return; }
-  closeModal(); toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); pa_notify('payment',id,'returned',reason.trim()); await pa_after(id);
+  let _pr; try{ _pr=await pa_rpc('portal_payment_transition',{p_payment_id:pid,p_action:'return',p_comment:reason.trim(),p_return_to:to}); }catch(e){ return; }
+  closeModal();
+  /* 044: إعادة فتح التعميد تُرجِع status='pricing' (تصحيح العروض/الأسعار)؛ خلاف ذلك إعادة إصدار الصرف. */
+  if(_pr && _pr.status==='pricing'){ toast('أُعيد فتح التعميد — عاد الطلب للتسعير لتصحيح العروض/الأسعار ثم إعادة الاعتماد','ok'); }
+  else { toast('أُعيد طلب الصرف مع الملاحظة — يمكن للمشتريات إصدار طلب جديد','ok'); }
+  pa_notify('payment',id,'returned',reason.trim()); await pa_after(id);
 }
 async function resubmitPayment(id){ toPayment(id); }
 /* توسيع نافذة الاستلام: حقن حقل إرفاق «مشهد/محضر الاستلام» قبل أزرار النافذة (التصميم المجمّد سليم). */
