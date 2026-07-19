@@ -3035,10 +3035,25 @@ async function submitRequest(){
   if(!items.length){ toast('أضف صنفاً واحداً على الأقل باسم وكمية','err'); return; }
   if(NR_META.procType && NR_META.procType!=='normal' && !(NR_META.justif||'').trim()){ toast('التبرير مطلوب لهذا النوع من الشراء','err'); return; }
   const deptId=userDept(ME);
+  const _pItems=items.map(it=>({desc:(it.desc||'').trim(),unit:it.unit||'حبة',qty:+it.qty,price:+it.price||0}));
+  /* 043 — وضع تعديل طلب مُعاد للتصحيح: نُحدّث المحتوى (portal_update_request) ثم نُعيد التقديم — لا إنشاء جديد. */
+  if(NR_EDIT_ID){
+    const eid=NR_EDIT_ID; let ur;
+    try{ ur=await pa_rpc('portal_update_request',{
+      p_request_id:eid, p_title:NR_META.title.trim(), p_items:_pItems,
+      p_project:(NR_META.project||'').trim(), p_priority:NR_META.priority||'متوسط',
+      p_need_by:NR_META.needBy||null, p_proc_type:NR_META.procType||'normal',
+      p_justification:(NR_META.justif||'').trim()||null, p_note:(NR_META.note||'').trim()||null }); }catch(e){ return; }
+    try{ await pa_rpc('portal_resubmit_request',{p_request_id:eid,p_comment:null}); }catch(e){ return; }
+    toast('حُفظ التعديل وأُعيد تقديم الطلب — تبدأ سلسلة الاعتماد من جديد'+((ur&&ur.split_flag)?' ⚠ تنبيه تجزئة':''),(ur&&ur.split_flag)?'err':'ok');
+    pa_notify('request',eid,'stage');
+    NR_EDIT_ID=null; NR_ITEMS=[{desc:'',unit:'حبة',qty:1,price:''}]; NR_META={title:'',deptId:'',priority:'متوسط',note:'',procType:'normal',justif:'',project:'',needBy:''};
+    CURRENT=eid; VIEW='detail'; await loadAll(); render(); return;
+  }
   let res;
   try{ res=await pa_rpc('portal_create_request',{
     p_title:NR_META.title.trim(), p_department_id:deptId||null, p_priority:NR_META.priority||'متوسط',
-    p_items:items.map(it=>({desc:(it.desc||'').trim(),unit:it.unit||'حبة',qty:+it.qty,price:+it.price||0})),
+    p_items:_pItems,
     p_project:(NR_META.project||'').trim(), p_need_by:NR_META.needBy||null, p_proc_type:NR_META.procType||'normal',
     p_justification:(NR_META.justif||'').trim()||null, p_note:(NR_META.note||'').trim()||null }); }catch(e){ return; }
   toast('رُفع الطلب '+((res&&res.id)||'')+((res&&res.split_flag)?' — مع تنبيه تجزئة ⚠':' ✦'),(res&&res.split_flag)?'err':'ok');
@@ -3050,10 +3065,37 @@ async function resumeHold(reqId){
   try{ await pa_rpc('portal_resume_hold',{p_request_id:reqId,p_comment:null}); }catch(e){ return; }
   toast('استُؤنف الطلب بعد توفّر السيولة','ok'); await pa_after(reqId);
 }
+/* 043 — الإعادة الذكية للتصحيح: زرّ «تعديل وإعادة التقديم» يفتح نموذج الطلب مُعبّأً
+   بمحتواه الحالي؛ المقدّم/المشتريات يعدّل ثم يحفظ (portal_update_request → resubmit عبر submitRequest). */
+var NR_EDIT_ID=null;
+/* أي انتقال «طلب جديد» من القائمة (لا من زرّ التعديل) يُلغي وضع التعديل — يمنع بقاء نموذج مُعبّأ عالقاً. */
+var _pa_refGo_edit=(typeof go==='function')?go:null;
+if(_pa_refGo_edit){ go=function(v){ if(v==='new'){ NR_EDIT_ID=null; } return _pa_refGo_edit(v); }; }
+/* مُغلِّف newRequestHTML: عند وضع التعديل يُضاف تنبيه واضح ويُبدَّل نصّ زرّ الإرسال. */
+var _pa_refNewRequestHTML_edit=(typeof newRequestHTML==='function')?newRequestHTML:null;
+if(_pa_refNewRequestHTML_edit){ newRequestHTML=function(){
+  var html=_pa_refNewRequestHTML_edit();
+  if(NR_EDIT_ID){
+    var banner='<div class="holder-banner warn" style="margin-bottom:16px">'+ic('undo',24)+'<div class="hb-txt"><div class="v" style="color:var(--warn)">أنت تُعدّل طلباً مُعاداً للتصحيح — <b dir="ltr">'+esc(NR_EDIT_ID)+'</b></div><div class="t" style="margin-top:2px">راجع ملاحظة الإرجاع، عدّل ما يلزم، ثم احفظ لتبدأ سلسلة الاعتماد من جديد. <a onclick="pa_cancelEdit()" style="cursor:pointer;color:var(--gold-3)">إلغاء التعديل</a></div></div></div>';
+    html=banner+html;
+    html=html.replace('رفع الطلب للاعتماد','حفظ التعديل وإعادة التقديم');
+  }
+  return html;
+}; }
+function pa_cancelEdit(){ NR_EDIT_ID=null; NR_ITEMS=[{desc:'',unit:'حبة',qty:1,price:''}]; NR_META={title:'',deptId:'',priority:'متوسط',note:'',procType:'normal',justif:'',project:'',needBy:''}; VIEW='pipeline'; CURRENT=null; render(); }
 async function resubmitRequest(reqId){
-  /* B2: RPC مخصّصة تُعيد بناء السلسلة وتُعيد الحالة in_review (الطلبات المُعادة فقط). */
-  try{ await pa_rpc('portal_resubmit_request',{p_request_id:reqId,p_comment:null}); }catch(e){ return; }
-  toast('أُعيد تقديم الطلب — بدأت سلسلة الاعتماد','ok'); pa_notify('request',reqId,'stage'); await pa_after(reqId);
+  /* 043: يفتح نموذج التعديل مُعبّأً بمحتوى الطلب المُعاد — التعديل الفعلي وإعادة التقديم يتمّان عبر submitRequest. */
+  var r=(REQS||[]).find(function(x){return x.id===reqId;});
+  if(!r){ return; }
+  if(r.status!=='returned'){ toast('يمكن تعديل/إعادة تقديم الطلبات المُعادة فقط','err'); return; }
+  var meP=(USERS[ME]&&USERS[ME].perms)||{};
+  if(r.requester!==ME && !isAdmin() && !meP.can_edit){ toast('التعديل يقتصر على مُقدّم الطلب أو المشتريات (صلاحية التعديل)','err'); return; }
+  NR_EDIT_ID=reqId;
+  NR_ITEMS=(r.items||[]).map(function(it){ return {desc:it.desc||'',unit:it.unit||'حبة',qty:it.qty,price:(it.price!=null&&it.price!==''?it.price:'')}; });
+  if(!NR_ITEMS.length) NR_ITEMS=[{desc:'',unit:'حبة',qty:1,price:''}];
+  NR_META={title:r.title||'',deptId:'',priority:r.priority||'متوسط',note:r.note||'',procType:r.procType||'normal',justif:r.justif||'',project:r.project||'',needBy:r.needBy||''};
+  VIEW='new'; CURRENT=null; render();  /* لا نستخدم go('new') كي لا يُلغى NR_EDIT_ID عبر مُغلِّف go */
+  toast('عدّل بيانات الطلب '+reqId+' ثم اضغط «حفظ التعديل وإعادة التقديم»','ok');
 }
 async function awardTo(id,sid,reason){
   const r=REQS.find(x=>x.id===id); if(!r||!r.proc){ return; }
