@@ -3653,6 +3653,29 @@ async function toggleAway(k){ const cur=!!(USERS[k]&&USERS[k].away); const {erro
 async function toggleSuspend(k){ if(USERS[k]&&USERS[k].admin){ toast('لا يُوقف حساب أدمن','err'); return; } const cur=!!(USERS[k]&&USERS[k].suspended); const {error}=await SB.from('portal_users').update({active:cur}).eq('username',k); if(error){ toast(pa_err(error),'err'); return; } toast(!cur?'أُوقف دخول المستخدم':'أُعيد تفعيل الدخول','ok'); await loadAll(); render(); }
 async function activateUser(k){ const {error}=await SB.from('portal_users').update({active:true}).eq('username',k); if(error){ toast(pa_err(error),'err'); return; } toast('فُعّل الحساب ✦','ok'); await loadAll(); render(); }
 async function rejectUser(k){ const {error}=await SB.from('portal_users').delete().eq('username',k); if(error){ toast(pa_err(error),'err'); return; } toast('رُفض الحساب وحُذف','ok'); await loadAll(); render(); }
+/* حذف المستخدم عبر الخلفية الحقيقية (كان محلياً فقط لا يُحفَظ) — يعيد استخدام حارس
+   portal-users.js (منع الذات/آخر أدمن/من له طلبات → توجيه للتعطيل + فكّ المراجع + حذف الدخول).
+   أُزيل مُنتقي «نقل الملكية» لأنّ الخلفية تمنع حذف من له طلبات (توجيه للتعطيل) لا تنقلها. */
+askDeleteUser = function(k){
+  var u=USERS[k]; if(!u) return; if(u.admin){ toast('لا يُحذف حساب أدمن','err'); return; }
+  if(k===ME){ toast('لا يمكنك حذف حسابك','err'); return; }
+  var openR=userOpenReqs(k); var isAppr=userIsApprover(k); var warn='';
+  if(openR) warn+='<div class="tl-note" style="border-color:var(--warn-line);background:var(--warn-bg);margin-bottom:8px">'+ic('alert',13)+' لديه <b>'+openR+'</b> طلب قائم — لا يُحذف حفاظاً على سلامة السجلّ؛ استخدم «إيقاف الدخول».</div>';
+  if(isAppr) warn+='<div class="tl-note" style="border-color:var(--danger-line);background:var(--danger-bg);margin-bottom:8px">'+ic('alert',13)+' هذا المستخدم معتمِد ضمن سلاسل سير عمل أو المصفوفة المالية — استبدله في تلك المراحل أولاً.</div>';
+  $('modal').innerHTML='<div class="modal-head"><div class="mi danger">'+ic('trash',22)+'</div><div><h3>حذف المستخدم</h3><div class="ms">'+esc(u.n)+'</div></div></div>'
+    +'<div class="modal-body">'+warn
+    +'<div class="muted" style="font-size:12.5px;margin-bottom:12px">الحذف نهائي ويُزيل حساب الدخول. البديل الأأمن «إيقاف الدخول» يحفظ سجلّه ويمنعه من الدخول.</div>'
+    +'<div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">تراجع</button>'
+    +'<button class="btn" onclick="closeModal();toggleSuspend(\''+k+'\')">'+ic('lock',14)+' إيقاف الدخول بدلاً من الحذف</button>'
+    +(openR?'':'<button class="btn btn-danger" onclick="confirmDeleteUser(\''+k+'\')">'+ic('trash',14)+' حذف نهائي</button>')+'</div>'
+    +'</div>';
+  $('overlay').classList.add('show');
+};
+confirmDeleteUser = async function(k){
+  var u=USERS[k]; if(!u) return; if(u.admin){ toast('لا يُحذف حساب أدمن','err'); return; }
+  var d=await pa_apiPost('/api/portal-users',{action:'delete',username:k});
+  if(d){ closeModal(); toast('حُذف المستخدم '+uName(k),'ok'); await loadAll(); render(); }
+};
 async function saveJob(){
   if(!JOB_DRAFT||!JOB_DRAFT.title.trim()){ toast('مسمّى الوظيفة مطلوب','err'); return; }
   const perms=pa_permsFromCan(JOB_DRAFT.can); if(JOB_DRAFT.see&&JOB_DRAFT.see.finance)perms.can_see_finance=true;
