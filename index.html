@@ -3617,6 +3617,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                 إرسال تجربة لي
               </button>
               <span id="et-status" style="font-size:12px;color:#64748b"></span>
+              <span id="et-health" style="font-size:12px;font-weight:600;display:none;align-items:center;gap:6px;padding:5px 11px;border-radius:999px"></span>
               <div style="margin-inline-start:auto;display:flex;gap:10px">
                 <button class="btn btn-ghost" onclick="closeEmailTemplates()">إغلاق</button>
                 <button class="btn btn-primary" onclick="etSave()">حفظ القوالب</button>
@@ -21207,6 +21208,30 @@ async function openEmailTemplates() {
   document.getElementById('et-status').textContent = '';
   etRenderTabs(); etFillInputs(); etPreview();
   document.getElementById('modal-email-templates').style.display = 'flex';
+  etHealthCheck();
+}
+// مؤشّر صحّة بريد الإشعارات: يستفتي /api/notify (GET) ويعرض شارة حمراء إن كان أي متغيّر
+// خادمي ناقصاً — كي لا يبقى انقطاع البريد صامتاً كما حدث سابقاً. منطقيات وجود فقط (لا أسرار).
+async function etHealthCheck() {
+  const el = document.getElementById('et-health'); if (!el) return;
+  el.style.display = 'none'; el.textContent = '';
+  try {
+    const r = await fetch('/api/notify', { method: 'GET' });
+    const d = await r.json().catch(() => ({}));
+    el.style.display = 'inline-flex';
+    if (d && d.ok) {
+      el.style.background = '#dcfce7'; el.style.color = '#166534';
+      el.textContent = '● بريد الإشعارات جاهز';
+    } else {
+      const c = d && d.checks ? d.checks : {};
+      const miss = [];
+      if (!c.supabase_url) miss.push('SUPABASE_URL');
+      if (!c.service_key) miss.push('SUPABASE_SERVICE_ROLE_KEY');
+      if (!c.resend) miss.push('RESEND_API_KEY');
+      el.style.background = '#fee2e2'; el.style.color = '#b91c1c';
+      el.textContent = '⚠ بريد الإشعارات متوقّف' + (miss.length ? ' — ناقص: ' + miss.join('، ') : '');
+    }
+  } catch (_) { /* لا نُعطّل المحرّر إن تعذّر الفحص */ }
 }
 function closeEmailTemplates() { const m = document.getElementById('modal-email-templates'); if (m) m.style.display = 'none'; }
 function etRenderTabs() {

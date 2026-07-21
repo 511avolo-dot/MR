@@ -54,8 +54,16 @@ async function verifyPortalStaff(env, base, jwt) {
   } catch (_) { return { ok: false, reason: 'خطأ غير متوقّع أثناء التحقّق' }; }
 }
 
+// فحص صحّة قابل للمراقبة (منطقيات وجود فقط، لا قيم) — مماثل لـ notify.js للنظامَين.
 export async function onRequestGet({ env }) {
-  return json({ ok: emailConfigured(env) });
+  return json({
+    ok: emailConfigured(env),
+    checks: {
+      portal_supabase_url: !!env.PORTAL_SUPABASE_URL,
+      portal_service_key: !!env.PORTAL_SUPABASE_SERVICE_ROLE_KEY,
+      resend: !!env.RESEND_API_KEY,
+    },
+  });
 }
 
 export async function onRequestPost({ request, env }) {
