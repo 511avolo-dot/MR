@@ -7460,6 +7460,10 @@ async function aiComplete(opts){
       // تعطيل "التفكير" في نماذج 2.5: وإلا تستهلك مرحلة التفكير كامل حد المخرجات
       // فيعود الرد فارغاً (finishReason: MAX_TOKENS بلا نص). مدعوم ويُتجاهل بأمان لغير النماذج المفكِّرة.
       thinkingConfig: { thinkingBudget: 0 },
+      // مخرجات منظّمة (JSON صارم) عند الطلب — يمنع الإدخال العشوائي ويضمن قابلية التحليل.
+      ...(opts.responseSchema
+        ? { responseMimeType: 'application/json', responseSchema: opts.responseSchema }
+        : {}),
     },
     safetySettings: [
       {category:'HARM_CATEGORY_HARASSMENT', threshold:'BLOCK_NONE'},
@@ -18095,16 +18099,68 @@ async function plMatchOne(name, unit){
 
 function plFmt(n){ return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); }
 
+// احتياط نصّي محلي (يُستخدم فقط إن كان الذكاء معطّلاً أو لم يجد مطابقة)
+function plStringFallback(name, unit){
+  const scored = STATE.items.map(i => {
+    let s = siSimilarity(i.name, name);
+    if(unit && i.unit){ const ua=siNormalize(unit), ub=siNormalize(i.unit);
+      if(ua===ub) s*=1.0; else if(siSimilarity(ua,ub)>0.7) s*=0.95; else s*=0.85; }
+    return { item:i, score:s };
+  }).filter(c => c.score > 0.3).sort((a,b) => b.score - a.score);
+  if(scored.length) return { item:scored[0].item, score:scored[0].score, reason:`تشابه ${(scored[0].score*100).toFixed(0)}%`, candidates:scored.slice(0,3) };
+  return { item:null, score:0, reason:'', candidates:[] };
+}
+
+/* المُحسِّم الشامل: مسار سريع محلي (رقم موديل + ربط معتمد) ثم مطابقة دلالية شاملة
+   بالذكاء على كامل الكتالوج (نداء واحد)، مع احتياط نصّي عند تعذّر الذكاء. */
+async function plResolveAll(items){
+  const out = items.map(() => ({item:null, score:0, reason:'', candidates:[]}));
+  const aliases = SI_LEARNED_ALIASES || {};
+  const needAI = [];
+  items.forEach((it, idx) => {
+    const name = it.name || '';
+    const modelNums = siExtractModelNumbers(name);
+    if(modelNums.length){
+      outerR: for(const mn of modelNums){ for(const i of STATE.items){
+        if((i.code && siExtractModelNumbers(i.code).includes(mn)) || siExtractModelNumbers(i.name||'').includes(mn)){
+          out[idx] = {item:i, score:0.95, reason:`رقم موديل: ${mn}`, candidates:[]}; break outerR; } } }
+    }
+    if(!out[idx].item){
+      const code = aliases[siNormalize(name)];
+      if(code){ const a = STATE.items.find(i => i.code === code); if(a) out[idx] = {item:a, score:0.99, reason:'ربط معتمد مسبقاً', candidates:[]}; }
+    }
+    if(!out[idx].item) needAI.push(idx);
+  });
+  if(needAI.length){
+    siShowProcessing('مطابقة دلالية شاملة بالذكاء...', `${needAI.length} بند على كامل الكتالوج (${(STATE.items||[]).length} صنف)`);
+    let aiRes = [];
+    try{ aiRes = await aiCatalogMatch(needAI.map(idx => ({name:items[idx].name, unit:items[idx].unit}))); }catch(_){ aiRes = []; }
+    needAI.forEach((idx, k) => {
+      const r = aiRes[k];
+      if(r && r.code){
+        const it2 = STATE.items.find(i => String(i.code) === String(r.code));
+        if(it2){
+          const conf = Number(r.confidence)||0;
+          const score = conf >= 0.7 ? 0.9 : (conf >= 0.45 ? 0.65 : 0);
+          if(score){ out[idx] = {item:it2, score, reason: r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي (ذكاء)', candidates:[]}; return; }
+        }
+      }
+      const fb = plStringFallback(items[idx].name, items[idx].unit);
+      if(fb.item) out[idx] = fb;
+    });
+  }
+  return out;
+}
+
 async function plShowReport(extracted){
   const items = (extracted.items || []).filter(it => it && it.name);
   PL_STATE.rows = [];
 
-  // المطابقة قد تستدعي الذكاء (طبقة 4) — نعرض تقدّماً
-  let done = 0;
-  for(const it of items){
-    done++;
-    siShowProcessing('مطابقة البنود...', `(${done}/${items.length}) ${String(it.name).slice(0,50)}`);
-    const m = await plMatchOne(it.name, it.unit);
+  // مطابقة شاملة: مسار سريع محلي + مطابقة دلالية بالذكاء على كامل الكتالوج (نداء واحد)
+  const _matches = await plResolveAll(items);
+  for(let _bi = 0; _bi < items.length; _bi++){
+    const it = items[_bi];
+    const m = _matches[_bi];
     let status; // matched | suggest | none
     if(m.item && m.score >= SI_MATCH_AUTO) status = 'matched';
     else if(m.item && m.score >= SI_MATCH_SUGGEST) status = 'suggest';
@@ -19138,6 +19194,90 @@ function siExtractModelNumbers(text){
    Gemini whether the English name semantically matches any of the top candidates.
    This is the last resort before declaring an item "new".
    Returns the matching candidate object {item, score} or null. */
+/* ════════════════════════════════════════════════════════════════════
+   المطابقة الدلالية الشاملة (نقلة نوعية) — الذكاء يطابق على كامل الكتالوج
+   بلا بوّابة نصّية. يفهم اختلاف التسمية واللغة والاختصارات ووحدات القياس،
+   فيربط البند المرفوع ببند مسجّل فعلاً، أو يقرّر «جديد» بعد بحث شامل حقيقي.
+   نداء واحد لكل مستند، ويعيد لكل بند: كود مطابق (من الكتالوج فقط) أو لا،
+   ثقة، وسبب. لا يخترع أكواداً خارج الكتالوج، ولا يخترع أسعاراً.
+   ════════════════════════════════════════════════════════════════════ */
+function siBuildCatalogForAI(){
+  const byCode = {};
+  const lines = [];
+  for(const i of (STATE.items||[])){
+    if(!i.code) continue;
+    const code = String(i.code);
+    byCode[code] = i;
+    const aliases = (SI_ALIASES_BY_CODE[code] || []).slice(0, 6).join(' | ');
+    // سطر مضغوط: الكود ⟨tab⟩ الاسم ⟨tab⟩ الفئة ⟨tab⟩ الوحدة ⟨tab⟩ مرادفات متعلّمة
+    lines.push(`${code}\t${i.name||''}\t${i.category||''}\t${i.unit||''}${aliases?('\t'+aliases):''}`);
+  }
+  return { text: lines.join('\n'), byCode, count: lines.length };
+}
+
+// يطابق دفعةً من البنود المرفوعة على كامل الكتالوج عبر الذكاء.
+// يعيد مصفوفة موازية للمدخلات: [{ code:string|null, confidence:number, reason:string }].
+async function aiCatalogMatch(inputs){
+  const n = (inputs || []).length;
+  const empty = Array.from({length:n}, () => ({code:null, confidence:0, reason:''}));
+  if(!n) return empty;
+  let cfg; try{ cfg = await loadAIConfig(); }catch(_){ return empty; }
+  if(!cfg || !cfg.enabled) return empty;
+  const cat = siBuildCatalogForAI();
+  if(!cat.count) return empty;
+
+  const itemsBlock = inputs.map((it, idx) => {
+    const u = it.unit ? ` [الوحدة: ${it.unit}]` : '';
+    return `${idx}\t${String(it.name||'').slice(0,220)}${u}`;
+  }).join('\n');
+
+  const system = [
+    'أنت خبير مطابقة أصناف مشتريات دقيق للغاية. لكل «بند مرفوع» حدِّد هل يطابق صنفاً في «كتالوج الأصناف» (نفس المنتج فعلياً) أم لا.',
+    'قواعد صارمة:',
+    '- طابِق بالمعنى لا بالحروف: اختلاف اللغة (عربي/إنجليزي)، ترتيب الكلمات، الاختصارات، العلامة التجارية، رقم الموديل، صياغة الوصف، ووحدات القياس المكافئة — لا يمنع أيٌّ منها المطابقة إن كان المنتج نفسه.',
+    '- code يجب أن يكون كوداً موجوداً حرفياً في الكتالوج أدناه. لا تخترع كوداً غير موجود إطلاقاً.',
+    '- إن لم يوجد صنف مطابق حقيقي بعد بحث شامل في كامل الكتالوج، اجعل code = "NEW" (بند جديد). لا تُجبر مطابقة ضعيفة، ولا تحكم بالجدّة قبل بحث شامل.',
+    '- confidence رقم بين 0 و1 يعكس يقينك. reason جملة عربية قصيرة جداً تبرّر القرار.',
+    '- لا تخترع أسعاراً ولا أي بيانات؛ مهمتك المطابقة فقط.',
+    'كتالوج الأصناف (كل سطر: code ثم tab ثم الاسم ثم الفئة ثم الوحدة ثم مرادفات):',
+    cat.text,
+  ].join('\n');
+
+  const prompt = `البنود المرفوعة (كل سطر: index ثم tab ثم الوصف):\n${itemsBlock}\n\nأعِد JSON فقط: {"matches":[{"i":<index>,"code":<كود من الكتالوج أو "NEW">,"confidence":<0..1>,"reason":"..."}]} لكل بند.`;
+
+  const schema = {
+    type:'object',
+    properties:{
+      matches:{ type:'array', items:{ type:'object',
+        properties:{ i:{type:'integer'}, code:{type:'string'}, confidence:{type:'number'}, reason:{type:'string'} },
+        required:['i','code','confidence'] } }
+    },
+    required:['matches']
+  };
+
+  try{
+    const reply = await aiComplete({
+      system, prompt, feature:'catalog_match', temperature:0,
+      maxTokens: Math.min(8192, 400 + n*70), cache:false, responseSchema: schema
+    });
+    const json = siExtractJSON(reply);
+    const out = empty.map(x => ({...x}));
+    if(json && Array.isArray(json.matches)){
+      for(const m of json.matches){
+        const i = parseInt(m.i);
+        if(!(i>=0 && i<n)) continue;
+        let code = (m.code==null) ? '' : String(m.code).trim();
+        if(!code || code.toUpperCase()==='NEW' || !cat.byCode[code]) code = null; // لا اختراع خارج الكتالوج
+        out[i] = { code, confidence: Math.max(0, Math.min(1, Number(m.confidence)||0)), reason: String(m.reason||'') };
+      }
+    }
+    return out;
+  }catch(e){
+    console.warn('[aiCatalogMatch]', e.message);
+    return empty;
+  }
+}
+
 async function siAISemanticMatch(extractedName, candidates){
   const cfg = await loadAIConfig();
   if(!cfg.enabled || candidates.length === 0) return null;
@@ -19281,24 +19421,10 @@ async function siMatchExtractedData(extracted){
       }
     }
 
-    // ── Tier 4: AI Semantic Matching (cross-language fallback) ──
-    // Triggered only when: no confident match yet (below suggest threshold),
-    // there are some text candidates to evaluate, and AI key is configured.
-    // This handles the common case: English quote vs Arabic catalog.
-    if(bestScore < SI_MATCH_SUGGEST && candidates.length > 0 && hasAI){
-      try {
-        siShowProcessing('مطابقة دلالية...', `"${item.name.slice(0, 50)}"`);
-        const aiMatch = await siAISemanticMatch(item.name, candidates);
-        if(aiMatch){
-          bestItem = aiMatch.item;
-          // Score of 0.72 → lands in 'suggest' range (user confirms), not auto
-          bestScore = 0.72;
-          matchReason = 'تطابق دلالي (ذكاء اصطناعي)';
-        }
-      } catch(e) {
-        console.warn('[Tier4 AI]', e.message);
-      }
-    }
+    // ── Tier 4 (المطابقة الدلالية الشاملة بالذكاء): نُقلت إلى ما بعد الحلقة ──
+    // تُجمَع البنود غير المحسومة وتُطابَق دفعةً واحدة على كامل الكتالوج (نداء واحد،
+    // بلا بوّابة نصّية) — بدل نداء لكل بند، فلا يُستنزَف الحدّ اليومي ولا تُهدَر المطابقة
+    // حين تختلف التسمية/اللغة (كان يُضاف البند كجديد خطأً).
 
     // Determine action based on four thresholds
     let action, matchedItem, suggestions;
@@ -19334,6 +19460,31 @@ async function siMatchExtractedData(extracted){
       userDecision: null,                // user's choice when action='suggest': 'merge'|'new'|null
       include: true
     });
+  }
+
+  // ── مطابقة دلالية شاملة بالذكاء (دفعة واحدة) للبنود التي لم تُطابَق محلياً ──
+  // نداء واحد على كامل الكتالوج بدل نداء لكل بند: يوفّر الحدّ اليومي، ويلتقط
+  // المطابقات عبر اختلاف التسمية/اللغة التي كانت تُضاف خطأً كبنود جديدة.
+  if(hasAI){
+    const pending = [];
+    result.rows.forEach((row, idx) => { if(row.action === 'add' && row.name) pending.push({idx, name:row.name, unit:row.unit}); });
+    if(pending.length){
+      siShowProcessing('مطابقة دلالية شاملة بالذكاء...', `${pending.length} بند على كامل الكتالوج (${(STATE.items||[]).length} صنف)`);
+      let aiRes = [];
+      try{ aiRes = await aiCatalogMatch(pending.map(p => ({name:p.name, unit:p.unit}))); }catch(_){ aiRes = []; }
+      pending.forEach((p, k) => {
+        const r = aiRes[k]; if(!r || !r.code) return;
+        const it2 = STATE.items.find(i => String(i.code) === String(r.code)); if(!it2) return;
+        const conf = Number(r.confidence)||0; const row = result.rows[p.idx];
+        if(conf >= 0.7){
+          row.matchedItem = it2; row.action = 'update'; row.matchScore = 0.9;
+          row.matchReason = r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي شامل (ذكاء)'; row.suggestions = null;
+        } else if(conf >= 0.45){
+          row.matchedItem = it2; row.action = 'suggest'; row.matchScore = 0.72;
+          row.matchReason = r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي شامل (ذكاء)'; row.suggestions = [{item:it2, score:0.72}];
+        }
+      });
+    }
   }
 
   return result;
