@@ -18339,6 +18339,71 @@ async function siExtractFromSpreadsheet(file){
 }
 
 /* === EXTRACTION: PDF === */
+// تحويل ArrayBuffer إلى base64 (مجزّأ لتفادي حدود call-stack على الملفات الكبيرة)
+function siArrayBufferToBase64(buf){
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i = 0; i < bytes.length; i += chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/* === استخراج مباشر من PDF عبر Gemini (قراءة مستندات أصلية) ===
+   يُرسل ملف الـPDF كاملاً إلى Gemini الذي يقرأ المستندات الممسوحة ضوئياً (OCR أصلي)
+   عبر كل الصفحات في نداء واحد بمخرجات منظّمة — أدقّ وأثبت بكثير من تصيير كل صفحة
+   صورةً على المتصفّح ثم استخراجها منفردة. */
+async function siAIExtractFromPDFBytes(base64Pdf){
+  const cfg = await loadAIConfig();
+  if(!cfg.enabled){ const e = new Error('الذكاء الاصطناعي غير مُعدّ.'); e.code = 'AI_NOT_CONFIGURED'; throw e; }
+  const prompt = `هذا ملف PDF لعرض سعر من مورد (غالباً ممسوح ضوئياً/مصوّر). اقرأه بالكامل واستخرج كل البنود من جميع الصفحات بدقّة.
+- اقرأ كل الجداول عبر كل الصفحات، ولا تتخطَّ أي بند.
+- price = سعر الوحدة رقماً فقط (إن وُجد الإجمالي مع الكمية فاحسب سعر الوحدة).
+- أبقِ الأسماء كما وردت (عربي/إنجليزي). استخدم null لأي قيمة غير موجودة.`;
+  const schema = { type:'object', properties:{
+      supplier:{ type:'object', properties:{ name:{type:'string'}, phone:{type:'string'}, email:{type:'string'}, address:{type:'string'}, vat_number:{type:'string'} } },
+      date:{type:'string'}, reference:{type:'string'},
+      items:{ type:'array', items:{ type:'object', properties:{
+        name:{type:'string'}, code:{type:'string'}, unit:{type:'string'}, quantity:{type:'number'}, price:{type:'number'} },
+        required:['name'] } }
+    }, required:['items'] };
+  const body = { contents:[{ role:'user', parts:[ {text:prompt}, {inline_data:{ mime_type:'application/pdf', data:base64Pdf }} ] }],
+    generationConfig:{ temperature:0.1, maxOutputTokens:32768, thinkingConfig:{thinkingBudget:0}, responseMimeType:'application/json', responseSchema:schema } };
+
+  const modelsToTry = [cfg.model];
+  for(const fb of AI_FALLBACK_MODELS){ if(!modelsToTry.includes(fb)) modelsToTry.push(fb); }
+  let lastError = null;
+  for(const model of modelsToTry){
+    for(let attempt = 1; attempt <= 4; attempt++){
+      try{
+        const resp = await aiFetch(model, 'generateContent', body, cfg);
+        if(!resp.ok){
+          let emsg = `HTTP ${resp.status}`; try{ const e = await resp.json(); emsg = e?.error?.message || emsg; }catch(_){}
+          if(resp.status === 400 && /API key/i.test(emsg)) throw new Error('مفتاح Gemini غير صالح. راجع الإعدادات → الذكاء الاصطناعي.');
+          if(resp.status === 403) throw new Error('مفتاح Gemini مرفوض. تأكد من تفعيل الخدمة.');
+          if(isHardQuotaError(resp.status, emsg)){ lastError = emsg; break; }
+          if(isTransientAIError(resp.status, emsg) && attempt < 4){ await _sleep([2000,5000,9000][attempt-1] || 9000); continue; }
+          lastError = emsg; break;
+        }
+        const dataR = await resp.json();
+        const cand = dataR?.candidates?.[0];
+        const text = cand?.content?.parts?.[0]?.text || '';
+        if(!text){ if(cand?.finishReason === 'SAFETY') throw new Error('حُجب الملف لأسباب أمنية في Gemini.'); lastError = 'استجابة فارغة من النموذج'; break; }
+        const parsed = siExtractJSON(text);
+        if(parsed && Array.isArray(parsed.items) && parsed.items.length){ logAIUsage('smart_import_pdf', true, dataR?.usageMetadata?.totalTokenCount || 0); return parsed; }
+        lastError = 'لم تُستخرج بنود'; break;
+      }catch(e){
+        lastError = e.message;
+        if(/غير صالح|مرفوض|حُجب/.test(e.message||'')) throw e;
+        if(/Failed to fetch|NetworkError|تعذر/.test(e.message||'') && attempt < 4){ await _sleep(1500*attempt); continue; }
+        break;
+      }
+    }
+  }
+  throw new Error('تعذّر الاستخراج المباشر من PDF: ' + (lastError || ''));
+}
+
 async function siExtractFromPDF(file){
   siShowProcessing('تحميل قارئ PDF...', 'يستغرق ثوانٍ معدودة في المرة الأولى');
   await loadLib(PDFJS_CDNS, ()=>typeof pdfjsLib !== 'undefined', 'PDF');
@@ -18376,6 +18441,16 @@ async function siExtractFromPDF(file){
     // then merge the items. Previously only page 1 was processed (major bug:
     // a 5-page scanned quote would silently lose pages 2-5).
     const totalPages = pdf.numPages;
+
+    // أولاً: قراءة مباشرة للـPDF عبر Gemini (OCR أصلي للمستندات الممسوحة، نداء واحد،
+    // مخرجات منظّمة) — أدقّ وأثبت بكثير من تصيير كل صفحة صورةً. عند الفشل نرتدّ للمسار القديم.
+    try{
+      siShowProcessing('قراءة المستند المصوّر بالذكاء...', `${totalPages} صفحة — قراءة مباشرة`);
+      const _b64 = siArrayBufferToBase64(await file.arrayBuffer());
+      const _direct = await siAIExtractFromPDFBytes(_b64);
+      if(_direct && Array.isArray(_direct.items) && _direct.items.length){ return _direct; }
+    }catch(_e){ console.warn('[PDF direct] fallback to per-page render:', _e.message); }
+
     siShowProcessing('PDF مصوّر — استخراج بصري...', `${totalPages} صفحة — قد يستغرق دقيقة`);
 
     // Render each page to a JPEG and call Gemini Vision per page.
