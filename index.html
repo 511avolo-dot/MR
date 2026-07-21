@@ -18357,6 +18357,9 @@ function siArrayBufferToBase64(buf){
 async function siAIExtractFromPDFBytes(base64Pdf){
   const cfg = await loadAIConfig();
   if(!cfg.enabled){ const e = new Error('الذكاء الاصطناعي غير مُعدّ.'); e.code = 'AI_NOT_CONFIGURED'; throw e; }
+  // الاستخراج الثقيل يُوجَّه عبر الوسيط الخادمي (/api/ai بمفتاح الخادم) دائماً — أوثق وأثبت
+  // من نداء المتصفّح المباشر بمفتاح محلي قد يصطدم بحدود الحصّة على الطلبات الكبيرة.
+  const cfgPx = { ...cfg, apiKey: '' };
   const prompt = `هذا ملف PDF لعرض سعر من مورد (غالباً ممسوح ضوئياً/مصوّر). اقرأه بالكامل واستخرج كل البنود من جميع الصفحات بدقّة.
 - اقرأ كل الجداول عبر كل الصفحات، ولا تتخطَّ أي بند.
 - price = سعر الوحدة رقماً فقط (إن وُجد الإجمالي مع الكمية فاحسب سعر الوحدة).
@@ -18377,7 +18380,7 @@ async function siAIExtractFromPDFBytes(base64Pdf){
   for(const model of modelsToTry){
     for(let attempt = 1; attempt <= 4; attempt++){
       try{
-        const resp = await aiFetch(model, 'generateContent', body, cfg);
+        const resp = await aiFetch(model, 'generateContent', body, cfgPx);
         if(!resp.ok){
           let emsg = `HTTP ${resp.status}`; try{ const e = await resp.json(); emsg = e?.error?.message || emsg; }catch(_){}
           if(resp.status === 400 && /API key/i.test(emsg)) throw new Error('مفتاح Gemini غير صالح. راجع الإعدادات → الذكاء الاصطناعي.');
@@ -18780,6 +18783,8 @@ async function siAIExtractFromImage(base64, mimeType){
     err.code = 'AI_NOT_CONFIGURED';
     throw err;
   }
+  // القراءة البصرية الثقيلة عبر الوسيط الخادمي دائماً (أثبت من مفتاح المتصفّح المحلي على الطلبات الكبيرة).
+  const cfgPx = { ...cfg, apiKey: '' };
 
   const prompt = `استخرج البيانات من عرض السعر في الصورة. أعد JSON بهذا التنسيق:
 {
@@ -18814,7 +18819,7 @@ async function siAIExtractFromImage(base64, mimeType){
 
     for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
       try {
-        const resp = await aiFetch(model, 'generateContent', body, cfg);
+        const resp = await aiFetch(model, 'generateContent', body, cfgPx);
         if(!resp.ok){
           let emsg = `HTTP ${resp.status}`;
           try { const e = await resp.json(); emsg = e?.error?.message || emsg; } catch(_){}
