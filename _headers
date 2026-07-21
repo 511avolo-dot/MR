@@ -6,8 +6,25 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Cross-Origin-Opener-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
-  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 
+# ملاحظة: لا نضع Cache-Control على /* حتى لا يُدمَج مع قواعد HTML فيسبق max-age=3600
+# قيمة max-age=0، فتُخزَّن الصفحة ساعةً ولا تصل التحديثات. الأصول الثابتة تُكاش بامتدادها أدناه.
+
+# الأصول الثابتة (نادرة التغيّر) — كاش يوم
+/*.js
+  Cache-Control: public, max-age=86400
+/*.css
+  Cache-Control: public, max-age=86400
+/*.png
+  Cache-Control: public, max-age=86400
+/*.jpg
+  Cache-Control: public, max-age=86400
+/*.svg
+  Cache-Control: public, max-age=86400
+/*.woff2
+  Cache-Control: public, max-age=604800
+
+# صفحات HTML — يجب أن تُعاد مراجعتها دائماً كي تصل التحديثات فوراً (لا كاش قديم)
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
 
