@@ -402,6 +402,24 @@ JWT (كعب `auth.jwt()` مطابق لدلالات Supabase + مطابقة `port
   الحذف لمن له طلبات) + إخفاء زرّ «حذف نهائي» لمن له طلبات قائمة (يبقى «إيقاف الدخول» الآمن). **بلا هجرة — يعيد
   استخدام خلفية قائمة.** السلامة النحوية مُتحقَّقة (3 سكربتات، 0 أخطاء)؛ تحتاج معاينة بصرية (لوحة الإدارة).
 
+### 📧 عطل بريد تسجيل الموردين (نظام 1) — تشخيص نهائي + رصد يمنع تكراره (2026-07-21، الفرع `claude/supabase-connection-check-t01so9`)
+**البلاغ:** بريد «تم استلام طلبك» للموردين المسجّلين عبر `register.html` توقّف منذ ~2026-07-05 (موردون حقيقيون
+07-20 لم يصلهم شيء). **الجذر المؤكَّد (بفحوص للقراءة فقط):** `GET /api/notify` = `{"ok":false}` على الدومينات
+الثلاثة ⇒ `emailConfigured(env)` خطأ (`notify.js:44` = `SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY && RESEND_API_KEY`).
+سجلّات Resend تُظهر إرسالاً مُسلَّماً حتى 07-20 ⇒ `RESEND_API_KEY` سليم؛ و`SUPABASE_URL` مؤكَّد ⇒ **الفارغ حصراً
+`SUPABASE_SERVICE_ROLE_KEY` في Cloudflare Pages Production** (يخصّ مشروع Supabase القديم `yofcaxvstjcrmbgciwym`).
+**الأثر أوسع:** نفس المفتاح يخدم `admin-users.js` + `pr-action.js`/`_pr-shared.js` + `verify.js` — كلها متوقّفة بصمت.
+البوابة (نظام 3) غير متأثّرة (تستخدم `PORTAL_SUPABASE_*`).
+- **الإصلاح التشغيلي (المالك، لا كود):** Pages → Settings → Environment variables → **Production** → أعِد إدخال
+  `SUPABASE_SERVICE_ROLE_KEY` + تحقّق `SUPABASE_URL` → **Redeploy** (المتغيّرات تسري على نشر جديد فقط). التحقّق:
+  `curl -s https://suppliers.aldeyabi.com/api/notify` يجب أن ينقلب إلى `{"ok":true,"checks":{…all true}}`.
+- **تصليب الرصد (كود، هذا الفرع — العطل بقي خفيّاً أسبوعين لأنّ فشل حدث `received` العام مُقنَّع بـ`{ok:true}`):**
+  (أ) `notify.js`/`portal-notify.js`: `onRequestGet` صار يعيد `checks{}` **منطقيات وجود فقط، لا قيم** (يكشف *أيّ*
+  متغيّر ناقص). (ب) `notify.js` مسار التخطّي يُصدِر `console.error('[notify] email_not_configured', {…})` (يظهر في
+  Real-time Logs **حتى لو كان مفتاح الخدمة نفسه الناقص** — لا يعتمد على القاعدة). (ج) `index.html` محرّر قوالب البريد:
+  مؤشّر صحّة (`etHealthCheck` → شارة حمراء بأسماء المتغيّرات الناقصة عند `ok:false`). **لا هجرة، لا سرّ يُطبع، التقنيع
+  المضادّ للأوراكل باقٍ.** `node --check` نظيف للثلاثة. **توصية:** ربط `portal-outbox-cron` القائم ليستفتي `/api/notify` وينبّه.
+
 ---
 
 ## ⏩ حالة الجلسة السابقة (2026-07-15) — نقطة الاستئناف لأي جلسة جديدة

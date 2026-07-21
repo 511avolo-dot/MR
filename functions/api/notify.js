@@ -98,14 +98,32 @@ async function verifySession(env, base, jwt) {
   } catch (_) { return { ok: false, reason: 'خطأ أثناء التحقّق من الجلسة' }; }
 }
 
+// فحص صحّة قابل للمراقبة: يعيد منطقيات وجود المتغيّرات الثلاثة (لا قيمها إطلاقاً) كي
+// يعرف أي مراقِب/كرون *أيّ* متغيّر ناقص فوراً — لا مجرّد ok/false مبهم.
 export async function onRequestGet({ env }) {
-  return json({ ok: emailConfigured(env) });
+  return json({
+    ok: emailConfigured(env),
+    checks: {
+      supabase_url: !!env.SUPABASE_URL,
+      service_key: !!env.SUPABASE_SERVICE_ROLE_KEY,
+      resend: !!env.RESEND_API_KEY,
+    },
+  });
 }
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
   // إن لم يُضبط البريد على الخادم: تجاهل بهدوء كي لا تتعطّل عملية التسجيل/المراجعة.
-  if (!emailConfigured(env)) return json({ skipped: true, reason: 'email_not_configured' });
+  if (!emailConfigured(env)) {
+    // سطر صارخ في سجلّات Cloudflare Functions — لا يعتمد على قاعدة البيانات (فيظهر حتى لو
+    // كان مفتاح الخدمة نفسه هو الناقص). منطقيات وجود فقط، لا أي سرّ. يُنهي «الفشل الصامت».
+    console.error('[notify] email_not_configured', {
+      supabase_url: !!env.SUPABASE_URL,
+      service_key: !!env.SUPABASE_SERVICE_ROLE_KEY,
+      resend: !!env.RESEND_API_KEY,
+    });
+    return json({ skipped: true, reason: 'email_not_configured' });
+  }
 
   let payload;
   try { payload = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
