@@ -18222,12 +18222,18 @@ async function plShowReport(extracted){
       <div style="flex:1;min-width:110px;padding:10px;background:rgba(155,44,44,0.08);border-radius:8px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:var(--danger)">${nNone}</div><div style="font-size:11px;color:var(--muted)">غير موجود</div></div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
       <div style="font-size:13px;font-weight:600">نتيجة مطابقة ${PL_STATE.rows.length} بند</div>
-      <button class="btn btn-ghost btn-sm" id="pl-export-btn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        تصدير CSV
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="pl-print-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+          طباعة
+        </button>
+        <button class="btn btn-ghost btn-sm" id="pl-export-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          تصدير Excel
+        </button>
+      </div>
     </div>
     <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px">
       <table style="width:100%;border-collapse:collapse;min-width:760px">
@@ -18257,27 +18263,59 @@ async function plShowReport(extracted){
   document.getElementById('si-review-content').innerHTML = html;
   const cf = document.getElementById('si-confirm-btn'); if(cf) cf.style.display = 'none';
   const bk = document.getElementById('si-back-btn'); if(bk) bk.style.display = '';
-  const ex = document.getElementById('pl-export-btn'); if(ex) ex.addEventListener('click', plExportCsv);
+  const ex = document.getElementById('pl-export-btn'); if(ex) ex.addEventListener('click', plExportXlsx);
+  const pb = document.getElementById('pl-print-btn'); if(pb) pb.addEventListener('click', plPrintReport);
 }
 
-function plExportCsv(){
+const plStatusLabel = r => r.status === 'none' ? 'غير موجود' : (!r.hasHistory ? 'موجود بلا تاريخ سعري' : (r.status === 'matched' ? 'مطابق' : 'مطابقة محتملة'));
+
+// تصدير Excel حقيقي (.xlsx) — يفتح عربياً سليماً في Excel بلا تشويه (بديل CSV).
+async function plExportXlsx(){
   if(!PL_STATE.rows.length){ toast('warn','لا توجد بيانات','لم تتم أي مطابقة بعد'); return; }
-  const statusLabel = r => r.status === 'none' ? 'غير موجود' : (!r.hasHistory ? 'موجود بلا تاريخ سعري' : (r.status === 'matched' ? 'مطابق' : 'مطابقة محتملة'));
-  const head = ['البند المطلوب','الكمية','الوحدة','الحالة','كود النظام','المطابق في النظام','آخر سعر','متوسط السعر','عدد العروض','آخر تاريخ','آخر مورد'];
-  const esc = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
-  const lines = [head.map(esc).join(',')];
-  for(const r of PL_STATE.rows){
-    lines.push([r.req, r.qty, r.unit, statusLabel(r), r.code, r.matchName,
-      r.lastPrice==null?'':r.lastPrice, r.avgPrice==null?'':r.avgPrice, r.offers||'',
-      r.lastDate||'', r.lastSupplier||''].map(esc).join(','));
-  }
-  const blob = new Blob(['﻿' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `تسعير-طلب-${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  toast('success','تم التصدير','حُفظ ملف CSV بنتائج المطابقة');
+  try{
+    await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined', 'Excel');
+    if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel');
+    const head = ['#','البند المطلوب','الكمية','الوحدة','الحالة','كود النظام','المطابق في النظام','آخر سعر','متوسط السعر','عدد العروض','آخر تاريخ','آخر مورد'];
+    const aoa = [head];
+    PL_STATE.rows.forEach((r,i)=>{ aoa.push([ i+1, r.req, r.qty, r.unit, plStatusLabel(r), r.code, r.matchName,
+      r.lastPrice==null?'':Number(r.lastPrice), r.avgPrice==null?'':Number(r.avgPrice), r.offers||'', r.lastDate||'', r.lastSupplier||'' ]); });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:4},{wch:34},{wch:8},{wch:8},{wch:16},{wch:12},{wch:34},{wch:10},{wch:10},{wch:8},{wch:12},{wch:20}];
+    if(ws['!ref']) ws['!autofilter'] = { ref: ws['!ref'] };
+    XLSX.utils.book_append_sheet(wb, ws, 'نتيجة التسعير');
+    XLSX.writeFile(wb, `تسعير-طلب-${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast('success','تم التصدير','حُفظ ملف Excel بنتائج المطابقة');
+  }catch(e){ toast('error','تعذّر التصدير', e.message||''); }
+}
+
+// طباعة تقرير التسعير في نافذة منسّقة نظيفة.
+function plPrintReport(){
+  if(!PL_STATE.rows.length){ toast('warn','لا توجد بيانات','لم تتم أي مطابقة بعد'); return; }
+  const rowsH = PL_STATE.rows.map((r,i)=>`<tr>
+    <td>${i+1}</td><td class="r">${escapeHtml(r.req)}</td><td>${escapeHtml(String(r.qty||''))} ${escapeHtml(r.unit||'')}</td>
+    <td>${plStatusLabel(r)}</td><td>${escapeHtml(r.code||'')}</td><td class="r">${escapeHtml(r.matchName||'')}</td>
+    <td class="n">${r.hasHistory&&r.lastPrice!=null?plFmt(r.lastPrice):'—'}</td>
+    <td class="n">${r.hasHistory&&r.avgPrice!=null?plFmt(r.avgPrice):'—'}</td>
+    <td>${r.hasHistory?(r.offers||0):'—'}</td><td>${escapeHtml(r.lastDate||'—')}</td></tr>`).join('');
+  const n = PL_STATE.rows.length;
+  const matched = PL_STATE.rows.filter(r=>r.status==='matched').length;
+  const none = PL_STATE.rows.filter(r=>r.status==='none').length;
+  const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>نتيجة التسعير الذكي</title>
+  <style>body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;padding:24px;color:#1f2937}
+  h1{font-size:18px;margin:0 0 4px}.sub{color:#6b7280;font-size:12px;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{border:1px solid #d1d5db;padding:6px 8px;text-align:center}
+  th{background:#f3f4f6}td.r{text-align:right}td.n{text-align:left;font-weight:600;font-variant-numeric:tabular-nums}
+  tr:nth-child(even){background:#fafafa}</style></head><body>
+  <h1>نتيجة مطابقة التسعير الذكي</h1>
+  <div class="sub">عدد البنود: ${n} · مطابق: ${matched} · غير موجود: ${none} · التاريخ: ${new Date().toLocaleDateString('en-GB')}</div>
+  <table><thead><tr><th>#</th><th>البند المطلوب</th><th>الكمية</th><th>الحالة</th><th>الكود</th><th>المطابق في النظام</th><th>آخر سعر</th><th>المتوسط</th><th>عروض</th><th>آخر تاريخ</th></tr></thead>
+  <tbody>${rowsH}</tbody></table></body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ toast('warn','منع المتصفّح','اسمح بالنوافذ المنبثقة للطباعة'); return; }
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(()=>{ try{ w.print(); }catch(_){} }, 350);
 }
 
 /* === EXTRACTION: SPREADSHEET === */
