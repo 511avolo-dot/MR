@@ -7457,9 +7457,9 @@ async function aiComplete(opts){
       topK: 40,
       topP: 0.95,
       maxOutputTokens: opts.maxTokens || 2048,
-      // تعطيل "التفكير" في نماذج 2.5: وإلا تستهلك مرحلة التفكير كامل حد المخرجات
-      // فيعود الرد فارغاً (finishReason: MAX_TOKENS بلا نص). مدعوم ويُتجاهل بأمان لغير النماذج المفكِّرة.
-      thinkingConfig: { thinkingBudget: 0 },
+      // "التفكير" مُعطَّل افتراضياً (وإلا يستهلك حد المخرجات فيعود الرد فارغاً). لكن مهامّ
+      // كالمطابقة الدقيقة تستفيد من تفكير محدود؛ يُفعَّل عبر opts.thinkBudget مع رفع maxOutputTokens.
+      thinkingConfig: { thinkingBudget: opts.thinkBudget ?? 0 },
       // مخرجات منظّمة (JSON صارم) عند الطلب — يمنع الإدخال العشوائي ويضمن قابلية التحليل.
       ...(opts.responseSchema
         ? { responseMimeType: 'application/json', responseSchema: opts.responseSchema }
@@ -18141,7 +18141,8 @@ async function plResolveAll(items){
         const it2 = STATE.items.find(i => String(i.code) === String(r.code));
         if(it2){
           const conf = Number(r.confidence)||0;
-          const score = conf >= 0.7 ? 0.9 : (conf >= 0.45 ? 0.65 : 0);
+          // معايرة متحفّظة: مطابقة يقينية فقط عند ثقة عالية؛ المتوسطة «محتملة» للمراجعة.
+          const score = conf >= 0.85 ? 0.9 : (conf >= 0.6 ? 0.65 : 0);
           if(score){ out[idx] = {item:it2, score, reason: r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي (ذكاء)', candidates:[]}; return; }
         }
       }
@@ -18165,14 +18166,15 @@ async function plShowReport(extracted){
     if(m.item && m.score >= SI_MATCH_AUTO) status = 'matched';
     else if(m.item && m.score >= SI_MATCH_SUGGEST) status = 'suggest';
     else status = 'none';
-    const it2 = m.item || {};
-    const hasHistory = !!(m.item && ((Number(it2.offers)||0) > 0 || it2.last_price != null));
+    // «غير موجود» = لا صنف مطابقاً إطلاقاً: لا نعرض كوداً ولا سعراً (كان يتسرّب سعر من مطابقة ضعيفة).
+    const it2 = (status === 'none') ? {} : (m.item || {});
+    const hasHistory = !!(status !== 'none' && m.item && ((Number(it2.offers)||0) > 0 || it2.last_price != null));
     PL_STATE.rows.push({
       req: it.name,
       qty: it.quantity || it.qty || '',
       unit: it.unit || '',
       status,
-      reason: m.reason,
+      reason: (status === 'none') ? '' : m.reason,
       code: it2.code || '',
       matchName: it2.name || '',
       lastPrice: hasHistory ? it2.last_price : null,
@@ -19232,24 +19234,36 @@ async function aiCatalogMatch(inputs){
   }).join('\n');
 
   const system = [
-    'أنت خبير مطابقة أصناف مشتريات دقيق للغاية. لكل «بند مرفوع» حدِّد هل يطابق صنفاً في «كتالوج الأصناف» (نفس المنتج فعلياً) أم لا.',
-    'قواعد صارمة:',
-    '- طابِق بالمعنى لا بالحروف: اختلاف اللغة (عربي/إنجليزي)، ترتيب الكلمات، الاختصارات، العلامة التجارية، رقم الموديل، صياغة الوصف، ووحدات القياس المكافئة — لا يمنع أيٌّ منها المطابقة إن كان المنتج نفسه.',
-    '- code يجب أن يكون كوداً موجوداً حرفياً في الكتالوج أدناه. لا تخترع كوداً غير موجود إطلاقاً.',
-    '- إن لم يوجد صنف مطابق حقيقي بعد بحث شامل في كامل الكتالوج، اجعل code = "NEW" (بند جديد). لا تُجبر مطابقة ضعيفة، ولا تحكم بالجدّة قبل بحث شامل.',
-    '- confidence رقم بين 0 و1 يعكس يقينك. reason جملة عربية قصيرة جداً تبرّر القرار.',
-    '- لا تخترع أسعاراً ولا أي بيانات؛ مهمتك المطابقة فقط.',
+    'أنت خبير مطابقة أصناف مشتريات دقيق جداً ومنضبط. لكل «بند مرفوع» قرِّر هل يطابق صنفاً في «كتالوج الأصناف» أدناه — أي المنتج نفسه تماماً بنفس المواصفات — أم لا.',
+    '',
+    'تجاهَل هذه الفروق (لا تمنع المطابقة إن كان المنتج ومواصفاته نفسها): اللغة (عربي/إنجليزي)، ترتيب الكلمات، الاختصارات، العلامة التجارية، رقم الموديل، وصياغة الوصف، والوحدات المكافئة (3.78 لتر = 1 جالون).',
+    '',
+    '⚠️ القاعدة الأهم — المواصفات الكمّية قيدٌ صارم لا يُتجاوَز: لا تطابِق بنداً بصنف تختلف عنه في أي مواصفة فارقة:',
+    '  • السعة/الحجم (لتر، مل، جالون)  • الوزن (كجم، جرام)  • العدد/حجم العبوة (شد 12، عبوة 24)  • الأبعاد (سم، مم)  • النوع الفرعي المميِّز (صغير/كبير، خفيف/ثقيل، سائل/بودرة، عادي/معطّر).',
+    'إن كان نوع المنتج نفسه لكن اختلفت مواصفة كمّية فارقة ⇒ هما منتجان مختلفان ⇒ code="NEW" و spec_match=false. لا تُقرِّب ولا تُجبر.',
+    '',
+    'أمثلة رفض (منتجات مختلفة رغم تشابه النوع):',
+    '  • «أكياس قمامة 90 جالون» ≠ «كيس نفاية 70 جالون» (سعة مختلفة).',
+    '  • «فوط صغيرة» ≠ «فوط كبيرة» (حجم مختلف).  • «عبوة 500 مل» ≠ «عبوة 1 لتر».  • «شد 12» ≠ «شد 24».',
+    '  • «ملمع خشب» ≠ «منظف زجاج» (وظيفة/منتج مختلف).',
+    'أمثلة قبول (نفس المنتج والمواصفة):',
+    '  • «صابون سائل لليدين» = «Hand Wash Soap 4L» إن تطابق الحجم.  • «منظف أرضيات 3.78 لتر» = «Floor Cleaner 1 Gallon» (وحدة مكافئة).',
+    '',
+    'code يجب أن يكون كوداً موجوداً حرفياً في الكتالوج أدناه — لا تخترع كوداً إطلاقاً. إن لم يوجد صنف مطابق حقيقي بعد بحث شامل في كامل الكتالوج فاجعل code="NEW". الشكّ يُرجَّح للجدّة لا للمطابقة القسرية.',
+    'confidence بين 0 و1 = يقينك أنه نفس المنتج والمواصفة. spec_match=true فقط إذا تطابقت كل المواصفات الكمّية الفارقة. reason جملة عربية قصيرة جداً تذكر المواصفة التي قارنتها (مثال: «نفس المنتج والسعة 4 لتر» أو «سعة مختلفة 90≠70 جالون»).',
+    'لا تخترع أسعاراً ولا بيانات؛ مهمتك المطابقة فقط.',
+    '',
     'كتالوج الأصناف (كل سطر: code ثم tab ثم الاسم ثم الفئة ثم الوحدة ثم مرادفات):',
     cat.text,
   ].join('\n');
 
-  const prompt = `البنود المرفوعة (كل سطر: index ثم tab ثم الوصف):\n${itemsBlock}\n\nأعِد JSON فقط: {"matches":[{"i":<index>,"code":<كود من الكتالوج أو "NEW">,"confidence":<0..1>,"reason":"..."}]} لكل بند.`;
+  const prompt = `البنود المرفوعة (كل سطر: index ثم tab ثم الوصف):\n${itemsBlock}\n\nلكل بند: فكِّر في نوع المنتج ومواصفته الكمّية الفارقة، ابحث في كامل الكتالوج، ثم قرِّر.\nأعِد JSON فقط: {"matches":[{"i":<index>,"code":<كود من الكتالوج أو "NEW">,"confidence":<0..1>,"spec_match":<true/false>,"reason":"..."}]} لكل بند.`;
 
   const schema = {
     type:'object',
     properties:{
       matches:{ type:'array', items:{ type:'object',
-        properties:{ i:{type:'integer'}, code:{type:'string'}, confidence:{type:'number'}, reason:{type:'string'} },
+        properties:{ i:{type:'integer'}, code:{type:'string'}, confidence:{type:'number'}, spec_match:{type:'boolean'}, reason:{type:'string'} },
         required:['i','code','confidence'] } }
     },
     required:['matches']
@@ -19258,7 +19272,8 @@ async function aiCatalogMatch(inputs){
   try{
     const reply = await aiComplete({
       system, prompt, feature:'catalog_match', temperature:0,
-      maxTokens: Math.min(8192, 400 + n*70), cache:false, responseSchema: schema
+      // تفكير محدود يرفع دقة الانضباط بالمواصفات؛ maxOutputTokens مرفوع ليتّسع للتفكير + المخرجات.
+      thinkBudget: 1024, maxTokens: Math.min(8192, 2000 + n*80), cache:false, responseSchema: schema
     });
     const json = siExtractJSON(reply);
     const out = empty.map(x => ({...x}));
@@ -19268,7 +19283,10 @@ async function aiCatalogMatch(inputs){
         if(!(i>=0 && i<n)) continue;
         let code = (m.code==null) ? '' : String(m.code).trim();
         if(!code || code.toUpperCase()==='NEW' || !cat.byCode[code]) code = null; // لا اختراع خارج الكتالوج
-        out[i] = { code, confidence: Math.max(0, Math.min(1, Number(m.confidence)||0)), reason: String(m.reason||'') };
+        let conf = Math.max(0, Math.min(1, Number(m.confidence)||0));
+        // قيد المواصفات الصارم: إن صرّح النموذج باختلاف مواصفة فارقة، فلا مطابقة (يمنع 90≠70 جالون).
+        if(code && m.spec_match === false){ code = null; conf = Math.min(conf, 0.25); }
+        out[i] = { code, confidence: conf, reason: String(m.reason||'') };
       }
     }
     return out;
@@ -19476,10 +19494,11 @@ async function siMatchExtractedData(extracted){
         const r = aiRes[k]; if(!r || !r.code) return;
         const it2 = STATE.items.find(i => String(i.code) === String(r.code)); if(!it2) return;
         const conf = Number(r.confidence)||0; const row = result.rows[p.idx];
-        if(conf >= 0.7){
+        // معايرة متحفّظة: دمج تلقائي فقط عند ثقة عالية؛ المتوسطة تُعرَض «اقتراح» ليقرّر المستخدم.
+        if(conf >= 0.85){
           row.matchedItem = it2; row.action = 'update'; row.matchScore = 0.9;
           row.matchReason = r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي شامل (ذكاء)'; row.suggestions = null;
-        } else if(conf >= 0.45){
+        } else if(conf >= 0.6){
           row.matchedItem = it2; row.action = 'suggest'; row.matchScore = 0.72;
           row.matchReason = r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي شامل (ذكاء)'; row.suggestions = [{item:it2, score:0.72}];
         }
