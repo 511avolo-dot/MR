@@ -4230,12 +4230,13 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <input type="text" class="form-input" id="sf-name" placeholder="مثال: شركة الفلاح للتجارة">
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-row full">
         <div class="form-field">
-          <label class="form-label">التخصص</label>
-          <input type="text" class="form-input" id="sf-specialty" list="specialties-list" placeholder="مثال: أدوات تنظيف، مواد بناء">
-          <datalist id="specialties-list"></datalist>
+          <label class="form-label">التصنيف (القطاعات) — اختر ما ينطبق</label>
+          <div id="sf-sectors" style="display:flex;flex-wrap:wrap;gap:7px;max-height:170px;overflow:auto;padding:9px;border:1px solid var(--border,#e2e8f0);border-radius:9px"></div>
         </div>
+      </div>
+      <div class="form-row full">
         <div class="form-field">
           <label class="form-label">جهة الاتصال</label>
           <input type="text" class="form-input" id="sf-contact" placeholder="اسم الشخص المسؤول">
@@ -4264,17 +4265,18 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       <div class="form-row">
         <div class="form-field">
           <label class="form-label">المدينة</label>
-          <input type="text" class="form-input" id="sf-city" placeholder="مثال: الرياض">
+          <input type="text" class="form-input" id="sf-city" list="sf-cities-list" placeholder="مثال: الرياض">
+          <datalist id="sf-cities-list"></datalist>
         </div>
         <div class="form-field">
           <label class="form-label">نوع المنشأة</label>
-          <input type="text" class="form-input" id="sf-entity" placeholder="مثال: شركة ذات مسؤولية محدودة">
+          <select class="form-input" id="sf-entity"></select>
         </div>
       </div>
       <div class="form-row full">
         <div class="form-field">
-          <label class="form-label">نطاق العمل</label>
-          <input type="text" class="form-input" id="sf-scope" placeholder="مثال: داخل المملكة (محلي)، تصدير">
+          <label class="form-label">نطاق العمل — اختر ما ينطبق</label>
+          <div id="sf-scope-group" style="display:flex;flex-wrap:wrap;gap:7px;padding:9px;border:1px solid var(--border,#e2e8f0);border-radius:9px"></div>
         </div>
       </div>
       <div class="form-row full">
@@ -8242,20 +8244,48 @@ function loadSupplierEdits(){
 
 let SUPPLIER_EDIT_MODE = null; // null=add, otherwise the supplier object being edited
 
+// قوائم التصنيف المعتمدة (نفس قوائم نموذج التسجيل) — لاختيار منظّم بدل النصّ الحرّ.
+const SUP_SECTORS = ["المقاولات والإنشاءات","التشغيل والصيانة","مواد البناء","الكهرباء والإنارة","السباكة والصرف الصحي","التكييف والتبريد","الأدوات والمعدات","المعدات الثقيلة","السلامة والأمن","الأثاث والمفروشات","القرطاسية والمكتبية","المواد الغذائية والضيافة","النظافة والمواد الاستهلاكية","التقنية والاتصالات","تقنية المعلومات والبرمجيات","النقليات والمركبات","الخدمات اللوجستية والشحن","الطبية والمخبرية","الطاقة والطاقة المتجددة","المياه ومعالجتها","الزراعة والمسطحات الخضراء","الدعاية والإعلان والمطبوعات","الاستشارات والخدمات المهنية","التدريب والتطوير","التوريدات العامة","أخرى"];
+const SUP_SCOPES = ["داخل المملكة (محلي)","إقليمي","دولي"];
+const SUP_ENTITY_TYPES = ["مؤسسة فردية","شركة ذات مسؤولية محدودة","شركة مساهمة","فرع شركة أجنبية"];
+const SAUDI_CITIES = ["الرياض","جدة","مكة المكرمة","المدينة المنورة","الدمام","الخبر","الظهران","الأحساء","الطائف","بريدة","عنيزة","تبوك","خميس مشيط","أبها","حائل","نجران","جازان","ينبع","الجبيل","القطيف","عرعر","سكاكا","الباحة","القصيم","الخرج"];
+
+// يعرض مجموعة اختيار متعدّد (شارات قابلة للنقر) داخل حاوية، ويؤشّر القيم المحددة حالياً.
+// يحافظ على أي قيمة قائمة خارج القائمة المعتمدة (لا يفقد بيانات المورد).
+function sfRenderChecks(containerId, options, selectedCsv){
+  const sel = String(selectedCsv||'').split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  const all = options.slice();
+  sel.forEach(v=>{ if(!all.includes(v)) all.push(v); });
+  const c = document.getElementById(containerId); if(!c) return;
+  c.innerHTML = all.map(v=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;background:var(--surface,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none"><input type="checkbox" value="${escapeHtml(v)}" ${sel.includes(v)?'checked':''} style="accent-color:var(--gold,#c4a265)"> ${escapeHtml(v)}</label>`).join('');
+}
+function sfGetChecks(containerId){
+  return [...document.querySelectorAll('#'+containerId+' input[type=checkbox]:checked')].map(c=>c.value).join('، ');
+}
+function sfFillSelect(id, options, current){
+  const s = document.getElementById(id); if(!s) return;
+  const opts = options.slice();
+  if(current && !opts.includes(current)) opts.unshift(current);
+  s.innerHTML = '<option value="">— اختر —</option>' + opts.map(o=>`<option value="${escapeHtml(o)}" ${o===current?'selected':''}>${escapeHtml(o)}</option>`).join('');
+}
+function sfFillDatalist(id, options){
+  const dl = document.getElementById(id); if(!dl) return;
+  dl.innerHTML = options.map(o=>`<option value="${escapeHtml(o)}"></option>`).join('');
+}
+
 function openAddSupplier(){
   SUPPLIER_EDIT_MODE = null;
   document.getElementById('sf-eyebrow').textContent = 'إضافة مورد';
   document.getElementById('sf-title').textContent = 'مورد جديد';
   document.getElementById('sf-save-text').textContent = 'حفظ المورد';
   // Clear form
-  ['sf-name','sf-specialty','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-bank-name','sf-account-holder','sf-account-number','sf-iban','sf-notes','sf-city','sf-entity','sf-scope','sf-bizdesc'].forEach(id=>{
-    document.getElementById(id).value='';
+  ['sf-name','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-bank-name','sf-account-holder','sf-account-number','sf-iban','sf-notes','sf-city','sf-bizdesc'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
   });
-  // Populate specialties datalist
-  const dl = document.getElementById('specialties-list');
-  dl.innerHTML = '';
-  const specs = [...new Set(STATE.suppliers.map(s=>s.specialty).filter(Boolean))].sort();
-  specs.forEach(s=>{const o=document.createElement('option');o.value=s;dl.appendChild(o)});
+  sfRenderChecks('sf-sectors', SUP_SECTORS, '');
+  sfRenderChecks('sf-scope-group', SUP_SCOPES, '');
+  sfFillSelect('sf-entity', SUP_ENTITY_TYPES, '');
+  sfFillDatalist('sf-cities-list', SAUDI_CITIES);
   openModal('modal-supplier-form');
   setTimeout(()=>document.getElementById('sf-name').focus(), 200);
 }
@@ -8266,7 +8296,7 @@ function openEditSupplier(supplier){
   document.getElementById('sf-title').textContent = supplier.name;
   document.getElementById('sf-save-text').textContent = 'حفظ التعديلات';
   document.getElementById('sf-name').value = supplier.name||'';
-  document.getElementById('sf-specialty').value = supplier.specialty||'';
+  sfRenderChecks('sf-sectors', SUP_SECTORS, supplier.specialty);
   document.getElementById('sf-contact').value = supplier.contact||'';
   document.getElementById('sf-phone').value = supplier.phone||'';
   document.getElementById('sf-mobile').value = supplier.mobile||'';
@@ -8280,14 +8310,10 @@ function openEditSupplier(supplier){
   document.getElementById('sf-iban').value = supplier.iban||'';
   document.getElementById('sf-notes').value = supplier.notes||'';
   document.getElementById('sf-city').value = supplier.city||'';
-  document.getElementById('sf-entity').value = supplier.entity_type||'';
-  document.getElementById('sf-scope').value = supplier.business_scope||'';
+  sfFillSelect('sf-entity', SUP_ENTITY_TYPES, supplier.entity_type||'');
+  sfRenderChecks('sf-scope-group', SUP_SCOPES, supplier.business_scope);
+  sfFillDatalist('sf-cities-list', SAUDI_CITIES);
   document.getElementById('sf-bizdesc').value = supplier.business_description||'';
-  // Populate specialties datalist
-  const dl = document.getElementById('specialties-list');
-  dl.innerHTML = '';
-  const specs = [...new Set(STATE.suppliers.map(s=>s.specialty).filter(Boolean))].sort();
-  specs.forEach(s=>{const o=document.createElement('option');o.value=s;dl.appendChild(o)});
   // Close detail modal first if open
   closeModal('modal-supplier');
   setTimeout(()=>openModal('modal-supplier-form'), 150);
@@ -8316,7 +8342,7 @@ function normalizeSaudiPhone(raw){
 async function saveSupplierForm(){
   if(!requirePermission('can_manage_suppliers', 'إدارة الموردين')) return;
   const name = document.getElementById('sf-name').value.trim();
-  const specialty = document.getElementById('sf-specialty').value.trim();
+  const specialty = sfGetChecks('sf-sectors');
   const contact = document.getElementById('sf-contact').value.trim();
   const phone = normalizeSaudiPhone(document.getElementById('sf-phone').value.trim());
   const mobile = normalizeSaudiPhone(document.getElementById('sf-mobile').value.trim());
@@ -8331,7 +8357,7 @@ async function saveSupplierForm(){
   const notes = document.getElementById('sf-notes').value.trim();
   const city = document.getElementById('sf-city').value.trim();
   const entity_type = document.getElementById('sf-entity').value.trim();
-  const business_scope = document.getElementById('sf-scope').value.trim();
+  const business_scope = sfGetChecks('sf-scope-group');
   const business_description = document.getElementById('sf-bizdesc').value.trim();
 
   if(!name){ toast('error','بيانات ناقصة','اسم المورد مطلوب'); return }
