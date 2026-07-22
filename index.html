@@ -18398,10 +18398,11 @@ async function siAIExtractFromPDFBytes(base64Pdf){
   // الاستخراج الثقيل يُوجَّه عبر الوسيط الخادمي (/api/ai بمفتاح الخادم) دائماً — أوثق وأثبت
   // من نداء المتصفّح المباشر بمفتاح محلي قد يصطدم بحدود الحصّة على الطلبات الكبيرة.
   const cfgPx = { ...cfg, apiKey: '' };
-  const prompt = `هذا ملف PDF لعرض سعر من مورد (غالباً ممسوح ضوئياً/مصوّر). اقرأه بالكامل واستخرج كل البنود من جميع الصفحات بدقّة.
-- اقرأ كل الجداول عبر كل الصفحات، ولا تتخطَّ أي بند.
-- price = سعر الوحدة رقماً فقط (إن وُجد الإجمالي مع الكمية فاحسب سعر الوحدة).
-- أبقِ الأسماء كما وردت (عربي/إنجليزي). استخدم null لأي قيمة غير موجودة.`;
+  const prompt = `هذا ملف PDF لعرض سعر من مورد (غالباً ممسوح ضوئياً/مصوّر). اقرأه بالكامل بعناية واستخرج كل البنود من جميع الصفحات بدقّة تامّة.
+- افحص كل صفحة وكل صفّ في الجداول، ولا تُغفِل أي بند مهما كان صغيراً. تحقّق في النهاية أنّ عدد البنود يطابق ما في المستند.
+- price = سعر الوحدة رقماً فقط. إن كان المذكور هو الإجمالي مع الكمية فاحسب سعر الوحدة (الإجمالي ÷ الكمية).
+- **أبقِ المقاسات والأحجام والسعات والعبوة (لتر/مل/جالون/كجم/شد/عدد) ضمن حقل الاسم كما وردت** — فهي مهمّة جداً للمطابقة اللاحقة.
+- أبقِ الأسماء كما وردت (عربي/إنجليزي بلا ترجمة). استخدم null لأي قيمة غير موجودة. لا تخترع بنوداً أو أسعاراً غير موجودة.`;
   const schema = { type:'object', properties:{
       supplier:{ type:'object', properties:{ name:{type:'string'}, phone:{type:'string'}, email:{type:'string'}, address:{type:'string'}, vat_number:{type:'string'} } },
       date:{type:'string'}, reference:{type:'string'},
@@ -18410,7 +18411,7 @@ async function siAIExtractFromPDFBytes(base64Pdf){
         required:['name'] } }
     }, required:['items'] };
   const body = { contents:[{ role:'user', parts:[ {text:prompt}, {inline_data:{ mime_type:'application/pdf', data:base64Pdf }} ] }],
-    generationConfig:{ temperature:0.1, maxOutputTokens:32768, thinkingConfig:{thinkingBudget:0}, responseMimeType:'application/json', responseSchema:schema } };
+    generationConfig:{ temperature:0.1, maxOutputTokens:32768, thinkingConfig:{thinkingBudget:2048}, responseMimeType:'application/json', responseSchema:schema } };
 
   const modelsToTry = [cfg.model];
   for(const fb of AI_FALLBACK_MODELS){ if(!modelsToTry.includes(fb)) modelsToTry.push(fb); }
@@ -19390,8 +19391,8 @@ async function aiCatalogMatch(inputs){
   try{
     const reply = await aiComplete({
       system, prompt, feature:'catalog_match', temperature:0,
-      // تفكير محدود يرفع دقة الانضباط بالمواصفات؛ maxOutputTokens مرفوع ليتّسع للتفكير + المخرجات.
-      thinkBudget: 1024, maxTokens: Math.min(8192, 2000 + n*80), cache:false, responseSchema: schema
+      // تفكير أعمق يرفع دقّة الانضباط بالمواصفات والحسم بين المتغيّرات؛ maxOutputTokens مرفوع للتفكير + المخرجات.
+      thinkBudget: 2048, maxTokens: Math.min(16384, 3500 + n*90), cache:false, responseSchema: schema
     });
     const json = siExtractJSON(reply);
     const out = empty.map(x => ({...x}));
