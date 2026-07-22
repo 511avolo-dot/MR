@@ -1314,6 +1314,29 @@ body.print-preview-active .print-document{display:block}
 /* Footer page meta refinement */
 .print-footer .pf-brand{font-family:'Fraunces','NeoSansArabic',serif;color:#9A7A45;font-weight:600;font-size:10.5px}
 
+/* ═══ تحسينات الطباعة الموحّدة (v3) — تُطبَّق على كل المطبوعات ═══ */
+/* 1) ضمان طباعة الألوان والخلفيات (وإلا يظهر نصّ الترويسات الداكنة أبيض على أبيض = غير مقروء) */
+.print-document{ -webkit-print-color-adjust:exact; print-color-adjust:exact; color-adjust:exact; }
+/* 2) منع تجاوز النصوص الطويلة (بريد/روابط/أسماء/تصنيفات) حدود الخلايا فتتداخل مع المجاور */
+.print-table{ max-width:100%; }
+.print-table th, .print-table td{ overflow-wrap:anywhere; word-break:break-word; }
+.print-info-value, .print-party-meta, .print-company-meta, .print-doc-info,
+.print-total-words, .print-note-box{ overflow-wrap:anywhere; }
+/* 3) عزل الاتجاه للقيم المختلطة (أرقام/بريد لاتيني داخل نصّ عربي) فلا ينعكس ترتيبها */
+.print-info-value, .print-party-meta, .print-company-meta, .print-doc-info,
+.print-table td.num, .print-table td[dir="ltr"]{ unicode-bidi:plaintext; }
+/* 4) إبقاء الكتل المترابطة على صفحة واحدة (لا تنقسم عبر الصفحات فيتداخل رأسها مع غيره) */
+.print-info-grid, .print-parties, .print-party, .print-grid-stats, .print-stat-card,
+.print-quote-totals, .print-note-box, .print-total-words, .print-signatures,
+.print-signature-box, .print-stat-card.accent{ page-break-inside:avoid; break-inside:avoid; }
+/* 5) العنوان يبقى ملتصقاً بمحتواه، ولا تُترَك أسطر يتيمة */
+.print-section-title{ page-break-after:avoid; break-after:avoid; }
+.print-section{ page-break-inside:auto; }
+.print-ai-body h3{ page-break-after:avoid; break-after:avoid; }
+.print-ai-body p, .print-ai-body li, .print-info-item{ orphans:2; widows:2; }
+/* 6) صور المستند لا تتجاوز عرض الصفحة */
+.print-document img{ max-width:100%; height:auto; }
+
 /* Print preview modal */
 .print-preview-overlay{
   position:fixed;inset:0;background:#3a352d;z-index:1000;
