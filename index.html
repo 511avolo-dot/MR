@@ -4263,6 +4263,28 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       </div>
       <div class="form-row">
         <div class="form-field">
+          <label class="form-label">المدينة</label>
+          <input type="text" class="form-input" id="sf-city" placeholder="مثال: الرياض">
+        </div>
+        <div class="form-field">
+          <label class="form-label">نوع المنشأة</label>
+          <input type="text" class="form-input" id="sf-entity" placeholder="مثال: شركة ذات مسؤولية محدودة">
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-field">
+          <label class="form-label">نطاق العمل</label>
+          <input type="text" class="form-input" id="sf-scope" placeholder="مثال: داخل المملكة (محلي)، تصدير">
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-field">
+          <label class="form-label">وصف النشاط</label>
+          <textarea class="form-input" id="sf-bizdesc" rows="3" placeholder="نبذة عن نشاط المورد وخبراته"></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
           <label class="form-label">السجل التجاري</label>
           <input type="text" class="form-input" id="sf-cr" placeholder="10XXXXXXXX" dir="ltr">
         </div>
@@ -8226,7 +8248,7 @@ function openAddSupplier(){
   document.getElementById('sf-title').textContent = 'مورد جديد';
   document.getElementById('sf-save-text').textContent = 'حفظ المورد';
   // Clear form
-  ['sf-name','sf-specialty','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-bank-name','sf-account-holder','sf-account-number','sf-iban','sf-notes'].forEach(id=>{
+  ['sf-name','sf-specialty','sf-contact','sf-phone','sf-mobile','sf-email','sf-address','sf-cr','sf-tax','sf-bank-name','sf-account-holder','sf-account-number','sf-iban','sf-notes','sf-city','sf-entity','sf-scope','sf-bizdesc'].forEach(id=>{
     document.getElementById(id).value='';
   });
   // Populate specialties datalist
@@ -8257,6 +8279,10 @@ function openEditSupplier(supplier){
   document.getElementById('sf-account-number').value = supplier.account_number||'';
   document.getElementById('sf-iban').value = supplier.iban||'';
   document.getElementById('sf-notes').value = supplier.notes||'';
+  document.getElementById('sf-city').value = supplier.city||'';
+  document.getElementById('sf-entity').value = supplier.entity_type||'';
+  document.getElementById('sf-scope').value = supplier.business_scope||'';
+  document.getElementById('sf-bizdesc').value = supplier.business_description||'';
   // Populate specialties datalist
   const dl = document.getElementById('specialties-list');
   dl.innerHTML = '';
@@ -8303,6 +8329,10 @@ async function saveSupplierForm(){
   const account_number = document.getElementById('sf-account-number').value.trim();
   const iban = document.getElementById('sf-iban').value.replace(/\s+/g,'').toUpperCase();
   const notes = document.getElementById('sf-notes').value.trim();
+  const city = document.getElementById('sf-city').value.trim();
+  const entity_type = document.getElementById('sf-entity').value.trim();
+  const business_scope = document.getElementById('sf-scope').value.trim();
+  const business_description = document.getElementById('sf-bizdesc').value.trim();
 
   if(!name){ toast('error','بيانات ناقصة','اسم المورد مطلوب'); return }
 
@@ -8315,9 +8345,10 @@ async function saveSupplierForm(){
       phone: sup.phone, mobile: sup.mobile, email: sup.email,
       address: sup.address, commercial_reg: sup.commercial_reg,
       tax_id: sup.tax_id, bank_name: sup.bank_name, account_holder: sup.account_holder,
-      account_number: sup.account_number, iban: sup.iban, notes: sup.notes
+      account_number: sup.account_number, iban: sup.iban, notes: sup.notes,
+      city: sup.city, entity_type: sup.entity_type, business_scope: sup.business_scope, business_description: sup.business_description
     };
-    const updates = {name, specialty, contact, phone, mobile, email, address, commercial_reg, tax_id, bank_name, account_holder, account_number, iban, notes};
+    const updates = {name, specialty, contact, phone, mobile, email, address, commercial_reg, tax_id, bank_name, account_holder, account_number, iban, notes, city, entity_type, business_scope, business_description};
     Object.assign(sup, updates);
     // If name changed and there are history records, propagate
     if(oldName !== name){
@@ -8353,6 +8384,7 @@ async function saveSupplierForm(){
     const newSup = {
       id, name, specialty, contact, phone, mobile, email, address,
       commercial_reg, tax_id, bank_name, account_holder, account_number, iban, notes,
+      city, entity_type, business_scope, business_description,
       offers_count: 0,
       _user: true
     };
@@ -13168,6 +13200,8 @@ window.CLOUD = {
         commercial_reg: sup.commercial_reg||null, tax_id: sup.tax_id||null,
         bank_name: sup.bank_name||null, account_holder: sup.account_holder||null,
         account_number: sup.account_number||null, iban: sup.iban||null,
+        city: sup.city||null, entity_type: sup.entity_type||null,
+        business_scope: sup.business_scope||null, business_description: sup.business_description||null,
         notes: sup.notes||null, updated_at: new Date().toISOString(),
         created_by: currentUser, updated_by: currentUser
       };
@@ -13185,6 +13219,8 @@ window.CLOUD = {
         commercial_reg: sup.commercial_reg||null, tax_id: sup.tax_id||null,
         bank_name: sup.bank_name||null, account_holder: sup.account_holder||null,
         account_number: sup.account_number||null, iban: sup.iban||null,
+        city: sup.city||null, entity_type: sup.entity_type||null,
+        business_scope: sup.business_scope||null, business_description: sup.business_description||null,
         notes: sup.notes||null, updated_at: new Date().toISOString(),
         updated_by: currentUser
       };
@@ -22089,6 +22125,10 @@ async function approveRegistration(reg) {
         account_holder: reg.account_holder || null,
         account_number: reg.account_number || null,
         iban:           reg.iban || null,
+        city:           reg.city || null,
+        entity_type:    reg.entity_type || null,
+        business_scope: Array.isArray(reg.business_scope) ? reg.business_scope.join('، ') : (reg.business_scope || null),
+        business_description: reg.business_description || null,
         notes:          `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`,
         created_by:     STATE.currentUser?.username || null,
         updated_by:     STATE.currentUser?.username || null,
