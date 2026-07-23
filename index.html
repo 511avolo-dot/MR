@@ -18280,33 +18280,59 @@ async function plShowReport(extracted){
       offers:    hasHistory ? (it2.offers||0) : 0,
       lastDate:  hasHistory ? (it2.last_date||'') : '',
       lastSupplier: hasHistory ? (it2.last_supplier||'') : '',
-      hasHistory
+      hasHistory,
+      selected: true,
+      manual: false
     });
   }
 
-  // إحصاءات
-  const nMatched = PL_STATE.rows.filter(r => r.status === 'matched' && r.hasHistory).length;
-  const nSuggest = PL_STATE.rows.filter(r => r.status === 'suggest' && r.hasHistory).length;
-  const nNoHist  = PL_STATE.rows.filter(r => r.status !== 'none' && !r.hasHistory).length;
-  const nNone    = PL_STATE.rows.filter(r => r.status === 'none').length;
+  // إظهار خطوة المراجعة ثم رسم التقرير التفاعلي
+  const up = document.getElementById('si-step-upload');
+  const pr = document.getElementById('si-step-processing');
+  const rv = document.getElementById('si-step-review');
+  if(up) up.style.display = 'none';
+  if(pr) pr.style.display = 'none';
+  if(rv) rv.style.display = '';
+  const cf = document.getElementById('si-confirm-btn'); if(cf) cf.style.display = 'none';
+  const bk = document.getElementById('si-back-btn'); if(bk) bk.style.display = '';
+  plRenderReport();
+}
 
-  const badge = (st, hasHist) => {
-    if(st === 'none') return '<span class="si-badge skip">غير موجود</span>';
-    if(!hasHist)      return '<span class="si-badge warn">بلا تاريخ سعري</span>';
-    if(st === 'matched') return '<span class="si-badge match">مطابق ✓</span>';
-    return '<span class="si-badge new">مطابقة محتملة</span>';
-  };
+const plBadge = (st, hasHist) => {
+  if(st === 'none') return '<span class="si-badge skip">غير موجود</span>';
+  if(!hasHist)      return '<span class="si-badge warn">بلا تاريخ سعري</span>';
+  if(st === 'matched') return '<span class="si-badge match">مطابق ✓</span>';
+  return '<span class="si-badge new">مطابقة محتملة</span>';
+};
 
-  const rowsHtml = PL_STATE.rows.map((r, idx) => `
-    <tr style="border-bottom:1px solid var(--border)">
+/* رسم تقرير التسعير — يُعاد استدعاؤه بعد كل ربط/تحديد فيبقى الجدول محدَّثاً.
+   يضيف: خانة تحديد لكل بند (تتحكّم بالتصدير/الطباعة + إضافة «غير الموجود» للنظام)،
+   وزرّ ربط يدوي احترافي بالبحث في البنود المسجّلة لكل بند (مطابق أو لا). */
+function plRenderReport(){
+  const rows = PL_STATE.rows;
+  const nMatched = rows.filter(r => r.status === 'matched' && r.hasHistory).length;
+  const nSuggest = rows.filter(r => r.status === 'suggest' && r.hasHistory).length;
+  const nNoHist  = rows.filter(r => r.status !== 'none' && !r.hasHistory).length;
+  const nNone    = rows.filter(r => r.status === 'none').length;
+  const nSelNone = rows.filter(r => r.selected && r.status === 'none').length;
+  const allSel   = rows.length && rows.every(r => r.selected);
+
+  const rowsHtml = rows.map((r, idx) => `
+    <tr style="border-bottom:1px solid var(--border)${r.manual?';background:rgba(45,106,79,0.05)':''}">
+      <td style="padding:6px;text-align:center"><input type="checkbox" class="pl-sel" data-i="${idx}" ${r.selected?'checked':''} style="width:16px;height:16px;cursor:pointer"></td>
       <td style="padding:8px;font-size:12px;color:var(--muted);text-align:center">${idx+1}</td>
       <td style="padding:8px;font-size:13px">${escapeHtml(r.req)}${r.qty?`<div style="font-size:11px;color:var(--muted)">الكمية: ${escapeHtml(String(r.qty))} ${escapeHtml(r.unit||'')}</div>`:''}</td>
-      <td style="padding:8px">${badge(r.status, r.hasHistory)}${r.status!=='none'?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.reason||'')}</div>`:''}</td>
-      <td style="padding:8px;font-size:12px">${r.status!=='none'?`${r.code?`<span style="font-family:monospace;color:var(--gold)">${escapeHtml(r.code)}</span> `:''}${escapeHtml(r.matchName||'')}`:'—'}</td>
+      <td style="padding:8px">${plBadge(r.status, r.hasHistory)}${r.status!=='none'?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(r.reason||'')}</div>`:''}</td>
+      <td style="padding:8px;font-size:12px">${r.status!=='none'?`${r.code?`<span style="font-family:monospace;color:var(--gold)">${escapeHtml(r.code)}</span> `:''}${escapeHtml(r.matchName||'')}`:'<span style="color:var(--muted)">—</span>'}</td>
       <td style="padding:8px;text-align:center;font-size:13px;font-weight:600">${r.hasHistory && r.lastPrice!=null?plFmt(r.lastPrice):'—'}</td>
       <td style="padding:8px;text-align:center;font-size:12px">${r.hasHistory && r.avgPrice!=null?plFmt(r.avgPrice):'—'}</td>
       <td style="padding:8px;text-align:center;font-size:12px;color:var(--muted)">${r.hasHistory?r.offers:'—'}</td>
       <td style="padding:8px;text-align:center;font-size:11px;color:var(--muted)" dir="ltr">${r.hasHistory && r.lastDate?escapeHtml(r.lastDate):'—'}</td>
+      <td style="padding:6px;text-align:center;white-space:nowrap">
+        ${r.status==='none'
+          ? `<button type="button" class="btn btn-ghost btn-sm pl-link-btn" data-i="${idx}" title="ربط بصنف مسجّل بالبحث">🔗 ربط</button>`
+          : `<button type="button" class="btn btn-ghost btn-sm pl-link-btn" data-i="${idx}" title="تغيير الربط">تغيير</button> <button type="button" class="btn btn-ghost btn-sm pl-unlink-btn" data-i="${idx}" title="إلغاء الربط">✕</button>`}
+      </td>
     </tr>`).join('');
 
   const html = `
@@ -18321,8 +18347,11 @@ async function plShowReport(extracted){
         <div style="font-size:20px;font-weight:800;color:var(--danger)">${nNone}</div><div style="font-size:11px;color:var(--muted)">غير موجود</div></div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
-      <div style="font-size:13px;font-weight:600">نتيجة مطابقة ${PL_STATE.rows.length} بند</div>
+      <div style="font-size:13px;font-weight:600">نتيجة مطابقة ${rows.length} بند</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="pl-add-btn" style="display:${nNone?'inline-flex':'none'};color:#1f4e3a">
+          ➕ إضافة غير الموجود المحدَّد (<span class="pl-add-n">${nSelNone}</span>)
+        </button>
         <button class="btn btn-ghost btn-sm" id="pl-print-btn">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
           طباعة
@@ -18334,8 +18363,9 @@ async function plShowReport(extracted){
       </div>
     </div>
     <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px">
-      <table style="width:100%;border-collapse:collapse;min-width:760px">
+      <table style="width:100%;border-collapse:collapse;min-width:900px">
         <thead><tr style="background:var(--surface-2,#f5f3ee);position:sticky;top:0">
+          <th style="padding:8px"><input type="checkbox" id="pl-selall" ${allSel?'checked':''} title="تحديد الكل" style="width:16px;height:16px;cursor:pointer"></th>
           <th style="padding:8px;font-size:11px;font-weight:700">#</th>
           <th style="padding:8px;font-size:11px;font-weight:700;text-align:right">البند المطلوب</th>
           <th style="padding:8px;font-size:11px;font-weight:700">الحالة</th>
@@ -18344,25 +18374,162 @@ async function plShowReport(extracted){
           <th style="padding:8px;font-size:11px;font-weight:700">المتوسط</th>
           <th style="padding:8px;font-size:11px;font-weight:700">عروض</th>
           <th style="padding:8px;font-size:11px;font-weight:700">آخر تاريخ</th>
+          <th style="padding:8px;font-size:11px;font-weight:700">إجراء</th>
         </tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6">
-      💡 «مطابقة محتملة» تعني أن النظام وجد بنداً قريباً — راجِعه يدوياً. «غير موجود» يعني عدم وجود بند مشابه (لا تاريخ سعري).
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.7">
+      💡 <b>ربط</b> يفتح بحثاً في البنود المسجّلة لتربط البند بأي صنف تختاره — ويتعلّمه النظام فيتعرّف عليه تلقائياً لاحقاً.
+      خانة التحديد تتحكّم بما يُصدَّر/يُطبَع، وزرّ «إضافة غير الموجود» يسجّل المحدَّد منها كأصناف جديدة في النظام.
     </div>`;
 
-  const up = document.getElementById('si-step-upload');
-  const pr = document.getElementById('si-step-processing');
-  const rv = document.getElementById('si-step-review');
-  if(up) up.style.display = 'none';
-  if(pr) pr.style.display = 'none';
-  if(rv) rv.style.display = '';
   document.getElementById('si-review-content').innerHTML = html;
-  const cf = document.getElementById('si-confirm-btn'); if(cf) cf.style.display = 'none';
-  const bk = document.getElementById('si-back-btn'); if(bk) bk.style.display = '';
+  const rc = document.getElementById('si-review-content');
+  rc.querySelectorAll('.pl-sel').forEach(cb => cb.addEventListener('change', e => {
+    const i = +e.target.getAttribute('data-i'); if(PL_STATE.rows[i]){ PL_STATE.rows[i].selected = e.target.checked; }
+    plUpdateAddBtn();
+    const sa = document.getElementById('pl-selall'); if(sa) sa.checked = PL_STATE.rows.every(r => r.selected);
+  }));
+  const sa = document.getElementById('pl-selall');
+  if(sa) sa.addEventListener('change', e => { PL_STATE.rows.forEach(r => r.selected = e.target.checked); plRenderReport(); });
+  rc.querySelectorAll('.pl-link-btn').forEach(b => b.addEventListener('click', () => plOpenLinkPicker(+b.getAttribute('data-i'))));
+  rc.querySelectorAll('.pl-unlink-btn').forEach(b => b.addEventListener('click', () => plUnlinkRow(+b.getAttribute('data-i'))));
+  const ab = document.getElementById('pl-add-btn'); if(ab) ab.addEventListener('click', plAddSelectedToSystem);
   const ex = document.getElementById('pl-export-btn'); if(ex) ex.addEventListener('click', plExportXlsx);
   const pb = document.getElementById('pl-print-btn'); if(pb) pb.addEventListener('click', plPrintReport);
+  plUpdateAddBtn();
+}
+
+function plUpdateAddBtn(){
+  const ab = document.getElementById('pl-add-btn'); if(!ab) return;
+  const n = PL_STATE.rows.filter(r => r.selected && r.status === 'none').length;
+  const span = ab.querySelector('.pl-add-n'); if(span) span.textContent = n;
+  ab.disabled = !n; ab.style.opacity = n ? '1' : '0.5';
+}
+
+/* المُنتقي المشترك: بحث احترافي في البنود المسجّلة (يُعاد استخدامه في التسعير والاستيراد الذكي).
+   opts: {title, subtitle, seed, onPick(item)} — onPick يُستدعى بالصنف المختار من STATE.items. */
+function siItemPicker(opts){
+  opts = opts || {};
+  let ov = document.getElementById('si-item-picker'); if(ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'si-item-picker';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `<div style="background:var(--bg,#fff);color:var(--text,#1f2937);width:min(700px,97vw);max-height:88vh;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,0.45)">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="min-width:0"><div style="font-weight:700;font-size:14px">${escapeHtml(opts.title||'ربط بصنف مسجّل')}</div>
+      ${opts.subtitle?`<div style="font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere">${escapeHtml(opts.subtitle)}</div>`:''}</div>
+      <button class="btn btn-ghost btn-sm" id="si-pick-close" style="flex-shrink:0">✕</button></div>
+    <div style="padding:12px 16px 8px">
+      <input id="si-pick-search" type="text" placeholder="ابحث بالاسم أو الكود أو الوصف..." autocomplete="off"
+        style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface,#faf9f6);color:inherit">
+    </div>
+    <div id="si-pick-results" style="overflow-y:auto;padding:4px 16px 16px;flex:1"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const search = ov.querySelector('#si-pick-search');
+  const results = ov.querySelector('#si-pick-results');
+  const render = () => { results.innerHTML = siItemPickerResults(search.value); };
+  search.addEventListener('input', render);
+  results.addEventListener('click', e => {
+    const b = e.target.closest('.si-pick-item'); if(!b) return;
+    const it = STATE.items.find(i => String(i.code) === String(b.getAttribute('data-code')));
+    ov.remove();
+    if(it && typeof opts.onPick === 'function') opts.onPick(it);
+  });
+  const close = () => ov.remove();
+  ov.querySelector('#si-pick-close').addEventListener('click', close);
+  ov.addEventListener('click', e => { if(e.target === ov) close(); });
+  document.addEventListener('keydown', function esc(ev){ if(ev.key==='Escape'){ close(); document.removeEventListener('keydown', esc); } });
+  search.value = opts.seed || '';
+  render();
+  setTimeout(() => search.focus(), 50);
+}
+
+function siItemPickerResults(query){
+  const q = (query||'').trim();
+  const qn = siNormalize(q);
+  const toks = qn.split(/\s+/).filter(Boolean);
+  let pool = STATE.items || [];
+  if(toks.length){
+    const sub = pool.filter(i => {
+      const hay = siNormalize((i.name||'') + ' ' + (i.code||''));
+      return toks.every(t => hay.includes(t));
+    });
+    if(sub.length) pool = sub; // تضييق سريع بالتطابق النصّي؛ وإلا نرتّب الكل بالتشابه
+  }
+  const scored = pool.map(i => ({ i, s: q ? siSimilarity(i.name||'', q) : 0 }))
+    .sort((a,b) => b.s - a.s).slice(0, 40);
+  if(!scored.length) return '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">لا نتائج — جرّب كلمة مختلفة</div>';
+  return scored.map(({i}) => {
+    const price = (i.last_price!=null) ? plFmt(i.last_price) : '—';
+    return `<button type="button" class="si-pick-item" data-code="${escapeHtml(String(i.code||''))}"
+      style="display:flex;justify-content:space-between;gap:10px;width:100%;text-align:right;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--surface,#faf9f6);color:inherit;cursor:pointer">
+      <span style="flex:1;min-width:0"><span style="font-weight:600;font-size:13px;overflow-wrap:anywhere">${escapeHtml(i.name||'')}</span>
+      <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">${i.code?`<span style="font-family:monospace">${escapeHtml(String(i.code))}</span> · `:''}${escapeHtml(i.unit||'')}${(Number(i.offers)||0)>0?` · ${i.offers} عرض`:''}</span></span>
+      <span style="font-size:12px;font-weight:700;white-space:nowrap">${price}</span>
+    </button>`;
+  }).join('');
+}
+
+/* ربط بند التسعير بصنف مسجّل يختاره المستخدم بالبحث (يعمل للمطابق وغير الموجود). */
+function plOpenLinkPicker(idx){
+  const row = PL_STATE.rows[idx]; if(!row) return;
+  siItemPicker({
+    title: 'ربط البند بصنف مسجّل في النظام',
+    subtitle: row.req,
+    seed: row.req,
+    onPick: (it) => plLinkRow(idx, it.code)
+  });
+}
+
+function plLinkRow(idx, code){
+  const row = PL_STATE.rows[idx]; if(!row) return;
+  const it = STATE.items.find(i => String(i.code) === String(code));
+  if(!it){ toast('error','تعذّر الربط','لم يُعثر على الصنف'); return; }
+  const hasHistory = ((Number(it.offers)||0) > 0 || it.last_price != null);
+  Object.assign(row, {
+    status: 'matched', reason: 'ربط يدوي', code: it.code || '', matchName: it.name || '',
+    lastPrice: hasHistory ? it.last_price : null,
+    avgPrice:  hasHistory ? it.avg_price  : null,
+    offers:    hasHistory ? (it.offers||0) : 0,
+    lastDate:  hasHistory ? (it.last_date||'') : '',
+    lastSupplier: hasHistory ? (it.last_supplier||'') : '',
+    hasHistory, manual: true, selected: row.selected
+  });
+  // تعليم الربط كي يتعرّف عليه النظام تلقائياً في المرات القادمة
+  try{ siSaveLearnedAlias(row.req, it.code, row.req); }catch(_){}
+  plRenderReport();
+  const nm = row.req.length > 34 ? row.req.slice(0,34)+'…' : row.req;
+  toast('success','تم الربط', 'رُبط «'+nm+'» بـ«'+(it.name||it.code)+'» وسيُتعرَّف عليه تلقائياً لاحقاً');
+}
+
+function plUnlinkRow(idx){
+  const row = PL_STATE.rows[idx]; if(!row) return;
+  Object.assign(row, { status:'none', reason:'', code:'', matchName:'', lastPrice:null, avgPrice:null, offers:0, lastDate:'', lastSupplier:'', hasHistory:false, manual:false });
+  plRenderReport();
+}
+
+/* إضافة البنود «غير الموجودة» المحدَّدة كأصناف جديدة مسجّلة في النظام (proc_items). */
+async function plAddSelectedToSystem(){
+  const targets = PL_STATE.rows.filter(r => r.selected && r.status === 'none' && r.req);
+  if(!targets.length){ toast('warn','لا بنود محدَّدة','حدِّد بنوداً «غير موجودة» أولاً لإضافتها للنظام'); return; }
+  if(!confirm('إضافة '+targets.length+' بند(بنود) «غير موجودة» كأصناف جديدة مسجّلة في النظام؟')) return;
+  let added = 0, fails = 0;
+  for(const row of targets){
+    const code = 'USR-' + Date.now() + '-' + added + '-' + Math.random().toString(36).slice(2,5);
+    const newItem = { code, name: row.req, category: 'مستورد', unit: row.unit || 'قطعة', offers: 0, _user: true };
+    STATE.items.push(newItem);
+    try{ saveUserItem(newItem); }catch(_){}
+    try{ logAudit('add','item',code,{name: row.req, source:'pricing_add'}); }catch(_){}
+    if(window.CLOUD && CLOUD.enabled){ try{ await CLOUD.items.upsert(newItem); }catch(e){ fails++; console.warn('[pricing-add] cloud upsert:', e && e.message); } }
+    Object.assign(row, { status:'matched', reason:'أُضيف للنظام', code, matchName: row.req, hasHistory:false, manual:true });
+    try{ siSaveLearnedAlias(row.req, code, row.req); }catch(_){}
+    added++;
+  }
+  plRenderReport();
+  toast(fails?'warn':'success','تمت الإضافة', added+' صنف أُضيف للنظام'+(fails?(' · '+fails+' لم تُزامَن سحابياً'):''));
 }
 
 const plStatusLabel = r => r.status === 'none' ? 'غير موجود' : (!r.hasHistory ? 'موجود بلا تاريخ سعري' : (r.status === 'matched' ? 'مطابق' : 'مطابقة محتملة'));
@@ -18370,12 +18537,14 @@ const plStatusLabel = r => r.status === 'none' ? 'غير موجود' : (!r.hasHi
 // تصدير Excel حقيقي (.xlsx) — يفتح عربياً سليماً في Excel بلا تشويه (بديل CSV).
 async function plExportXlsx(){
   if(!PL_STATE.rows.length){ toast('warn','لا توجد بيانات','لم تتم أي مطابقة بعد'); return; }
+  const sel = PL_STATE.rows.filter(r => r.selected);
+  if(!sel.length){ toast('warn','لا بنود محدَّدة','حدِّد بنداً واحداً على الأقل للتصدير'); return; }
   try{
     await loadLib(SHEETJS_CDNS, ()=>typeof XLSX !== 'undefined', 'Excel');
     if(typeof XLSX === 'undefined') throw new Error('فشل تحميل مكتبة Excel');
     const head = ['#','البند المطلوب','الكمية','الوحدة','الحالة','كود النظام','المطابق في النظام','آخر سعر','متوسط السعر','عدد العروض','آخر تاريخ','آخر مورد'];
     const aoa = [head];
-    PL_STATE.rows.forEach((r,i)=>{ aoa.push([ i+1, r.req, r.qty, r.unit, plStatusLabel(r), r.code, r.matchName,
+    sel.forEach((r,i)=>{ aoa.push([ i+1, r.req, r.qty, r.unit, plStatusLabel(r), r.code, r.matchName,
       r.lastPrice==null?'':Number(r.lastPrice), r.avgPrice==null?'':Number(r.avgPrice), r.offers||'', r.lastDate||'', r.lastSupplier||'' ]); });
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -18390,15 +18559,17 @@ async function plExportXlsx(){
 // طباعة تقرير التسعير في نافذة منسّقة نظيفة.
 function plPrintReport(){
   if(!PL_STATE.rows.length){ toast('warn','لا توجد بيانات','لم تتم أي مطابقة بعد'); return; }
-  const rowsH = PL_STATE.rows.map((r,i)=>`<tr>
+  const sel = PL_STATE.rows.filter(r => r.selected);
+  if(!sel.length){ toast('warn','لا بنود محدَّدة','حدِّد بنداً واحداً على الأقل للطباعة'); return; }
+  const rowsH = sel.map((r,i)=>`<tr>
     <td>${i+1}</td><td class="r">${escapeHtml(r.req)}</td><td>${escapeHtml(String(r.qty||''))} ${escapeHtml(r.unit||'')}</td>
     <td>${plStatusLabel(r)}</td><td>${escapeHtml(r.code||'')}</td><td class="r">${escapeHtml(r.matchName||'')}</td>
     <td class="n">${r.hasHistory&&r.lastPrice!=null?plFmt(r.lastPrice):'—'}</td>
     <td class="n">${r.hasHistory&&r.avgPrice!=null?plFmt(r.avgPrice):'—'}</td>
     <td>${r.hasHistory?(r.offers||0):'—'}</td><td>${escapeHtml(r.lastDate||'—')}</td></tr>`).join('');
-  const n = PL_STATE.rows.length;
-  const matched = PL_STATE.rows.filter(r=>r.status==='matched').length;
-  const none = PL_STATE.rows.filter(r=>r.status==='none').length;
+  const n = sel.length;
+  const matched = sel.filter(r=>r.status==='matched').length;
+  const none = sel.filter(r=>r.status==='none').length;
   const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>نتيجة التسعير الذكي</title>
   <style>body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;padding:24px;color:#1f2937}
   h1{font-size:18px;margin:0 0 4px}.sub{color:#6b7280;font-size:12px;margin-bottom:16px}
@@ -19869,6 +20040,8 @@ function siShowReview(){
       }
     }
 
+    html += `<div style="margin-top:5px"><button type="button" class="btn btn-ghost btn-sm" data-si-link="${idx}" style="font-size:10px;padding:2px 8px" title="ربط بصنف مسجّل بالبحث في النظام">🔗 ربط بالبحث</button></div>`;
+
     html += `      </div>
       <div style="font-size:12px;color:var(--muted);text-align:center">×${row.quantity}</div>
       <div style="font-size:13px;font-weight:600;color:var(--ink);text-align:end;white-space:nowrap">${fmtPrice(row.price)} ر.س</div>
@@ -19953,6 +20126,30 @@ function siShowReview(){
       const idx = parseInt(btn.getAttribute('data-si-undo-decision'));
       SI_STATE.matched.rows[idx].userDecision = null;
       siShowReview();
+    });
+  });
+
+  // ربط يدوي احترافي بالبحث في البنود المسجّلة — يعمل لأي بند (مطابق/محتمل/جديد)
+  document.querySelectorAll('[data-si-link]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-si-link'));
+      const row = SI_STATE.matched.rows[idx];
+      if(!row) return;
+      siItemPicker({
+        title: 'ربط البند بصنف مسجّل في النظام',
+        subtitle: row.name,
+        seed: row.name,
+        onPick: (it) => {
+          // يمرّ عبر مسار الدمج القائم: يتحوّل لاقتراح مُدمَج فيُحدَّث تاريخ الصنف المختار
+          row.action = 'suggest';
+          row.userDecision = 'merge';
+          row.matchedItem = it;
+          row.matchReason = 'ربط يدوي بالبحث';
+          try{ siSaveLearnedAlias(row.name, it.code, row.name); }catch(_){}
+          siShowReview();
+          toast('success','تم الربط', 'رُبط البند بـ«'+(it.name||it.code)+'» وسيُتعرَّف عليه تلقائياً لاحقاً');
+        }
+      });
     });
   });
 }
