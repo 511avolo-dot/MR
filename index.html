@@ -19592,12 +19592,20 @@ function siExtractModelNumbers(text){
    نداء واحد لكل مستند، ويعيد لكل بند: كود مطابق (من الكتالوج فقط) أو لا،
    ثقة، وسبب. لا يخترع أكواداً خارج الكتالوج، ولا يخترع أسعاراً.
    ════════════════════════════════════════════════════════════════════ */
-/* استرجاع نصّي عالي التغطية — يتجاهل قيد الأرقام كي تتجمّع المتغيّرات معاً
+/* كلمات الوحدات/العبوات تُتجاهَل في الاسترجاع — لأنّها تصنع «جيراناً كاذبين»:
+   «شامبو سجاد 3 لتر» كان يُطابِق «مبيد حشرات لتر» لمجرّد اشتراك كلمة «لتر».
+   نزعها يجعل اسم المنتج نفسه هو المهيمن (الأرقام والوحدات يعيد النموذج فحصها في التحقّق). */
+const SI_UNIT_STOP = new Set(['لتر','مل','كجم','جم','كيلو','غرام','جالون','علبه','علبة','عبوه','عبوة',
+  'كرتون','حبه','حبة','عدد','شد','كيس','رول','ربطه','ربطة','شوال','قطعه','قطعة','سم','مم','بوصه','بوصة',
+  'لفه','لفة','متر','اونز','ورقه','ورقة','شده','شدة']);
+function siStripUnits(norm){ return norm.split(' ').filter(t => t && !SI_UNIT_STOP.has(t)).join(' '); }
+
+/* استرجاع نصّي عالي التغطية — يتجاهل الأرقام وكلمات الوحدات كي تتجمّع المتغيّرات معاً
    (90 و70 جالون كلاهما يُرشَّح) فيتولّى النموذج بعدها بوّابة المواصفات الفارقة. */
 function siRetrievalScore(qNorm, iNorm){
   if(!qNorm || !iNorm) return 0;
-  const ta = qNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim();
-  const tb = iNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim();
+  const ta = siStripUnits(qNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim());
+  const tb = siStripUnits(iNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim());
   if(!ta || !tb) return ta === tb ? 1 : 0;
   const sub = (ta.includes(tb)||tb.includes(ta)) ? Math.min(ta.length,tb.length)/Math.max(ta.length,tb.length) : 0;
   return Math.max(sub, siTokenScore(ta,tb), siDice(ta,tb), siJaccard(ta,tb));
@@ -19615,7 +19623,7 @@ function siRetrieveCandidates(name, K){
       const im = siExtractModelNumbers((it.code||'')+' '+(it.name||''));
       if(qModels.some(m => im.includes(m))) s = Math.max(s, 0.97); // رقم موديل مشترك = مرشّح قوي
     }
-    if(s > 0.28) scored.push({it, s});
+    if(s > 0.22) scored.push({it, s}); // عتبة تغطية (خُفّضت بعد نزع كلمات الوحدات فانخفضت الدرجات قليلاً)
   }
   scored.sort((a,b)=>b.s-a.s);
   return scored.slice(0, K).map(x=>x.it);
