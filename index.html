@@ -19488,6 +19488,30 @@ function siCompareNumbers(numsA, numsB){
   return matched / Math.max(sa.length, sb.length);
 }
 
+/* === تعارض كمّي بنفس الوحدة (شبكة أمان حتمية ضد الإيجابي الكاذب) ===
+   يستخرج أزواج (قيمة، وحدة) للوحدات الفارقة فقط (لتر/مل/جالون/كجم/سم…)، ويتجاهل
+   أعداد العبوة/التغليف (شد/عبوة) التي لا وحدة لها. يعيد true إن اشتركت وحدةٌ لكن
+   اختلفت قيمتها بوضوح — مثل «مطهر 4 لتر» ↔ «مطهر 3 لتر». آمن لغوياً (نفس الوحدة
+   فقط) ولا يمسّ تكافؤ الوحدات المختلفة (جالون↔لتر يعيد النموذج فحصه). */
+const SI_SPEC_UNITS = new Set(['لتر','مل','جالون','كجم','جم','جرام','كيلو','سم','مم','متر','بوصه','بوصة','واط','فولت','امبير','طن']);
+function siUnitQty(name){
+  const out = {};
+  for(const {value, unit} of siExtractNumbers(siNormalize(name||''))){
+    if(SI_SPEC_UNITS.has(unit)){ (out[unit] = out[unit] || []).push(value); }
+  }
+  return out;
+}
+function siUnitConflict(a, b){
+  const ua = siUnitQty(a), ub = siUnitQty(b);
+  for(const u in ua){
+    if(ub[u]){
+      const agree = ua[u].some(x => ub[u].some(y => Math.min(x,y)/Math.max(x,y) >= 0.92));
+      if(!agree) return true; // نفس الوحدة، لا قيمة متقاربة ⇒ تعارض
+    }
+  }
+  return false;
+}
+
 /* === تشابه حرفي (Sørensen–Dice على الثنائيات) — يعالج التصريف والأخطاء الإملائية ===
    "مكتب"~"مكتبي"، "مسمار"~"مسامير"، "portland"~"portlandi" تنجح حرفياً. */
 function siBigrams(s){ s=(s||'').replace(/\s+/g,''); const m=new Map(); for(let i=0;i<s.length-1;i++){const g=s.slice(i,i+2); m.set(g,(m.get(g)||0)+1);} return m; }
@@ -19717,7 +19741,17 @@ async function aiCatalogMatch(inputs){
         let conf = Math.max(0, Math.min(1, Number(m.confidence)||0));
         // بوّابة المواصفات الصارمة: إن صرّح النموذج باختلاف مواصفة فارقة، فلا مطابقة (يمنع 90≠70 جالون).
         if(code && m.spec_match === false){ code = null; conf = Math.min(conf, 0.25); }
-        out[i] = { code, confidence: conf, reason: String(m.reason||'') };
+        let rsn = String(m.reason||'');
+        // شبكة أمان حتمية: إن أبقى النموذج مطابقةً تلقائية رغم اختلاف كمّي بنفس الوحدة
+        // (مثل «مطهر 4 لتر» ↔ «مطهر 3 لتر»)، أنزلها من «تحديث تلقائي» إلى «قرار يُراجَع».
+        if(code && conf >= 0.85){
+          const mc = cand[i] && cand[i].find(c => String(c.code) === code);
+          if(mc && siUnitConflict(inputs[i].name, mc.name)){
+            conf = 0.7;
+            rsn = (rsn ? rsn + ' — ' : '') + 'تحقّق: اختلاف كمّي بنفس الوحدة، يُراجَع';
+          }
+        }
+        out[i] = { code, confidence: conf, reason: rsn };
       }
     }
     return out;
