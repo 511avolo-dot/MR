@@ -7515,8 +7515,8 @@ async function aiComplete(opts){
     }],
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
-      topK: 40,
-      topP: 0.95,
+      topK: opts.topK ?? 40,
+      topP: opts.topP ?? 0.95,
       maxOutputTokens: opts.maxTokens || 2048,
       // "التفكير" مُعطَّل افتراضياً (وإلا يستهلك حد المخرجات فيعود الرد فارغاً). لكن مهامّ
       // كالمطابقة الدقيقة تستفيد من تفكير محدود؛ يُفعَّل عبر opts.thinkBudget مع رفع maxOutputTokens.
@@ -19592,61 +19592,93 @@ function siExtractModelNumbers(text){
    نداء واحد لكل مستند، ويعيد لكل بند: كود مطابق (من الكتالوج فقط) أو لا،
    ثقة، وسبب. لا يخترع أكواداً خارج الكتالوج، ولا يخترع أسعاراً.
    ════════════════════════════════════════════════════════════════════ */
-function siBuildCatalogForAI(){
-  const byCode = {};
-  const lines = [];
-  for(const i of (STATE.items||[])){
-    if(!i.code) continue;
-    const code = String(i.code);
-    byCode[code] = i;
-    const aliases = (SI_ALIASES_BY_CODE[code] || []).slice(0, 6).join(' | ');
-    // سطر مضغوط: الكود ⟨tab⟩ الاسم ⟨tab⟩ الفئة ⟨tab⟩ الوحدة ⟨tab⟩ مرادفات متعلّمة
-    lines.push(`${code}\t${i.name||''}\t${i.category||''}\t${i.unit||''}${aliases?('\t'+aliases):''}`);
-  }
-  return { text: lines.join('\n'), byCode, count: lines.length };
+/* استرجاع نصّي عالي التغطية — يتجاهل قيد الأرقام كي تتجمّع المتغيّرات معاً
+   (90 و70 جالون كلاهما يُرشَّح) فيتولّى النموذج بعدها بوّابة المواصفات الفارقة. */
+function siRetrievalScore(qNorm, iNorm){
+  if(!qNorm || !iNorm) return 0;
+  const ta = qNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim();
+  const tb = iNorm.replace(/\d+(?:\.\d+)?/g,'').replace(/\s+/g,' ').trim();
+  if(!ta || !tb) return ta === tb ? 1 : 0;
+  const sub = (ta.includes(tb)||tb.includes(ta)) ? Math.min(ta.length,tb.length)/Math.max(ta.length,tb.length) : 0;
+  return Math.max(sub, siTokenScore(ta,tb), siDice(ta,tb), siJaccard(ta,tb));
 }
 
-// يطابق دفعةً من البنود المرفوعة على كامل الكتالوج عبر الذكاء.
-// يعيد مصفوفة موازية للمدخلات: [{ code:string|null, confidence:number, reason:string }].
+// المرحلة B (محلية، بلا ذكاء): أفضل K مرشّحاً لبند — أعلى تشابه نصّي + مرشّحو رقم الموديل.
+function siRetrieveCandidates(name, K){
+  const qn = siNormalize(name||'');
+  const qModels = siExtractModelNumbers(name||'');
+  const scored = [];
+  for(const it of (STATE.items||[])){
+    if(!it.code) continue;
+    let s = siRetrievalScore(qn, siNormalize(it.name||''));
+    if(qModels.length){
+      const im = siExtractModelNumbers((it.code||'')+' '+(it.name||''));
+      if(qModels.some(m => im.includes(m))) s = Math.max(s, 0.97); // رقم موديل مشترك = مرشّح قوي
+    }
+    if(s > 0.28) scored.push({it, s});
+  }
+  scored.sort((a,b)=>b.s-a.s);
+  return scored.slice(0, K).map(x=>x.it);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   محرّك التحليل → الاسترجاع → التحقّق (Retrieve→Verify) — نقلة الدقّة:
+   بدل عرض كامل الكتالوج على النموذج (فيؤنسِن السطح ويطابق المتشابه)، نُرشِّح
+   محلياً أفضل K مرشّحاً نصّياً لكل بند (استرجاع عالي التغطية)، ثم يحكم النموذج
+   على كل بند مقابل قائمته القصيرة فقط ببوّابة «تطابق كل مواصفة كمّية فارقة»
+   الصارمة. أي اختلاف في مواصفة فارقة ⇒ رفض (NEW). الكود يفرض حدّين: لا كود
+   خارج مرشّحي البند، وبوّابة المواصفات. حتمية كاملة (temperature/topK/topP=0/1/1).
+   يعيد مصفوفة موازية للمدخلات: [{ code:string|null, confidence:number, reason:string }].
+   ════════════════════════════════════════════════════════════════════ */
 async function aiCatalogMatch(inputs){
   const n = (inputs || []).length;
   const empty = Array.from({length:n}, () => ({code:null, confidence:0, reason:''}));
   if(!n) return empty;
   let cfg; try{ cfg = await loadAIConfig(); }catch(_){ return empty; }
   if(!cfg || !cfg.enabled) return empty;
-  const cat = siBuildCatalogForAI();
-  if(!cat.count) return empty;
+  if(!(STATE.items||[]).length) return empty;
 
-  const itemsBlock = inputs.map((it, idx) => {
+  // المرحلة B: قائمة مرشّحين قصيرة عالية التغطية لكل بند.
+  const K = n > 20 ? 8 : 12;
+  const cand = inputs.map(it => siRetrieveCandidates(it.name, K));
+  const codeSet = cand.map(list => new Set(list.map(c => String(c.code))));
+
+  // بند بلا أي مرشّح نصّي قريب = جديد يقيناً (لا نُتعِب النموذج به ولا نخاطر بمطابقة قسرية).
+  const toVerify = [];
+  inputs.forEach((it, i) => { if(cand[i].length) toVerify.push(i); });
+  if(!toVerify.length) return empty;
+
+  const block = toVerify.map(i => {
+    const it = inputs[i];
     const u = it.unit ? ` [الوحدة: ${it.unit}]` : '';
-    return `${idx}\t${String(it.name||'').slice(0,220)}${u}`;
-  }).join('\n');
+    const lines = cand[i].map(c => {
+      const al = (SI_ALIASES_BY_CODE[String(c.code)] || []).slice(0,4).join(' | ');
+      return `   - ${c.code}\t${c.name||''}\t${c.unit||''}${al?('\t'+al):''}`;
+    }).join('\n');
+    return `[${i}] ${String(it.name||'').slice(0,220)}${u}\n${lines}`;
+  }).join('\n\n');
 
   const system = [
-    'أنت خبير مطابقة أصناف مشتريات دقيق جداً ومنضبط. لكل «بند مرفوع» قرِّر هل يطابق صنفاً في «كتالوج الأصناف» أدناه — أي المنتج نفسه تماماً بنفس المواصفات — أم لا.',
+    'أنت مُحكِّم مطابقة أصناف مشتريات صارم ومنضبط، دفاعيّ الطابع: قرارك الافتراضي «جديد» (NEW)، ولا ترفعه إلى مطابقة إلا بدليل قاطع.',
+    'لكل «بند مرفوع» قائمةٌ من «المرشّحين» المسجّلين تخصّه. طابِق البند بمرشّح واحد فقط من قائمته هو — لا من خارجها إطلاقاً — أو قرِّر NEW.',
     '',
-    'تجاهَل هذه الفروق (لا تمنع المطابقة إن كان المنتج ومواصفاته نفسها): اللغة (عربي/إنجليزي)، ترتيب الكلمات، الاختصارات، العلامة التجارية، رقم الموديل، وصياغة الوصف، والوحدات المكافئة (3.78 لتر = 1 جالون).',
+    'الخطوة الذهنية لكل بند: فكِّك البند والمرشّح إلى مواصفات (النوع الأساسي + كل قيمة كمّية بوحدتها)، ثم قارِن المواصفات الفارقة واحدةً واحدة.',
     '',
-    '⚠️ القاعدة الأهم — المواصفات الكمّية قيدٌ صارم لا يُتجاوَز: لا تطابِق بنداً بصنف تختلف عنه في أي مواصفة فارقة:',
-    '  • السعة/الحجم (لتر، مل، جالون)  • الوزن (كجم، جرام)  • العدد/حجم العبوة (شد 12، عبوة 24)  • الأبعاد (سم، مم)  • النوع الفرعي المميِّز (صغير/كبير، خفيف/ثقيل، سائل/بودرة، عادي/معطّر).',
-    'إن كان نوع المنتج نفسه لكن اختلفت مواصفة كمّية فارقة ⇒ هما منتجان مختلفان ⇒ code="NEW" و spec_match=false. لا تُقرِّب ولا تُجبر.',
+    '⚠️ بوّابة المواصفات الفارقة (قيد صارم): يجب أن تتطابق كل مواصفة كمّية فارقة بين البند والمرشّح بعد التطبيع:',
+    '  • السعة/الحجم (لتر/مل/جالون)  • الوزن (كجم/جم)  • الجهد (فولت)  • التيار (أمبير)  • القدرة (واط)',
+    '  • الأبعاد (سم/مم: طول/عرض/سمك/قطر)  • العدد/حجم العبوة (شد/عبوة)  • الدرجة/النوع الفرعي (صغير/كبير، سائل/بودرة، عادي/معطّر).',
+    'أي اختلاف في مواصفة فارقة واحدة، أو غيابها في أحد الطرفين = منتجان مختلفان = NEW لهذا البند. لا تُقرِّب ولا تُجبِر.',
+    'التشابه النصّي أو الدلالي العالي ليس دليلاً على التطابق — الدليل الوحيد هو تساوي المواصفات الفارقة.',
     '',
-    'أمثلة رفض (منتجات مختلفة رغم تشابه النوع):',
-    '  • «أكياس قمامة 90 جالون» ≠ «كيس نفاية 70 جالون» (سعة مختلفة).',
-    '  • «فوط صغيرة» ≠ «فوط كبيرة» (حجم مختلف).  • «عبوة 500 مل» ≠ «عبوة 1 لتر».  • «شد 12» ≠ «شد 24».',
-    '  • «ملمع خشب» ≠ «منظف زجاج» (وظيفة/منتج مختلف).',
-    'أمثلة قبول (نفس المنتج والمواصفة):',
-    '  • «صابون سائل لليدين» = «Hand Wash Soap 4L» إن تطابق الحجم.  • «منظف أرضيات 3.78 لتر» = «Floor Cleaner 1 Gallon» (وحدة مكافئة).',
+    'تجاهَل (لا تمنع المطابقة): اللغة (عربي/إنجليزي)، ترتيب الكلمات، الاختصارات، العلامة التجارية، رقم الموديل، صياغة الوصف، والوحدات المكافئة فيزيائياً (3.78 لتر = 1 جالون، 4 بوصة = 10.16 سم).',
     '',
-    'code يجب أن يكون كوداً موجوداً حرفياً في الكتالوج أدناه — لا تخترع كوداً إطلاقاً. إن لم يوجد صنف مطابق حقيقي بعد بحث شامل في كامل الكتالوج فاجعل code="NEW". الشكّ يُرجَّح للجدّة لا للمطابقة القسرية.',
-    'confidence بين 0 و1 = يقينك أنه نفس المنتج والمواصفة. spec_match=true فقط إذا تطابقت كل المواصفات الكمّية الفارقة. reason جملة عربية قصيرة جداً تذكر المواصفة التي قارنتها (مثال: «نفس المنتج والسعة 4 لتر» أو «سعة مختلفة 90≠70 جالون»).',
-    'لا تخترع أسعاراً ولا بيانات؛ مهمتك المطابقة فقط.',
+    'أمثلة رفض: «قمامة 90 جالون» ≠ «نفاية 70 جالون» · «فوط صغيرة» ≠ «فوط كبيرة» · «500 مل» ≠ «1 لتر» · «110 فولت» ≠ «220 فولت» · «شد 12» ≠ «شد 24».',
+    'أمثلة قبول: «صابون يدين سائل» = «Hand Wash Soap 4L» إن تطابق الحجم · «منظف أرضيات 3.78 لتر» = «Floor Cleaner 1 Gallon».',
     '',
-    'كتالوج الأصناف (كل سطر: code ثم tab ثم الاسم ثم الفئة ثم الوحدة ثم مرادفات):',
-    cat.text,
+    'code = كود من قائمة مرشّحي ذلك البند حرفياً، أو "NEW". لا تخترع كوداً ولا تستعمل كوداً من قائمة بند آخر. spec_match=true فقط إذا تطابقت كل المواصفات الفارقة. confidence بين 0 و1. reason جملة عربية قصيرة جداً تذكر المواصفة المقارَنة (مثال: «نفس المنتج والسعة 4 لتر» / «سعة مختلفة 90≠70 جالون»).',
   ].join('\n');
 
-  const prompt = `البنود المرفوعة (كل سطر: index ثم tab ثم الوصف):\n${itemsBlock}\n\nلكل بند: فكِّر في نوع المنتج ومواصفته الكمّية الفارقة، ابحث في كامل الكتالوج، ثم قرِّر.\nأعِد JSON فقط: {"matches":[{"i":<index>,"code":<كود من الكتالوج أو "NEW">,"confidence":<0..1>,"spec_match":<true/false>,"reason":"..."}]} لكل بند.`;
+  const prompt = `البنود ومرشّحوها (سطر البند: [index] الوصف؛ ثم أسطر مرشّحيه بادئتها «-»: code ثم tab ثم الاسم ثم الوحدة ثم مرادفات):\n${block}\n\nأعِد JSON فقط: {"matches":[{"i":<index>,"code":<كود من مرشّحي هذا البند أو "NEW">,"confidence":<0..1>,"spec_match":<true/false>,"reason":"..."}]} لكل بند مذكور.`;
 
   const schema = {
     type:'object',
@@ -19660,9 +19692,10 @@ async function aiCatalogMatch(inputs){
 
   try{
     const reply = await aiComplete({
-      system, prompt, feature:'catalog_match', temperature:0,
-      // تفكير أعمق يرفع دقّة الانضباط بالمواصفات والحسم بين المتغيّرات؛ maxOutputTokens مرفوع للتفكير + المخرجات.
-      thinkBudget: 2048, maxTokens: Math.min(16384, 3500 + n*90), cache:false, responseSchema: schema
+      system, prompt, feature:'catalog_match',
+      temperature:0, topK:1, topP:1,            // حتمية كاملة — نفس المدخل ⇒ نفس المخرج
+      thinkBudget: 2048, maxTokens: Math.min(16384, 3500 + toVerify.length*120),
+      cache:false, responseSchema: schema
     });
     const json = siExtractJSON(reply);
     const out = empty.map(x => ({...x}));
@@ -19671,9 +19704,10 @@ async function aiCatalogMatch(inputs){
         const i = parseInt(m.i);
         if(!(i>=0 && i<n)) continue;
         let code = (m.code==null) ? '' : String(m.code).trim();
-        if(!code || code.toUpperCase()==='NEW' || !cat.byCode[code]) code = null; // لا اختراع خارج الكتالوج
+        // حدّ الحدود: الكود يجب أن يكون من مرشّحي هذا البند تحديداً (لا اختراع، لا من قائمة بند آخر).
+        if(!code || code.toUpperCase()==='NEW' || !codeSet[i] || !codeSet[i].has(code)) code = null;
         let conf = Math.max(0, Math.min(1, Number(m.confidence)||0));
-        // قيد المواصفات الصارم: إن صرّح النموذج باختلاف مواصفة فارقة، فلا مطابقة (يمنع 90≠70 جالون).
+        // بوّابة المواصفات الصارمة: إن صرّح النموذج باختلاف مواصفة فارقة، فلا مطابقة (يمنع 90≠70 جالون).
         if(code && m.spec_match === false){ code = null; conf = Math.min(conf, 0.25); }
         out[i] = { code, confidence: conf, reason: String(m.reason||'') };
       }
