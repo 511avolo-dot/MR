@@ -3969,40 +3969,6 @@ BEGIN
   RAISE NOTICE '030: ثُبِّت search_path على % دالة DEFINER.', v_fixed;
 END $mig$;
 
--- ═══════════════════════════════════════════════════════════════════════════
---  دمج الهجرة 046 (إتمام التصليب) — سدّ الفجوة التي تركتها 030
---  ⚠️ الفجوة: كتلة 030 تعالج فقط الدوال التي تملك منحاً صريحاً لـauthenticated/
---     service_role (شرط `proacl IS NOT NULL`). أمّا الدوال التي بلا منح صريح
---     (proacl IS NULL) فتبقى على الافتراض: EXECUTE لـPUBLIC — ومنه يرث anon.
---     أثبت الـCI أنّ تنصيباً نظيفاً يُخرِج ~40 دالة مكشوفة لـanon، منها دوال
---     كتابة حقيقية (portal_create_request / portal_award / portal_cancel_request).
---     (حمايتها الداخلية قائمة — portal_username() تعيد NULL لـanon فتُرفَض —
---      لكن كشفها يخالف «رفض افتراضي» وهو مبدأ البوابة.)
---  المعالجة: سحب PUBLIC+anon عن كل دالة portal_ باقية، مع منح authenticated
---     صراحةً لغير المجموعة الخادمية كي لا تنكسر الدورة (كانت تصل عبر PUBLIC).
--- ═══════════════════════════════════════════════════════════════════════════
-DO $mig$
-DECLARE r record; v_done int := 0;
-  server_only CONSTANT text[] := ARRAY[
-    'portal_audit_write','portal_award_total','portal_budget_committed','portal_contract_consumed',
-    'portal_create_token','portal_invoiced_total','portal_outbox_claim','portal_outbox_mark',
-    'portal_outbox_purge','portal_pr_transition_email','portal_returns_total','portal_run_sla'];
-BEGIN
-  FOR r IN
-    SELECT (p.oid::regprocedure)::text AS sig, p.proname
-    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.proname LIKE 'portal\_%'
-      AND has_function_privilege('anon', p.oid, 'EXECUTE')
-  LOOP
-    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', r.sig);
-    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon',   r.sig);
-    IF NOT (r.proname = ANY(server_only)) THEN
-      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', r.sig);
-    END IF;
-    v_done := v_done + 1;
-  END LOOP;
-  RAISE NOTICE '046: أُغلق كشف anon عن % دالة portal_ متبقّية.', v_done;
-END $mig$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --  دمج الهجرة 031 (ضبط الميزانية — Commitment Control) — مطابقة لـ 031
@@ -5093,3 +5059,40 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION portal_payment_transition(bigint, text, text, text, jsonb) FROM public;
 GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint, text, text, text, jsonb) TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 046 (إتمام التصليب) — سدّ الفجوة التي تركتها 030
+--  ⚠️ موضعها آخر الملف عمداً: يجب أن تلي **كل** تعريفات الدوال (بما فيها مُشغِّلات
+--     الهجرات 031/032/033/037 المُلحقة بعد كتلة 030) وإلّا أفلتت منها.
+--  ⚠️ الفجوة: كتلة 030 تعالج فقط الدوال التي تملك منحاً صريحاً لـauthenticated/
+--     service_role (شرط `proacl IS NOT NULL`). أمّا الدوال التي بلا منح صريح
+--     (proacl IS NULL) فتبقى على الافتراض: EXECUTE لـPUBLIC — ومنه يرث anon.
+--     أثبت الـCI أنّ تنصيباً نظيفاً يُخرِج ~40 دالة مكشوفة لـanon، منها دوال
+--     كتابة حقيقية (portal_create_request / portal_award / portal_cancel_request).
+--     (حمايتها الداخلية قائمة — portal_username() تعيد NULL لـanon فتُرفَض —
+--      لكن كشفها يخالف «رفض افتراضي» وهو مبدأ البوابة.)
+--  المعالجة: سحب PUBLIC+anon عن كل دالة portal_ باقية، مع منح authenticated
+--     صراحةً لغير المجموعة الخادمية كي لا تنكسر الدورة (كانت تصل عبر PUBLIC).
+-- ═══════════════════════════════════════════════════════════════════════════
+DO $mig$
+DECLARE r record; v_done int := 0;
+  server_only CONSTANT text[] := ARRAY[
+    'portal_audit_write','portal_award_total','portal_budget_committed','portal_contract_consumed',
+    'portal_create_token','portal_invoiced_total','portal_outbox_claim','portal_outbox_mark',
+    'portal_outbox_purge','portal_pr_transition_email','portal_returns_total','portal_run_sla'];
+BEGIN
+  FOR r IN
+    SELECT (p.oid::regprocedure)::text AS sig, p.proname
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname LIKE 'portal\_%'
+      AND has_function_privilege('anon', p.oid, 'EXECUTE')
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', r.sig);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon',   r.sig);
+    IF NOT (r.proname = ANY(server_only)) THEN
+      EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated', r.sig);
+    END IF;
+    v_done := v_done + 1;
+  END LOOP;
+  RAISE NOTICE '046: أُغلق كشف anon عن % دالة portal_ متبقّية.', v_done;
+END $mig$;
