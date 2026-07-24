@@ -3281,8 +3281,9 @@ async function pa_confirmReturn(reqId){
 if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
   adminHTML=function(){
     if(typeof isAdmin==='function' && !isAdmin()) return _pa_refAdminHTML();
-    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency' || ADMIN_TAB==='contracts'){
-      var body = ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : ADMIN_TAB==='currency'? pa_currencySection() : pa_contractsSection();
+    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency' || ADMIN_TAB==='contracts' || ADMIN_TAB==='readiness'){
+      var body = ADMIN_TAB==='readiness'? pa_readinessSection()
+               : ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : ADMIN_TAB==='currency'? pa_currencySection() : pa_contractsSection();
       var bar='<div class="filters">'+pa_adminExtraBtns(true)+'</div>';
       return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية · العملات</div></div></div>'
         +'<div class="filters"><button class="fbtn" onclick="setAdminTab(\'accounts\')">'+ic('undo',15)+' رجوع لأقسام الإدارة</button></div>'+bar+body;
@@ -3292,8 +3293,90 @@ if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
     return html;
   };
 }
+/* ══════ فحص جاهزية النظام — يكشف إعدادات تُجمّد سير العمل صامتةً ══════
+   الدافع: فحص القاعدة الحيّة كشف أربعة معوّقات تُوقف الطلبات الحقيقية فور
+   الإطلاق (لجنة بلا أعضاء · حامل صرف واحد بينما فصل المهام يتطلّب اثنين ·
+   أقسام بلا مدير · مستخدمون بلا وظيفة). كانت هذه كلها **صامتة تماماً**: لا
+   شيء في النظام يُنبّه إليها حتى يعلق طلب حقيقي بلا معتمِد. هذه اللوحة تجعل
+   النظام يشخّص نفسه ويقول للأدمن بالضبط ما ينقصه وكيف يُصلحه. */
+function pa_readinessSection(){
+  var issues=[];
+  function add(sev,title,detail,fix){ issues.push({sev:sev,t:title,d:detail,f:fix}); }
+  try{
+    var U=(typeof USERS==='object'&&USERS)?USERS:{}, J=(typeof JOBS==='object'&&JOBS)?JOBS:{},
+        D=(typeof DEPTS==='object'&&DEPTS)?DEPTS:{};
+    var actUsers=Object.keys(U).filter(function(k){ return U[k] && U[k].active!==false; });
+    /* حاملو صلاحية معيّنة (المستخدم أو وظيفته أو كونه أدمن) */
+    function holders(canKey){
+      return actUsers.filter(function(k){
+        var u=U[k]||{}; if(u.admin) return true;
+        var c=(u.acc&&u.acc.can)||{}; return !!c[canKey];
+      });
+    }
+    /* (١) الصرف: فصل المهام الثلاثي يتطلّب شخصين مختلفين على الأقل */
+    var dis=holders('disburse');
+    if(dis.length<2) add('high','الصرف سيتجمّد: حاملو صلاحية الصرف '+dis.length,
+      'فصل المهام يمنع أن يكون طالب الصرف هو معتمِده هو منفّذه. بحاملٍ واحد لا تكتمل الدورة إطلاقاً.',
+      'امنح موظفاً مالياً ثانياً (محاسب/رئيس حسابات) صلاحية «الصرف» من الوظائف أو الحسابات.');
+    /* (٢) اللجنة: شريحة أوامر الشراء المتوسطة تتطلّب معتمِد لجنة */
+    var comm=holders('approveCommittee');
+    var commList=[]; try{ commList=(typeof COMMITTEE!=='undefined'&&COMMITTEE)?COMMITTEE:[]; }catch(_e){}
+    if(!comm.length && !(commList&&commList.length)) add('high','اللجنة المصغّرة بلا أعضاء',
+      'شريحة أوامر الشراء التي تتطلّب اعتماد اللجنة لن تجد معتمِداً مؤهَّلاً، فيعلق الطلب بلا مخرج.',
+      'عيّن أعضاء اللجنة من «مصفوفة الصلاحيات ← لوحة اللجنة»، أو امنح وظيفةً صلاحية اعتماد اللجنة.');
+    /* (٣) أقسام بلا مدير: سلسلة الاعتماد لا تُبنى */
+    var noMgr=Object.keys(D).filter(function(k){ var d=D[k]||{}; return d.active!==false && !d.mgr; });
+    if(noMgr.length) add('high','أقسام بلا مدير: '+noMgr.length,
+      'طلبات هذه الأقسام لا تستطيع بناء سلسلة اعتماد الحاجة: '+noMgr.map(function(k){return (D[k].n||k);}).join(' · '),
+      'حدّد مدير كل قسم من «الأقسام».');
+    /* (٤) مستخدمون نشطون بلا وظيفة: بلا صلاحيات ونطاق رؤية ضيّق */
+    var noJob=actUsers.filter(function(k){ return !U[k].admin && !U[k].job; });
+    if(noJob.length) add('mid','مستخدمون نشطون بلا وظيفة: '+noJob.length,
+      'لا يملكون أي صلاحية، ونطاق رؤيتهم «طلباتي فقط» — سيبدو لهم النظام فارغاً.',
+      'أسنِد لكلٍّ منهم وظيفة من «الحسابات».');
+    /* (٥) وظائف نشطة بلا صلاحيات */
+    var emptyJobs=Object.keys(J).filter(function(k){
+      var c=(J[k]&&J[k].acc&&J[k].acc.can)||{}; return !Object.keys(c).some(function(x){return c[x];});
+    });
+    if(emptyJobs.length) add('mid','وظائف بلا صلاحيات: '+emptyJobs.length,
+      'من يحمل هذه الوظائف لن يستطيع فعل شيء: '+emptyJobs.map(function(k){return (J[k].title||k);}).join(' · '),
+      'حرّر صلاحيات كل وظيفة من «الوظائف».');
+    /* (٦) صلاحيات حرِجة بلا حامل واحد */
+    [['approveReq','اعتماد الطلبات'],['approveAward','اعتماد التعميد'],
+     ['issuePO','إصدار أمر الشراء'],['manageRfq','إدارة المشتريات والتسعير'],
+     ['create','رفع الطلبات']].forEach(function(p){
+      if(!holders(p[0]).length) add('high','لا أحد يحمل صلاحية: '+p[1],
+        'أي طلب يصل هذه المرحلة سيتوقّف بلا معتمِد مؤهَّل.','امنحها لوظيفة أو مستخدم نشط.');
+    });
+  }catch(e){ add('mid','تعذّر إكمال الفحص','حدث خطأ أثناء قراءة الإعدادات: '+(e&&e.message||''),'أعد تحميل الصفحة.'); }
+
+  var hi=issues.filter(function(i){return i.sev==='high';}).length;
+  var head='<div class="pagehead"><div><h1>فحص جاهزية النظام</h1>'
+    +'<div class="sub">يكشف إعدادات تُجمّد سير العمل قبل أن يعلق طلب حقيقي</div></div></div>';
+  if(!issues.length) return head
+    +'<div class="card"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('check',16)+'</span>جاهز</div>'
+    +'<div class="muted">لا توجد فجوات إعداد تمنع سير العمل. كل الصلاحيات الحرِجة لها حاملون، والأقسام لها مدراء.</div></div>';
+  var rows=issues.map(function(i){
+    var col=i.sev==='high'?'var(--danger)':'var(--warn)';
+    var lbl=i.sev==='high'?'يوقف العمل':'يحتاج انتباهاً';
+    return '<div class="card" style="border-inline-start:3px solid '+col+'">'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<b style="font-size:14px">'+esc(i.t)+'</b>'
+        +'<span class="si-badge" style="background:'+(i.sev==='high'?'var(--danger-bg)':'var(--warn-bg)')+';color:'+col+'">'+lbl+'</span>'
+      +'</div>'
+      +'<div class="muted" style="margin-top:6px;line-height:1.7">'+esc(i.d)+'</div>'
+      +'<div style="margin-top:8px;font-size:12.5px"><b>الإصلاح:</b> '+esc(i.f)+'</div>'
+    +'</div>';
+  }).join('');
+  return head
+    +'<div class="card" style="background:var(--warn-bg);border-color:var(--warn-line)">'
+    +'<b>'+issues.length+' ملاحظة</b> — منها <b style="color:var(--danger)">'+hi+'</b> توقف سير العمل فعلياً.'
+    +'</div>'+rows;
+}
+
 function pa_adminExtraBtns(activeCtx){
-  return '<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
+  return '<button class="fbtn '+(ADMIN_TAB==='readiness'?'active':'')+'" onclick="setAdminTab(\'readiness\')">'+ic('alert',15)+' فحص الجاهزية</button>'
+    +'<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='currency'?'active':'')+'" onclick="setAdminTab(\'currency\')">'+ic('money',15)+' العملات وأسعار الصرف</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='contracts'?'active':'')+'" onclick="setAdminTab(\'contracts\')">'+ic('save',15)+' العقود الإطارية</button>';
@@ -5016,6 +5099,133 @@ togglePerm = async function(k,pk,on){
     for(var i=0;i<n;i++) h+='<div class="pa-sk pa-sk-row" style="width:'+(92-i*11)+'%"></div>';
     return h+'</div>';
   };
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   م2: الهوية البصرية الجديدة — «دفتر القيد المحفور» (The Engraved Ledger)
+   ══════════════════════════════════════════════════════════════════════════
+   الاكتشاف الذي قاد الاتجاه: هوية مجموعة الذيابي الفعلية في مستنداتها المطبوعة
+   هي الذهبي #C4A265 والفحمي #231F20 (مستعملان 100 و80 مرة في نظام المستندات)،
+   بينما كانت البوابة على أزرق كحلي #16243d **لا صلة له بالشركة إطلاقاً**.
+   فالنقلة ليست ذوقاً عشوائياً بل **توحيد النظام مع هوية الشركة الأصيلة** —
+   وهذا أفخم وأصدق معاً: الشاشة تصبح امتداداً لترويسة المستند لا شيئاً غريباً عنها.
+
+   الاتجاه: سلطة هادئة — حبر فحمي دافئ، ذهب نفيس يُستعمل بحساب (لا يُغرَق به)،
+   أسطح ورقية دافئة بدل الرمادي البارد، إيقاع مسافات دقيق، وظلال أدفأ وأنظف.
+   الفخامة هنا انضباط لا صخب.
+
+   التنفيذ: طبقة رموز تُعيد تعريف متغيّرات CSS فتتحوّل كل المكوّنات بانتظام —
+   بلا مساس بمنطقة التصميم 1–2555، وقابلة للتراجع بحذف هذه الكتلة وحدها.
+   بلا طلب خطّ جديد (احتراماً لأداء الجوال).
+   التباين مُتحقَّق (WCAG AA): ink 15.9:1 · muted 5.5:1 · gold-2 نصّي 4.6:1 ·
+   ذهب على فحمي 6.6:1. الذهب الفاتح للحدود والتمييز لا للنصوص الصغيرة.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  var css = ''
+  +':root{'
+    /* الأساس: فحمي دافئ (حبر الترويسة) بدل الكحلي الغريب */
+    +'--navy:#231F20;--navy-2:#171415;--navy-3:#3A3335;'
+    /* الحبر والنصوص */
+    +'--ink:#231F20;--muted:#6E6459;--faint:#9C9287;'
+    /* الذهب: لون العلامة الفعلي + عمقه للنصوص + تدرّج ناعم للخلفيات */
+    +'--gold:#C4A265;--gold-2:#9A7A45;--gold-3:#7A5E33;--gold-soft:#F0E5CF;'
+    /* الأسطح: ورق دافئ بدل الرمادي البارد */
+    +'--bg:#F7F5F2;--surface:#FFFFFF;--surface-2:#FAF8F5;'
+    +'--line:#E6E0D7;--line-2:#F1ECE4;'
+    /* الدلالات: مُواءمة مع اللوحة الدافئة مع بقاء المعنى واضحاً */
+    +'--ok:#2C6E52;--ok-bg:#E9F1EC;--ok-line:#C4DCCF;'
+    +'--danger:#A8382F;--danger-bg:#F8ECEA;--danger-line:#EBC8C3;'
+    +'--warn:#8A6212;--warn-bg:#F8EFDA;--warn-line:#E7D4A8;'
+    +'--info:#44536B;--info-bg:#EEF0F4;--info-line:#D5DAE3;'
+    /* هندسة أدقّ = إحساس أرتب */
+    +'--radius:12px;--radius-sm:9px;'
+    /* ظلال أدفأ وأنظف (نفس البنية، حرارة مختلفة) */
+    +'--sh-1:0 1px 2px rgba(35,31,32,.05),0 1px 3px rgba(35,31,32,.045);'
+    +'--sh-2:0 8px 20px -10px rgba(35,31,32,.17),0 3px 8px -5px rgba(35,31,32,.10);'
+    +'--sh-3:0 28px 60px -24px rgba(23,20,21,.36),0 12px 26px -16px rgba(23,20,21,.20);'
+  +'}'
+  /* ── لمسات «محفورة» تُعطي الترتيب والفخامة ── */
+  /* عنوان القسم: شرطة ذهبية رفيعة بدل عنوان عائم */
+  +'.sec-title{letter-spacing:.006em;font-weight:700}'
+  +'.card>.sec-title:first-child{padding-bottom:9px;border-bottom:1px solid var(--line-2);margin-bottom:11px}'
+  /* رأس الجدول: فحمي بفواصل ذهبية شفّافة (يطابق روح المستند المطبوع) */
+  +'table thead th{letter-spacing:.01em}'
+  /* المؤشّرات: أرقام دفترية بخطّ أحادي = دقّة ومصداقية */
+  +'.kpi .kv{font-family:var(--font-mono);letter-spacing:-.015em;font-weight:600}'
+  +'.kpi{border:1px solid var(--line);box-shadow:var(--sh-1)}'
+  /* الشريط الذهبي الرفيع أعلى البطاقات المميّزة */
+  +'.kpi.alert{box-shadow:inset 0 2px 0 0 var(--gold),var(--sh-1)}'
+  /* تركيز بالذهب (ينسجم مع م3) */
+  +'a:focus-visible,button:focus-visible,.btn:focus-visible,.tab:focus-visible,'
+  +'input:focus-visible,select:focus-visible,textarea:focus-visible{outline-color:var(--gold-2)}'
+  /* أشرطة التقارير: تدرّج ذهبي نبيل بدل لون مسطّح */
+  +'.bf{background:linear-gradient(90deg,var(--gold-3),var(--gold))}'
+  /* عمق هادئ جداً على خلفية التطبيق (لا نقش صاخب) */
+  +'body{background-image:radial-gradient(1200px 600px at 100% -10%,rgba(196,162,101,.07),transparent 60%)}'
+  /* عناوين أقوى */
+  +'.pagehead h1{letter-spacing:-.012em;font-weight:700}'
+  /* ══ توحيد الأسطح الداكنة على كل المقاسات ══
+     24 موضعاً كانت تكتب الأزرق الكحلي يدوياً (لا عبر الرموز)، فكانت ستبقى زرقاء
+     وسط هوية فحمية — أوضحها الشريط الجانبي لسطح المكتب. توحيدها هنا يجعل الهوية
+     متسقة على الجوال واللوحي وسطح المكتب معاً لا على الجوال وحده. */
+  +'.topbar{background:linear-gradient(165deg,#171415 0%,#231F20 55%,#39312C 100%) !important}'
+  +'@media (min-width:921px){'
+    +'.topbar{background:linear-gradient(178deg,#171415 0%,#231F20 62%,#39312C 100%) !important;'
+    +'border-inline-end-color:rgba(196,162,101,.24) !important}'
+  +'}'
+  +'.kpis .kpi:first-child{background:linear-gradient(150deg,#171415,#231F20 70%,#3A3335) !important;'
+  +'border-color:#3A3335 !important}'
+  +'.sec-title .ico{background:linear-gradient(160deg,#231F20,#3A3335) !important}'
+  +'.pqv-bar{background:linear-gradient(180deg,#2A2526,#231F20) !important}'
+  +'#pa-lg-btn,#pa-rs-btn{background:linear-gradient(155deg,#3A3335,#231F20) !important}'
+  +'#pa-forgot{color:var(--gold-2) !important}'
+  /* ══ الشاشات الواسعة: مساحة تتنفّس للبيانات الكثيفة ══
+     كان المحتوى محبوساً في 1180px مهما اتّسعت الشاشة، فتضيع مساحة كبيرة على
+     شاشات 1440px+ بينما جداول المقارنة والتقارير تحتاجها فعلاً. */
+  +'@media (min-width:1500px){.wrap{max-width:1340px}}'
+  +'@media (min-width:1850px){.wrap{max-width:1480px}}'
+  /* اللوحي الأفقي (821–920): كان يقع بين تحسينات الجوال والشريط الجانبي */
+  +'@media (min-width:821px) and (max-width:920px){'
+    +'.kpis{grid-template-columns:repeat(3,1fr)}'
+    +'.wrap{padding-left:26px;padding-right:26px}'
+  +'}';
+  var st=document.createElement('style'); st.id='pa-identity-engraved'; st.textContent=css;
+  document.head.appendChild(st);
+})();
+
+/* ══════ م1-ب: إصلاحان من معاينة المالك على الجوال ══════
+   (١) تداخل الترويسة: .topbar فليكس بفجوة 16px وحشو 22px، وأبناؤه (الشعار +
+       العنوان + اسم المستخدم + الخروج + الشارة) بلا حدّ انكماش ولا اقتطاع —
+       فتتراكب على الشاشة الضيّقة.
+   (٢) المستندات لا تظهر كاملة: .doc عليه overflow:hidden (لقصّ الزوايا)، وحين
+       يتجاوز محتواه (جداول المقارنة متعدّدة الموردين) عرض الشاشة يُقتطع ولا
+       سبيل للوصول إليه. وقد **فاقمَه** ما أضفتُه في م1 من overflow-x:hidden على
+       الجسم، فأُغلق آخر منفذ للتمرير. الإصلاح: تقييد صندوق المستند بعرض الشاشة
+       وجعل التمرير داخله هو المخرج — فلا يضيع شيء ولا تنزلق الصفحة كلها. */
+(function(){
+  var css = ''
+  +'@media (max-width:820px){'
+    /* (١) ترويسة بلا تراكب */
+    +'.topbar{gap:8px !important;padding:10px 12px !important;flex-wrap:nowrap}'
+    +'.topbar .brand{min-width:0;flex:1 1 auto;gap:8px;overflow:hidden}'
+    +'.topbar .brand>div{min-width:0;overflow:hidden}'
+    +'.topbar .brand .ttl,.topbar .brand .ttl-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}'
+    +'.topbar .brand .ttl{font-size:13px}'
+    +'.topbar .brand .ttl-sub{font-size:10px;opacity:.85}'
+    +'.topbar .crest-full{height:28px !important;width:auto;flex:0 0 auto}'
+    +'.topbar>*:not(.brand){flex:0 0 auto}'
+    /* (٢) المستند يُقيَّد بالشاشة ويمرّر داخله */
+    +'.doc{max-width:100% !important;overflow-x:auto !important;-webkit-overflow-scrolling:touch}'
+    +'.doc table{min-width:max-content}'
+    /* الحاويات الأب لا تفرض عرضاً أوسع من الشاشة */
+    +'#print-root,#print-root>*{max-width:100%}'
+  +'}'
+  +'@media (max-width:430px){'
+    +'.topbar .brand .ttl-sub{display:none}'
+    +'.topbar .crest-full{height:24px !important}'
+  +'}';
+  var st=document.createElement('style'); st.id='pa-mobile-fixes'; st.textContent=css;
+  document.head.appendChild(st);
 })();
 
 /* الإقلاع الفعلي */
