@@ -3281,8 +3281,9 @@ async function pa_confirmReturn(reqId){
 if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
   adminHTML=function(){
     if(typeof isAdmin==='function' && !isAdmin()) return _pa_refAdminHTML();
-    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency' || ADMIN_TAB==='contracts'){
-      var body = ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : ADMIN_TAB==='currency'? pa_currencySection() : pa_contractsSection();
+    if(ADMIN_TAB==='budget' || ADMIN_TAB==='iban' || ADMIN_TAB==='currency' || ADMIN_TAB==='contracts' || ADMIN_TAB==='readiness'){
+      var body = ADMIN_TAB==='readiness'? pa_readinessSection()
+               : ADMIN_TAB==='budget'? pa_budgetSection() : ADMIN_TAB==='iban'? pa_ibanSection() : ADMIN_TAB==='currency'? pa_currencySection() : pa_contractsSection();
       var bar='<div class="filters">'+pa_adminExtraBtns(true)+'</div>';
       return '<div class="pagehead"><div><h1>لوحة التحكّم والإدارة</h1><div class="sub">الميزانيات · بيانات الموردين البنكية · العملات</div></div></div>'
         +'<div class="filters"><button class="fbtn" onclick="setAdminTab(\'accounts\')">'+ic('undo',15)+' رجوع لأقسام الإدارة</button></div>'+bar+body;
@@ -3292,8 +3293,90 @@ if(typeof adminHTML==='function'){ var _pa_refAdminHTML=adminHTML;
     return html;
   };
 }
+/* ══════ فحص جاهزية النظام — يكشف إعدادات تُجمّد سير العمل صامتةً ══════
+   الدافع: فحص القاعدة الحيّة كشف أربعة معوّقات تُوقف الطلبات الحقيقية فور
+   الإطلاق (لجنة بلا أعضاء · حامل صرف واحد بينما فصل المهام يتطلّب اثنين ·
+   أقسام بلا مدير · مستخدمون بلا وظيفة). كانت هذه كلها **صامتة تماماً**: لا
+   شيء في النظام يُنبّه إليها حتى يعلق طلب حقيقي بلا معتمِد. هذه اللوحة تجعل
+   النظام يشخّص نفسه ويقول للأدمن بالضبط ما ينقصه وكيف يُصلحه. */
+function pa_readinessSection(){
+  var issues=[];
+  function add(sev,title,detail,fix){ issues.push({sev:sev,t:title,d:detail,f:fix}); }
+  try{
+    var U=(typeof USERS==='object'&&USERS)?USERS:{}, J=(typeof JOBS==='object'&&JOBS)?JOBS:{},
+        D=(typeof DEPTS==='object'&&DEPTS)?DEPTS:{};
+    var actUsers=Object.keys(U).filter(function(k){ return U[k] && U[k].active!==false; });
+    /* حاملو صلاحية معيّنة (المستخدم أو وظيفته أو كونه أدمن) */
+    function holders(canKey){
+      return actUsers.filter(function(k){
+        var u=U[k]||{}; if(u.admin) return true;
+        var c=(u.acc&&u.acc.can)||{}; return !!c[canKey];
+      });
+    }
+    /* (١) الصرف: فصل المهام الثلاثي يتطلّب شخصين مختلفين على الأقل */
+    var dis=holders('disburse');
+    if(dis.length<2) add('high','الصرف سيتجمّد: حاملو صلاحية الصرف '+dis.length,
+      'فصل المهام يمنع أن يكون طالب الصرف هو معتمِده هو منفّذه. بحاملٍ واحد لا تكتمل الدورة إطلاقاً.',
+      'امنح موظفاً مالياً ثانياً (محاسب/رئيس حسابات) صلاحية «الصرف» من الوظائف أو الحسابات.');
+    /* (٢) اللجنة: شريحة أوامر الشراء المتوسطة تتطلّب معتمِد لجنة */
+    var comm=holders('approveCommittee');
+    var commList=[]; try{ commList=(typeof COMMITTEE!=='undefined'&&COMMITTEE)?COMMITTEE:[]; }catch(_e){}
+    if(!comm.length && !(commList&&commList.length)) add('high','اللجنة المصغّرة بلا أعضاء',
+      'شريحة أوامر الشراء التي تتطلّب اعتماد اللجنة لن تجد معتمِداً مؤهَّلاً، فيعلق الطلب بلا مخرج.',
+      'عيّن أعضاء اللجنة من «مصفوفة الصلاحيات ← لوحة اللجنة»، أو امنح وظيفةً صلاحية اعتماد اللجنة.');
+    /* (٣) أقسام بلا مدير: سلسلة الاعتماد لا تُبنى */
+    var noMgr=Object.keys(D).filter(function(k){ var d=D[k]||{}; return d.active!==false && !d.mgr; });
+    if(noMgr.length) add('high','أقسام بلا مدير: '+noMgr.length,
+      'طلبات هذه الأقسام لا تستطيع بناء سلسلة اعتماد الحاجة: '+noMgr.map(function(k){return (D[k].n||k);}).join(' · '),
+      'حدّد مدير كل قسم من «الأقسام».');
+    /* (٤) مستخدمون نشطون بلا وظيفة: بلا صلاحيات ونطاق رؤية ضيّق */
+    var noJob=actUsers.filter(function(k){ return !U[k].admin && !U[k].job; });
+    if(noJob.length) add('mid','مستخدمون نشطون بلا وظيفة: '+noJob.length,
+      'لا يملكون أي صلاحية، ونطاق رؤيتهم «طلباتي فقط» — سيبدو لهم النظام فارغاً.',
+      'أسنِد لكلٍّ منهم وظيفة من «الحسابات».');
+    /* (٥) وظائف نشطة بلا صلاحيات */
+    var emptyJobs=Object.keys(J).filter(function(k){
+      var c=(J[k]&&J[k].acc&&J[k].acc.can)||{}; return !Object.keys(c).some(function(x){return c[x];});
+    });
+    if(emptyJobs.length) add('mid','وظائف بلا صلاحيات: '+emptyJobs.length,
+      'من يحمل هذه الوظائف لن يستطيع فعل شيء: '+emptyJobs.map(function(k){return (J[k].title||k);}).join(' · '),
+      'حرّر صلاحيات كل وظيفة من «الوظائف».');
+    /* (٦) صلاحيات حرِجة بلا حامل واحد */
+    [['approveReq','اعتماد الطلبات'],['approveAward','اعتماد التعميد'],
+     ['issuePO','إصدار أمر الشراء'],['manageRfq','إدارة المشتريات والتسعير'],
+     ['create','رفع الطلبات']].forEach(function(p){
+      if(!holders(p[0]).length) add('high','لا أحد يحمل صلاحية: '+p[1],
+        'أي طلب يصل هذه المرحلة سيتوقّف بلا معتمِد مؤهَّل.','امنحها لوظيفة أو مستخدم نشط.');
+    });
+  }catch(e){ add('mid','تعذّر إكمال الفحص','حدث خطأ أثناء قراءة الإعدادات: '+(e&&e.message||''),'أعد تحميل الصفحة.'); }
+
+  var hi=issues.filter(function(i){return i.sev==='high';}).length;
+  var head='<div class="pagehead"><div><h1>فحص جاهزية النظام</h1>'
+    +'<div class="sub">يكشف إعدادات تُجمّد سير العمل قبل أن يعلق طلب حقيقي</div></div></div>';
+  if(!issues.length) return head
+    +'<div class="card"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('check',16)+'</span>جاهز</div>'
+    +'<div class="muted">لا توجد فجوات إعداد تمنع سير العمل. كل الصلاحيات الحرِجة لها حاملون، والأقسام لها مدراء.</div></div>';
+  var rows=issues.map(function(i){
+    var col=i.sev==='high'?'var(--danger)':'var(--warn)';
+    var lbl=i.sev==='high'?'يوقف العمل':'يحتاج انتباهاً';
+    return '<div class="card" style="border-inline-start:3px solid '+col+'">'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<b style="font-size:14px">'+esc(i.t)+'</b>'
+        +'<span class="si-badge" style="background:'+(i.sev==='high'?'var(--danger-bg)':'var(--warn-bg)')+';color:'+col+'">'+lbl+'</span>'
+      +'</div>'
+      +'<div class="muted" style="margin-top:6px;line-height:1.7">'+esc(i.d)+'</div>'
+      +'<div style="margin-top:8px;font-size:12.5px"><b>الإصلاح:</b> '+esc(i.f)+'</div>'
+    +'</div>';
+  }).join('');
+  return head
+    +'<div class="card" style="background:var(--warn-bg);border-color:var(--warn-line)">'
+    +'<b>'+issues.length+' ملاحظة</b> — منها <b style="color:var(--danger)">'+hi+'</b> توقف سير العمل فعلياً.'
+    +'</div>'+rows;
+}
+
 function pa_adminExtraBtns(activeCtx){
-  return '<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
+  return '<button class="fbtn '+(ADMIN_TAB==='readiness'?'active':'')+'" onclick="setAdminTab(\'readiness\')">'+ic('alert',15)+' فحص الجاهزية</button>'
+    +'<button class="fbtn '+(ADMIN_TAB==='budget'?'active':'')+'" onclick="setAdminTab(\'budget\')">'+ic('scale',15)+' الميزانيات</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='iban'?'active':'')+'" onclick="setAdminTab(\'iban\')">'+ic('cart',15)+' بيانات الموردين البنكية</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='currency'?'active':'')+'" onclick="setAdminTab(\'currency\')">'+ic('money',15)+' العملات وأسعار الصرف</button>'
     +'<button class="fbtn '+(ADMIN_TAB==='contracts'?'active':'')+'" onclick="setAdminTab(\'contracts\')">'+ic('save',15)+' العقود الإطارية</button>';
