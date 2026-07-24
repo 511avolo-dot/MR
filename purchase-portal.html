@@ -5080,7 +5080,32 @@ togglePerm = async function(k,pk,on){
   /* عمق هادئ جداً على خلفية التطبيق (لا نقش صاخب) */
   +'body{background-image:radial-gradient(1200px 600px at 100% -10%,rgba(196,162,101,.07),transparent 60%)}'
   /* عناوين أقوى */
-  +'.pagehead h1{letter-spacing:-.012em;font-weight:700}';
+  +'.pagehead h1{letter-spacing:-.012em;font-weight:700}'
+  /* ══ توحيد الأسطح الداكنة على كل المقاسات ══
+     24 موضعاً كانت تكتب الأزرق الكحلي يدوياً (لا عبر الرموز)، فكانت ستبقى زرقاء
+     وسط هوية فحمية — أوضحها الشريط الجانبي لسطح المكتب. توحيدها هنا يجعل الهوية
+     متسقة على الجوال واللوحي وسطح المكتب معاً لا على الجوال وحده. */
+  +'.topbar{background:linear-gradient(165deg,#171415 0%,#231F20 55%,#39312C 100%) !important}'
+  +'@media (min-width:921px){'
+    +'.topbar{background:linear-gradient(178deg,#171415 0%,#231F20 62%,#39312C 100%) !important;'
+    +'border-inline-end-color:rgba(196,162,101,.24) !important}'
+  +'}'
+  +'.kpis .kpi:first-child{background:linear-gradient(150deg,#171415,#231F20 70%,#3A3335) !important;'
+  +'border-color:#3A3335 !important}'
+  +'.sec-title .ico{background:linear-gradient(160deg,#231F20,#3A3335) !important}'
+  +'.pqv-bar{background:linear-gradient(180deg,#2A2526,#231F20) !important}'
+  +'#pa-lg-btn,#pa-rs-btn{background:linear-gradient(155deg,#3A3335,#231F20) !important}'
+  +'#pa-forgot{color:var(--gold-2) !important}'
+  /* ══ الشاشات الواسعة: مساحة تتنفّس للبيانات الكثيفة ══
+     كان المحتوى محبوساً في 1180px مهما اتّسعت الشاشة، فتضيع مساحة كبيرة على
+     شاشات 1440px+ بينما جداول المقارنة والتقارير تحتاجها فعلاً. */
+  +'@media (min-width:1500px){.wrap{max-width:1340px}}'
+  +'@media (min-width:1850px){.wrap{max-width:1480px}}'
+  /* اللوحي الأفقي (821–920): كان يقع بين تحسينات الجوال والشريط الجانبي */
+  +'@media (min-width:821px) and (max-width:920px){'
+    +'.kpis{grid-template-columns:repeat(3,1fr)}'
+    +'.wrap{padding-left:26px;padding-right:26px}'
+  +'}';
   var st=document.createElement('style'); st.id='pa-identity-engraved'; st.textContent=css;
   document.head.appendChild(st);
 })();
