@@ -3538,6 +3538,69 @@ function pa_reportsHTML(){
   var pendPay=(typeof disburseCount==='function')?disburseCount():0;
   var outstanding=Math.max(0,committed-disbursed);
 
+  /* ═══ تحليلات متقدّمة (نقلة نوعية) — كلها مُحصَّنة: أي فشل يسقط بأمان لا يُفرِغ الشاشة ═══ */
+  var D=86400000, ADV={ct:{approve:0,source:0,pay:0,total:0,n:0,slow:''},sav:{amount:0,pct:0,n:0},bud:[],mon:[],ret:0};
+  try{
+    /* (1) زمن الدورة ومواضع الاختناق — أهمّ مؤشّر في أنظمة المشتريات العالمية */
+    var A=[],S=[],P=[],T=[];
+    SCOPE.forEach(function(r){
+      var ev=r.events||[]; if(!ev.length) return;
+      var first=function(n){ for(var i=0;i<ev.length;i++){ if(n.indexOf(ev[i].event)>=0) return ev[i].at; } return null; };
+      var last =function(n){ var v=null; ev.forEach(function(e){ if(n.indexOf(e.event)>=0) v=e.at; }); return v; };
+      var t0=first(['created','submitted']),
+          tA=last(['approved']),
+          tW=last(['awarded','award','award_approved']),
+          tP=last(['payment_disbursed','disbursed','paid']),
+          tE=last(['closed']);
+      if(t0&&tA&&tA>t0) A.push((tA-t0)/D);
+      if(tA&&tW&&tW>tA) S.push((tW-tA)/D);
+      if(tW&&tP&&tP>tW) P.push((tP-tW)/D);
+      if(t0&&tE&&tE>t0) T.push((tE-t0)/D);
+    });
+    var avg=function(a){ return a.length? a.reduce(function(s,x){return s+x;},0)/a.length : 0; };
+    ADV.ct={approve:avg(A), source:avg(S), pay:avg(P), total:avg(T), n:T.length, slow:''};
+    var ph=[['الاعتماد',ADV.ct.approve],['التسعير والترسية',ADV.ct.source],['الصرف',ADV.ct.pay]]
+             .sort(function(a,b){return b[1]-a[1];});
+    if(ph[0]&&ph[0][1]>0) ADV.ct.slow=ph[0][0];
+
+    /* (2) الوفر التفاوضي: متوسط العروض − العرض الفائز (مؤشّر قيمة المشتريات) */
+    SCOPE.forEach(function(r){
+      var p=r.proc||{}; if(!p.offers||!p.winner) return;
+      var ks=Object.keys(p.offers); if(ks.length<2) return;
+      var tot=ks.map(function(k){return Number((p.offers[k]||{}).total)||0;}).filter(function(x){return x>0;});
+      var win=Number((p.offers[p.winner]||{}).total)||0;
+      if(tot.length<2||!win) return;
+      var mean=tot.reduce(function(s,x){return s+x;},0)/tot.length;
+      if(mean>win){ ADV.sav.amount+=(mean-win); ADV.sav.pct+=mean; ADV.sav.n++; }
+    });
+    ADV.sav.pct = ADV.sav.pct ? (ADV.sav.amount/ADV.sav.pct*100) : 0;
+
+    /* (3) الميزانية مقابل الالتزام — بيانات موجودة (هجرة 031) لم تكن تُعرض إطلاقاً */
+    var yr=new Date().getFullYear();
+    Object.keys(DEPTS||{}).forEach(function(dk){
+      var dn=((DEPTS[dk]||{}).n)||dk, com=byDept[dn]||0;
+      var b=(typeof BUDGETS!=='undefined'&&BUDGETS)?BUDGETS.filter(function(x){return x.dept===dk&&x.year===yr;})[0]:null;
+      var amt=b?Number(b.amount)||0:0;
+      if(!amt&&!com) return;
+      ADV.bud.push({name:dn, budget:amt, committed:com, pct: amt? (com/amt*100) : null});
+    });
+    ADV.bud.sort(function(a,b){ return (b.pct==null?-1:b.pct)-(a.pct==null?-1:a.pct); });
+
+    /* (4) الاتجاه الشهري للالتزام (آخر 6 أشهر) */
+    var mm={};
+    SCOPE.forEach(function(r){
+      var p=r.proc||{}; if(!(p.isSplit||(Number(p.winnerTotal)||0)>0)) return;
+      var ev=r.events||[], t=null;
+      ev.forEach(function(e){ if(['awarded','award','award_approved'].indexOf(e.event)>=0) t=e.at; });
+      if(!t&&ev.length) t=ev[ev.length-1].at;
+      if(!t) return;
+      var d=new Date(t), k=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
+      mm[k]=(mm[k]||0)+pa_awardTotalOf(r);
+    });
+    ADV.mon=Object.keys(mm).sort().slice(-6).map(function(k){ return {m:k, v:mm[k]}; });
+  }catch(_e){ /* التحليلات المتقدّمة اختيارية — لا تُعطِّل التقرير الأساسي */ }
+
+  var d1=function(n){ return (Math.round((Number(n)||0)*10)/10).toLocaleString('en-US'); };
   var kpi=function(v,l,i,cls){ return '<div class="kpi '+(cls||'')+'"><div class="kv">'+v+'</div><div class="kl">'+ic(i,14)+l+'</div></div>'; };
   var bars=function(obj,fmtVal){ var e=Object.entries(obj).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
     if(!e.length) return '<div class="muted" style="padding:8px 0">لا يوجد</div>';
@@ -3553,6 +3616,8 @@ function pa_reportsHTML(){
     +kpi(money(outstanding),'المتبقّي (التزام − مصروف)','box','')
     +kpi(money(invoiced),'إجمالي الفواتير المسجّلة','save')
     +kpi(String(awardedCount),'طلبات معمَّدة','award')
+    +kpi(ADV.ct.total? d1(ADV.ct.total)+' يوم' : '—','متوسط زمن الدورة (حتى الإقفال)','clock')
+    +kpi(ADV.sav.amount? money(ADV.sav.amount) : '—','الوفر التفاوضي'+(ADV.sav.pct?' ('+d1(ADV.sav.pct)+'%)':''),'scale')
     +kpi(String(pendPay),'صرف بانتظار الإجراء','money',pendPay?'alert':'')
     +kpi(String(overdue),'اعتمادات متأخّرة (SLA)','alert',overdue?'alert':'')
     +'</div>'
@@ -3560,7 +3625,56 @@ function pa_reportsHTML(){
     +'<div class="card"><div class="sec-title"><span class="ico">'+ic('layers',16)+'</span>الالتزام حسب القسم</div>'+bars(byDept,money)+'</div>'
     +'<div class="card"><div class="sec-title"><span class="ico">'+ic('award',16)+'</span>أعلى الموردين التزاماً</div>'+bars(bySup,money)+'</div>'
     +'<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>الطلبات حسب الحالة</div>'+bars(byStatusLabeled)+'</div>'
-    +'</div>';
+    +'</div>'
+    /* ── زمن الدورة ومواضع الاختناق ── */
+    +'<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('clock',16)+'</span>زمن الدورة ومواضع الاختناق</div>'
+      +(ADV.ct.n||ADV.ct.approve||ADV.ct.source||ADV.ct.pay
+        ? (function(){
+            var ph=[['الاعتماد (تقديم ← موافقة)',ADV.ct.approve],['التسعير والترسية (موافقة ← تعميد)',ADV.ct.source],['الصرف (تعميد ← دفع)',ADV.ct.pay]];
+            var mx=Math.max.apply(null,ph.map(function(x){return x[1];}).concat([0.001]));
+            return ph.map(function(x){
+              var slow = ADV.ct.slow && x[0].indexOf(ADV.ct.slow)===0;
+              return '<div class="bar-row"><span class="bl">'+esc(x[0])+(slow?' <b style="color:var(--danger,#b3261e)">• الأبطأ</b>':'')+'</span>'
+                +'<div class="bw"><div class="bf" style="width:'+Math.round(x[1]/mx*100)+'%"></div></div>'
+                +'<b style="font-variant-numeric:tabular-nums">'+d1(x[1])+' يوم</b></div>';
+            }).join('')
+            +'<div class="muted" style="margin-top:8px;font-size:12px">متوسط الدورة الكاملة: <b style="font-variant-numeric:tabular-nums">'+d1(ADV.ct.total)+'</b> يوم · مبنيّ على '+ADV.ct.n+' طلب مكتمل</div>';
+          })()
+        : '<div class="muted" style="padding:8px 0">لا توجد طلبات مكتملة بعد لحساب زمن الدورة</div>')
+    +'</div>'
+    /* ── الميزانية مقابل الالتزام ── */
+    +'<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('scale',16)+'</span>الميزانية مقابل الالتزام (السنة الحالية)</div>'
+      +(ADV.bud.length
+        ? '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:460px">'
+          +'<thead><tr style="text-align:start">'
+            +'<th style="text-align:start;padding:6px 8px">القسم</th>'
+            +'<th style="text-align:start;padding:6px 8px">الميزانية</th>'
+            +'<th style="text-align:start;padding:6px 8px">الملتزَم</th>'
+            +'<th style="text-align:start;padding:6px 8px">المتبقّي</th>'
+            +'<th style="text-align:start;padding:6px 8px">الاستهلاك</th></tr></thead><tbody>'
+          +ADV.bud.map(function(b){
+             var rem=b.budget? (b.budget-b.committed) : null;
+             var col=(b.pct==null)?'':(b.pct>=100?'var(--danger,#b3261e)':(b.pct>=80?'#9a6b12':'var(--ok,#1f7a4d)'));
+             return '<tr style="border-top:1px solid var(--line,#e5e7eb)">'
+               +'<td style="padding:6px 8px">'+esc(b.name)+'</td>'
+               +'<td style="padding:6px 8px;font-variant-numeric:tabular-nums">'+(b.budget?money(b.budget):'<span class="muted">لم تُحدَّد</span>')+'</td>'
+               +'<td style="padding:6px 8px;font-variant-numeric:tabular-nums">'+money(b.committed)+'</td>'
+               +'<td style="padding:6px 8px;font-variant-numeric:tabular-nums">'+(rem==null?'—':money(rem))+'</td>'
+               +'<td style="padding:6px 8px;font-variant-numeric:tabular-nums;color:'+col+';font-weight:700">'+(b.pct==null?'—':d1(b.pct)+'%')+'</td></tr>';
+           }).join('')
+          +'</tbody></table></div>'
+          +'<div class="muted" style="margin-top:8px;font-size:12px">الأقسام بلا ميزانية معرّفة تظهر «لم تُحدَّد» — عرّفها من الإدارة ← الميزانيات ليعمل ضبط الميزانية.</div>'
+        : '<div class="muted" style="padding:8px 0">لا توجد ميزانيات معرّفة ولا التزامات بعد</div>')
+    +'</div>'
+    /* ── الاتجاه الشهري ── */
+    +(ADV.mon.length
+      ? '<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('layers',16)+'</span>اتجاه الالتزام الشهري (آخر 6 أشهر)</div>'
+        +(function(){ var mx=Math.max.apply(null,ADV.mon.map(function(x){return x.v;}).concat([1]));
+           return ADV.mon.map(function(x){ return '<div class="bar-row"><span class="bl" dir="ltr" style="font-variant-numeric:tabular-nums">'+esc(x.m)+'</span>'
+             +'<div class="bw"><div class="bf" style="width:'+Math.round(x.v/mx*100)+'%"></div></div>'
+             +'<b style="font-variant-numeric:tabular-nums">'+money(x.v)+'</b></div>'; }).join(''); })()
+        +'</div>'
+      : '');
 }
 
 /* ══════ فواتير المورد + المطابقة الثلاثية (033): رفع أصل الفاتورة PDF + عرضه داخل النظام ══════ */

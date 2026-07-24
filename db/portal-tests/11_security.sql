@@ -55,5 +55,18 @@ BEGIN
     THEN RAISE EXCEPTION 'S7 fail: المجموعة الخادمية غير متوقّعة (%): %', v_cnt, v_bad; END IF;
   RAISE NOTICE 'PASS S7 المجموعة الخادمية = 12 دالة مقصودة، الباقي للمستخدم';
 
-  RAISE NOTICE '════ SECURITY: 7/7 PASS ════';
+  -- S8: لا دالة كتابة في البوابة قابلة للتنفيذ من anon.
+  --     خلفية: Supabase تمنح anon صلاحية صريحة على كل دالة جديدة (pg_default_acl)،
+  --     و«REVOKE ... FROM public» لا يزيل منحاً صريحاً لدور — فيجب السحب من anon صراحةً.
+  --     هذا التأكيد يمنع تكرار الارتداد صامتاً (اكتُشف حيّاً في portal_update_request).
+  SELECT count(*), coalesce(string_agg(proname,', ' ORDER BY proname),'') INTO v_cnt, v_bad
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.proname LIKE 'portal\_%'
+    AND has_function_privilege('anon', p.oid, 'EXECUTE');
+  IF v_cnt <> 0 THEN
+    RAISE EXCEPTION 'S8 fail: % دالة بوابة قابلة للتنفيذ من anon (اسحبها: REVOKE ALL ON FUNCTION ... FROM anon): %', v_cnt, v_bad;
+  END IF;
+  RAISE NOTICE 'PASS S8 لا دالة بوابة مكشوفة لـanon';
+
+  RAISE NOTICE '════ SECURITY: 8/8 PASS ════';
 END $t$;
