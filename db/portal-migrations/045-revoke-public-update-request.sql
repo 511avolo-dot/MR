@@ -4,10 +4,23 @@
 --  المصدر: مدقّق Supabase الأمني على القاعدة الحيّة (2026-07-24) —
 --  «Public Can Execute SECURITY DEFINER Function» على portal_update_request.
 --
---  السبب الجذري: الدالة أُضيفت في الهجرة 043 (الإعادة الذكية للتصحيح)، أي **بعد**
---  هجرة التصليب 030 التي سحبت EXECUTE من PUBLIC/anon عن دوال الكتابة. فلم يشملها
---  السحب وبقيت مكشوفة. (نمط ارتداد متكرّر: أي دالة كتابة جديدة بعد 030 يجب أن
---  تُسحب صلاحيتها العامة صراحةً — قاعدة مثبَّتة الآن.)
+--  ⚠️ السبب الجذري الحقيقي (مؤكَّد بالفحص، وليس «نسيان REVOKE»):
+--  الهجرة 043 و portal-standalone.sql **تحتويان** REVOKE فعلاً — لكن بصيغة
+--  «REVOKE ALL ... FROM public» فقط. وهذا لا يكفي على Supabase:
+--    SELECT defaclacl FROM pg_default_acl WHERE defaclnamespace='public'::regnamespace
+--           AND defaclobjtype='f';
+--    ⇒ {postgres=X/…, anon=X/…, authenticated=X/…, service_role=X/…}
+--  أي أنّ Supabase تمنح anon صلاحية EXECUTE **صريحة لكل دالة جديدة** عبر
+--  ALTER DEFAULT PRIVILEGES. و«REVOKE ... FROM PUBLIC» يزيل امتياز PUBLIC الضمني
+--  فقط ولا يمسّ منحاً صريحاً لدور — فيبقى anon قادراً على التنفيذ.
+--  لذلك الهجرة 030 كانت تسحب من الاثنين معاً (FROM PUBLIC ثم FROM anon) وهي المحقّة.
+--
+--  ⇒ قاعدة مثبَّتة لكل دالة جديدة في البوابة:
+--     REVOKE ALL ON FUNCTION <sig> FROM public;
+--     REVOKE ALL ON FUNCTION <sig> FROM anon;      -- ← لا تنسَ هذا السطر
+--     GRANT EXECUTE ON FUNCTION <sig> TO authenticated;
+--  وأُضيف تأكيد دائم في db/portal-tests/11_security.sql (S8) يُفشِل الـCI إن
+--  عادت أي دالة portal_* لتكون قابلة للتنفيذ من anon.
 --
 --  الأثر: الدالة SECURITY DEFINER وتستبدل بنود/محتوى الطلب. حمايتها الداخلية قائمة
 --  (تشترط هوية معروفة + حالة returned + صلاحية المقدّم/can_edit/أدمن)، فالاستغلال

@@ -4946,6 +4946,9 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'est_total', v_est, 'quotes_required', v_quotes, 'split_flag', v_split, 'revision', v_rev);
 END $fn$;
 REVOKE ALL ON FUNCTION portal_update_request(text, text, jsonb, text, text, date, text, text, text) FROM public;
+-- ⚠️ لازم: Supabase تمنح anon صلاحية صريحة على كل دالة جديدة (pg_default_acl)،
+--    و REVOKE ... FROM public لا يزيل منحاً صريحاً لدور. فيجب السحب من anon أيضاً.
+REVOKE ALL ON FUNCTION portal_update_request(text, text, jsonb, text, text, date, text, text, text) FROM anon;
 GRANT EXECUTE ON FUNCTION portal_update_request(text, text, jsonb, text, text, date, text, text, text) TO authenticated;
 
 -- ═══════════════════════════════════════════════════════════════════════════
