@@ -4966,6 +4966,58 @@ togglePerm = async function(k,pk,on){
   document.head.appendChild(st);
 })();
 
+/* ══════ م3: تجربة المستخدم والوصولية — «إصدار أوضح وأسهل» ══════
+   ثلاثة إصلاحات مقيسة بالفحص (لا تخمين)، كلها في المُحوِّل ولا تمسّ منطقة التصميم:
+   (١) الإشعارات (toast) لم تكن تُنطَق لقارئات الشاشة (بلا aria-live) — والمستخدم
+       الذي يعتمد قارئ شاشة كان يفقد كل تأكيد/خطأ في النظام.
+   (٢) حالات التركيز ضعيفة (5 قواعد فقط) — التنقّل بلوحة المفاتيح شبه أعمى.
+   (٣) لا هياكل تحميل إطلاقاً (0) — الشاشة تبدو «معلّقة» أثناء الجلب. */
+(function(){
+  /* ── (١) إعلان الإشعارات لقارئات الشاشة ──
+     الحاوية موجودة في منطقة التصميم فلا نعدّلها؛ نضبط سماتها من هنا فقط.
+     status/polite: يُنطَق دون مقاطعة عمل المستخدم. */
+  function markToast(){
+    var t=document.getElementById('toast');
+    if(t && !t.getAttribute('role')){
+      t.setAttribute('role','status');
+      t.setAttribute('aria-live','polite');
+      t.setAttribute('aria-atomic','true');
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',markToast);
+  else markToast();
+
+  var css = ''
+  /* ── (٢) تركيز واضح لكل عنصر تفاعلي (لوحة المفاتيح) — بلا تأثير على الفأرة ── */
+  +'a:focus-visible,button:focus-visible,.btn:focus-visible,.tab:focus-visible,'
+  +'input:focus-visible,select:focus-visible,textarea:focus-visible,'
+  +'[tabindex]:focus-visible,summary:focus-visible{'
+  +'outline:2px solid var(--gold,#c4a265);outline-offset:2px;border-radius:8px}'
+  /* المتصفّحات القديمة: لا نُلغِ الحدّ الافتراضي إن لم تدعم focus-visible */
+  +'.btn:focus:not(:focus-visible){outline:none}'
+  /* ── (٣) هياكل تحميل (Skeleton) — إحساس أسرع أثناء الجلب ── */
+  +'.pa-sk{position:relative;overflow:hidden;background:var(--line,#e7e3da);border-radius:8px;min-height:12px}'
+  +'.pa-sk::after{content:"";position:absolute;inset:0;transform:translateX(-100%);'
+  +'background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:pa-sh 1.25s infinite}'
+  +'@keyframes pa-sh{100%{transform:translateX(100%)}}'
+  +'.pa-sk-row{height:14px;margin:9px 0}'
+  +'.pa-sk-card{height:74px;margin:10px 0;border-radius:14px}'
+  /* احترام تفضيل تقليل الحركة */
+  +'@media (prefers-reduced-motion:reduce){.pa-sk::after{animation:none}}'
+  /* ── تنظيم بصري: نصّ طويل لا يكسر التخطيط، وأرقام مصطفّة ── */
+  +'.bl,.kl,.sec-title,td,th{overflow-wrap:anywhere}'
+  +'.kv,.num,td.num{font-variant-numeric:tabular-nums}';
+  var st=document.createElement('style'); st.id='pa-ux-a11y'; st.textContent=css;
+  document.head.appendChild(st);
+
+  /* هيكل تحميل جاهز للاستعمال من أي شاشة: paSkeleton(3) */
+  window.paSkeleton=function(rows){
+    var n=Math.max(1,rows||3), h='<div class="card" aria-busy="true" aria-label="جارٍ التحميل…">';
+    for(var i=0;i<n;i++) h+='<div class="pa-sk pa-sk-row" style="width:'+(92-i*11)+'%"></div>';
+    return h+'</div>';
+  };
+})();
+
 /* الإقلاع الفعلي */
 boot();
 </script>
