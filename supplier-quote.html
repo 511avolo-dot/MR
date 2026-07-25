@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<!-- بوابة المورّد الذاتية — مجموعة الذيابي (نظام 3، معزولة: portal_* فقط)
+     تُفتح برابط رمزي بلا حساب: /supplier-quote.html?t=<token>
+     نقيض النسخة البدائية في نظام 2: تسعير بالبنود · حفظ تلقائي · تحقّق فوري ·
+     تنقيح العرض · تأكيد واضح · تصميم بهوية الشركة · الجوال أولاً. -->
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>تقديم عرض سعر · مجموعة الذيابي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#231F20; --muted:#6E6459; --faint:#9C9287;
+  --gold:#C4A265; --gold-2:#9A7A45; --gold-3:#7A5E33; --gold-soft:#F0E5CF;
+  --bg:#F7F5F2; --surface:#fff; --surface-2:#FAF8F5;
+  --line:#E6E0D7; --line-2:#F1ECE4;
+  --ok:#2C6E52; --ok-bg:#E9F1EC; --danger:#A8382F; --danger-bg:#F8ECEA;
+  --warn:#8A6212; --warn-bg:#F8EFDA;
+  --radius:12px; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sh-1:0 1px 2px rgba(35,31,32,.05),0 1px 3px rgba(35,31,32,.045);
+  --sh-2:0 8px 20px -10px rgba(35,31,32,.17),0 3px 8px -5px rgba(35,31,32,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;font-size:15px;line-height:1.7;
+  background-image:radial-gradient(1000px 500px at 100% -10%,rgba(196,162,101,.08),transparent 60%);
+  max-width:100%;overflow-x:hidden}
+.wrap{max-width:860px;margin:0 auto;padding:0 16px 96px}
+header{background:linear-gradient(165deg,#171415,#231F20 60%,#39312C);color:#F6EFE0;
+  padding:20px 16px;margin-bottom:18px;border-bottom:2px solid var(--gold)}
+.hd{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hd .t{font-weight:700;font-size:17px;letter-spacing:-.01em}
+.hd .s{font-size:11.5px;color:var(--gold);letter-spacing:.14em;text-transform:uppercase}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px;margin-bottom:14px;box-shadow:var(--sh-1)}
+h1{font-size:20px;margin:0 0 4px;letter-spacing:-.012em}
+.muted{color:var(--muted);font-size:13px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.meta .m{background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:9px 11px}
+.meta .l{font-size:11px;color:var(--muted);display:block}
+.meta .v{font-weight:600;font-size:14px;margin-top:2px;unicode-bidi:plaintext}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+th{background:#231F20;color:#F6EFE0;padding:9px 10px;text-align:start;font-size:12.5px;font-weight:600;
+  border-inline-end:1px solid rgba(246,239,224,.18);position:sticky;top:0}
+td{padding:8px 10px;border-top:1px solid var(--line-2);vertical-align:middle;overflow-wrap:anywhere}
+tbody tr:nth-child(even){background:var(--surface-2)}
+.num{font-variant-numeric:tabular-nums;font-family:var(--mono)}
+input[type=number],input[type=text],textarea{width:100%;padding:10px 11px;border:1px solid var(--line);
+  border-radius:9px;font-family:inherit;font-size:16px;background:var(--surface);color:inherit}
+input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--gold-2);outline-offset:2px}
+.price-in{max-width:140px;text-align:start}
+.line-total{font-weight:600;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;font-weight:600}
+.total-box{background:linear-gradient(150deg,#171415,#231F20 70%,#3A3335);color:#F6EFE0;
+  border-radius:var(--radius);padding:16px;display:flex;justify-content:space-between;align-items:center;
+  gap:12px;flex-wrap:wrap;box-shadow:var(--sh-2)}
+.total-box .lb{font-size:13px;color:var(--gold)}
+.total-box .vl{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.02em}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:11px;
+  padding:12px 18px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;min-height:46px;
+  touch-action:manipulation;transition:.15s}
+.btn:hover{border-color:var(--gold)}
+.btn-primary{background:linear-gradient(155deg,#3A3335,#231F20);color:#F6EFE0;border-color:#231F20}
+.btn-primary:hover{filter:brightness(1.15)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.note{border-inline-start:3px solid var(--gold);background:var(--gold-soft);padding:11px 13px;
+  border-radius:9px;font-size:13px;margin-bottom:14px}
+.state{text-align:center;padding:52px 18px}
+.state .ic{font-size:44px;line-height:1}
+.state h2{margin:12px 0 6px;font-size:20px}
+.bad{color:var(--danger)}
+.err{background:var(--danger-bg);border:1px solid var(--danger);color:var(--danger);
+  padding:10px 13px;border-radius:9px;margin-bottom:12px;font-size:13.5px}
+.ok-box{background:var(--ok-bg);border:1px solid var(--ok);color:var(--ok);
+  padding:12px 14px;border-radius:10px;margin-bottom:14px;font-weight:600}
+.sk{background:var(--line);border-radius:8px;height:14px;margin:10px 0;position:relative;overflow:hidden}
+.sk::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:sh 1.25s infinite}
+@keyframes sh{100%{transform:translateX(100%)}}
+.bar{position:fixed;inset-inline:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -8px 24px -12px rgba(35,31,32,.2);z-index:20}
+.bar .in{max-width:860px;margin:0 auto;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.saved{font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.sk::after{animation:none}}
+@media (max-width:560px){ .total-box .vl{font-size:22px} h1{font-size:18px} }
+</style>
+</head>
+<body>
+<header><div class="hd">
+  <div><div class="s">AL-DEYABI GROUP</div><div class="t">مجموعة الذيابي · تقديم عرض سعر</div></div>
+</div></header>
+
+<div class="wrap">
+  <div id="view">
+    <div class="card"><div class="sk" style="width:60%"></div><div class="sk" style="width:85%"></div>
+      <div class="sk" style="width:40%"></div><div class="muted">جارٍ تحميل طلب التسعير…</div></div>
+  </div>
+</div>
+
+<div class="bar" id="bar" style="display:none"><div class="in">
+  <div><div class="saved" id="saved">—</div></div>
+  <button class="btn btn-primary" id="submit" onclick="submitQuote()">إرسال العرض</button>
+</div></div>
+
+<script>
+/* ══ بوابة المورّد — بلا حساب، الرمز وحده هو الهوية ══ */
+var SB_URL='https://mwbjoysuybgbrvfrprex.supabase.co';
+var SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
+var TOKEN=new URLSearchParams(location.search).get('t')||'';
+var RFQ=null, DRAFT_KEY='';
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function money(n){return (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function $(id){return document.getElementById(id);}
+
+/* نداء RPC مباشر (anon) — الدالتان محروستان بالرمز في الخادم */
+async function rpc(fn, body){
+  var r=await fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',
+    headers:{'Content-Type':'application/json','apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON},
+    body:JSON.stringify(body)});
+  var t=await r.text(); var j=null; try{ j=JSON.parse(t); }catch(_){}
+  if(!r.ok) throw new Error((j&&(j.message||j.hint))||('تعذّر الاتصال ('+r.status+')'));
+  return j;
+}
+
+function stateBox(icon,title,msg,tone){
+  return '<div class="card state"><div class="ic">'+icon+'</div><h2 class="'+(tone||'')+'">'+esc(title)+'</h2>'
+    +'<div class="muted">'+esc(msg)+'</div></div>';
+}
+
+async function boot(){
+  if(!TOKEN){ $('view').innerHTML=stateBox('🔗','رابط غير مكتمل','افتح الرابط الذي وصلك من إدارة المشتريات كما هو.','bad'); return; }
+  try{
+    var d=await rpc('portal_supplier_rfq',{p_token:TOKEN});
+    if(!d||!d.ok){
+      var m={invalid:['⛔','رابط غير صالح','تحقّق من الرابط أو اطلب رابطاً جديداً من إدارة المشتريات.'],
+             expired:['⌛','انتهت صلاحية الرابط','تواصل مع إدارة المشتريات لإصدار رابط جديد.'],
+             closed:['🔒','أُقفل باب التسعير','لم يعد بالإمكان تقديم عرض لهذا الطلب.']}[(d&&d.reason)||'invalid'];
+      $('view').innerHTML=stateBox(m[0],m[1],m[2],'bad'); return;
+    }
+    RFQ=d; DRAFT_KEY='sq_draft_'+TOKEN.slice(0,12);
+    render();
+  }catch(e){
+    $('view').innerHTML=stateBox('⚠️','تعذّر التحميل', e.message||'حاول لاحقاً.','bad');
+  }
+}
+
+function render(){
+  var d=RFQ, items=d.items||[];
+  var prev=d.previous||null, prevMap={};
+  if(prev&&prev.items) prev.items.forEach(function(x){ prevMap[x.seq]=x.price; });
+  var draft=null; try{ draft=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null'); }catch(_){}
+
+  var exp=d.expires_at?new Date(d.expires_at):null;
+  var days=exp?Math.max(0,Math.ceil((exp-new Date())/86400000)):null;
+
+  var rows=items.map(function(it){
+    var v = (draft&&draft.p&&draft.p[it.seq]!=null) ? draft.p[it.seq]
+          : (prevMap[it.seq]!=null ? prevMap[it.seq] : '');
+    return '<tr>'
+      +'<td class="num">'+it.seq+'</td>'
+      +'<td>'+esc(it.name||'')+'</td>'
+      +'<td class="num">'+esc(String(it.qty||''))+'</td>'
+      +'<td>'+esc(it.unit||'')+'</td>'
+      +'<td><input class="price-in num" type="number" inputmode="decimal" min="0" step="0.01" '
+        +'data-seq="'+it.seq+'" data-qty="'+(Number(it.qty)||0)+'" value="'+esc(String(v))+'" '
+        +'aria-label="سعر الوحدة للبند '+it.seq+'" oninput="recalc()"></td>'
+      +'<td class="num line-total" id="lt-'+it.seq+'">—</td>'
+    +'</tr>';
+  }).join('');
+
+  $('view').innerHTML=''
+   +(d.submitted?'<div class="ok-box">✓ سبق أن قدّمت عرضاً لهذا الطلب (مراجعة '+d.submit_count+'). '
+      +'يمكنك تعديل الأسعار وإعادة الإرسال — سيحلّ الجديد محلّ السابق.</div>':'')
+   +'<div class="card">'
+     +'<h1>'+esc(d.title||'طلب تسعير')+'</h1>'
+     +'<div class="muted">مرحباً <b>'+esc(d.supplier||'')+'</b> — يسرّنا تلقّي عرضكم.</div>'
+     +'<div class="meta">'
+       +'<div class="m"><span class="l">رقم الطلب</span><span class="v" dir="ltr">'+esc(d.request_id)+'</span></div>'
+       +(d.need_by?'<div class="m"><span class="l">التوريد المطلوب</span><span class="v" dir="ltr">'+esc(d.need_by)+'</span></div>':'')
+       +(days!=null?'<div class="m"><span class="l">صلاحية الرابط</span><span class="v">'+days+' يوم</span></div>':'')
+       +'<div class="m"><span class="l">عدد البنود</span><span class="v">'+items.length+'</span></div>'
+     +'</div>'
+   +'</div>'
+   +'<div class="note">أدخل <b>سعر الوحدة</b> لكل بند — يُحسب إجمالي السطر والإجمالي العام تلقائياً. '
+     +'يُحفظ ما تكتبه في جهازك تلقائياً فلا يضيع إن أُغلقت الصفحة.</div>'
+   +'<div class="card"><div class="tw"><table>'
+     +'<thead><tr><th>م</th><th>البند</th><th>الكمية</th><th>الوحدة</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>'
+     +'<tbody>'+rows+'</tbody></table></div></div>'
+   +'<div class="card"><div class="grid">'
+     +'<div><label for="dd">مدة التوريد (أيام)</label><input id="dd" type="number" min="0" inputmode="numeric" value="'+esc(String((draft&&draft.dd)||(prev&&prev.delivery_days)||''))+'" oninput="saveDraft()"></div>'
+     +'<div><label for="pd">مهلة السداد (أيام)</label><input id="pd" type="number" min="0" inputmode="numeric" value="'+esc(String((draft&&draft.pd)||(prev&&prev.payment_days)||''))+'" oninput="saveDraft()"></div>'
+   +'</div>'
+   +'<div style="margin-top:12px"><label for="nt">ملاحظات (اختياري)</label>'
+     +'<textarea id="nt" rows="3" oninput="saveDraft()" placeholder="شروط، بدائل مقترحة، ملاحظات على البنود…">'+esc((draft&&draft.nt)||(prev&&prev.note)||'')+'</textarea></div>'
+   +'</div>'
+   +'<div class="total-box"><div><div class="lb">الإجمالي (قبل الضريبة)</div>'
+     +'<div class="vl"><span id="grand">0.00</span> <span style="font-size:14px">ر.س</span></div></div>'
+     +'<div class="muted" style="color:var(--gold);font-size:12.5px" id="filled">0 من '+items.length+' بند</div>'
+   +'</div>'
+   +'<div id="err"></div>';
+
+  $('bar').style.display='';
+  recalc();
+}
+
+function readPrices(){
+  var out={}, els=document.querySelectorAll('.price-in');
+  for(var i=0;i<els.length;i++){
+    var v=els[i].value.trim();
+    if(v!=='') out[els[i].getAttribute('data-seq')]=Number(v);
+  }
+  return out;
+}
+
+function recalc(){
+  var els=document.querySelectorAll('.price-in'), total=0, filled=0;
+  for(var i=0;i<els.length;i++){
+    var seq=els[i].getAttribute('data-seq'), qty=Number(els[i].getAttribute('data-qty'))||0;
+    var v=els[i].value.trim(), lt=$('lt-'+seq);
+    if(v!==''&&Number(v)>=0){ var t=qty*Number(v); total+=t; filled++; if(lt) lt.textContent=money(t); }
+    else if(lt) lt.textContent='—';
+  }
+  var g=$('grand'); if(g) g.textContent=money(total);
+  var f=$('filled'); if(f) f.textContent=filled+' من '+els.length+' بند';
+  var b=$('submit'); if(b) b.disabled=(filled===0);
+  saveDraft();
+}
+
+var _sv;
+function saveDraft(){
+  clearTimeout(_sv);
+  _sv=setTimeout(function(){
+    try{
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({p:readPrices(),
+        dd:($('dd')||{}).value, pd:($('pd')||{}).value, nt:($('nt')||{}).value}));
+      var s=$('saved'); if(s) s.textContent='حُفظت مسودّتك في جهازك · '+new Date().toLocaleTimeString('en-GB').slice(0,5);
+    }catch(_){}
+  },400);
+}
+
+async function submitQuote(){
+  var err=$('err'); if(err) err.innerHTML='';
+  var prices=readPrices(), seqs=Object.keys(prices);
+  if(!seqs.length){ err.innerHTML='<div class="err">أدخل سعراً واحداً على الأقل.</div>'; return; }
+  var bad=seqs.filter(function(s){ return !(prices[s]>0); });
+  if(bad.length){ err.innerHTML='<div class="err">أسعار غير صالحة في البنود: '+esc(bad.join('، '))+' — يجب أن تكون أكبر من صفر.</div>'; return; }
+
+  var total=0; document.querySelectorAll('.price-in').forEach(function(el){
+    var v=el.value.trim(); if(v!=='') total+=(Number(el.getAttribute('data-qty'))||0)*Number(v); });
+  if(!confirm('تأكيد إرسال العرض بإجمالي '+money(total)+' ر.س؟')) return;
+
+  var b=$('submit'); b.disabled=true; b.textContent='جارٍ الإرسال…';
+  try{
+    var items=seqs.map(function(s){ return {seq:Number(s), price:prices[s]}; });
+    var res=await rpc('portal_supplier_submit',{
+      p_token:TOKEN, p_items:items,
+      p_delivery_days:Number(($('dd')||{}).value)||null,
+      p_payment_days:Number(($('pd')||{}).value)||null,
+      p_note:(($('nt')||{}).value||'').trim()||null});
+    try{ localStorage.removeItem(DRAFT_KEY); }catch(_){}
+    $('bar').style.display='none';
+    $('view').innerHTML=stateBox('✅','تم استلام عرضكم',
+      'الإجمالي '+money(res&&res.total)+' ر.س · مراجعة رقم '+((res&&res.revision)||1)
+      +'. ستتواصل معكم إدارة المشتريات عند اكتمال المقارنة. يمكنكم إعادة فتح الرابط لتعديل العرض ما دام باب التسعير مفتوحاً.');
+    window.scrollTo(0,0);
+  }catch(e){
+    b.disabled=false; b.textContent='إرسال العرض';
+    err.innerHTML='<div class="err">'+esc(e.message||'تعذّر الإرسال، حاول مجدداً.')+'</div>';
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

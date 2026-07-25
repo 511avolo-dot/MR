@@ -62,11 +62,16 @@ BEGIN
   SELECT count(*), coalesce(string_agg(proname,', ' ORDER BY proname),'') INTO v_cnt, v_bad
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname LIKE 'portal\_%'
-    AND has_function_privilege('anon', p.oid, 'EXECUTE');
+    AND has_function_privilege('anon', p.oid, 'EXECUTE')
+    -- استثناء مقصود وموثّق (هجرة 047): بوابة المورّد الذاتية. المورّد لا حساب له،
+    -- والرمز (43 محرفاً عشوائياً) هو هويّته. الدالتان SECURITY DEFINER محروستان
+    -- بالرمز + مرحلة التسعير، ولا تكشفان إلا بنود ذلك الطلب (لا عروض منافسين
+    -- ولا ميزانية ولا معتمِدين). أي دالة أخرى تظهر هنا = ارتداد يجب سحبه.
+    AND p.proname NOT IN ('portal_supplier_rfq','portal_supplier_submit');
   IF v_cnt <> 0 THEN
     RAISE EXCEPTION 'S8 fail: % دالة بوابة قابلة للتنفيذ من anon (اسحبها: REVOKE ALL ON FUNCTION ... FROM anon): %', v_cnt, v_bad;
   END IF;
-  RAISE NOTICE 'PASS S8 لا دالة بوابة مكشوفة لـanon';
+  RAISE NOTICE 'PASS S8 لا دالة بوابة مكشوفة لـanon (عدا بوابة المورّد المقصودة)';
 
   RAISE NOTICE '════ SECURITY: 8/8 PASS ════';
 END $t$;
