@@ -5228,6 +5228,113 @@ togglePerm = async function(k,pk,on){
   document.head.appendChild(st);
 })();
 
+/* ══════ دعوة مورّد لتقديم عرضه ذاتياً (بريد / واتساب / نسخ رابط) ══════
+   يُكمل بوابة المورّد (هجرة 047): بدل أن تُدخِل المشتريات العرض يدوياً، تُرسل
+   للمورّد رابطاً خاصاً يُسعّر عبره بنفسه. الرابط يُنشأ في القاعدة بجلسة الموظّف
+   (فيبقى حارس can_manage_procurement ومرحلة التسعير هما المرجع).
+   واتساب: رابط wa.me مُعبّأ مسبقاً — يفتح المحادثة برسالة جاهزة يرسلها الموظّف.
+   (واجهة WhatsApp Business الرسمية تتطلّب حساب Meta معتمَداً وقوالب مُصادَقة ورسوماً.) */
+function pa_inviteSupplier(reqId){
+  var r=(REQS||[]).filter(function(x){return x.id===reqId;})[0];
+  var opts=Object.keys(SUPPLIERS||{}).map(function(k){
+    var s=SUPPLIERS[k]||{}; return '<option value="'+esc(s.n||k)+'" data-em="'+esc(s.email||'')+'" data-ph="'+esc(s.phone||s.mobile||'')+'">';
+  }).join('');
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info">'+ic('cart',18)+'</div>'
+    +'<div><div class="mt">دعوة مورّد للتسعير</div>'
+    +'<div class="ms">يُرسَل للمورّد رابط خاص يُدخل عبره أسعاره بنفسه</div></div></div>'
+    +'<div class="modal-body">'
+      +'<label for="si-name">اسم المورّد <span style="color:var(--danger)">*</span></label>'
+      +'<input id="si-name" list="si-sup" autocomplete="off" placeholder="اكتب أو اختر من الموردين المسجّلين">'
+      +'<datalist id="si-sup">'+opts+'</datalist>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px">'
+        +'<div><label for="si-mail">البريد (للإرسال الآلي)</label>'
+          +'<input id="si-mail" type="email" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>'
+        +'<div><label for="si-ph">الجوال (لواتساب)</label>'
+          +'<input id="si-ph" type="tel" inputmode="tel" autocomplete="off" placeholder="9665xxxxxxxx"></div>'
+        +'<div><label for="si-ttl">صلاحية الرابط (أيام)</label>'
+          +'<input id="si-ttl" type="number" min="1" max="60" value="14"></div>'
+      +'</div>'
+      +'<div id="si-out" style="margin-top:14px"></div>'
+    +'</div>'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="si-go" onclick="pa_doInvite(\''+esc(reqId)+'\')">'
+      +ic('check',15)+' إنشاء الرابط</button>'
+      +'<button class="btn btn-ghost" onclick="closeModal()">إغلاق</button></div>';
+  $('overlay').classList.add('show');
+  setTimeout(function(){
+    var n=$('si-name'); if(n) n.focus();
+    if(n) n.addEventListener('input',function(){   /* تعبئة البريد/الجوال من المورّد المسجّل */
+      var o=document.querySelector('#si-sup option[value="'+(n.value||'').replace(/"/g,'')+'"]');
+      if(o){ if($('si-mail')&&!$('si-mail').value) $('si-mail').value=o.getAttribute('data-em')||'';
+             if($('si-ph')&&!$('si-ph').value)   $('si-ph').value=o.getAttribute('data-ph')||''; }
+    });
+  },60);
+}
+
+async function pa_doInvite(reqId){
+  var name=(($('si-name')||{}).value||'').trim();
+  var mail=(($('si-mail')||{}).value||'').trim();
+  var ph  =(($('si-ph')||{}).value||'').replace(/[^\d]/g,'');
+  var ttl =Number((($('si-ttl')||{}).value||14))||14;
+  var out=$('si-out');
+  if(!name){ toast('اسم المورّد مطلوب','err'); return; }
+  var btn=$('si-go'); if(btn){ btn.disabled=true; btn.textContent='جارٍ الإنشاء…'; }
+  var r=(REQS||[]).filter(function(x){return x.id===reqId;})[0];
+  var d=await pa_apiPost('/api/portal-supplier-invite',
+        {request_id:reqId, supplier:name, email:mail||null, ttl_days:ttl, title:(r&&r.title)||''});
+  if(btn){ btn.disabled=false; btn.innerHTML=ic('check',15)+' إنشاء رابط آخر'; }
+  if(!d) return;
+
+  var link=d.link||'';
+  var msg='السادة '+name+' المحترمين،\nيسرّ مجموعة الذيابي دعوتكم لتقديم عرض سعر'
+        +((r&&r.title)?(' بخصوص: '+r.title):'')+'.\nيمكنكم إدخال أسعاركم لكل بند عبر الرابط:\n'+link
+        +'\n\nصلاحية الرابط '+ttl+' يوماً. الرابط خاصّ بكم.';
+  var wa=ph?('https://wa.me/'+ph+'?text='+encodeURIComponent(msg)):'';
+  var em=(d.emailed&&d.emailed.ok)?'<span style="color:var(--ok)">✓ أُرسل بالبريد</span>'
+        :(mail?'<span style="color:var(--warn)">لم يُرسل البريد — استخدم واتساب أو انسخ الرابط</span>':'');
+
+  out.innerHTML='<div style="background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:10px;padding:12px">'
+    +'<b style="color:var(--ok)">تمّ إنشاء الرابط</b> '+em
+    +'<div style="margin-top:8px;font-size:12px;word-break:break-all;font-family:var(--font-mono);'
+      +'background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px" id="si-link">'+esc(link)+'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'
+      +'<button class="btn btn-ghost btn-sm" onclick="pa_copyInvite()">📋 نسخ الرابط</button>'
+      +(wa?('<a class="btn btn-ghost btn-sm" href="'+esc(wa)+'" target="_blank" rel="noopener">💬 إرسال بواتساب</a>'):'')
+      +(mail?('<a class="btn btn-ghost btn-sm" href="mailto:'+esc(mail)+'?subject='
+        +encodeURIComponent('دعوة لتقديم عرض سعر')+'&body='+encodeURIComponent(msg)+'">✉️ فتح بريدي</a>'):'')
+    +'</div>'
+    +'<div class="muted" style="margin-top:8px;font-size:11.5px">الرابط خاصّ بهذا المورّد وصالح '+ttl+' يوماً. '
+      +'إنشاء رابط جديد لنفس المورّد يُبطِل السابق.</div>'
+  +'</div>';
+}
+
+function pa_copyInvite(){
+  var el=$('si-link'); if(!el) return;
+  var t=el.textContent||'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ toast('نُسخ الرابط','ok'); },function(){ toast('انسخه يدوياً','err'); });
+  } else { toast('انسخه يدوياً','err'); }
+}
+
+/* زرّ الدعوة داخل مساحة عمل المشتريات (طور التسعير فقط، لمن يملك صلاحية المشتريات) */
+try{
+  var _pa_refProcWs2 = procWorkspace;
+  procWorkspace = function(r){
+    var html=_pa_refProcWs2(r);
+    try{
+      var can=(accessOf(ME).can && accessOf(ME).can.manageRfq) || isAdmin();
+      if(r && r.proc && r.proc.phase==='pricing' && can){
+        html += '<div class="card"><div class="sec-title"><span class="ico" aria-hidden="true">'+ic('cart',16)+'</span>'
+          +'دعوة مورّد للتسعير الذاتي</div>'
+          +'<div class="muted" style="margin-bottom:10px">أرسل رابطاً خاصاً للمورّد ليُدخل أسعاره بنفسه — '
+          +'تصل مباشرةً إلى مقارنة العروض بلا إدخال يدوي.</div>'
+          +'<button class="btn btn-gold" onclick="pa_inviteSupplier(\''+esc(r.id)+'\')">'
+          +ic('cart',15)+' دعوة مورّد</button></div>';
+      }
+    }catch(_e){}
+    return html;
+  };
+}catch(_e){}
+
 /* الإقلاع الفعلي */
 boot();
 </script>
