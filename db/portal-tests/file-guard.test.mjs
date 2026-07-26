@@ -2,7 +2,8 @@
  * تأكيدات حارس الملفات المرفوعة (functions/api/_file-guard.js)
  * ════════════════════════════════════════════════════════════════════════════
  * يحمي مسار رفع المورّد الخارجي (/api/portal-supplier-doc) ومسارَي الموظّفين
- * (/api/portal-quote و/api/portal-doc). أي تراجع في الحارس يُفشِل الـCI.
+ * (/api/portal-quote و/api/portal-doc)، ونقطة وثائق تسجيل الموردين في النظام 1
+ * (/api/reg-doc). أي تراجع في الحارس يُفشِل الـCI.
  *
  * التشغيل:  node db/portal-tests/file-guard.test.mjs        (خروج غير صفري عند أي فشل)
  */
@@ -63,3 +64,33 @@ if (failed) {
   process.exit(1);
 }
 console.log(`\n✅ حارس الملفات: ${cases.length}/${cases.length} PASS`);
+
+/* ── تأكيدات نقطة رفع وثائق تسجيل الموردين (نظام 1) ─────────────────────────
+   لا تُلامس الشبكة: كل هذه الحالات تُرفض قبل أي اتصال بالتخزين. */
+const { onRequestPost: regDocPost } = await import('../../functions/api/reg-doc.js');
+
+const REQ = (qs, body, headers = {}) => new Request(`https://suppliers.aldeyabi.com/api/reg-doc${qs}`, {
+  method: 'POST', body,
+  headers: { origin: 'https://suppliers.aldeyabi.com', host: 'suppliers.aldeyabi.com', ...headers },
+});
+const ENV_OK  = { SUPABASE_URL: 'https://x.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'k' };
+const ENV_OFF = { SUPABASE_URL: 'https://x.supabase.co' };
+const goodPdfBuf = Buffer.from('%PDF-1.4\n' + pad(300) + '\n%%EOF\n', 'latin1');
+const evilPdfBuf = Buffer.from('%PDF-1.4\n/OpenAction<</S/JavaScript/JS(x)>>\n' + pad(300) + '\n%%EOF\n', 'latin1');
+
+const epCases = [
+  ['أصل مختلف (cross-origin) يُرفض', 403, ENV_OK, '?reg_id=DG-ABC123&doc=cr', goodPdfBuf,
+    { origin: 'https://evil.example', host: 'suppliers.aldeyabi.com' }],
+  ['بلا إعداد خادم ⇒ 503', 503, ENV_OFF, '?reg_id=DG-ABC123&doc=cr', goodPdfBuf, {}],
+  ['رقم تسجيل غير صالح', 400, ENV_OK, '?reg_id=../../etc&doc=cr', goodPdfBuf, {}],
+  ['نوع وثيقة غير صالح (اجتياز مسار)', 400, ENV_OK, '?reg_id=DG-ABC123&doc=../x', goodPdfBuf, {}],
+  ['PDF بمحتوى نشِط يُرفض', 400, ENV_OK, '?reg_id=DG-ABC123&doc=cr', evilPdfBuf, {}],
+];
+for (const [name, expect, env, qs, body, hdr] of epCases) {
+  const res = await regDocPost({ request: REQ(qs, body, hdr), env });
+  const pass = res.status === expect;
+  if (!pass) failed++;
+  console.log(`${pass ? '✓' : '✗ FAIL'}  ${name.padEnd(34)} HTTP ${res.status} (المتوقّع ${expect})`);
+}
+if (failed) { console.error('\n❌ فشل في تأكيدات نقطة الرفع'); process.exit(1); }
+console.log(`\n✅ نقطة /api/reg-doc: ${epCases.length}/${epCases.length} PASS`);

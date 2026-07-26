@@ -2931,6 +2931,49 @@ function genRegId(){
 let regId = _resumeId || genRegId();
 let _resumeData = null;   // holds existing registration when in resume mode
 
+/* ── رفع وثيقة عبر الخادم (/api/reg-doc) ─────────────────────────────────────
+   الحارس الحقيقي على الخادم: يفحص الملف بعمق ثم يرفعه بمفتاح الخدمة، فلا يملك
+   المتصفّح أي صلاحية كتابة على المخزن.
+
+   ⚠️ سقوط مؤقّت مقصود: إن ردّ الخادم 503 بـreason="not_configured" (لأنّ
+   SUPABASE_SERVICE_ROLE_KEY لم يُضبط بعد في Cloudflare) نعود للمسار القديم كي لا
+   يتعطّل تسجيل موردين حقيقيين. **يُزال هذا السقوط فور تأكيد ضبط المتغيّر** ومعه
+   تُغلق صلاحية الكتابة العامة على المخزن (db/system1-storage-hardening.sql).
+   أمّا رفض الملف نفسه (400) فلا سقوط له إطلاقاً — يُرفض ويُبلَّغ المستخدم. */
+async function uploadDocViaServer(regIdVal, docId, file, realType, ext){
+  let resp = null;
+  try {
+    resp = await fetch(`/api/reg-doc?reg_id=${encodeURIComponent(regIdVal)}&doc=${encodeURIComponent(docId)}`, {
+      method: 'POST', headers: { 'Content-Type': realType }, body: file
+    });
+  } catch(_) { resp = null; }   // تعذّر الوصول للنقطة (شبكة/بيئة محلية) → سقوط
+
+  if (resp) {
+    let body = null; try { body = await resp.json(); } catch(_) {}
+    if (resp.ok && body && body.path) return body.path;
+    // الملف مرفوض أمنياً أو مُدخَل غير صالح → لا سقوط، الخطأ نهائي
+    if (resp.status === 400) throw new Error((body && body.error) || 'الملف مرفوض لأسباب أمنية');
+    if (!(resp.status === 503 && body && body.reason === 'not_configured') && resp.status !== 404) {
+      throw new Error((body && body.error) || 'تعذّر رفع الملف عبر الخادم');
+    }
+    console.warn('[reg-doc] الخادم غير مهيّأ — رفع مباشر مؤقّت حتى ضبط SUPABASE_SERVICE_ROLE_KEY');
+  }
+
+  // ── المسار القديم (مؤقّت): رفع مباشر بمفتاح anon ──
+  const path = `${regIdVal}/${docId}/${Date.now()}.${ext}`;
+  const {error} = await SB.storage.from(BUCKET).upload(path, file, { contentType: realType, upsert: true });
+  if (error) throw error;
+  try {
+    const folder = `${regIdVal}/${docId}`;
+    const { data: existing } = await SB.storage.from(BUCKET).list(folder);
+    if (existing && existing.length) {
+      const stale = existing.map(f => `${folder}/${f.name}`).filter(p => p !== path);
+      if (stale.length) await SB.storage.from(BUCKET).remove(stale).catch(()=>{});
+    }
+  } catch(_) {}
+  return path;
+}
+
 /* ── مقاييس كفاءة التعبئة (مؤشرات أداء التسجيل: نقرات/دقائق/تعبئة تلقائية مقابل يدوية) ── */
 const SESSION_START = Date.now();
 let CLICK_COUNT = 0;
@@ -3071,12 +3114,8 @@ async function connectSupabase(url, key) {
       }
     } catch(e) {}
     AI_AVAILABLE = await aiProbeProxy();
-    // Try to create the storage bucket if it doesn't exist yet
-    // (anon key may not have permission — that's OK, we'll catch it)
-    try {
-      const {error: bErr} = await SB.storage.createBucket(BUCKET, {public: false});
-      // If error is "already exists" that's fine. Any other error is silently ignored.
-    } catch(e) {}
+    // (أُزيل إنشاء مخزن الملفات من المتصفّح: عملية إدارية لا يجوز أن يحاولها العميل،
+    //  والمخزن supplier-docs مُنشأ مسبقاً. الرفع صار عبر /api/reg-doc بمفتاح الخدمة.)
     hideProc();
     if (_resumeId) {
       await loadResumeData();
@@ -4059,24 +4098,12 @@ async function submitForm() {
         uploadFailures.push(docData.name); continue;
       }
       try {
-        // ترتيب غير مُتلِف: ارفع الملف الجديد أولاً، ثم احذف النسخ القديمة بعد نجاح الرفع.
-        // (الترتيب العكسي كان يحذف القديم ثم يفشل الرفع فيضيع الملف ويبقى المرجع معطوباً.)
-        const path = `${regId}/${docId}/${Date.now()}.${ext}`;
-        const {error} = await SB.storage.from(BUCKET).upload(path, docData.file, {
-          contentType: realType,   // النوع المُتحقَّق من التوقيع الفعلي، لا المُعلَن
-          upsert: true
-        });
-        if (error) throw error;
+        // ── المسار الآمن: الرفع عبر الخادم (/api/reg-doc) بمفتاح الخدمة ───────────
+        // الفحوص أعلاه تقع في المتصفّح فيسهل تجاوزها بالمفتاح العام؛ الخادم يعيد
+        // فحص الملف بحارس طبقي (توقيع سحري · متعدّد صيغ · سلامة بنيوية · رفض
+        // المحتوى النشِط في PDF) ثم يرفعه، فلا يحتاج العميل أي صلاحية على المخزن.
+        const path = await uploadDocViaServer(regId, docId, docData.file, realType, ext);
         docPaths[docId] = path;
-        // بعد نجاح الرفع فقط: نظّف أي نسخ سابقة لنفس الوثيقة (عدا الملف الجديد) لتفادي التراكم.
-        try {
-          const folder = `${regId}/${docId}`;
-          const { data: existing } = await SB.storage.from(BUCKET).list(folder);
-          if (existing && existing.length) {
-            const stale = existing.map(f => `${folder}/${f.name}`).filter(p => p !== path);
-            if (stale.length) await SB.storage.from(BUCKET).remove(stale).catch(()=>{});
-          }
-        } catch(_) {}
       } catch(e) {
         // فشل رفع وثيقة رُفعت حديثاً: لا تُبقِ المسار القديم (قد يكون حُذف أو لم يعُد ممثِّلاً
         // للملف الجديد) كي يلتقطها فحص النواقص أدناه بدل إرسال الطلب بمرجع وثيقة قديمة.

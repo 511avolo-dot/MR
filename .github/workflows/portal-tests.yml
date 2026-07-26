@@ -10,6 +10,7 @@ on:
       - 'db/portal-tests/**'
       - 'functions/api/portal-*'
       - 'functions/api/_file-guard.js'
+      - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'db/portal-tests/**'
       - 'functions/api/portal-*'
       - 'functions/api/_file-guard.js'
+      - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
 
 jobs:
