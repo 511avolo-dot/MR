@@ -14,8 +14,8 @@
  *   - same-origin + مستخدم نشط + تحقّق رؤية الطلب. يبثّ الملف inline (لا رابط R2 مكشوف).
  */
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
+import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const KEY_RE = /^docs\/(pay|grn|inst|inv|ret)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
 // pay=محضر صرف (مالية) · grn=مشهد استلام (مستودع) · inst=مرفق دفعة (مشتريات) · inv=أصل فاتورة المورد (مشتريات/مالية)
@@ -66,14 +66,6 @@ async function hasPerm(env, base, jwt, perm) {
     return (await r.json()) === true;
   } catch (_) { return false; }
 }
-// يتحقّق من التوقيع السحري ويعيد الامتداد المطابق، أو null إن لم يكن نوعاً مسموحاً.
-function sniffExt(buf) {
-  const h = new Uint8Array(buf.slice(0, 8));
-  if (h[0] === 0x25 && h[1] === 0x50 && h[2] === 0x44 && h[3] === 0x46) return { ext: 'pdf', ct: 'application/pdf' }; // %PDF
-  if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) return { ext: 'jpg', ct: 'image/jpeg' };                        // JPEG
-  if (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47) return { ext: 'png', ct: 'image/png' };        // PNG
-  return null;
-}
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
@@ -98,10 +90,9 @@ export async function onRequestPost({ request, env }) {
   if (!REQID_RE.test(reqId)) return json({ error: 'معرّف طلب غير صالح' }, 400);
 
   const buf = await request.arrayBuffer();
-  if (buf.byteLength === 0) return json({ error: 'ملف فارغ' }, 400);
-  if (buf.byteLength > MAX_BYTES) return json({ error: 'حجم الملف يتجاوز 10 ميجابايت' }, 400);
-  const sniff = sniffExt(buf);
-  if (!sniff) return json({ error: 'الملف يجب أن يكون PDF أو صورة (JPG/PNG)' }, 400);
+  // حارس الملفات الطبقي المشترك
+  const sniff = inspectUpload(buf);
+  if (!sniff.ok) return json({ error: sniff.error }, 400);
 
   const rand = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('d' + Date.now() + Math.random().toString(36).slice(2, 10));
   const key = `docs/${kind}/${reqId}/${rand}.${sniff.ext}`;
@@ -141,12 +132,5 @@ export async function onRequestGet({ request, env }) {
   const obj = await env.QUOTES_BUCKET.get(key);
   if (!obj) return new Response('not found', { status: 404 });
   const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream';
-  return new Response(obj.body, {
-    status: 200,
-    headers: {
-      'Content-Type': ct,
-      'Content-Disposition': 'inline',
-      'Cache-Control': 'private, no-store',
-    },
-  });
+  return new Response(obj.body, { status: 200, headers: fileResponseHeaders(ct) });
 }

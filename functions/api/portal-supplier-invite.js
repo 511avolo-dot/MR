@@ -48,8 +48,11 @@ function inviteHtml(supplier, title, link, days) {
         <p style="margin:0 0 10px">السادة <b>${s}</b> المحترمين،</p>
         <p style="margin:0 0 14px">يسرّ مجموعة الذيابي دعوتكم لتقديم عرض سعر بخصوص:
           <b>${esc(title || 'طلب تسعير')}</b>.</p>
-        <p style="margin:0 0 18px">يمكنكم إدخال أسعاركم لكل بند مباشرةً عبر الرابط أدناه — تُحفظ مدخلاتكم
+        <p style="margin:0 0 14px">يمكنكم إدخال أسعاركم لكل بند مباشرةً عبر الرابط أدناه — تُحفظ مدخلاتكم
           تلقائياً، ويمكنكم تعديل العرض ما دام باب التسعير مفتوحاً.</p>
+        <p style="margin:0 0 18px;background:#FAF6EE;border-inline-start:3px solid #C4A265;padding:9px 12px;border-radius:8px">
+          <b>مطلوب:</b> إرفاق عرض السعر الرسمي بترويسة مؤسستكم (ملف PDF أو صورة واضحة) من داخل الصفحة —
+          يُحفظ سنداً للعرض في ملف المعاملة.</p>
         <p style="margin:0 0 20px;text-align:center">
           <a href="${esc(link)}" style="display:inline-block;background:#231F20;color:#F6EFE0;text-decoration:none;
             padding:13px 26px;border-radius:11px;font-weight:700;font-size:15px">تقديم عرض السعر</a></p>

@@ -13,9 +13,10 @@
  *   - يبثّ الملف inline (لا رابط R2 مكشوف). الواجهة تجلبه بجلستها وتعرضه عبر object URL في iframe.
  */
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
+import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const KEY_RE = /^quotes\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.pdf$/;
+// المورّد قد يرفع صورة عرضه (تصوير مستند ورقي) عبر /api/portal-supplier-doc — فنقبل الصور عرضاً أيضاً.
+const KEY_RE = /^quotes\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
 
 function json(obj, status = 200) {
@@ -73,20 +74,15 @@ export async function onRequestPost({ request, env }) {
   const reqId = String(new URL(request.url).searchParams.get('request_id') || '').trim();
   if (!REQID_RE.test(reqId)) return json({ error: 'معرّف طلب غير صالح' }, 400);
 
-  const ct = request.headers.get('content-type') || '';
-  if (!/application\/pdf/i.test(ct)) return json({ error: 'الملف يجب أن يكون PDF' }, 400);
   const buf = await request.arrayBuffer();
-  if (buf.byteLength === 0) return json({ error: 'ملف فارغ' }, 400);
-  if (buf.byteLength > MAX_BYTES) return json({ error: 'حجم الملف يتجاوز 10 ميجابايت' }, 400);
-  const head = new Uint8Array(buf.slice(0, 5));
-  if (!(head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46)) {
-    return json({ error: 'محتوى الملف ليس PDF صالحاً' }, 400); // %PDF
-  }
+  // حارس الملفات الطبقي (نفس الحارس المطبَّق على رفع المورّد الخارجي)
+  const sniff = inspectUpload(buf);
+  if (!sniff.ok) return json({ error: sniff.error }, 400);
 
   const rand = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('q' + Date.now() + Math.random().toString(36).slice(2, 10));
-  const key = `quotes/${reqId}/${rand}.pdf`;
+  const key = `quotes/${reqId}/${rand}.${sniff.ext}`;
   try {
-    await env.QUOTES_BUCKET.put(key, buf, { httpMetadata: { contentType: 'application/pdf' } });
+    await env.QUOTES_BUCKET.put(key, buf, { httpMetadata: { contentType: sniff.ct } });
   } catch (_) { return json({ error: 'تعذّر حفظ الملف' }, 502); }
   return json({ ok: true, key });
 }
@@ -104,25 +100,21 @@ export async function onRequestGet({ request, env }) {
   const key = String(new URL(request.url).searchParams.get('key') || '').trim();
   if (!KEY_RE.test(key)) return new Response('bad key', { status: 400 });
 
-  // دفاع في العمق: تحقّق أن المستخدم يرى الطلب صاحب الملف (best-effort — الحارس الأساسي مستخدم نشط).
+  // تحقّق أن المستخدم يرى الطلب صاحب الملف — **يفشل مغلقاً** (لا يُبَثّ إلا بتأكيد رؤية صريح).
   const reqId = key.split('/')[1];
+  let canSee = false;
   try {
     const r = await fetch(`${base}/rest/v1/rpc/portal_can_see_request`, {
       method: 'POST',
       headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ p_id: reqId }),
     });
-    if (r.ok && (await r.json()) === false) return new Response('forbidden', { status: 403 });
-  } catch (_) { /* best-effort */ }
+    if (r.ok) canSee = (await r.json()) === true;
+  } catch (_) { canSee = false; }
+  if (!canSee) return new Response('forbidden', { status: 403 });
 
   const obj = await env.QUOTES_BUCKET.get(key);
   if (!obj) return new Response('not found', { status: 404 });
-  return new Response(obj.body, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': 'inline; filename="quote.pdf"',
-      'Cache-Control': 'private, no-store',
-    },
-  });
+  const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/pdf';
+  return new Response(obj.body, { status: 200, headers: fileResponseHeaders(ct) });
 }

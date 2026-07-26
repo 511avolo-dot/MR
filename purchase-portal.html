@@ -4125,12 +4125,12 @@ function pa_offersInline(r){
   var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
   var head='<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
    + '<div class="sec-title"><span class="ico">'+ic('plus',16)+'</span>إضافة عرض مورد <span class="muted" style="font-weight:400;font-size:12px">('+have+(need?(' من '+need+' مطلوبة'):'')+')</span></div>'
-   + '<div class="muted" style="font-size:12px;margin-bottom:11px">أدخِل <b>سعر الوحدة لكل بند</b> — يُحسب الإجمالي تلقائياً — وأرفِق ملف عرض المورد (PDF) إثباتاً، ثم «حفظ». اترك البند فارغاً إن لم يُسعّره المورد.</div>'
+   + '<div class="muted" style="font-size:12px;margin-bottom:11px">أدخِل <b>سعر الوحدة لكل بند</b> — يُحسب الإجمالي تلقائياً — و<b>أرفِق مستند عرض المورد</b> (PDF أو صورة) سنداً للعرض، ثم «حفظ». اترك البند فارغاً إن لم يُسعّره المورد.</div>'
    + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">'
    +   '<div style="flex:2;min-width:160px"><label '+L+'>المورد *</label><input class="input" id="qa-sup" list="qa-sups" placeholder="اسم المورد" autocomplete="off"><datalist id="qa-sups">'+supList+'</datalist></div>'
    +   '<div style="flex:1;min-width:72px"><label '+L+'>توريد (يوم)</label><input class="input num" id="qa-deliv" type="number" min="0" placeholder="0"></div>'
    +   '<div style="flex:1;min-width:72px"><label '+L+'>سداد (يوم)</label><input class="input num" id="qa-pay" type="number" min="0" placeholder="0"></div>'
-   +   '<div><label '+L+'>ملف العرض (PDF)</label><label class="btn btn-ghost btn-sm" for="qa-pdf" style="cursor:pointer;display:block;white-space:nowrap"><span id="qa-pdfn">📎 اختر ملفاً</span></label><input id="qa-pdf" type="file" accept="application/pdf" style="display:none" onchange="pa_qaFile()"></div>'
+   +   '<div><label '+L+'>مستند العرض '+(PA_DOC_REQ?'<span style="color:var(--danger,#a8382f)">*</span>':'')+'</label><label class="btn btn-ghost btn-sm" for="qa-pdf" style="cursor:pointer;display:block;white-space:nowrap"><span id="qa-pdfn">📎 اختر ملفاً</span></label><input id="qa-pdf" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_qaFile()"></div>'
    + '</div>';
   var body;
   if(r.items && r.items.length){
@@ -4154,6 +4154,13 @@ function pa_offersInline(r){
    + '<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-gold btn-sm" id="qa-save" onclick="pa_quickAdd(\''+r.id+'\')">'+ic('check',14)+' حفظ العرض</button></div>'
    + '</div>';
 }
+/* سياسة إلزام مستند العرض — من portal_settings.quote_doc_required (افتراضي مُفعَّل).
+   الإنفاذ الحقيقي في portal_submit_offer؛ هذه لتجربة أوضح لا لتكون الحارس. */
+function PA_DOC_REQ_(){ try{
+  var v=(typeof PSET!=='undefined'&&PSET)?PSET.quote_doc_required:undefined;
+  return v===undefined ? true : Number(v)>=1;
+}catch(_){ return true; } }
+Object.defineProperty(window,'PA_DOC_REQ',{get:PA_DOC_REQ_,configurable:true});
 function pa_qaFile(){ var i=$('qa-pdf'),n=$('qa-pdfn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>16?f.name.slice(0,14)+'…':f.name)):'📎 اختر ملفاً'; } }
 /* حساب حيّ: إجمالي كل بند = كمية × سعر، ومجموعها الإجمالي الكلي. */
 function pa_qaCalc(reqId){ var r=(REQS||[]).find(function(x){ return x.id===reqId; }); if(!r||!r.items) return 0;
@@ -4174,7 +4181,8 @@ async function pa_quickAdd(reqId){
     if(!(total>0)){ toast('الإجمالي مطلوب','err'); return; }
   }
   var fileEl=$('qa-pdf'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
-  if(file){ if(file.type!=='application/pdf'){ toast('الملف يجب أن يكون PDF','err'); return; } if(file.size>10*1024*1024){ toast('حجم الملف يتجاوز 10 ميجابايت','err'); return; } }
+  if(!file && PA_DOC_REQ){ toast('أرفِق مستند عرض المورد (PDF أو صورة) — لا يُسجَّل عرض بلا سند','err'); if(fileEl) fileEl.click(); return; }
+  if(file){ if(!/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type)){ toast('الملف يجب أن يكون PDF أو صورة (JPG/PNG)','err'); return; } if(file.size>10*1024*1024){ toast('حجم الملف يتجاوز 10 ميجابايت','err'); return; } }
   var btn=$('qa-save'); if(btn) btn.disabled=true; var key=null;
   try{ if(file){ key=await pa_uploadQuote(reqId,file); }
     await pa_rpc('portal_submit_offer',{p_request_id:reqId,p_supplier:sup,p_total:total,p_delivery_days:deliv,p_quality:null,p_payment_days:pay,p_note:null,p_quote_pdf_key:key,p_items:items});

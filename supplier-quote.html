@@ -87,6 +87,14 @@ label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;font-w
   padding:12px 16px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -8px 24px -12px rgba(35,31,32,.2);z-index:20}
 .bar .in{max-width:860px;margin:0 auto;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .saved{font-size:12px;color:var(--muted)}
+.up{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px dashed var(--gold-2);background:#FEFCF8;
+  border-radius:11px;padding:12px 14px}
+.up label.pick{display:inline-block;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer;min-height:44px;line-height:24px;margin:0}
+.up label.pick:hover{border-color:var(--gold)}
+.up .fn{font-size:13px;color:var(--muted);unicode-bidi:plaintext;overflow-wrap:anywhere}
+.up .fn.has{color:var(--ok);font-weight:600}
+.req{color:var(--danger);font-weight:700}
 @media (prefers-reduced-motion:reduce){.sk::after{animation:none}}
 @media (max-width:560px){ .total-box .vl{font-size:22px} h1{font-size:18px} }
 </style>
@@ -113,7 +121,7 @@ label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;font-w
 var SB_URL='https://mwbjoysuybgbrvfrprex.supabase.co';
 var SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
 var TOKEN=new URLSearchParams(location.search).get('t')||'';
-var RFQ=null, DRAFT_KEY='';
+var RFQ=null, DRAFT_KEY='', DOC_KEY=null, REQ_DOC=true;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -158,6 +166,9 @@ function render(){
   if(prev&&prev.items) prev.items.forEach(function(x){ prevMap[x.seq]=x.price; });
   var draft=null; try{ draft=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null'); }catch(_){}
 
+  var prevDoc = !!(prev && prev.has_doc);
+  REQ_DOC = (d.doc_required !== false) && !prevDoc;   /* المُرفَق سابقاً يُرحَّل تلقائياً عند التنقيح */
+  DOC_KEY = null;
   var exp=d.expires_at?new Date(d.expires_at):null;
   var days=exp?Math.max(0,Math.ceil((exp-new Date())/86400000)):null;
 
@@ -201,6 +212,15 @@ function render(){
    +'<div style="margin-top:12px"><label for="nt">ملاحظات (اختياري)</label>'
      +'<textarea id="nt" rows="3" oninput="saveDraft()" placeholder="شروط، بدائل مقترحة، ملاحظات على البنود…">'+esc((draft&&draft.nt)||(prev&&prev.note)||'')+'</textarea></div>'
    +'</div>'
+   +'<div class="card"><label style="margin-bottom:8px">إرفاق عرض السعر الرسمي '
+     +(REQ_DOC?'<span class="req">*</span>':'<span class="muted" style="font-weight:400">(اختياري)</span>')+'</label>'
+     +'<div class="up">'
+       +'<label class="pick" for="qf">📎 اختر ملفاً</label>'
+       +'<input id="qf" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pickFile()">'
+       +'<span class="fn'+(prevDoc?' has':'')+'" id="qfn">'+(prevDoc?'✓ مرفق سابقاً — ارفع ملفاً جديداً لاستبداله':'PDF أو صورة، حتى 10 ميجابايت')+'</span>'
+     +'</div>'
+     +'<div class="muted" style="font-size:12px;margin-top:8px">أرفِق عرضكم الرسمي بترويسة المؤسسة (PDF) أو صورة واضحة منه — '
+     +'يُحفظ سنداً للعرض في ملف المعاملة.</div></div>'
    +'<div class="total-box"><div><div class="lb">الإجمالي (قبل الضريبة)</div>'
      +'<div class="vl"><span id="grand">0.00</span> <span style="font-size:14px">ر.س</span></div></div>'
      +'<div class="muted" style="color:var(--gold);font-size:12.5px" id="filled">0 من '+items.length+' بند</div>'
@@ -209,6 +229,27 @@ function render(){
 
   $('bar').style.display='';
   recalc();
+}
+
+var FILE=null;
+function pickFile(){
+  var i=$('qf'), n=$('qfn'); if(!i||!n) return;
+  var f=i.files&&i.files[0];
+  if(!f){ FILE=null; n.textContent='PDF أو صورة، حتى 10 ميجابايت'; n.className='fn'; return; }
+  if(!/^(application\/pdf|image\/jpeg|image\/png)$/.test(f.type)){
+    FILE=null; i.value=''; n.textContent='النوع غير مدعوم — استخدم PDF أو JPG أو PNG'; n.className='fn'; return; }
+  if(f.size>10*1024*1024){
+    FILE=null; i.value=''; n.textContent='حجم الملف يتجاوز 10 ميجابايت'; n.className='fn'; return; }
+  FILE=f; DOC_KEY=null;
+  n.textContent='✓ '+f.name+' ('+Math.max(1,Math.round(f.size/1024))+' ك.ب)'; n.className='fn has';
+}
+/* رفع المستند عبر نقطة الرمز — الخادم يشتقّ مسار التخزين من القاعدة لا من هنا */
+async function uploadDoc(){
+  var r=await fetch('/api/portal-supplier-doc?t='+encodeURIComponent(TOKEN),
+    {method:'POST', headers:{'Content-Type': FILE.type}, body:FILE});
+  var j=null; try{ j=await r.json(); }catch(_){}
+  if(!r.ok||!j||!j.ok) throw new Error((j&&j.error)||'تعذّر رفع الملف');
+  return j.key;
 }
 
 function readPrices(){
@@ -257,14 +298,21 @@ async function submitQuote(){
     var v=el.value.trim(); if(v!=='') total+=(Number(el.getAttribute('data-qty'))||0)*Number(v); });
   if(!confirm('تأكيد إرسال العرض بإجمالي '+money(total)+' ر.س؟')) return;
 
+  if(REQ_DOC && !FILE && !DOC_KEY){
+    err.innerHTML='<div class="err">إرفاق عرض السعر الرسمي إلزامي — اختر ملف PDF أو صورة واضحة من عرضكم.</div>';
+    var u=document.querySelector('.up'); if(u) u.scrollIntoView({block:'center'}); return; }
+
   var b=$('submit'); b.disabled=true; b.textContent='جارٍ الإرسال…';
   try{
+    if(FILE && !DOC_KEY){ b.textContent='جارٍ رفع الملف…'; DOC_KEY=await uploadDoc(); }
+    b.textContent='جارٍ الإرسال…';
     var items=seqs.map(function(s){ return {seq:Number(s), price:prices[s]}; });
     var res=await rpc('portal_supplier_submit',{
       p_token:TOKEN, p_items:items,
       p_delivery_days:Number(($('dd')||{}).value)||null,
       p_payment_days:Number(($('pd')||{}).value)||null,
-      p_note:(($('nt')||{}).value||'').trim()||null});
+      p_note:(($('nt')||{}).value||'').trim()||null,
+      p_quote_pdf_key:DOC_KEY});
     try{ localStorage.removeItem(DRAFT_KEY); }catch(_){}
     $('bar').style.display='none';
     $('view').innerHTML=stateBox('✅','تم استلام عرضكم',

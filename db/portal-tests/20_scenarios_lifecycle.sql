@@ -132,9 +132,9 @@ BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"b3_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','بدء التسعير');
   -- عرضان بأسعار بنود (كل مورد أرخص في بند)
-  v_r := portal_submit_offer(v_id,'مورد-A',0,7,90,30,'عرض A',NULL,'[{"seq":1,"price":90},{"seq":2,"price":210}]');
+  v_r := portal_submit_offer(v_id,'مورد-A',0,7,90,30,'عرض A','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":90},{"seq":2,"price":210}]');
   v_o1 := (v_r->>'id')::bigint;
-  v_r := portal_submit_offer(v_id,'مورد-B',0,7,90,30,'عرض B',NULL,'[{"seq":1,"price":110},{"seq":2,"price":190}]');
+  v_r := portal_submit_offer(v_id,'مورد-B',0,7,90,30,'عرض B','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":110},{"seq":2,"price":190}]');
   v_o2 := (v_r->>'id')::bigint;
   -- ترسية مجزّأة: بند1→A (الأرخص 90) بند2→B (الأرخص 190)
   v_r := portal_award_split(v_id,
@@ -209,7 +209,7 @@ BEGIN
   PERFORM portal_pr_transition(v_id,'approve','ok');
   PERFORM set_config('request.jwt.claims','{"email":"b3_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
-  v_r := portal_submit_offer(v_id,'مورد-C',1600,7,90,30,'عرض C',NULL,'[{"seq":1,"price":100},{"seq":2,"price":100}]');
+  v_r := portal_submit_offer(v_id,'مورد-C',1600,7,90,30,'عرض C','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":100},{"seq":2,"price":100}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_award(v_id, v_o, NULL);          -- ترسية مفردة
   PERFORM set_config('request.jwt.claims','{"email":"b3_aw2@aldeyabi.com","role":"authenticated"}',true);
@@ -265,7 +265,7 @@ BEGIN
   PERFORM portal_pr_transition(v_id,'approve','ok');
   PERFORM set_config('request.jwt.claims','{"email":"b3_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
-  v_r := portal_submit_offer(v_id,'مورد-D',100000,10,90,30,'عرض D',NULL,'[{"seq":1,"price":1000}]');
+  v_r := portal_submit_offer(v_id,'مورد-D',100000,10,90,30,'عرض D','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":1000}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_award(v_id, v_o, NULL);
   -- ضبط اللجنة (يتطلّب أدمن) — نُنفّذه بهوية أدمن مؤقّتة
@@ -317,7 +317,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"b3_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
   -- عرض واحد ثم المشتريات ترجع للمقدّم
-  v_r := portal_submit_offer(v_id,'مورد-E',1500,7,90,30,'عرض E',NULL,'[{"seq":1,"price":500}]');
+  v_r := portal_submit_offer(v_id,'مورد-E',1500,7,90,30,'عرض E','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":500}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_bounce_to_requester(v_id,'المواصفات ناقصة — أعد التحديد');
   v_super := (v_r->>'superseded')::int;
