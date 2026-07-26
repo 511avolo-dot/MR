@@ -2653,13 +2653,13 @@ function pa_status(s){
   return 'approved'; /* pricing|award_review|awarded|payment_pending|receipt_pending|closed → معتمد + phase */ }
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
-var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[], PA_BENEFS=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) + المستفيدون (053) */
+var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[], PA_BENEFS=[], PA_RECUR=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) + المستفيدون (053) + المتكرّر (055) */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR,recR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2685,11 +2685,15 @@ async function loadAll(){
     SB.from('portal_supplier_iban_changes').select('*').order('id'),  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
     SB.from('portal_currencies').select('*').order('code'),           /* العملات (هجرة 035) — يُتحمَّل غيابه */
     SB.from('portal_contracts').select('*').order('id'),              /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
-    SB.from('portal_beneficiaries').select('*').order('name')         /* سجلّ المستفيدين (هجرة 053) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_beneficiaries').select('*').order('name'),        /* سجلّ المستفيدين (هجرة 053) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_recurring_expenses').select('*').order('next_run') /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
   ]);
   /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
   window.__paBenOK=!!(benR && !benR.error);
   PA_BENEFS=(benR && !benR.error)?(benR.data||[]).map(x=>({id:x.id, name:x.name||'', btype:x.btype||'company', iban:x.iban||'', accountName:x.account_name||'', taxNo:x.tax_no||'', contact:x.contact||'', active:x.active!==false})):[];
+  /* الصرف المتكرّر (هجرة 055). window.__paRecOK للتفعيل. */
+  window.__paRecOK=!!(recR && !recR.error);
+  PA_RECUR=(recR && !recR.error)?(recR.data||[]).map(x=>({id:x.id, title:x.title||'', dept:x.department_id||'', beneficiary:x.beneficiary||'', beneficiaryId:x.beneficiary_id||null, amount:Number(x.amount)||0, kind:x.kind||'bank', details:x.details||{}, frequency:x.frequency||'monthly', nextRun:x.next_run||null, active:x.active!==false, runsCount:Number(x.runs_count)||0, lastRunAt:x.last_run_at||null})):[];
   /* العقود الإطارية (هجرة 037). window.__paCtrOK للتفعيل. */
   window.__paCtrOK=!!(ctrR && !ctrR.error);
   CONTRACTS=(ctrR && !ctrR.error)?(ctrR.data||[]).map(x=>({id:x.id, no:x.contract_no||'', title:x.title||'', supplier:x.supplier_name||'', ceiling:Number(x.ceiling)||0, currency:x.currency||'SAR', status:x.status||'active', start:x.start_date||null, end:x.end_date||null})):[];
@@ -5411,8 +5415,71 @@ function pa_expenseHome(){
         }).join('')
       + '</tbody></table></div></div>'
     : '<div class="card muted" style="text-align:center;padding:26px">لا توجد طلبات صرف مرئية لك بعد.</div>';
-  return (canCreate?pa_expenseForm():'') + list;
+  return (canCreate?pa_expenseForm():'') + pa_recurringPanel() + list;
 }
+/* ── الصرف المتكرّر/المجدوَل (055) — لوحة إدارة القوالب (المُحوِّل فقط) ── */
+var REC_META={ title:'', deptId:'', amount:'', kind:'bank', benId:'', custodyTo:'', frequency:'monthly', nextRun:'' };
+function pa_recurCanManage(){ var a=accessOf(ME)||{}; return isAdmin() || !!(a.see&&a.see.finance) || !!(a.can&&a.can.manageRfq); }
+function pa_recurSet(k,v){ REC_META[k]=v; if(k==='kind') pa_expenseRender(); }
+function pa_recurringPanel(){
+  if(!window.__paRecOK || !pa_recurCanManage()) return '';
+  var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
+  var m=REC_META, freqTxt={weekly:'أسبوعي',monthly:'شهري',quarterly:'ربع سنوي',yearly:'سنوي'};
+  var rows=(PA_RECUR||[]).map(function(t){
+    return '<tr><td>'+esc(t.title)+'</td><td>'+esc(t.beneficiary||'—')+'</td><td class="mono">'+money(t.amount)+'</td>'
+      +'<td>'+({bank:'تحويل',custody:'عهدة'})[t.kind]+'</td><td>'+(freqTxt[t.frequency]||t.frequency)+'</td>'
+      +'<td dir="ltr" class="mono">'+esc(t.nextRun||'—')+'</td>'
+      +'<td><span class="badge '+(t.active?'ok':'')+'" style="font-size:10px">'+(t.active?'نشط':'موقوف')+'</span></td>'
+      +'<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="pa_recurToggle('+t.id+','+(t.active?'false':'true')+')">'+(t.active?'إيقاف':'تفعيل')+'</button>'
+      +' <button class="btn btn-ghost btn-sm" onclick="pa_recurDelete('+t.id+')">'+ic('trash',12)+'</button></td></tr>';
+  }).join('');
+  var depts=Object.keys(DEPTS||{}).map(function(k){return '<option value="'+esc(k)+'"'+(m.deptId===k?' selected':'')+'>'+esc((DEPTS[k]||{}).n||k)+'</option>';}).join('');
+  var actBen=(PA_BENEFS||[]).filter(function(b){return b.active;});
+  var benOpts=actBen.map(function(b){return '<option value="'+esc(b.id)+'"'+(String(m.benId)===String(b.id)?' selected':'')+'>'+esc(b.name)+(b.iban?(' — '+esc(b.iban)):'')+'</option>';}).join('');
+  var users=Object.keys(USERS||{}).filter(function(u){return (USERS[u]||{}).active!==false;}).map(function(u){return '<option value="'+esc(u)+'"'+(m.custodyTo===u?' selected':'')+'>'+esc(uName(u))+'</option>';}).join('');
+  var kindField = m.kind==='bank'
+    ? '<div style="flex:2;min-width:180px"><label '+L+'>المستفيد (من السجلّ) *</label><select class="select" onchange="REC_META.benId=this.value"><option value="">— اختر —</option>'+benOpts+'</select></div>'
+    : '<div style="flex:2;min-width:180px"><label '+L+'>مسؤول العهدة *</label><select class="select" onchange="REC_META.custodyTo=this.value"><option value="">— اختر —</option>'+users+'</select></div>'
+      +'<div style="flex:2;min-width:150px"><label '+L+'>اسم المستفيد *</label><input class="input" value="'+esc(m.beneficiary||'')+'" oninput="REC_META.beneficiary=this.value" placeholder="جهة العهدة"></div>';
+  var form = '<div style="border-top:1px dashed var(--line,#e2e6ee);margin-top:14px;padding-top:12px">'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px;font-weight:700">قالب جديد</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">'
+      +'<div style="flex:2;min-width:160px"><label '+L+'>العنوان *</label><input class="input" value="'+esc(m.title)+'" oninput="REC_META.title=this.value" placeholder="إيجار المكتب / رواتب"></div>'
+      +'<div style="flex:1;min-width:110px"><label '+L+'>المبلغ *</label><input class="input mono" type="number" min="1" value="'+esc(m.amount)+'" oninput="REC_META.amount=this.value"></div>'
+      +'<div style="flex:1;min-width:110px"><label '+L+'>القسم *</label><select class="select" onchange="REC_META.deptId=this.value"><option value="">— اختر —</option>'+depts+'</select></div>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px">'
+      +'<div style="flex:1;min-width:120px"><label '+L+'>الطريقة *</label><select class="select" onchange="pa_recurSet(\'kind\',this.value)"><option value="bank"'+(m.kind==='bank'?' selected':'')+'>تحويل بنكي</option><option value="custody"'+(m.kind==='custody'?' selected':'')+'>عهدة نقدية</option></select></div>'
+      +kindField
+      +'<div style="flex:1;min-width:110px"><label '+L+'>التكرار *</label><select class="select" onchange="REC_META.frequency=this.value"><option value="monthly"'+(m.frequency==='monthly'?' selected':'')+'>شهري</option><option value="weekly"'+(m.frequency==='weekly'?' selected':'')+'>أسبوعي</option><option value="quarterly"'+(m.frequency==='quarterly'?' selected':'')+'>ربع سنوي</option><option value="yearly"'+(m.frequency==='yearly'?' selected':'')+'>سنوي</option></select></div>'
+      +'<div style="flex:1;min-width:130px"><label '+L+'>أول تشغيل *</label><input class="input" type="date" value="'+esc(m.nextRun)+'" oninput="REC_META.nextRun=this.value"></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:flex-end"><button class="btn btn-gold btn-sm" onclick="pa_recurSave()">'+ic('plus',13)+' حفظ القالب</button></div></div>';
+  return '<div class="card" style="margin-bottom:16px">'
+    +'<div class="sec-title"><span class="ico">'+ic('clock',16)+'</span>الصرف المتكرّر/المجدوَل</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:10px">قوالب صرف دوري (رواتب/إيجارات) يُنشئ المولّد طلباً منها في كل استحقاق ويمرّره بسلسلة الموافقات المالية.</div>'
+    +(rows?('<div class="tbl-wrap"><table class="tbl"><thead><tr><th>العنوان</th><th>المستفيد</th><th>المبلغ</th><th>الطريقة</th><th>التكرار</th><th>التالي</th><th>الحالة</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div class="muted" style="font-size:12px;padding:6px 0">لا قوالب بعد.</div>')
+    +form+'</div>';
+}
+async function pa_recurSave(){
+  var m=REC_META;
+  if(!m.title.trim()){ toast('العنوان مطلوب','err'); return; }
+  var amt=Number(m.amount); if(!(amt>0)){ toast('المبلغ غير صالح','err'); return; }
+  if(!m.deptId){ toast('اختر القسم','err'); return; }
+  if(!m.nextRun){ toast('حدّد موعد أول تشغيل','err'); return; }
+  var det={}, benId=null;
+  if(m.kind==='bank'){ if(!m.benId){ toast('اختر مستفيداً من السجلّ للتحويل البنكي','err'); return; } benId=Number(m.benId); }
+  else { if(!m.custodyTo){ toast('حدّد مسؤول العهدة','err'); return; } if(!(m.beneficiary||'').trim()){ toast('اسم المستفيد مطلوب','err'); return; }
+    det={ beneficiary:(m.beneficiary||'').trim(), custody_to:m.custodyTo }; }
+  try{
+    await pa_rpc('portal_recurring_save',{ p_id:null, p_title:m.title.trim(), p_department_id:m.deptId, p_amount:amt,
+      p_kind:m.kind, p_details:det, p_frequency:m.frequency, p_next_run:m.nextRun, p_beneficiary_id:benId });
+    REC_META={ title:'', deptId:'', amount:'', kind:'bank', benId:'', custodyTo:'', beneficiary:'', frequency:'monthly', nextRun:'' };
+    toast('حُفِظ القالب','ok'); await loadAll(); pa_expenseRender();
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الحفظ'),'err'); }
+}
+async function pa_recurToggle(id,active){ try{ await pa_rpc('portal_recurring_set_active',{p_id:id,p_active:active}); await loadAll(); pa_expenseRender(); }catch(e){ toast(pa_err?pa_err(e):String(e),'err'); } }
+async function pa_recurDelete(id){ if(!window.confirm('حذف هذا القالب المتكرّر؟')) return; try{ await pa_rpc('portal_recurring_delete',{p_id:id}); toast('حُذِف القالب','ok'); await loadAll(); pa_expenseRender(); }catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); } }
 function pa_openExpense(id){ CURRENT=id; VIEW='detail'; render(); }
 function pa_expenseForm(){
   var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';

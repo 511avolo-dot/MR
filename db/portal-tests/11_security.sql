@@ -51,9 +51,9 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname LIKE 'portal\_%'
     AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE');
-  IF v_bad <> 'portal_audit_write, portal_award_total, portal_budget_committed, portal_build_chain, portal_contract_consumed, portal_create_token, portal_invoiced_total, portal_open_direct_payment, portal_outbox_claim, portal_outbox_mark, portal_outbox_purge, portal_pr_transition_email, portal_returns_total, portal_run_sla, portal_supplier_token_request'
+  IF v_bad <> 'portal_audit_write, portal_award_total, portal_budget_committed, portal_build_chain, portal_contract_consumed, portal_create_token, portal_invoiced_total, portal_open_direct_payment, portal_outbox_claim, portal_outbox_mark, portal_outbox_purge, portal_pr_transition_email, portal_recurring_run, portal_returns_total, portal_run_sla, portal_supplier_token_request'
     THEN RAISE EXCEPTION 'S7 fail: المجموعة الخادمية غير متوقّعة (%): %', v_cnt, v_bad; END IF;
-  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 15 دالة مقصودة، الباقي للمستخدم';
+  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 16 دالة مقصودة، الباقي للمستخدم';
 
   -- S8: لا دالة كتابة في البوابة قابلة للتنفيذ من anon.
   --     خلفية: Supabase تمنح anon صلاحية صريحة على كل دالة جديدة (pg_default_acl)،
