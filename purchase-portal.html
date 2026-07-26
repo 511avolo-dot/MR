@@ -5554,7 +5554,7 @@ async function submitExpense(){
       p_beneficiary_id:benId });
     EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'' };
     toast('أُنشئ طلب الصرف','ok');
-    try{ pa_notify('request',res.id,'submitted'); }catch(_e){}
+    try{ pa_notify('request',res.id,'submitted'); pa_notify('disbursement',res.id,'pending'); }catch(_e){}
     await loadAll(); CURRENT=res.id; VIEW='detail'; render();
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر إنشاء الطلب'),'err'); }
 }
@@ -5621,8 +5621,12 @@ function pa_canApproveDisb(s){ var a=accessOf(ME)||{}; if(isAdmin()) return true
     || (rk==='can_approve_finance' && !!(a.see&&a.see.finance) && !!perms.can_approve_finance)
     || (rk==='can_manage_users' && isAdmin()); }
 async function pa_disbApprove(id){
-  try{ await pa_rpc('portal_pr_transition',{p_request_id:id,p_action:'approve',p_comment:null,p_cycle:'disbursement'}); }catch(e){ return; }
-  toast('اعتُمدت مرحلة الصرف','ok'); try{pa_notify('payment',id,'pending');}catch(_e){} await pa_after(id);
+  var res;
+  try{ res=await pa_rpc('portal_pr_transition',{p_request_id:id,p_action:'approve',p_comment:null,p_cycle:'disbursement'}); }catch(e){ return; }
+  toast('اعتُمدت مرحلة الصرف','ok');
+  /* اكتملت السلسلة ⇒ أخطر منفّذي الصرف (payment)؛ مرحلة وسطى ⇒ اعتماد بريديّ للمرحلة التالية (disbursement, 056). */
+  try{ if(res&&res.status==='payment_pending') pa_notify('payment',id,'pending'); else pa_notify('disbursement',id,'pending'); }catch(_e){}
+  await pa_after(id);
 }
 function pa_disbReject(id){
   $('modal').innerHTML='<div class="modal-head"><div class="mi danger">'+ic('x',22)+'</div><div><h3>رفض الصرف</h3><div class="ms">سيُرفض طلب الصرف</div></div></div>'

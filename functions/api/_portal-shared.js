@@ -173,10 +173,11 @@ export async function userEmail(env, base, username) {
 }
 
 // ── إنشاء رمز اعتماد لمرة واحدة عبر RPC القاعدة (portal_create_token) ──
-export async function createToken(env, base, requestId, kind, seq, approver) {
+//   p_cycle واعٍ بالدورة (056): 'need' افتراضاً، 'disbursement' لسلسلة الصرف.
+export async function createToken(env, base, requestId, kind, seq, approver, cycle) {
   const r = await fetch(`${base}/rest/v1/rpc/portal_create_token`, {
     method: 'POST', headers: svcHeaders(env),
-    body: JSON.stringify({ p_request_id: requestId, p_kind: kind, p_seq: seq, p_approver: approver }),
+    body: JSON.stringify({ p_request_id: requestId, p_kind: kind, p_seq: seq, p_approver: approver, p_cycle: cycle || 'need' }),
   });
   if (!r.ok) return null;
   const t = await r.json().catch(() => null);
@@ -349,6 +350,39 @@ export async function notifyPending(env, base, req, deptLabel, approvals, origin
     let html;
     if (origin) {
       const token = await createToken(env, base, req.id, 'approval', stage.seq, uname);
+      if (!token) { failed++; continue; }
+      const actionBase = `${origin}/api/portal-action?token=${encodeURIComponent(token)}`;
+      html = buildActionEmail(req, deptLabel, origin, actionBase, stage.stage_label);
+    } else {
+      html = buildActionEmail(req, deptLabel, '', '', stage.stage_label);
+    }
+    const res = await sendResend(env, [email], subjectFor('pending', req), html);
+    if (res && res.ok) sent += res.sent;
+    else if (res && res.error) { failed++; lastDetail = res.detail || ''; }
+  }
+  if (sent === 0 && failed > 0) return { error: true, detail: lastDetail || 'all_sends_failed' };
+  return { ok: true, sent };
+}
+
+/**
+ * إشعار مرحلة الصرف الحالية (دورة disbursement, 056): يُرسل بريد قرار بأزرار
+ * (اعتماد بضغطة) لكل معتمِد مُحلّ للمرحلة المعلّقة، برمز واعٍ بالدورة. يعيد استخدام
+ * currentPendingStage — لطلب صرف مباشر لا توجد مراحل need، ولطلب شراء دخل الصرف
+ * تكون مراحل need كلها approved، فالمرحلة المعلّقة هي دائماً مرحلة الصرف الصحيحة.
+ */
+export async function notifyDisbPending(env, base, req, deptLabel, approvals, origin) {
+  const stage = currentPendingStage(approvals);
+  if (!stage) return { skipped: true, reason: 'no_pending_stage' };
+  let approvers = await resolveStageApprovers(env, base, req, stage);
+  approvers = [...new Set(approvers.filter((u) => u && u !== req.requester))];
+  if (!approvers.length) return { skipped: true, reason: 'no_approver' };
+  let sent = 0, failed = 0, lastDetail = '';
+  for (const uname of approvers) {
+    const email = await userEmail(env, base, uname);
+    if (!/@aldeyabi\.com$/i.test(email)) continue;
+    let html;
+    if (origin) {
+      const token = await createToken(env, base, req.id, 'approval', stage.seq, uname, 'disbursement');
       if (!token) { failed++; continue; }
       const actionBase = `${origin}/api/portal-action?token=${encodeURIComponent(token)}`;
       html = buildActionEmail(req, deptLabel, origin, actionBase, stage.stage_label);
