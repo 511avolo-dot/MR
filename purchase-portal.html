@@ -5665,6 +5665,42 @@ try{ if(typeof myTasks==='function'){ var _pa_refMyTasks3=myTasks;
     return t; }; }
 }catch(_e){}
 
+/* ── الاعتماد الجماعي (054): زرّ «اعتماد الكل» في ورقة المهام (تغليف openTasksSheet المرجعي) ── */
+try{ if(typeof openTasksSheet==='function'){ var _pa_refTasksSheet=openTasksSheet;
+  openTasksSheet=function(){
+    _pa_refTasksSheet.apply(this,arguments);
+    try{
+      var tasks=(typeof myTasks==='function')?myTasks():[];
+      var approvable=tasks.filter(function(t){return t && (t.label==='بانتظار اعتمادك'||t.label==='اعتماد صرف بانتظارك');});
+      var body=$('modal')&&$('modal').querySelector('.modal-body');
+      if(approvable.length>=2 && body){
+        var btn=document.createElement('button');
+        btn.className='btn btn-gold'; btn.style.cssText='width:100%;margin-bottom:10px';
+        btn.innerHTML=ic('check',15)+' اعتماد الكل ('+approvable.length+')';
+        btn.onclick=function(){ pa_bulkApproveTasks(); };
+        body.insertBefore(btn, body.firstChild);
+      }
+    }catch(_e){}
+  };
+}}catch(_e){}
+async function pa_bulkApproveTasks(){
+  var tasks=(typeof myTasks==='function')?myTasks():[];
+  var need=[], disb=[];
+  tasks.forEach(function(t){ if(!t||!t.r) return;
+    if(t.label==='بانتظار اعتمادك') need.push(t.r.id);
+    else if(t.label==='اعتماد صرف بانتظارك') disb.push(t.r.id); });
+  if(!need.length && !disb.length){ toast('لا طلبات للاعتماد الجماعي','err'); return; }
+  if(!window.confirm('اعتماد '+(need.length+disb.length)+' طلباً دفعةً واحدة؟ (فصل المهام محفوظ — غير المؤهَّل يُتخطّى)')) return;
+  try{
+    var ok=0, fail=0;
+    if(need.length){ var r1=await pa_rpc('portal_bulk_transition',{p_request_ids:need,p_action:'approve',p_comment:null,p_cycle:'need'}); ok+=(r1&&r1.approved)||0; fail+=(r1&&r1.failed)||0; }
+    if(disb.length){ var r2=await pa_rpc('portal_bulk_transition',{p_request_ids:disb,p_action:'approve',p_comment:null,p_cycle:'disbursement'}); ok+=(r2&&r2.approved)||0; fail+=(r2&&r2.failed)||0; }
+    try{ closeModal(); }catch(_e){}
+    await loadAll(); render();
+    toast('اعتماد جماعي: '+ok+' نجح'+(fail?(' · '+fail+' تعذّر (فصل مهام/صلاحية)'):''), fail?'':'ok');
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الاعتماد الجماعي'),'err'); }
+}
+
 /* الإقلاع الفعلي */
 boot();
 </script>
