@@ -18,9 +18,9 @@ BEGIN
   RAISE NOTICE 'PASS S2 anon لا ينفّذ الصادر';
 
   -- S3: دالة كتابة رئيسية — anon فقدت، authenticated احتفظت
-  IF has_function_privilege('anon','portal_payment_transition(bigint,text,text,text,jsonb)','EXECUTE')
+  IF has_function_privilege('anon','portal_payment_transition(bigint,text,text,text,jsonb,text)','EXECUTE')
     THEN RAISE EXCEPTION 'S3 fail: anon ينفّذ portal_payment_transition'; END IF;
-  IF NOT has_function_privilege('authenticated','portal_payment_transition(bigint,text,text,text,jsonb)','EXECUTE')
+  IF NOT has_function_privilege('authenticated','portal_payment_transition(bigint,text,text,text,jsonb,text)','EXECUTE')
     THEN RAISE EXCEPTION 'S3 fail: authenticated فقد portal_payment_transition'; END IF;
   RAISE NOTICE 'PASS S3 anon=منع / authenticated=سماح';
 

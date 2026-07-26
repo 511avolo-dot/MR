@@ -2632,6 +2632,7 @@ function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pe
   else { m.kindLabel='آجل'; m.credit={dueDate:d.due_date||'',terms:d.terms||''}; }
   if(pay.status==='rejected'){ m.rejectReason=pay.comment||''; m.status='rejected'; }
   if(st==='returned'){ m.returnReason=pay.comment||''; }
+  if(pay.status==='voided'){ m.voidReason=pay.void_reason||''; m.voidedBy=pay.voided_by||null; }
   m.proofKey=(d.proof_key||null);   /* محضر/سند الصرف في R2 (docs/pay/…) */
   return m; }
 
@@ -5558,11 +5559,20 @@ async function pa_disbReturnDo(id){
 function pa_expenseExecPanel(r){
   var pay=r.expensePay; if(!pay) return '';
   var a=accessOf(ME)||{}; var canDisb=isAdmin()||!!(a.can&&a.can.disburse);
+  if(pay.status==='voided'){
+    return '<div class="card"><div class="sec-title"><span class="ico">'+ic('undo',16)+'</span>صرف مُبطَل</div>'
+      +'<div class="muted" style="font-size:12.5px">أُبطِل الصرف (تعويض مسجَّل)'
+      +(pay.voidReason?(' — '+esc(pay.voidReason)):'')+'.</div></div>';
+  }
   if(pay.status==='disbursed' || r.phase==='closed'){
+    var aFin=isAdmin()||!!(a.see&&a.see.finance);
+    var canVoid = aFin && pay.status==='disbursed' && pay.disbursedBy!==ME && pay.reqBy!==ME;
     return '<div class="card"><div class="sec-title"><span class="ico">'+ic('check',16)+'</span>تمّ الصرف</div>'
       +'<div class="muted" style="font-size:12.5px">نُفِّذ الصرف بمبلغ <b>'+money(pay.amount)+' ر.س</b>'
       +(pay.disbursedBy?(' بواسطة '+esc(uName(pay.disbursedBy))):'')+'.'
-      +(pay.proofKey?(' <button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pay.proofKey)+'\')">'+ic('eye',13)+' عرض السند</button>'):'')+'</div></div>';
+      +(pay.proofKey?(' <button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pay.proofKey)+'\')">'+ic('eye',13)+' عرض السند</button>'):'')
+      +(canVoid?(' <button class="btn btn-danger btn-sm" onclick="pa_voidDisb(\''+r.id+'\','+pay._id+')">'+ic('undo',13)+' إبطال</button>'):'')
+      +'</div></div>';
   }
   if(r.phase!=='pay' || !canDisb){
     return '<div class="card muted" style="font-size:12.5px">'+ic('info',13)+' التنفيذ متاح لمسؤول البنك بعد اكتمال سلسلة الاعتماد.</div>';
@@ -5587,9 +5597,23 @@ async function pa_execDisb(reqId,payId){
   var btn=$('disb-exec'); if(btn) btn.disabled=true; var det={};
   try{
     if(file){ var key=await pa_docUpload('disb',reqId,file); det.proof_key=key; }
-    await pa_rpc('portal_payment_transition',{p_payment_id:payId,p_action:'disburse',p_comment:null,p_return_to:null,p_details:det});
+    /* مفتاح idempotency حتميّ (exactly-once): أي إعادة إرسال لنفس الدفعة تُرجِع النتيجة بلا تنفيذ مزدوج */
+    await pa_rpc('portal_payment_transition',{p_payment_id:payId,p_action:'disburse',p_comment:null,p_return_to:null,p_details:det,p_idem_key:'pay:'+payId+':disburse'});
     toast('نُفِّذ الصرف','ok'); try{pa_notify('payment',reqId,'disbursed');}catch(_e){} await pa_after(reqId);
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر التنفيذ'),'err'); }
+}
+/* ── إبطال صرف منفَّذ (تعويض saga) — صلاحية مالية، فصل مهام ── */
+function pa_voidDisb(reqId,payId){
+  $('modal').innerHTML='<div class="modal-head"><div class="mi danger">'+ic('undo',22)+'</div><div><h3>إبطال الصرف</h3>'
+    +'<div class="ms">تعويض محكوم — يُسجَّل قيد عكسي في التدقيق. لا يُبطَل صرفٌ استُلمت بضاعته.</div></div></div>'
+    +'<div class="modal-body"><label>سبب الإبطال <span style="color:var(--danger)">*</span></label><textarea id="void-rc" rows="3" placeholder="سبب إبطال الصرف (خطأ/عكس بنكي…)"></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-danger" onclick="pa_voidDisbDo(\''+reqId+'\','+payId+')">'+ic('undo',15)+' تأكيد الإبطال</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_voidDisbDo(reqId,payId){
+  var c=(($('void-rc')||{}).value||'').trim(); if(!c){ toast('السبب مطلوب','err'); return; }
+  try{ await pa_rpc('portal_payment_void',{p_payment_id:payId,p_reason:c}); }catch(e){ return; }
+  closeModal(); toast('أُبطِل الصرف — قُيِّد عكسياً','ok'); await pa_after(reqId);
 }
 
 /* ── مركز المهام: اعتماد صرف / تنفيذ صرف بانتظار المستخدم ── */
