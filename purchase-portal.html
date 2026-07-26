@@ -2653,13 +2653,13 @@ function pa_status(s){
   return 'approved'; /* pricing|award_review|awarded|payment_pending|receipt_pending|closed → معتمد + phase */ }
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
-var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) */
+var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[], PA_BENEFS=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) + المستفيدون (053) */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2684,8 +2684,12 @@ async function loadAll(){
     SB.from('portal_budgets').select('*'),                        /* الميزانيات (هجرة 031) — يُتحمَّل غيابه */
     SB.from('portal_supplier_iban_changes').select('*').order('id'),  /* طلبات تغيير الآيبان (هجرة 032) — يُتحمَّل غيابه */
     SB.from('portal_currencies').select('*').order('code'),           /* العملات (هجرة 035) — يُتحمَّل غيابه */
-    SB.from('portal_contracts').select('*').order('id')               /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
+    SB.from('portal_contracts').select('*').order('id'),              /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
+    SB.from('portal_beneficiaries').select('*').order('name')         /* سجلّ المستفيدين (هجرة 053) — يُتحمَّل غيابه قبل التطبيق */
   ]);
+  /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
+  window.__paBenOK=!!(benR && !benR.error);
+  PA_BENEFS=(benR && !benR.error)?(benR.data||[]).map(x=>({id:x.id, name:x.name||'', btype:x.btype||'company', iban:x.iban||'', accountName:x.account_name||'', taxNo:x.tax_no||'', contact:x.contact||'', active:x.active!==false})):[];
   /* العقود الإطارية (هجرة 037). window.__paCtrOK للتفعيل. */
   window.__paCtrOK=!!(ctrR && !ctrR.error);
   CONTRACTS=(ctrR && !ctrR.error)?(ctrR.data||[]).map(x=>({id:x.id, no:x.contract_no||'', title:x.title||'', supplier:x.supplier_name||'', ceiling:Number(x.ceiling)||0, currency:x.currency||'SAR', status:x.status||'active', start:x.start_date||null, end:x.end_date||null})):[];
@@ -5380,8 +5384,16 @@ try{
 
 /* ── شاشة التبويب: نموذج إنشاء (لمن يملك create) + قائمة طلبات الصرف المرئية ── */
 var EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'',
-               iban:'', accName:'', custodyTo:'', dueDate:'' };
+               iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'' };
 function pa_expSet(k,v){ EXP_META[k]=v; if(k==='method') pa_expenseRender(); }
+/* اختيار مستفيد من السجلّ (053): يملأ الاسم، وللبنكي يملأ ويقفل الآيبان/الحساب المُعتمَد. */
+function pa_expPickBenef(id){
+  EXP_META.beneficiaryId=id||'';
+  if(!id){ pa_expenseRender(); return; }
+  var b=(PA_BENEFS||[]).find(function(x){return String(x.id)===String(id);});
+  if(b){ EXP_META.beneficiary=b.name||''; if(EXP_META.method==='bank'){ EXP_META.iban=b.iban||''; EXP_META.accName=b.accountName||b.name||''; } }
+  pa_expenseRender();
+}
 function pa_expenseRender(){ var v=$('view'); if(v && VIEW==='expense') v.innerHTML=pa_expenseHome(); }
 function pa_expenseHome(){
   var a=accessOf(ME)||{}, c=a.can||{};
@@ -5408,10 +5420,23 @@ function pa_expenseForm(){
   var depts=Object.keys(DEPTS||{}).map(function(k){return '<option value="'+esc(k)+'"'+(m.deptId===k?' selected':'')+'>'+esc((DEPTS[k]||{}).n||k)+'</option>';}).join('');
   var users=Object.keys(USERS||{}).filter(function(u){return (USERS[u]||{}).active!==false;})
     .map(function(u){return '<option value="'+esc(u)+'"'+(m.custodyTo===u?' selected':'')+'>'+esc(uName(u))+'</option>';}).join('');
+  var picked=!!m.beneficiaryId;
+  var lockAttr=picked?' readonly style="background:var(--panel2,#f2f4f8)"':'';
+  /* مُنتقي سجلّ المستفيدين (053) — يظهر فقط بعد تطبيق الهجرة ووجود مستفيدين نشطين. */
+  var benefPicker='';
+  if(window.__paBenOK){
+    var actBen=(PA_BENEFS||[]).filter(function(b){return b.active;});
+    if(actBen.length){
+      benefPicker='<div style="margin-bottom:10px"><label '+L+'>مستفيد من السجلّ (اختياري — يفرض البيانات البنكية المُعتمَدة)</label>'
+        +'<select class="select" id="ex-benefid" onchange="pa_expPickBenef(this.value)"><option value="">— إدخال يدوي —</option>'
+        +actBen.map(function(b){return '<option value="'+esc(b.id)+'"'+(String(m.beneficiaryId)===String(b.id)?' selected':'')+'>'+esc(b.name)+(b.iban?(' — '+esc(b.iban)):'')+'</option>';}).join('')
+        +'</select>'+(picked?'<div class="muted" style="font-size:11px;margin-top:3px">مربوط بالسجلّ — الآيبان/الاسم مُعتمَدان ومقفلان. لتغيير الآيبان استخدم مسار «طلب تغيير الآيبان».</div>':'')+'</div>';
+    }
+  }
   var methodFields='';
   if(m.method==='bank'){
-    methodFields='<div style="flex:2;min-width:200px"><label '+L+'>آيبان المستفيد (SA..) *</label><input class="input mono" id="ex-iban" dir="ltr" maxlength="24" placeholder="SA............" value="'+esc(m.iban)+'" oninput="EXP_META.iban=this.value"></div>'
-      +'<div style="flex:2;min-width:160px"><label '+L+'>اسم الحساب *</label><input class="input" id="ex-accname" placeholder="اسم صاحب الحساب" value="'+esc(m.accName)+'" oninput="EXP_META.accName=this.value"></div>';
+    methodFields='<div style="flex:2;min-width:200px"><label '+L+'>آيبان المستفيد (SA..) *</label><input class="input mono" id="ex-iban" dir="ltr" maxlength="24" placeholder="SA............" value="'+esc(m.iban)+'" oninput="EXP_META.iban=this.value"'+lockAttr+'></div>'
+      +'<div style="flex:2;min-width:160px"><label '+L+'>اسم الحساب *</label><input class="input" id="ex-accname" placeholder="اسم صاحب الحساب" value="'+esc(m.accName)+'" oninput="EXP_META.accName=this.value"'+lockAttr+'></div>';
   } else if(m.method==='custody'){
     methodFields='<div style="flex:2;min-width:200px"><label '+L+'>مسؤول العهدة *</label><select class="select" id="ex-custody" onchange="EXP_META.custodyTo=this.value"><option value="">— اختر —</option>'+users+'</select></div>';
   } else {
@@ -5421,8 +5446,9 @@ function pa_expenseForm(){
     +'<div class="sec-title"><span class="ico">'+ic('plus',16)+'</span>طلب صرف مباشر جديد</div>'
     +'<div class="muted" style="font-size:12px;margin-bottom:12px">طلب صرف يُنشأ ويمرّ بسلسلة الموافقات المالية '
     +'<b>خارج دورة المشتريات تماماً</b> (بلا تسعير أو تعميد).</div>'
+    +benefPicker
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">'
-      +'<div style="flex:2;min-width:200px"><label '+L+'>الجهة/المستفيد *</label><input class="input" id="ex-benef" placeholder="اسم الجهة أو المستفيد" value="'+esc(m.beneficiary)+'" oninput="EXP_META.beneficiary=this.value"></div>'
+      +'<div style="flex:2;min-width:200px"><label '+L+'>الجهة/المستفيد *</label><input class="input" id="ex-benef" placeholder="اسم الجهة أو المستفيد" value="'+esc(m.beneficiary)+'" oninput="EXP_META.beneficiary=this.value"'+(picked?' readonly style="background:var(--panel2,#f2f4f8)"':'')+'></div>'
       +'<div style="flex:1;min-width:120px"><label '+L+'>المبلغ (ر.س) *</label><input class="input mono" id="ex-amt" type="number" min="1" step="any" placeholder="0" value="'+esc(m.amount)+'" oninput="EXP_META.amount=this.value"></div>'
       +'<div style="flex:1;min-width:130px"><label '+L+'>القسم *</label><select class="select" id="ex-dept" onchange="EXP_META.deptId=this.value"><option value="">— اختر —</option>'+depts+'</select></div>'
     +'</div>'
@@ -5445,16 +5471,21 @@ async function submitExpense(){
   var amt=Number(m.amount); if(!(amt>0)){ toast('المبلغ غير صالح','err'); return; }
   if(!m.deptId){ toast('اختر القسم','err'); return; }
   if(!m.purpose.trim()){ toast('الغرض مطلوب','err'); return; }
+  var benId=m.beneficiaryId?Number(m.beneficiaryId):null;
   var det={};
-  if(m.method==='bank'){ if(!/^SA\d{22}$/.test((m.iban||'').replace(/\s/g,''))){ toast('آيبان غير صحيح (SA + 22 رقماً)','err'); return; }
-    if(!m.accName.trim()){ toast('اسم الحساب مطلوب','err'); return; } det={iban:m.iban.replace(/\s/g,''),account_name:m.accName.trim()}; }
+  if(m.method==='bank'){
+    /* عند الربط بالسجلّ يُفرَض الآيبان خادمياً؛ التحقّق اليدوي فقط في الإدخال الحرّ. */
+    if(!benId){ if(!/^SA\d{22}$/.test((m.iban||'').replace(/\s/g,''))){ toast('آيبان غير صحيح (SA + 22 رقماً)','err'); return; }
+      if(!m.accName.trim()){ toast('اسم الحساب مطلوب','err'); return; } }
+    det={iban:(m.iban||'').replace(/\s/g,''),account_name:(m.accName||'').trim()}; }
   else if(m.method==='custody'){ if(!m.custodyTo){ toast('حدّد مسؤول العهدة','err'); return; } det={custody_to:m.custodyTo}; }
   else { if(!m.dueDate){ toast('تاريخ الاستحقاق مطلوب','err'); return; } det={due_date:m.dueDate}; }
   var btn=$('ex-save'); if(btn) btn.disabled=true;
   try{
     var res=await pa_rpc('portal_create_expense',{ p_beneficiary:m.beneficiary.trim(), p_amount:amt, p_kind:m.method,
-      p_purpose:m.purpose.trim(), p_department_id:m.deptId, p_need_by:m.needBy||null, p_details:det, p_note:m.note||null });
-    EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'' };
+      p_purpose:m.purpose.trim(), p_department_id:m.deptId, p_need_by:m.needBy||null, p_details:det, p_note:m.note||null,
+      p_beneficiary_id:benId });
+    EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'' };
     toast('أُنشئ طلب الصرف','ok');
     try{ pa_notify('request',res.id,'submitted'); }catch(_e){}
     await loadAll(); CURRENT=res.id; VIEW='detail'; render();
