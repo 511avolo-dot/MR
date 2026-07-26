@@ -6935,7 +6935,7 @@ GRANT  USAGE, SELECT ON SEQUENCE portal_recurring_expenses_id_seq TO service_rol
 
 -- ── (2) حساب الموعد التالي حسب التكرار ──────────────────────────────────────
 CREATE OR REPLACE FUNCTION portal_recurring_next(p_from date, p_freq text) RETURNS date
-LANGUAGE sql IMMUTABLE AS $$
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$
   SELECT CASE p_freq
     WHEN 'weekly'    THEN p_from + INTERVAL '7 day'
     WHEN 'monthly'   THEN p_from + INTERVAL '1 month'
