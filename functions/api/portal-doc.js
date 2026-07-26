@@ -16,16 +16,18 @@
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
 import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
 
-const KEY_RE = /^docs\/(pay|grn|inst|inv|ret)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
+const KEY_RE = /^docs\/(pay|grn|inst|inv|ret|disb)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
 // pay=محضر صرف (مالية) · grn=مشهد استلام (مستودع) · inst=مرفق دفعة (مشتريات) · inv=أصل فاتورة المورد (مشتريات/مالية)
-// ret=محضر مرتجع/تالف (استلام/جودة أو مشتريات). القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع.
+// ret=محضر مرتجع/تالف (استلام/جودة أو مشتريات) · disb=سند تحويل الصرف المباشر (مسؤول البنك).
+// القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع.
 const KIND_PERM = {
   pay:  ['can_disburse'],
   grn:  ['can_verify_stock'],
   inst: ['can_manage_procurement'],
   inv:  ['can_manage_procurement', 'can_see_finance'],
   ret:  ['can_verify_stock', 'can_manage_procurement'],
+  disb: ['can_disburse'],
 };
 
 function json(obj, status = 200) {
@@ -81,7 +83,7 @@ export async function onRequestPost({ request, env }) {
   const url = new URL(request.url);
   const kind = String(url.searchParams.get('kind') || '').trim();
   const perms = KIND_PERM[kind];
-  if (!perms) return json({ error: 'نوع مستند غير صالح (pay|grn|inst|inv)' }, 400);
+  if (!perms) return json({ error: 'نوع مستند غير صالح (pay|grn|inst|inv|ret|disb)' }, 400);
   let permitted = false;
   for (const p of perms) { if (await hasPerm(env, base, jwt, p)) { permitted = true; break; } }
   if (!permitted) return json({ error: 'صلاحية غير كافية لرفع هذا المستند' }, 403);

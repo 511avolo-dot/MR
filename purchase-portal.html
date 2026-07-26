@@ -2583,20 +2583,21 @@ function pa_quotesRule(v){ return (+v||0)<500?1:3; }
 function pa_can(p){ p=p||{}; return {
   approveReq:!!p.can_approve_stage, approveAward:!!p.can_approve_award, issuePO:!!p.can_issue_po,
   manageRfq:!!p.can_manage_procurement, disburse:!!p.can_disburse, create:!!p.can_create,
-  edit:!!p.can_edit, manageUsers:!!p.can_manage_users }; }
+  edit:!!p.can_edit, manageUsers:!!p.can_manage_users, approveDisb:!!p.can_approve_disbursement }; }
 function pa_see(p){ p=p||{}; const proc=!!(p.can_manage_procurement||p.can_approve_award||p.can_issue_po);
   return {requests:1, award:proc?1:0, comparison:proc?1:0, finance:(p.can_see_finance||p.can_disburse)?1:0}; }
 function pa_scope(p,jobScope,isAdm){ if(isAdm)return 'all'; if(jobScope)return jobScope; p=p||{};
   return (p.can_manage_procurement||p.can_disburse||p.can_verify_stock||p.can_see_finance)?'all':'own'; }
 function pa_acc(perms,jobScope,isAdm){ if(isAdm) return {scope:'all',see:{requests:1,award:1,comparison:1,finance:1},
-    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,edit:1,manageUsers:1}};
+    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,edit:1,manageUsers:1,approveDisb:1}};
   return {scope:pa_scope(perms,jobScope,isAdm), see:pa_see(perms), can:pa_can(perms)}; }
 /* العكس: صلاحيات المرجع(camel) → مفاتيح Supabase(snake) لحفظ الوظائف */
 function pa_permsFromCan(can){ can=can||{}; const p={};
   if(can.approveReq)p.can_approve_stage=true; if(can.approveAward)p.can_approve_award=true;
   if(can.issuePO)p.can_issue_po=true; if(can.manageRfq)p.can_manage_procurement=true;
   if(can.disburse)p.can_disburse=true; if(can.create)p.can_create=true;
-  if(can.edit)p.can_edit=true; if(can.manageUsers)p.can_manage_users=true; return p; }
+  if(can.edit)p.can_edit=true; if(can.manageUsers)p.can_manage_users=true;
+  if(can.approveDisb)p.can_approve_disbursement=true; return p; }
 
 /* حلّ المعتمِد لمرحلة معلّقة: المعتمِد المخزَّن، وإلا المستخدم الحالي إن كان مخوَّلاً، وإلا أول مخوَّل */
 function pa_resolveApprover(roleKey,approver){ if(approver) return approver;
@@ -2762,8 +2763,8 @@ async function loadAll(){
       seq:it.seq, desc:it.description, unit:it.unit||'حبة', qty:Number(it.qty)||0,
       price:Number(it.unit_price)||0, received:Number(it.received_qty)||0, _id:it.id }));
 
-    /* سلسلة اعتماد الحاجة (الدورة الأولى) */
-    const chain=(apprBy[r.id]||[]).slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(a=>{
+    /* سلسلة اعتماد الحاجة (الدورة الأولى، cycle='need') — تُقصى دورة الصرف (050) */
+    const chain=(apprBy[r.id]||[]).filter(a=>(a.cycle||'need')!=='disbursement').slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(a=>{
       const dec=a.decision; const acted=(dec!=='pending'&&a.approver);
       let type,who,user;
       if(a.resolver==='dept_manager'){ type='dept'; user=(DEPTS[r.department_id]||{}).mgr||ROOT; who={kind:'dept',user,deptStage:true}; }
@@ -2790,6 +2791,14 @@ async function loadAll(){
       splitFlag:!!r.split_flag, holdReason:r.hold_reason||'', holdUntil:r.hold_until||null,
       cancelReason:r.cancel_reason||'', cancelledBy:r.cancelled_by||null, cancelledAt:pa_ms(r.cancelled_at),
       resubmitCount:0, _raw:r };
+
+    /* ── محرّك الصرف الموحّد (050): نوع الطلب + سلسلة اعتماد الصرف (cycle='disbursement') ── */
+    req.reqType=r.req_type||'purchase';
+    req.beneficiary=r.beneficiary||''; req.expenseMethod=r.expense_method||'';
+    req.disbChain=(apprBy[r.id]||[]).filter(a=>a.cycle==='disbursement').slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(a=>({
+      seq:a.seq, label:a.stage_label, roleKey:a.role_key,
+      user:(a.decision!=='pending'&&a.approver)?a.approver:pa_resolveApprover(a.role_key,a.approver),
+      decision:a.decision, actedAt:pa_ms(a.acted_at), actor:a.approver||null, comment:a.comment||null }));
 
     /* دورة حياة المشتريات (proc) — تُبنى فقط بعد تجاوز اعتماد الحاجة */
     const offers=(offBy[r.id]||[]).filter(o=>!o.superseded); const award=awardBy[r.id]||null; const payments=payBy[r.id]||[]; const receipts=rcBy[r.id]||[];
@@ -2868,6 +2877,12 @@ async function loadAll(){
       /* مشاهد/محاضر الاستلام المرفقة (docs/grn/…) لعرضها/تنزيلها */
       proc.receiptDocs=(receipts||[]).filter(x=>x.doc_key).map(x=>({key:x.doc_key,by:x.received_by,at:pa_ms(x.received_at)}));
       req.proc=proc; req.phase=phase;
+    } else if(req.reqType==='direct_expense'){
+      /* الصرف المباشر: لا proc مشتريات — دورة صرف مستقلّة. الطور من حالة الطلب. */
+      req.kind='expense';
+      req.phase=({disbursement:'disb',payment:'pay',closed:'closed'})[r.phase]||'disb';
+      const epay=(payBy[r.id]||[]);
+      req.expensePay=epay.length?pa_mapPayment(epay[epay.length-1]):null;
     } else {
       req.phase=(r.phase==='closed')?'closed':'need';
     }
@@ -5341,6 +5356,258 @@ try{
     }catch(_e){}
     return html;
   };
+}catch(_e){}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   محرّك الصرف الموحّد (المرحلة 1) — واجهة المُحوِّل فقط (أسماء _pa_ref* فريدة)
+   • تبويب «طلب صرف مباشر» (المدخل الأول، خارج دورة المشتريات)
+   • نموذج الإنشاء → portal_create_expense
+   • لوحة سلسلة اعتماد الصرف (بالإرجاع) → portal_pr_transition(cycle:'disbursement')
+   • تنفيذ البنك (سند تحويل) → portal_payment_transition disburse + pa_docUpload('disb')
+   ════════════════════════════════════════════════════════════════════════ */
+try{
+  if(typeof TABS!=='undefined' && !TABS.some(function(t){return t[0]==='expense';})) TABS.push(['expense','صرف مباشر','money']);
+  var _pa_expCanUse=function(){ var a=accessOf(ME)||{}; var c=a.can||{};
+    return isAdmin() || !!c.create || !!c.approveDisb || !!c.disburse || !!(a.see&&a.see.finance); };
+  if(typeof navAllowed==='function'){ var _pa_refNavAllowed3=navAllowed;
+    navAllowed=function(k){ if(k==='expense') return _pa_expCanUse(); return _pa_refNavAllowed3(k); }; }
+  if(typeof render==='function'){ var _pa_refRender3=render;
+    render=function(){ if(VIEW==='expense'){ renderNav(); var v=$('view'); if(v) v.innerHTML=pa_expenseHome();
+        var tt=$('topbar-ttl'); if(tt) tt.textContent='طلبات الصرف المباشر'; window.scrollTo(0,0); try{saveState();}catch(e){} return; }
+      return _pa_refRender3.apply(this,arguments); }; }
+}catch(_e){}
+
+/* ── شاشة التبويب: نموذج إنشاء (لمن يملك create) + قائمة طلبات الصرف المرئية ── */
+var EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'',
+               iban:'', accName:'', custodyTo:'', dueDate:'' };
+function pa_expSet(k,v){ EXP_META[k]=v; if(k==='method') pa_expenseRender(); }
+function pa_expenseRender(){ var v=$('view'); if(v && VIEW==='expense') v.innerHTML=pa_expenseHome(); }
+function pa_expenseHome(){
+  var a=accessOf(ME)||{}, c=a.can||{};
+  var canCreate = isAdmin() || !!c.create;
+  var mine=(REQS||[]).filter(function(r){return r && r.kind==='expense';});
+  var list = mine.length ? '<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>طلبات الصرف ('+mine.length+')</div>'
+      + '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>رقم</th><th>الجهة/المستفيد</th><th>القيمة</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>'
+      + mine.map(function(r){
+          var stTxt=({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—';
+          var stCls=(r.phase==='closed')?'ok':(r.phase==='pay'?'gold':'');
+          return '<tr><td dir="ltr" class="mono">'+esc(r.id)+'</td><td>'+esc(r.beneficiary||'—')+'</td>'
+            +'<td class="mono">'+money(r.estTotal)+'</td><td>'+({bank:'تحويل',custody:'عهدة',credit:'آجل'})[r.expenseMethod||'bank']+'</td>'
+            +'<td><span class="badge '+stCls+'" style="font-size:10.5px">'+stTxt+'</span></td>'
+            +'<td><button class="btn btn-ghost btn-sm" onclick="pa_openExpense(\''+esc(r.id)+'\')">'+ic('eye',13)+' فتح</button></td></tr>';
+        }).join('')
+      + '</tbody></table></div></div>'
+    : '<div class="card muted" style="text-align:center;padding:26px">لا توجد طلبات صرف مرئية لك بعد.</div>';
+  return (canCreate?pa_expenseForm():'') + list;
+}
+function pa_openExpense(id){ CURRENT=id; VIEW='detail'; render(); }
+function pa_expenseForm(){
+  var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
+  var m=EXP_META;
+  var depts=Object.keys(DEPTS||{}).map(function(k){return '<option value="'+esc(k)+'"'+(m.deptId===k?' selected':'')+'>'+esc((DEPTS[k]||{}).n||k)+'</option>';}).join('');
+  var users=Object.keys(USERS||{}).filter(function(u){return (USERS[u]||{}).active!==false;})
+    .map(function(u){return '<option value="'+esc(u)+'"'+(m.custodyTo===u?' selected':'')+'>'+esc(uName(u))+'</option>';}).join('');
+  var methodFields='';
+  if(m.method==='bank'){
+    methodFields='<div style="flex:2;min-width:200px"><label '+L+'>آيبان المستفيد (SA..) *</label><input class="input mono" id="ex-iban" dir="ltr" maxlength="24" placeholder="SA............" value="'+esc(m.iban)+'" oninput="EXP_META.iban=this.value"></div>'
+      +'<div style="flex:2;min-width:160px"><label '+L+'>اسم الحساب *</label><input class="input" id="ex-accname" placeholder="اسم صاحب الحساب" value="'+esc(m.accName)+'" oninput="EXP_META.accName=this.value"></div>';
+  } else if(m.method==='custody'){
+    methodFields='<div style="flex:2;min-width:200px"><label '+L+'>مسؤول العهدة *</label><select class="select" id="ex-custody" onchange="EXP_META.custodyTo=this.value"><option value="">— اختر —</option>'+users+'</select></div>';
+  } else {
+    methodFields='<div style="flex:1;min-width:150px"><label '+L+'>تاريخ الاستحقاق *</label><input class="input" id="ex-due" type="date" value="'+esc(m.dueDate)+'" oninput="EXP_META.dueDate=this.value"></div>';
+  }
+  return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
+    +'<div class="sec-title"><span class="ico">'+ic('plus',16)+'</span>طلب صرف مباشر جديد</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:12px">طلب صرف يُنشأ ويمرّ بسلسلة الموافقات المالية '
+    +'<b>خارج دورة المشتريات تماماً</b> (بلا تسعير أو تعميد).</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">'
+      +'<div style="flex:2;min-width:200px"><label '+L+'>الجهة/المستفيد *</label><input class="input" id="ex-benef" placeholder="اسم الجهة أو المستفيد" value="'+esc(m.beneficiary)+'" oninput="EXP_META.beneficiary=this.value"></div>'
+      +'<div style="flex:1;min-width:120px"><label '+L+'>المبلغ (ر.س) *</label><input class="input mono" id="ex-amt" type="number" min="1" step="any" placeholder="0" value="'+esc(m.amount)+'" oninput="EXP_META.amount=this.value"></div>'
+      +'<div style="flex:1;min-width:130px"><label '+L+'>القسم *</label><select class="select" id="ex-dept" onchange="EXP_META.deptId=this.value"><option value="">— اختر —</option>'+depts+'</select></div>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">'
+      +'<div style="flex:1;min-width:150px"><label '+L+'>طريقة السداد *</label><select class="select" id="ex-method" onchange="pa_expSet(\'method\',this.value)">'
+        +'<option value="bank"'+(m.method==='bank'?' selected':'')+'>تحويل بنكي</option>'
+        +'<option value="custody"'+(m.method==='custody'?' selected':'')+'>عهدة نقدية</option>'
+        +'<option value="credit"'+(m.method==='credit'?' selected':'')+'>آجل</option></select></div>'
+      +methodFields
+      +'<div style="flex:1;min-width:130px"><label '+L+'>مطلوب بحلول</label><input class="input" id="ex-needby" type="date" value="'+esc(m.needBy)+'" oninput="EXP_META.needBy=this.value"></div>'
+    +'</div>'
+    +'<div style="margin-bottom:10px"><label '+L+'>الغرض *</label><input class="input" id="ex-purpose" placeholder="سبب الصرف" value="'+esc(m.purpose)+'" oninput="EXP_META.purpose=this.value"></div>'
+    +'<div style="margin-bottom:10px"><label '+L+'>ملاحظات</label><textarea class="input" id="ex-note" rows="2" oninput="EXP_META.note=this.value">'+esc(m.note)+'</textarea></div>'
+    +'<div style="display:flex;justify-content:flex-end"><button class="btn btn-gold btn-sm" id="ex-save" onclick="submitExpense()">'+ic('check',14)+' إرسال طلب الصرف</button></div>'
+  +'</div>';
+}
+async function submitExpense(){
+  var m=EXP_META;
+  if(!m.beneficiary.trim()){ toast('اسم الجهة/المستفيد مطلوب','err'); return; }
+  var amt=Number(m.amount); if(!(amt>0)){ toast('المبلغ غير صالح','err'); return; }
+  if(!m.deptId){ toast('اختر القسم','err'); return; }
+  if(!m.purpose.trim()){ toast('الغرض مطلوب','err'); return; }
+  var det={};
+  if(m.method==='bank'){ if(!/^SA\d{22}$/.test((m.iban||'').replace(/\s/g,''))){ toast('آيبان غير صحيح (SA + 22 رقماً)','err'); return; }
+    if(!m.accName.trim()){ toast('اسم الحساب مطلوب','err'); return; } det={iban:m.iban.replace(/\s/g,''),account_name:m.accName.trim()}; }
+  else if(m.method==='custody'){ if(!m.custodyTo){ toast('حدّد مسؤول العهدة','err'); return; } det={custody_to:m.custodyTo}; }
+  else { if(!m.dueDate){ toast('تاريخ الاستحقاق مطلوب','err'); return; } det={due_date:m.dueDate}; }
+  var btn=$('ex-save'); if(btn) btn.disabled=true;
+  try{
+    var res=await pa_rpc('portal_create_expense',{ p_beneficiary:m.beneficiary.trim(), p_amount:amt, p_kind:m.method,
+      p_purpose:m.purpose.trim(), p_department_id:m.deptId, p_need_by:m.needBy||null, p_details:det, p_note:m.note||null });
+    EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'' };
+    toast('أُنشئ طلب الصرف','ok');
+    try{ pa_notify('request',res.id,'submitted'); }catch(_e){}
+    await loadAll(); CURRENT=res.id; VIEW='detail'; render();
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر إنشاء الطلب'),'err'); }
+}
+
+/* ── تفصيل طلب الصرف المباشر: يحلّ محلّ رَفّ المشتريات (المُحوِّل) ── */
+if(typeof detailHTML==='function'){ var _pa_refDetailHTML_exp=detailHTML;
+  detailHTML=function(id){
+    var r=(REQS||[]).find(function(x){return x.id===id;});
+    if(r && r.kind==='expense'){ return pa_expenseDetail(r); }
+    return _pa_refDetailHTML_exp.apply(this,arguments);
+  };
+}
+function pa_expenseDetail(r){
+  var back='<button class="btn btn-ghost btn-sm" onclick="go(\'expense\')" style="margin-bottom:12px">'+ic('undo',14)+' رجوع</button>';
+  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[r.expenseMethod||'bank'];
+  var head='<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:flex-start">'
+    +'<div><div class="mono muted" style="font-size:12px" dir="ltr">'+esc(r.id)+'</div>'
+      +'<h2 style="margin:2px 0 0;font-size:19px">'+esc(r.title||'طلب صرف')+'</h2></div>'
+    +'<span class="badge '+(r.phase==='closed'?'ok':(r.phase==='pay'?'gold':''))+'">'
+      +(({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—')+'</span></div>'
+    +'<div class="meta-grid" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'
+      +pa_metaCell('الجهة/المستفيد',esc(r.beneficiary||'—'))
+      +pa_metaCell('المبلغ',money(r.estTotal)+' ر.س')
+      +pa_metaCell('طريقة السداد',methodTxt)
+      +pa_metaCell('القسم',esc(r.dept||'—'))
+      +pa_metaCell('المقدّم',esc(uName(r.requester||'')))
+      +(r.needBy?pa_metaCell('مطلوب بحلول',esc(r.needBy)):'')
+    +'</div></div>';
+  var body=head + pa_disbChainPanel(r) + pa_expenseExecPanel(r);
+  try{ if(typeof auditTimeline==='function') body += auditTimeline(r); }catch(_e){}
+  return back + body;
+}
+function pa_metaCell(l,v){ return '<div style="background:var(--surface-2,#f5f3ee);border:1px solid var(--line-2,#eee);border-radius:9px;padding:8px 11px">'
+  +'<div style="font-size:10.5px;color:var(--muted,#7a8296)">'+l+'</div><div style="font-weight:700;font-size:13.5px;margin-top:2px">'+v+'</div></div>'; }
+
+/* ── لوحة سلسلة اعتماد الصرف (بالإرجاع) — نموذجها poReviewPanel ── */
+function pa_disbChainPanel(r){
+  var ch=r.disbChain||[]; if(!ch.length) return '';
+  var meCanReturn=false;
+  var rows=ch.map(function(s,i){
+    var done=s.decision==='approved';
+    var active=!done && s.decision==='pending' && ch.slice(0,i).every(function(x){return x.decision==='approved';});
+    var canAct=active && pa_canApproveDisb(s) && r.requester!==ME;
+    if(canAct && i>0) meCanReturn=true;
+    var right = done ? '<span class="badge ok" style="font-size:10px">معتمد</span>'
+      : (s.decision==='rejected') ? '<span class="badge" style="font-size:10px;background:var(--danger-bg);color:var(--danger)">مرفوض</span>'
+      : active ? (canAct
+          ? '<button class="btn btn-gold btn-sm" onclick="pa_disbApprove(\''+r.id+'\')">'+ic('check',13)+' اعتماد</button> '
+            +'<button class="btn btn-ghost btn-sm" onclick="pa_disbReturn(\''+r.id+'\','+(s.seq||1)+')">'+ic('undo',13)+' إرجاع</button> '
+            +'<button class="btn btn-danger btn-sm" onclick="pa_disbReject(\''+r.id+'\')">'+ic('x',13)+' رفض</button>'
+          : '<span class="chip">'+ic('eye',12)+' بانتظار '+esc(uName(s.user||''))+'</span>')
+      : '<span class="chip">بالانتظار</span>';
+    return '<div class="par-row"><div class="av sm" style="background:'+(done?'linear-gradient(155deg,#36916b,#2e7d5b)':active?'linear-gradient(155deg,#c2a063,#a37f43)':'#cdc4b2')+';color:#fff">'+(done?'✓':(s.seq||(i+1)))+'</div>'
+      +'<div class="nm" style="flex:1">'+esc(s.label||'')+'<div class="rl muted" style="font-size:10.5px;font-weight:500">'+esc(uName(s.user||''))+(s.comment?(' · '+esc(s.comment)):'')+'</div></div>'+right+'</div>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
+    +'<div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>سلسلة اعتماد الصرف</div>'
+    +'<div class="muted" style="font-size:11.5px;margin-bottom:10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
+    + rows + '</div>';
+}
+function pa_canApproveDisb(s){ var a=accessOf(ME)||{}; if(isAdmin()) return true; var perms=(USERS[ME]||{}).perms||{};
+  var rk=s.roleKey; if(!rk) return !!(a.can&&a.can.approveDisb);
+  return !!perms[rk] || (rk==='can_approve_disbursement' && !!(a.can&&a.can.approveDisb))
+    || (rk==='can_approve_finance' && !!(a.see&&a.see.finance) && !!perms.can_approve_finance)
+    || (rk==='can_manage_users' && isAdmin()); }
+async function pa_disbApprove(id){
+  try{ await pa_rpc('portal_pr_transition',{p_request_id:id,p_action:'approve',p_comment:null,p_cycle:'disbursement'}); }catch(e){ return; }
+  toast('اعتُمدت مرحلة الصرف','ok'); try{pa_notify('payment',id,'pending');}catch(_e){} await pa_after(id);
+}
+function pa_disbReject(id){
+  $('modal').innerHTML='<div class="modal-head"><div class="mi danger">'+ic('x',22)+'</div><div><h3>رفض الصرف</h3><div class="ms">سيُرفض طلب الصرف</div></div></div>'
+    +'<div class="modal-body"><label>سبب الرفض <span style="color:var(--danger)">*</span></label><textarea id="disb-rej" rows="3"></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-danger" onclick="pa_disbRejectDo(\''+id+'\')">'+ic('x',15)+' تأكيد</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_disbRejectDo(id){
+  var c=(($('disb-rej')||{}).value||'').trim(); if(!c){ toast('السبب مطلوب','err'); return; }
+  try{ await pa_rpc('portal_pr_transition',{p_request_id:id,p_action:'reject',p_comment:c,p_cycle:'disbursement'}); }catch(e){ return; }
+  closeModal(); toast('رُفض الصرف','ok'); await pa_after(id);
+}
+function pa_disbReturn(id,curSeq){
+  var r=(REQS||[]).find(function(x){return x.id===id;}); var ch=(r&&r.disbChain)||[];
+  var opts=ch.filter(function(s){return (s.seq||0)>0 && (s.seq||0)<curSeq;})
+    .map(function(s){return '<option value="'+(s.seq||1)+'">'+esc(s.label)+'</option>';}).join('');
+  if(!opts){ toast('لا مرحلة سابقة للإرجاع إليها','err'); return; }
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info">'+ic('undo',22)+'</div><div><h3>إرجاع لمرحلة سابقة</h3><div class="ms">يعود الطلب للمرحلة المختارة</div></div></div>'
+    +'<div class="modal-body"><label>إلى مرحلة</label><select class="select" id="disb-to">'+opts+'</select>'
+    +'<label style="margin-top:10px">سبب الإرجاع <span style="color:var(--danger)">*</span></label><textarea id="disb-rc" rows="3"></textarea>'
+    +'<div class="modal-foot"><button class="btn btn-gold" onclick="pa_disbReturnDo(\''+id+'\')">'+ic('check',15)+' تأكيد الإرجاع</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_disbReturnDo(id){
+  var seq=Number(($('disb-to')||{}).value||0); var c=(($('disb-rc')||{}).value||'').trim();
+  if(!c){ toast('السبب مطلوب','err'); return; }
+  try{ await pa_rpc('portal_pr_transition',{p_request_id:id,p_action:'return',p_comment:c,p_return_to_seq:seq,p_cycle:'disbursement'}); }catch(e){ return; }
+  closeModal(); toast('أُعيد الطلب للمرحلة السابقة','ok'); await pa_after(id);
+}
+
+/* ── لوحة تنفيذ الصرف (مسؤول البنك) — رفع سند التحويل ── */
+function pa_expenseExecPanel(r){
+  var pay=r.expensePay; if(!pay) return '';
+  var a=accessOf(ME)||{}; var canDisb=isAdmin()||!!(a.can&&a.can.disburse);
+  if(pay.status==='disbursed' || r.phase==='closed'){
+    return '<div class="card"><div class="sec-title"><span class="ico">'+ic('check',16)+'</span>تمّ الصرف</div>'
+      +'<div class="muted" style="font-size:12.5px">نُفِّذ الصرف بمبلغ <b>'+money(pay.amount)+' ر.س</b>'
+      +(pay.disbursedBy?(' بواسطة '+esc(uName(pay.disbursedBy))):'')+'.'
+      +(pay.proofKey?(' <button class="btn btn-ghost btn-sm" onclick="pa_docView(\''+esc(pay.proofKey)+'\')">'+ic('eye',13)+' عرض السند</button>'):'')+'</div></div>';
+  }
+  if(r.phase!=='pay' || !canDisb){
+    return '<div class="card muted" style="font-size:12.5px">'+ic('info',13)+' التنفيذ متاح لمسؤول البنك بعد اكتمال سلسلة الاعتماد.</div>';
+  }
+  var noSelf = (pay.reqBy===ME);
+  return '<div class="card" style="border-color:var(--gold-soft)"><div class="sec-title"><span class="ico">'+ic('money',16)+'</span>تنفيذ الصرف</div>'
+    +'<div class="muted" style="font-size:12.5px;margin-bottom:10px">المبلغ <b>'+money(pay.amount)+' ر.س</b> · '+esc(pay.kindLabel||'')+'</div>'
+    +(noSelf?'<div class="muted" style="color:var(--danger)">لا يمكنك تنفيذ صرفٍ طلبته بنفسك.</div>'
+      :('<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+        +'<div><label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">سند التحويل (PDF/صورة)</label>'
+          +'<label class="btn btn-ghost btn-sm" for="disb-proof" style="cursor:pointer"><span id="disb-proofn">📎 اختر ملفاً</span></label>'
+          +'<input id="disb-proof" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_disbProofPick()"></div>'
+        +'<button class="btn btn-gold btn-sm" id="disb-exec" onclick="pa_execDisb(\''+r.id+'\','+pay._id+')">'+ic('check',14)+' تأكيد تنفيذ الصرف</button>'
+      +'</div>'))
+  +'</div>';
+}
+function pa_disbProofPick(){ var i=$('disb-proof'),n=$('disb-proofn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>18?f.name.slice(0,16)+'…':f.name)):'📎 اختر ملفاً'; } }
+async function pa_execDisb(reqId,payId){
+  var fileEl=$('disb-proof'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
+  if(file){ if(!/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type)){ toast('الملف يجب أن يكون PDF أو صورة','err'); return; }
+    if(file.size>10*1024*1024){ toast('حجم الملف يتجاوز 10 ميجابايت','err'); return; } }
+  var btn=$('disb-exec'); if(btn) btn.disabled=true; var det={};
+  try{
+    if(file){ var key=await pa_docUpload('disb',reqId,file); det.proof_key=key; }
+    await pa_rpc('portal_payment_transition',{p_payment_id:payId,p_action:'disburse',p_comment:null,p_return_to:null,p_details:det});
+    toast('نُفِّذ الصرف','ok'); try{pa_notify('payment',reqId,'disbursed');}catch(_e){} await pa_after(reqId);
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر التنفيذ'),'err'); }
+}
+
+/* ── مركز المهام: اعتماد صرف / تنفيذ صرف بانتظار المستخدم ── */
+try{ if(typeof myTasks==='function'){ var _pa_refMyTasks3=myTasks;
+  myTasks=function(){ var t=_pa_refMyTasks3()||[];
+    (REQS||[]).forEach(function(r){
+      if(!r || r.kind!=='expense') return;
+      if(r.phase==='disb' && r.disbChain && r.requester!==ME){
+        var idx=-1; for(var i=0;i<r.disbChain.length;i++){ if(r.disbChain[i].decision==='pending'){ idx=i; break; } }
+        if(idx>=0){ var s=r.disbChain[idx]; var active=r.disbChain.slice(0,idx).every(function(x){return x.decision==='approved';});
+          if(active && pa_canApproveDisb(s)) t.push({ r:r, label:'اعتماد صرف بانتظارك', ic:'clipboard', sub:s.label||'' }); }
+      }
+      if(r.phase==='pay' && r.expensePay && r.expensePay.status!=='disbursed'){
+        var a=accessOf(ME)||{}; if((isAdmin()||!!(a.can&&a.can.disburse)) && r.expensePay.reqBy!==ME)
+          t.push({ r:r, label:'تنفيذ صرف بانتظارك', ic:'money', sub:'رفع سند التحويل' });
+      }
+    });
+    return t; }; }
 }catch(_e){}
 
 /* الإقلاع الفعلي */
