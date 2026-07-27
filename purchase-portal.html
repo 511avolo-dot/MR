@@ -5583,9 +5583,44 @@ function pa_expenseDetail(r){
       +pa_metaCell('المقدّم',esc(uName(r.requester||'')))
       +(r.needBy?pa_metaCell('مطلوب بحلول',esc(r.needBy)):'')
     +'</div></div>';
-  var body=head + pa_disbChainPanel(r) + pa_expenseExecPanel(r);
+  var body=head + pa_disbChainPanel(r) + pa_expenseExecPanel(r) + pa_expenseVoucher(r);
   try{ if(typeof auditTimeline==='function') body += auditTimeline(r); }catch(_e){}
   return back + body;
+}
+/* سند صرف مباشر قابل للطباعة/PDF (المرحلة 4) — مستند رسميّ من بيانات الطلب وسلسلة اعتماده. */
+function pa_expenseVoucher(r){
+  var vat=(typeof PSET!=='undefined'&&PSET&&PSET.vat!=null)?Number(PSET.vat):15;
+  var net=Number(r.estTotal)||0, tot=Math.round(net*(1+vat/100));
+  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[r.expenseMethod||'bank'];
+  var det=(r._raw&&r._raw.expense_details)||{};
+  var sigs=(r.disbChain||[]).filter(function(s){return s.decision==='approved'&&s.actor;})
+    .map(function(s){return '<td style="border:1px solid #cfd6e0;padding:8px 10px;text-align:center;font-size:11px"><div style="color:#5b6472">'+esc(s.label||'اعتماد')+'</div><div style="font-weight:700;margin-top:14px">'+esc(uName(s.actor))+'</div></td>';}).join('');
+  var execRow='';
+  if(r.expensePay&&r.expensePay.status==='disbursed'){ execRow='<tr><td style="padding:7px 10px;color:#5b6472">نُفِّذ الصرف بواسطة</td><td style="padding:7px 10px;font-weight:700">'+esc(uName(r.expensePay.disbursedBy||''))+'</td></tr>'; }
+  function row(l,v){ return '<tr><td style="padding:7px 10px;color:#5b6472;width:38%">'+l+'</td><td style="padding:7px 10px;font-weight:700">'+v+'</td></tr>'; }
+  var voucher='<div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
+    +'<div class="sec-title" style="margin:0"><span class="ico">'+ic('file',16)+'</span>سند الصرف</div>'
+    +'<button class="btn btn-primary btn-sm" onclick="printEl(\'exp-voucher-'+esc(r.id)+'\',\'سند صرف\',\''+esc(r.id)+'\')">'+ic('print',14)+' طباعة / PDF</button></div>'
+    +'<div id="exp-voucher-'+esc(r.id)+'" style="background:#fff;border:1px solid #cfd6e0;border-radius:10px;padding:20px;color:#1b2333" dir="rtl">'
+      +'<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1b2333;padding-bottom:10px;margin-bottom:14px">'
+        +'<div style="font-weight:800;font-size:16px">مجموعة الذيابي</div>'
+        +'<div style="text-align:end"><div style="font-weight:800;font-size:15px">سند صرف مباشر</div><div class="mono" style="font-size:11px;color:#5b6472" dir="ltr">'+esc(r.id)+'</div></div></div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12.5px">'
+        +row('الجهة/المستفيد',esc(r.beneficiary||'—'))
+        +row('الغرض',esc(r.title||'—'))
+        +row('القسم',esc(r.dept||'—'))
+        +row('طريقة السداد',methodTxt)
+        +(det.iban?row('الآيبان','<span class="mono" dir="ltr">'+esc(det.iban)+'</span>'):'')
+        +(det.custody_to?row('مسؤول العهدة',esc(uName(det.custody_to))):'')
+        +row('المبلغ الصافي','<span class="mono">'+money(net)+'</span> ر.س')
+        +row('ضريبة القيمة المضافة ('+vat+'%)','<span class="mono">'+money(tot-net)+'</span> ر.س')
+        +row('الإجمالي المستحقّ','<span class="mono" style="font-size:14px">'+money(tot)+'</span> ر.س')
+        +execRow
+      +'</table>'
+      +(sigs?('<div style="margin-top:18px;font-size:11px;color:#5b6472;margin-bottom:6px">اعتمادات الصرف:</div><table style="width:100%;border-collapse:collapse"><tr>'+sigs+'</tr></table>'):'')
+      +'<div style="margin-top:16px;font-size:10.5px;color:#8b95a6;text-align:center">مستند آليّ من بوابة الذيابي — صالح للتدقيق. تاريخ الطباعة يُذيَّل تلقائياً.</div>'
+    +'</div></div>';
+  return voucher;
 }
 function pa_metaCell(l,v){ return '<div style="background:var(--surface-2,#f5f3ee);border:1px solid var(--line-2,#eee);border-radius:9px;padding:8px 11px">'
   +'<div style="font-size:10.5px;color:var(--muted,#7a8296)">'+l+'</div><div style="font-weight:700;font-size:13.5px;margin-top:2px">'+v+'</div></div>'; }
