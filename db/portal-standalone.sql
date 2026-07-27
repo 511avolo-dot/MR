@@ -5291,3 +5291,2050 @@ ALTER FUNCTION public.portal_create_token(text,text,integer,text,numeric) SET se
 ALTER FUNCTION public.portal_supplier_invite(text,text,text,int) SET search_path = public, extensions;
 
 -- تحقّق: SELECT length(portal_gen_token()); ⇒ 43
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 049 (إلزام مستند العرض + رفع المورّد لعرضه) — مطابقة لـ db/portal-migrations/049
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════════
+--  049 — إلزام إرفاق مستند عرض المورد + تمكين المورّد من رفع عرضه بنفسه
+--  ─────────────────────────────────────────────────────────────────────────
+--  توجيه المالك: «عندما تضع عرض سعر يجب أن ترفق المستند تبع عرض المورد،
+--  لذلك أيضاً يجب أن تتيح للمورد أن يرفع عرضه كذلك».
+--
+--  الحالة قبل هذه الهجرة:
+--    • portal_submit_offer يقبل p_quote_pdf_key **اختيارياً** — فيمكن تسجيل
+--      عرض بلا أي مستند يُثبته (فجوة تدقيق: رقم بلا سند).
+--    • portal_supplier_submit (047) لا يقبل مستنداً إطلاقاً — فالمورّد الذي
+--      يسعّر ذاتياً لا يستطيع إرفاق عرضه الرسمي، وهو المسار الذي يُفترض أن
+--      يكون **أقوى** إثباتاً (المستند من المورّد مباشرة لا من الموظّف).
+--
+--  ما تفعله هذه الهجرة:
+--   (1) مفتاح إعداد `quote_doc_required` في portal_settings — **افتراضي 1
+--       (مُفعَّل)** خلافاً لبقية مفاتيح الإنفاذ الخاملة، لأنّ المالك طلبه صراحةً.
+--       قابل للإطفاء (=0) من شاشة الإعدادات إن استدعى ظرف تشغيلي ذلك.
+--   (2) portal_submit_offer: يرفض العرض بلا مفتاح مستند عند تفعيل المفتاح.
+--   (3) portal_supplier_submit: توقيع جديد بمعامل سادس p_quote_pdf_key،
+--       بنفس الإلزام، مع **ترحيل مستند المراجعة السابقة** عند التنقيح بلا
+--       إعادة رفع (فلا يُعاقَب المورّد على تصحيح سعر).
+--   (4) portal_supplier_token_request: دالة **خادمية بحتة** (service_role فقط)
+--       تتحقّق من رمز المورّد وتعيد رقم الطلب — تستخدمها نقطة الرفع
+--       /api/portal-supplier-doc كي لا يُشتقّ رقم الطلب من مُدخَل العميل.
+--
+--  ⚠️ تُطبَّق حيّاً بعد 048. مدمجة في db/portal-standalone.sql (تنصيب نظيف).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── (1) مفتاح الإعداد (لا يطمس اختيار المالك إن سبق ضبطه) ──────────────────
+UPDATE portal_settings
+   SET value = value || jsonb_build_object('quote_doc_required', 1)
+ WHERE key = 'portal_settings'
+   AND NOT (value ? 'quote_doc_required');
+
+-- ── (2) إلزام المستند في إدخال المشتريات ───────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_submit_offer(p_request_id text, p_supplier text, p_total numeric,
+    p_delivery_days int DEFAULT NULL, p_quality int DEFAULT NULL, p_payment_days int DEFAULT NULL,
+    p_note text DEFAULT NULL, p_quote_pdf_key text DEFAULT NULL, p_items jsonb DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_phase text; v_id bigint; v_total numeric := p_total;
+        v_key text := nullif(trim(coalesce(p_quote_pdf_key,'')),'');
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_manage_procurement') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  SELECT phase INTO v_phase FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF v_phase IS NULL THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_phase <> 'pricing' THEN RAISE EXCEPTION 'الطلب ليس في مرحلة التسعير'; END IF;
+
+  -- مستند عرض المورد إلزامي (سند العرض) ما لم يُطفَأ المفتاح تشغيلياً
+  IF v_key IS NULL AND portal_setting_num('quote_doc_required', 1) >= 1 THEN
+    RAISE EXCEPTION 'إرفاق مستند عرض المورد إلزامي (PDF أو صورة) — لا يُسجَّل عرض بلا سند';
+  END IF;
+
+  IF p_items IS NOT NULL AND jsonb_array_length(p_items) > 0 THEN
+    SELECT coalesce(sum(ri.qty * nullif((it->>'price'),'')::numeric), 0)
+      INTO v_total
+      FROM jsonb_array_elements(p_items) it
+      JOIN portal_request_items ri ON ri.request_id = p_request_id AND ri.seq = (it->>'seq')::int;
+  END IF;
+  IF coalesce(p_supplier,'') = '' OR coalesce(v_total,0) <= 0 THEN RAISE EXCEPTION 'بيانات العرض غير مكتملة'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  INSERT INTO portal_offers(request_id, supplier_name, total, delivery_days, quality, payment_days, note, entered_by, quote_pdf_key)
+    VALUES (p_request_id, p_supplier, v_total, p_delivery_days, p_quality, p_payment_days, p_note, v_me, v_key)
+    RETURNING id INTO v_id;
+  IF p_items IS NOT NULL AND jsonb_array_length(p_items) > 0 THEN
+    INSERT INTO portal_offer_items(offer_id, item_seq, unit_price)
+      SELECT v_id, (it->>'seq')::int, coalesce(nullif((it->>'price'),'')::numeric, 0)
+      FROM jsonb_array_elements(p_items) it
+      WHERE (it->>'seq') IS NOT NULL;
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'offer_added', v_me, 'portal',
+    jsonb_build_object('supplier', p_supplier, 'total', v_total, 'has_pdf', (v_key IS NOT NULL),
+                       'by_item', (p_items IS NOT NULL)));
+  RETURN jsonb_build_object('ok', true, 'id', v_id);
+END $fn$;
+
+GRANT EXECUTE ON FUNCTION portal_submit_offer(text, text, numeric, int, int, int, text, text, jsonb) TO authenticated;
+
+-- ── (3) رفع المورّد لمستند عرضه (توقيع جديد بمعامل سادس) ───────────────────
+DROP FUNCTION IF EXISTS portal_supplier_submit(text, jsonb, int, int, text);
+CREATE OR REPLACE FUNCTION portal_supplier_submit(
+  p_token text, p_items jsonb, p_delivery_days int DEFAULT NULL,
+  p_payment_days int DEFAULT NULL, p_note text DEFAULT NULL,
+  p_quote_pdf_key text DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE t portal_supplier_tokens%ROWTYPE; v_phase text; v_total numeric; v_id bigint; v_n int;
+        v_key text := nullif(trim(coalesce(p_quote_pdf_key,'')),'');
+BEGIN
+  SELECT * INTO t FROM portal_supplier_tokens WHERE token = p_token FOR UPDATE;
+  IF NOT FOUND OR t.revoked THEN RAISE EXCEPTION 'رابط غير صالح'; END IF;
+  IF t.expires_at < now() THEN RAISE EXCEPTION 'انتهت صلاحية الرابط'; END IF;
+
+  SELECT phase INTO v_phase FROM portal_requests WHERE id = t.request_id FOR UPDATE;
+  IF v_phase IS NULL THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_phase <> 'pricing' THEN RAISE EXCEPTION 'أُقفل باب التسعير لهذا الطلب'; END IF;
+
+  IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN RAISE EXCEPTION 'أدخل أسعار البنود'; END IF;
+
+  -- تنقيح بلا إعادة رفع: يُرحَّل مستند المراجعة السابقة (العرض نفسه لم يتغيّر مصدره)
+  IF v_key IS NULL AND t.offer_id IS NOT NULL THEN
+    SELECT nullif(trim(coalesce(o.quote_pdf_key,'')),'') INTO v_key
+      FROM portal_offers o WHERE o.id = t.offer_id;
+  END IF;
+  IF v_key IS NULL AND portal_setting_num('quote_doc_required', 1) >= 1 THEN
+    RAISE EXCEPTION 'إرفاق عرض السعر الرسمي إلزامي (PDF أو صورة)';
+  END IF;
+  -- المستند يجب أن يخصّ طلب هذا الرمز (لا إسناد مفتاح طلب آخر)
+  IF v_key IS NOT NULL AND v_key NOT LIKE ('quotes/' || t.request_id || '/%') THEN
+    RAISE EXCEPTION 'مفتاح المستند لا يخصّ هذا الطلب';
+  END IF;
+
+  -- كل بند مُسعَّر يجب أن يكون من بنود الطلب فعلاً، وبسعر موجب
+  SELECT count(*) INTO v_n FROM jsonb_array_elements(p_items) it
+   WHERE NOT EXISTS (SELECT 1 FROM portal_request_items ri
+                     WHERE ri.request_id = t.request_id AND ri.seq = (it->>'seq')::int);
+  IF v_n > 0 THEN RAISE EXCEPTION 'بند غير موجود في الطلب'; END IF;
+
+  SELECT coalesce(sum(ri.qty * nullif((it->>'price'),'')::numeric), 0) INTO v_total
+    FROM jsonb_array_elements(p_items) it
+    JOIN portal_request_items ri ON ri.request_id = t.request_id AND ri.seq = (it->>'seq')::int;
+  IF coalesce(v_total,0) <= 0 THEN RAISE EXCEPTION 'الإجمالي غير صالح'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  IF t.offer_id IS NOT NULL THEN
+    -- تنقيح: نستبدل العرض السابق لنفس المورّد (لا تتكدّس عروض مكرّرة)
+    DELETE FROM portal_offer_items WHERE offer_id = t.offer_id;
+    DELETE FROM portal_offers WHERE id = t.offer_id;
+  END IF;
+  INSERT INTO portal_offers(request_id, supplier_name, total, delivery_days, payment_days, note, entered_by, quote_pdf_key)
+    VALUES (t.request_id, t.supplier_name, v_total, p_delivery_days, p_payment_days,
+            nullif(trim(coalesce(p_note,'')),''), 'supplier:self', v_key)
+    RETURNING id INTO v_id;
+  INSERT INTO portal_offer_items(offer_id, item_seq, unit_price)
+    SELECT v_id, (it->>'seq')::int, coalesce(nullif((it->>'price'),'')::numeric, 0)
+      FROM jsonb_array_elements(p_items) it WHERE (it->>'seq') IS NOT NULL;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  UPDATE portal_supplier_tokens
+     SET offer_id = v_id, submit_count = submit_count + 1, last_submit_at = now()
+   WHERE token = p_token;
+
+  PERFORM portal_audit_write(t.request_id, 'offer_added', 'supplier:'||t.supplier_name, 'supplier_portal',
+    jsonb_build_object('supplier', t.supplier_name, 'total', v_total, 'has_pdf', (v_key IS NOT NULL),
+                       'self_service', true, 'revision', t.submit_count + 1));
+  RETURN jsonb_build_object('ok', true, 'total', v_total, 'revision', t.submit_count + 1);
+END $fn$;
+
+REVOKE ALL ON FUNCTION portal_supplier_submit(text,jsonb,int,int,text,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_supplier_submit(text,jsonb,int,int,text,text) TO anon, authenticated;
+
+-- ── (4) حجز فتحة رفع بالرمز (خادمية بحتة) ──────────────────────────────────
+--   لا تكشف شيئاً عن الطلب سوى رقمه واسم المورّد — وتُستدعى بمفتاح الخدمة فقط.
+--   غايتان:
+--     (أ) أن تشتقّ نقطة الرفع مسار التخزين من **القاعدة** لا من مُدخَل العميل،
+--         فلا يستطيع حاملُ رمزٍ رفعَ ملف تحت مجلّد طلب آخر.
+--     (ب) **سقف رفع لكل رمز** (مضاد إساءة الاستخدام): الرمز طرف خارجي بلا حساب،
+--         فبلا سقف يمكن إغراق التخزين. 20 محاولة تكفي أي مورّد جادّ.
+ALTER TABLE portal_supplier_tokens ADD COLUMN IF NOT EXISTS upload_count int NOT NULL DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION portal_supplier_token_request(p_token text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE t portal_supplier_tokens%ROWTYPE; v_phase text;
+        MAXUP CONSTANT int := 20;
+BEGIN
+  SELECT * INTO t FROM portal_supplier_tokens WHERE token = p_token FOR UPDATE;
+  IF NOT FOUND OR t.revoked THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid'); END IF;
+  IF t.expires_at < now() THEN RETURN jsonb_build_object('ok', false, 'reason', 'expired'); END IF;
+  SELECT phase INTO v_phase FROM portal_requests WHERE id = t.request_id;
+  IF v_phase IS DISTINCT FROM 'pricing' THEN RETURN jsonb_build_object('ok', false, 'reason', 'closed'); END IF;
+  IF t.upload_count >= MAXUP THEN RETURN jsonb_build_object('ok', false, 'reason', 'too_many'); END IF;
+
+  UPDATE portal_supplier_tokens SET upload_count = upload_count + 1 WHERE token = p_token;
+  RETURN jsonb_build_object('ok', true, 'request_id', t.request_id, 'supplier', t.supplier_name);
+END $fn$;
+
+REVOKE ALL ON FUNCTION portal_supplier_token_request(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_supplier_token_request(text) FROM anon;
+REVOKE ALL ON FUNCTION portal_supplier_token_request(text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION portal_supplier_token_request(text) TO service_role;
+
+-- ── (5) إبلاغ الواجهة بحالة الإلزام + وجود مستند سابق ──────────────────────
+--   الواجهة لا تخمّن السياسة: doc_required تأتي من القاعدة، و previous.has_doc
+--   يخبر المورّد أنّ مستنده السابق مُرحَّل فلا يُطالَب برفعه ثانيةً عند التنقيح.
+CREATE OR REPLACE FUNCTION portal_supplier_rfq(p_token text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE t portal_supplier_tokens%ROWTYPE; r portal_requests%ROWTYPE; v_items jsonb; v_prev jsonb;
+BEGIN
+  SELECT * INTO t FROM portal_supplier_tokens WHERE token = p_token;
+  IF NOT FOUND OR t.revoked THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid'); END IF;
+  IF t.expires_at < now() THEN RETURN jsonb_build_object('ok', false, 'reason', 'expired'); END IF;
+
+  SELECT * INTO r FROM portal_requests WHERE id = t.request_id;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid'); END IF;
+  IF r.phase <> 'pricing' THEN RETURN jsonb_build_object('ok', false, 'reason', 'closed'); END IF;
+
+  SELECT coalesce(jsonb_agg(jsonb_build_object('seq', ri.seq, 'name', ri.description,
+           'qty', ri.qty, 'unit', ri.unit) ORDER BY ri.seq), '[]'::jsonb)
+    INTO v_items FROM portal_request_items ri WHERE ri.request_id = t.request_id;
+
+  -- إن سبق للمورّد التقديم: نُعيد أسعاره كي يُنقّحها (لا أسعار غيره)
+  v_prev := NULL;
+  IF t.offer_id IS NOT NULL THEN
+    SELECT jsonb_build_object(
+             'total', o.total, 'delivery_days', o.delivery_days,
+             'payment_days', o.payment_days, 'note', o.note,
+             'has_doc', (nullif(trim(coalesce(o.quote_pdf_key,'')),'') IS NOT NULL),
+             'items', coalesce((SELECT jsonb_agg(jsonb_build_object('seq', oi.item_seq, 'price', oi.unit_price))
+                                FROM portal_offer_items oi WHERE oi.offer_id = o.id), '[]'::jsonb))
+      INTO v_prev FROM portal_offers o WHERE o.id = t.offer_id;
+  END IF;
+
+  RETURN jsonb_build_object('ok', true,
+    'request_id', r.id, 'title', r.title, 'need_by', r.need_by,
+    'supplier', t.supplier_name, 'expires_at', t.expires_at,
+    'submitted', (t.offer_id IS NOT NULL), 'submit_count', t.submit_count,
+    'doc_required', (portal_setting_num('quote_doc_required', 1) >= 1),
+    'items', v_items, 'previous', v_prev);
+END $fn$;
+
+REVOKE ALL ON FUNCTION portal_supplier_rfq(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_supplier_rfq(text) TO anon, authenticated;
+
+-- تحقّق:
+--   SELECT (value->>'quote_doc_required') FROM portal_settings WHERE key='portal_settings';  ⇒ 1
+--   SELECT has_function_privilege('anon','portal_supplier_token_request(text)','EXECUTE');   ⇒ false
+--   SELECT has_function_privilege('anon','portal_supplier_submit(text,jsonb,int,int,text,text)','EXECUTE'); ⇒ true
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 050 (محرّك الصرف الموحّد الواعي بالدورة) — مطابقة لـ db/portal-migrations/050
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════════
+--  050 — محرّك الصرف والموافقات المالية الموحّد (النواة، المرحلة ١)
+--  ─────────────────────────────────────────────────────────────────────────
+--  دمج نظام طلبات الصرف المالية داخل البوابة كـ«محرّك صرف موحّد» بمدخلين يغذّيان
+--  نفس محرّك الوورك فلو الذكيّ القائم (إرجاع لمرحلة · تفويض · تصعيد · معتمِد مؤهَّل ·
+--  اعتماد بريد · فصل مهام) — لا استنساخ محرّك أفقر:
+--
+--    • المدخل الأول: طلب صرف مستقلّ يُنشأ ويكتمل **خارج دورة المشتريات تماماً**.
+--    • المدخل الثاني: ذيل دورة الشراء — يمرّ الصرف بالسلسلة المالية الجديدة بدل
+--      الاعتماد المسطّح (اختياري بمفتاح، آمن افتراضياً).
+--
+--  المبدأ: نضيف بُعد «الدورة» (cycle) على portal_approvals/portal_workflows، ونعمّم
+--  portal_pr_transition ودوال المحرّك لتعمل لأي دورة. عدم الانحدار مضمون: cycle
+--  الافتراضي 'need' فكل القائم يبقى مطابقاً.
+--
+--  ⚠️ تُطبَّق حيّاً بعد 049. مدمجة في db/portal-standalone.sql (تنصيب نظيف).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── (1) بُعد الدورة + نوع الطلب + حقول الصرف ────────────────────────────────
+ALTER TABLE portal_approvals ADD COLUMN IF NOT EXISTS cycle TEXT NOT NULL DEFAULT 'need';
+DROP INDEX IF EXISTS uq_portal_appr_req_seq;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portal_appr_req_cycle_seq ON portal_approvals(request_id, cycle, seq);
+
+ALTER TABLE portal_workflows ADD COLUMN IF NOT EXISTS cycle TEXT NOT NULL DEFAULT 'need';
+
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS req_type        TEXT NOT NULL DEFAULT 'purchase'; -- purchase | direct_expense
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS beneficiary     TEXT;
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS expense_method  TEXT;   -- bank | custody | credit
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS expense_details JSONB; -- بيانات الصرف المباشر (آيبان/عهدة/آجل)
+
+-- مفتاح تفعيل بوّابة الصرف على مسار الشراء (افتراضي 0 = السلوك الحالي المسطّح؛
+-- يرفعه المالك إلى 1 بعد ضبط سلسلة صرف الشراء وأدوارها — تفعيل تدريجي آمن).
+UPDATE portal_settings SET value = value || jsonb_build_object('disb_gate_purchase', 0)
+ WHERE key = 'portal_settings' AND NOT (value ? 'disb_gate_purchase');
+
+-- ── (2) باني السلسلة المعمَّم (يخدم دورتَي need و disbursement) ──────────────
+--   يُطابِق قالب portal_workflows حسب cycle/القسم/القطاع/القيمة ويُدرِج مراحل
+--   portal_approvals بذلك الـcycle. يعيد عدد المراحل (0 = لا سلسلة مطابِقة).
+CREATE OR REPLACE FUNCTION portal_build_chain(p_request_id text, p_cycle text)
+RETURNS int LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_req portal_requests%ROWTYPE; v_wf portal_workflows%ROWTYPE; v_sector text; v_stage jsonb; v_n int := 0;
+BEGIN
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  SELECT sector INTO v_sector FROM portal_departments WHERE id = v_req.department_id;
+
+  SELECT * INTO v_wf FROM portal_workflows
+    WHERE active AND cycle = p_cycle
+      AND (department_id IS NULL OR department_id = v_req.department_id)
+      AND (sector IS NULL OR sector = v_sector)
+      AND v_req.est_total >= min_total
+      AND (max_total IS NULL OR v_req.est_total <= max_total)
+    ORDER BY priority ASC LIMIT 1;
+
+  -- امسح صفوف هذه الدورة القديمة (إعادة بناء آمنة). ملاحظة: DELETE يعيد ضبط FOUND،
+  -- لذا نعتمد على v_wf.id (لا FOUND) لتقرير مطابقة القالب.
+  DELETE FROM portal_approvals WHERE request_id = p_request_id AND cycle = p_cycle;
+
+  IF v_wf.id IS NOT NULL THEN
+    FOR v_stage IN SELECT * FROM jsonb_array_elements(v_wf.stages) LOOP
+      INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+        VALUES (p_request_id, p_cycle, (v_stage->>'seq')::int, v_stage->>'label',
+                v_stage->>'resolver', v_stage->>'role_key', v_stage->>'approver');
+      v_n := v_n + 1;
+    END LOOP;
+    IF p_cycle = 'need' THEN UPDATE portal_requests SET workflow_id = v_wf.id WHERE id = p_request_id; END IF;
+  ELSIF p_cycle = 'need' THEN
+    -- سلسلة الحاجة الاحتياطية: مرحلة واحدة (مدير القسم) — توافق مع السلوك القائم.
+    INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+      VALUES (p_request_id, 'need', 1, 'مدير القسم', 'dept_manager', NULL, NULL);
+    v_n := 1;
+  END IF;
+  RETURN v_n;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_build_chain(text,text) FROM PUBLIC, anon;
+
+-- ── (3) portal_submit_request يعيد استخدام الباني (دورة need) ───────────────
+CREATE OR REPLACE FUNCTION portal_submit_request(p_request_id text) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_n int;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'draft' THEN RAISE EXCEPTION 'الطلب أُرسل مسبقاً'; END IF;
+  IF v_req.requester <> v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  v_n := portal_build_chain(p_request_id, 'need');
+  UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_me
+    WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'submitted', v_me, 'portal', '{}'::jsonb);
+  RETURN jsonb_build_object('ok', true, 'status', 'in_review');
+END $fn$;
+
+-- ── (4) portal_pr_transition واعياً بالدورة ────────────────────────────────
+--   p_cycle=NULL ⇒ يُشتقّ من الطور: disbursement عند phase='disbursement' وإلا need.
+--   كل استعلام portal_approvals مُنطاق بالدورة. فرع الاكتمال يوجَّه بالدورة/النوع.
+--   ⚠️ يُسقَط التوقيع القديم (5 معاملات) كي لا يبقى تحميل زائد مبهم؛ كل نداء بـ5
+--      معاملات مسمّاة يُحلّ إلى التوقيع الجديد (p_cycle افتراضه NULL).
+DROP FUNCTION IF EXISTS portal_pr_transition(text, text, text, date, int);
+CREATE OR REPLACE FUNCTION portal_pr_transition(p_request_id text, p_action text,
+    p_comment text DEFAULT NULL, p_hold_until date DEFAULT NULL, p_return_to_seq int DEFAULT 0,
+    p_cycle text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text := portal_username();
+  v_req portal_requests%ROWTYPE; v_stage portal_approvals%ROWTYPE; v_target portal_approvals%ROWTYPE;
+  v_pending int; v_next_seq int; v_decision text; v_status text; v_phase text;
+  v_ok boolean := false; v_intended text; v_perm boolean; v_cycle text; v_active_phase text;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','defer') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'in_review' THEN RAISE EXCEPTION 'الطلب ليس قيد المراجعة'; END IF;
+
+  v_cycle := coalesce(p_cycle, CASE WHEN v_req.phase = 'disbursement' THEN 'disbursement' ELSE 'need' END);
+  v_active_phase := CASE WHEN v_cycle = 'disbursement' THEN 'disbursement' ELSE 'requisition' END;
+
+  SELECT * INTO v_stage FROM portal_approvals
+    WHERE request_id = p_request_id AND cycle = v_cycle AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'لا توجد مرحلة معلّقة'; END IF;
+
+  IF portal_setting_bool('sod_requester_cannot_approve', true)
+     AND v_req.requester = v_me AND NOT portal_is_admin() THEN
+    RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = p_request_id AND cycle = v_cycle
+              AND approver = v_me AND decision = 'approved' AND seq < v_stage.seq)
+     AND NOT portal_is_admin() THEN
+    RAISE EXCEPTION 'اعتمدت مرحلة سابقة لهذا الطلب — لا يجوز اعتماد أكثر من مرحلة (فصل المهام)';
+  END IF;
+
+  v_intended := portal_resolve_stage(p_request_id, v_stage);
+  IF v_intended IS NOT NULL THEN
+    v_ok := (portal_qualified_approver(v_intended, v_req.requester) = v_me);
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm
+      FROM portal_users WHERE username = v_me;
+    v_ok := coalesce(v_perm, false);
+  END IF;
+  IF NOT v_ok AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
+
+  IF p_action IN ('reject','return','defer') AND coalesce(trim(p_comment),'') = '' THEN
+    RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع/التأجيل';
+  END IF;
+
+  -- التأجيل المالي: مرحلة التحقق المالي فقط (يعمل في الدورتين).
+  IF p_action = 'defer' THEN
+    IF v_stage.role_key IS DISTINCT FROM 'can_approve_finance' AND NOT portal_is_admin() THEN
+      RAISE EXCEPTION 'التأجيل المالي متاح في مرحلة التحقق المالي فقط';
+    END IF;
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_requests SET status = 'on_hold', hold_reason = p_comment, hold_until = p_hold_until,
+           held_by = v_me, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(p_request_id, 'deferred', v_me, 'portal',
+      jsonb_build_object('reason', p_comment, 'until', p_hold_until, 'cycle', v_cycle));
+    RETURN jsonb_build_object('ok', true, 'action', 'defer', 'status', 'on_hold');
+  END IF;
+
+  -- الإرجاع المرن إلى مرحلة سابقة (ضمن الدورة نفسها).
+  IF p_action = 'return' AND coalesce(p_return_to_seq, 0) > 0 THEN
+    IF p_return_to_seq >= v_stage.seq THEN RAISE EXCEPTION 'الإرجاع يكون لمرحلة سابقة فقط'; END IF;
+    SELECT * INTO v_target FROM portal_approvals
+      WHERE request_id = p_request_id AND cycle = v_cycle AND seq = p_return_to_seq;
+    IF NOT FOUND THEN RAISE EXCEPTION 'المرحلة الهدف غير موجودة'; END IF;
+
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_approvals SET decision = 'pending', approver = NULL, comment = NULL, acted_at = NULL, channel = 'portal'
+      WHERE request_id = p_request_id AND cycle = v_cycle AND seq >= p_return_to_seq;
+    UPDATE portal_requests SET status = 'in_review', phase = v_active_phase,
+           current_seq = p_return_to_seq, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+
+    PERFORM portal_audit_write(p_request_id, 'stage_returned', v_me, 'portal',
+      jsonb_build_object('cycle', v_cycle, 'from_seq', v_stage.seq, 'to_seq', p_return_to_seq, 'comment', p_comment));
+    RETURN jsonb_build_object('ok', true, 'action', 'return', 'decision', 'returned',
+      'status', 'in_review', 'finalized', false, 'seq', v_stage.seq, 'return_to_seq', p_return_to_seq);
+  END IF;
+
+  v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
+  SELECT count(*) INTO v_pending FROM portal_approvals
+    WHERE request_id = p_request_id AND cycle = v_cycle AND decision = 'pending';
+
+  IF p_action = 'approve' THEN
+    IF v_pending <= 1 THEN
+      -- اكتملت السلسلة — التوجيه بالدورة والنوع:
+      IF v_cycle = 'disbursement' THEN
+        v_status := 'payment_pending'; v_phase := 'payment'; v_next_seq := 0;
+      ELSIF v_req.req_type = 'direct_expense' THEN
+        v_status := 'payment_pending'; v_phase := 'payment'; v_next_seq := 0;   -- احتياط (الصرف المباشر يستخدم دورة disbursement)
+      ELSE
+        v_status := 'pricing'; v_phase := 'pricing'; v_next_seq := v_stage.seq;  -- مسار الشراء بلا تغيير
+      END IF;
+    ELSE
+      SELECT min(seq) INTO v_next_seq FROM portal_approvals
+        WHERE request_id = p_request_id AND cycle = v_cycle AND decision = 'pending' AND seq > v_stage.seq;
+      v_status := 'in_review'; v_phase := v_active_phase;
+    END IF;
+  ELSIF p_action = 'reject' THEN
+    v_status := 'rejected'; v_phase := v_active_phase; v_next_seq := 0;
+  ELSE
+    v_status := 'returned'; v_phase := v_active_phase; v_next_seq := 0;
+  END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_approvals SET decision = v_decision, approver = v_me, comment = p_comment, acted_at = now(), channel = 'portal'
+    WHERE request_id = p_request_id AND cycle = v_cycle AND seq = v_stage.seq;
+  UPDATE portal_requests SET status = v_status, current_seq = coalesce(v_next_seq,0), phase = v_phase,
+         updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  -- عند اكتمال دورة الصرف: افتح الدفعة المُعتمَدة بالسلسلة (للصرف المباشر) أو جهّز
+  -- بوّابة التنفيذ (لمسار الشراء — الدفعة تُنشأ لاحقاً عبر portal_payment_request).
+  IF p_action = 'approve' AND v_pending <= 1 AND v_cycle = 'disbursement' AND v_req.req_type = 'direct_expense' THEN
+    PERFORM portal_open_direct_payment(p_request_id, v_me);
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'stage_' || v_decision, v_me, 'portal',
+    jsonb_build_object('cycle', v_cycle, 'stage', v_stage.stage_label, 'comment', p_comment));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'decision', v_decision, 'status', v_status,
+    'finalized', v_status <> 'in_review', 'seq', v_stage.seq, 'cycle', v_cycle);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_pr_transition(text,text,text,date,int,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_pr_transition(text,text,text,date,int,text) TO authenticated;
+
+-- ── (5) portal_pr_transition_email مُنطاق بدورة need (اعتماد بريد الصرف = مرحلة لاحقة) ──
+CREATE OR REPLACE FUNCTION portal_pr_transition_email(p_token text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_tok portal_email_tokens%ROWTYPE; v_req portal_requests%ROWTYPE; v_stage portal_approvals%ROWTYPE;
+  v_intended text; v_perm boolean; v_ok boolean := false;
+  v_pending int; v_next_seq int; v_decision text; v_status text; v_phase text;
+BEGIN
+  IF p_action NOT IN ('approve','reject','return') THEN RETURN jsonb_build_object('error','invalid_action','code',400); END IF;
+  IF NOT p_token ~ '^[0-9A-Za-z]{16,128}$' THEN RETURN jsonb_build_object('error','unknown_token','code',400); END IF;
+  SELECT * INTO v_tok FROM portal_email_tokens WHERE token = p_token FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','unknown_token','code',404); END IF;
+  IF v_tok.used THEN RETURN jsonb_build_object('error','used','code',410); END IF;
+  IF v_tok.expires_at < now() THEN RETURN jsonb_build_object('error','expired','code',410); END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = v_tok.request_id FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','pr_not_found','code',404); END IF;
+  IF v_req.status <> 'in_review' THEN RETURN jsonb_build_object('error','not_in_review','code',409); END IF;
+
+  -- اعتماد البريد للدورة الأولى (need) فقط في هذه المرحلة.
+  SELECT * INTO v_stage FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = 'need' AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','no_pending','code',409); END IF;
+  IF v_stage.seq <> v_tok.seq THEN RETURN jsonb_build_object('error','stage_changed','code',409); END IF;
+
+  IF portal_setting_bool('sod_requester_cannot_approve', true)
+     AND v_req.requester = v_tok.approver THEN RETURN jsonb_build_object('error','sod','code',403); END IF;
+  IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = 'need'
+              AND approver = v_tok.approver AND decision = 'approved' AND seq < v_stage.seq) THEN
+    RETURN jsonb_build_object('error','sod','code',403);
+  END IF;
+
+  v_intended := portal_resolve_stage(v_tok.request_id, v_stage);
+  IF v_intended IS NOT NULL THEN
+    v_ok := (portal_qualified_approver(v_intended, v_req.requester) = v_tok.approver);
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm FROM portal_users WHERE username = v_tok.approver;
+    v_ok := coalesce(v_perm, false);
+  END IF;
+  IF NOT v_ok THEN RETURN jsonb_build_object('error','not_approver','code',403); END IF;
+  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN
+    RETURN jsonb_build_object('error','comment_required','code',400);
+  END IF;
+
+  UPDATE portal_email_tokens SET used = true, used_at = now() WHERE token = p_token;
+  v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
+  SELECT count(*) INTO v_pending FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = 'need' AND decision = 'pending';
+
+  IF p_action = 'approve' THEN
+    IF v_pending <= 1 THEN v_status := 'pricing'; v_phase := 'pricing'; v_next_seq := v_stage.seq;
+    ELSE
+      SELECT min(seq) INTO v_next_seq FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = 'need' AND decision = 'pending' AND seq > v_stage.seq;
+      v_status := 'in_review'; v_phase := 'requisition';
+    END IF;
+  ELSIF p_action = 'reject' THEN v_status := 'rejected'; v_phase := 'requisition'; v_next_seq := 0;
+  ELSE v_status := 'returned'; v_phase := 'requisition'; v_next_seq := 0;
+  END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_approvals SET decision = v_decision, approver = v_tok.approver, comment = p_comment, acted_at = now(), channel = 'email'
+    WHERE request_id = v_tok.request_id AND cycle = 'need' AND seq = v_stage.seq;
+  UPDATE portal_requests SET status = v_status, current_seq = coalesce(v_next_seq,0), phase = v_phase, updated_at = now(), updated_by = v_tok.approver
+    WHERE id = v_tok.request_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(v_tok.request_id, 'stage_' || v_decision, v_tok.approver, 'email', jsonb_build_object('stage', v_stage.stage_label, 'comment', p_comment));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'decision', v_decision, 'status', v_status,
+    'finalized', v_status <> 'in_review', 'seq', v_stage.seq,
+    'request', jsonb_build_object('id', v_req.id, 'title', v_req.title, 'department_id', v_req.department_id,
+                                   'requester', v_req.requester, 'requester_name', v_req.requester_name));
+END $fn$;
+
+-- ── (6) portal_resubmit_request واعياً بالدورة ─────────────────────────────
+CREATE OR REPLACE FUNCTION portal_resubmit_request(p_request_id text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_first int; v_cycle text; v_phase text;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'returned' THEN RAISE EXCEPTION 'يمكن إعادة تقديم الطلبات المُعادة فقط'; END IF;
+  IF v_req.requester <> v_me AND NOT portal_is_admin() THEN
+    RAISE EXCEPTION 'إعادة التقديم تقتصر على مُقدّم الطلب';
+  END IF;
+  v_cycle := CASE WHEN v_req.phase = 'disbursement' THEN 'disbursement' ELSE 'need' END;
+  v_phase := CASE WHEN v_cycle = 'disbursement' THEN 'disbursement' ELSE 'requisition' END;
+
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_approvals SET decision='pending', approver=NULL, comment=NULL, acted_at=NULL, channel='portal'
+   WHERE request_id = p_request_id AND cycle = v_cycle;
+  SELECT min(seq) INTO v_first FROM portal_approvals WHERE request_id = p_request_id AND cycle = v_cycle;
+  UPDATE portal_requests SET status='in_review', phase=v_phase, current_seq = coalesce(v_first,1),
+         updated_at=now(), updated_by=v_me WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition','0',true);
+  PERFORM portal_audit_write(p_request_id,'resubmitted',v_me,'portal',jsonb_build_object('comment',p_comment,'cycle',v_cycle));
+  RETURN jsonb_build_object('ok', true, 'status', 'in_review');
+END $fn$;
+
+-- ── (7) portal_run_sla واعياً بالدورة (يصعّد مرحلة الدورة النشطة) ───────────
+CREATE OR REPLACE FUNCTION portal_run_sla() RETURNS int
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_req RECORD; v_stage portal_approvals%ROWTYPE; v_intended text; v_deleg text; v_cnt int := 0;
+        v_h numeric := portal_sla_hours(); v_cycle text;
+BEGIN
+  FOR v_req IN SELECT * FROM portal_requests
+      WHERE status = 'in_review' AND stage_due_at < now()
+        AND (last_escalation_at IS NULL OR last_escalation_at < now() - make_interval(hours => v_h::int))
+  LOOP
+    v_cycle := CASE WHEN v_req.phase = 'disbursement' THEN 'disbursement' ELSE 'need' END;
+    SELECT * INTO v_stage FROM portal_approvals WHERE request_id = v_req.id AND cycle = v_cycle AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+    CONTINUE WHEN NOT FOUND;
+    v_intended := portal_resolve_stage(v_req.id, v_stage);
+    v_deleg := NULL;
+    IF v_intended IS NOT NULL THEN
+      SELECT delegate_to INTO v_deleg FROM portal_users WHERE username = v_intended AND is_away = true;
+    END IF;
+    IF v_intended IS NOT NULL THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        VALUES ('ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||v_intended,
+                v_intended, 'system', 'تذكير: طلب متأخّر بانتظار اعتمادك', v_req.title, 'inbox')
+        ON CONFLICT (id) DO NOTHING;
+    ELSIF v_stage.role_key IS NOT NULL THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.username,
+               u.username, 'system', 'تذكير: طلب متأخّر بانتظار اعتماد مرحلتك ('||coalesce(v_stage.stage_label,'')||')', v_req.title, 'inbox'
+        FROM portal_users u WHERE u.active AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.delegate_to,
+               u.delegate_to, 'system', 'تفويض: طلب متأخّر ('||coalesce(v_stage.stage_label,'')||') بالنيابة', v_req.title, 'inbox'
+        FROM portal_users u WHERE u.active AND u.is_away AND u.delegate_to IS NOT NULL
+          AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+    IF v_deleg IS NOT NULL THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        VALUES ('ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||v_deleg,
+                v_deleg, 'system', 'تفويض: طلب متأخّر بانتظار اعتمادك (بالنيابة)', v_req.title, 'inbox')
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+    INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+      SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||username,
+             username, 'system', 'تصعيد SLA: طلب متأخّر', v_req.title, 'inbox'
+      FROM portal_users WHERE role = 'admin' AND active = true ON CONFLICT (id) DO NOTHING;
+
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_requests SET escalations = escalations + 1,
+      escalated_at = coalesce(escalated_at, now()), last_escalation_at = now() WHERE id = v_req.id;
+    PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(v_req.id, 'escalated', NULL, 'system', jsonb_build_object('intended', v_intended, 'cycle', v_cycle, 'stage_label', v_stage.stage_label));
+    v_cnt := v_cnt + 1;
+  END LOOP;
+  RETURN v_cnt;
+END $fn$;
+
+-- ── (8) المدخل الأول: إنشاء طلب صرف مستقلّ (خارج دورة المشتريات تماماً) ──────
+CREATE OR REPLACE FUNCTION portal_create_expense(
+    p_beneficiary text, p_amount numeric, p_kind text, p_purpose text,
+    p_department_id text, p_need_by date, p_details jsonb DEFAULT NULL, p_note text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id text; v_n int; v_details jsonb := coalesce(p_details,'{}'::jsonb); v_iban text;
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_create') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF coalesce(trim(p_beneficiary),'') = '' THEN RAISE EXCEPTION 'اسم الجهة/المستفيد مطلوب'; END IF;
+  IF coalesce(p_amount,0) <= 0 THEN RAISE EXCEPTION 'المبلغ غير صالح'; END IF;
+  IF coalesce(trim(p_purpose),'') = '' THEN RAISE EXCEPTION 'الغرض مطلوب'; END IF;
+  IF p_kind NOT IN ('bank','custody','credit') THEN RAISE EXCEPTION 'طريقة صرف غير صالحة'; END IF;
+  IF p_department_id IS NULL OR NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = p_department_id) THEN
+    RAISE EXCEPTION 'القسم غير صالح'; END IF;
+  -- تحقّق بيانات الصرف مبكّراً (نفس قواعد portal_payment_request)
+  IF p_kind = 'bank' THEN
+    v_iban := upper(regexp_replace(coalesce(v_details->>'iban',''), '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+    IF coalesce(trim(v_details->>'account_name'),'') = '' THEN RAISE EXCEPTION 'اسم الحساب البنكي مطلوب'; END IF;
+    v_details := v_details || jsonb_build_object('iban', v_iban);
+  ELSIF p_kind = 'custody' THEN
+    IF coalesce(v_details->>'custody_to','') = '' OR NOT EXISTS (SELECT 1 FROM portal_users WHERE username = v_details->>'custody_to' AND active) THEN
+      RAISE EXCEPTION 'حدّد مسؤول العهدة (مستخدم نشط)'; END IF;
+  ELSIF p_kind = 'credit' THEN
+    IF (v_details->>'due_date') IS NULL OR (v_details->>'due_date')::date IS NULL THEN
+      RAISE EXCEPTION 'تاريخ الاستحقاق مطلوب للصرف الآجل'; END IF;
+  END IF;
+
+  v_id := 'REQ-' || to_char(now(),'YYYYMMDD') || '-' || substr(md5(random()::text),1,6);
+  PERFORM set_config('app.portal_transition', '1', true);
+  INSERT INTO portal_requests(id, title, department_id, requester, requester_name, req_type, est_total,
+      status, phase, beneficiary, expense_method, project, need_by, note, created_by, created_at)
+    VALUES (v_id, left(p_purpose,200), p_department_id, v_me,
+            (SELECT display_name FROM portal_users WHERE username = v_me), 'direct_expense', p_amount,
+            'draft', 'disbursement', p_beneficiary, p_kind, 'صرف مباشر', p_need_by, p_note, v_me, now());
+  UPDATE portal_requests SET expense_details = v_details WHERE id = v_id;
+
+  v_n := portal_build_chain(v_id, 'disbursement');
+  IF v_n = 0 THEN
+    -- لا سلسلة صرف مُعرّفة: مرحلة احتياطية واحدة (اعتماد صرف).
+    INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+      VALUES (v_id, 'disbursement', 1, 'اعتماد الصرف', NULL, 'can_approve_disbursement', NULL);
+    v_n := 1;
+  END IF;
+  UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = v_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(v_id, 'expense_created', v_me, 'portal',
+    jsonb_build_object('beneficiary', p_beneficiary, 'amount', p_amount, 'kind', p_kind, 'stages', v_n));
+  RETURN jsonb_build_object('ok', true, 'id', v_id, 'status', 'in_review');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text) TO authenticated;
+
+-- ── (9) فتح دفعة الصرف المباشر عند اكتمال السلسلة (مُعتمَدة بالسلسلة) ────────
+--   تُنشئ portal_payments بحالة approved_pay (السلسلة كانت الاعتماد)، والبنك ينفّذ.
+CREATE OR REPLACE FUNCTION portal_open_direct_payment(p_request_id text, p_last_approver text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_req portal_requests%ROWTYPE; v_details jsonb; v_amt numeric; v_vat numeric;
+BEGIN
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id;
+  IF v_req.req_type <> 'direct_expense' THEN RETURN; END IF;
+  v_details := coalesce(v_req.expense_details, '{}'::jsonb);
+  v_vat := portal_setting_num('vat', 15);
+  v_amt := round(v_req.est_total * (1 + v_vat/100.0));
+  INSERT INTO portal_payments(request_id, kind, amount, custody_to, status, requested_by, approved_by, approved_at, details, created_at)
+    VALUES (p_request_id, v_req.expense_method, v_amt,
+            nullif(v_details->>'custody_to',''), 'approved_pay', v_req.requester, p_last_approver, now(), v_details, now());
+END $fn$;
+REVOKE ALL ON FUNCTION portal_open_direct_payment(text,text) FROM PUBLIC, anon;
+
+-- ── (10) portal_payment_transition: دورة الصرف تحلّ محلّ الاعتماد المسطّح ─────
+--   عند وجود سلسلة صرف مكتملة (cycle='disbursement')، يُسمح بالتنفيذ مباشرةً من
+--   pending_pay/approved_pay (السلسلة كانت الاعتماد)، بفصل مهام: المنفّذ ≠ الطالب ≠
+--   أي معتمِد في سلسلة الصرف. الصرف المباشر → closed (لا استلام). الباقي بلا تغيير.
+CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text,
+    p_comment text DEFAULT NULL, p_return_to text DEFAULT NULL, p_details jsonb DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_pay portal_payments%ROWTYPE; v_status text;
+  v_req_status text; v_req_phase text; v_req_inst boolean; v_req_type text; v_split boolean; v_multi boolean;
+  v_pending int; v_vat numeric; v_agg_max numeric; v_disb_sum numeric; v_merge jsonb := coalesce(p_details, '{}'::jsonb);
+  v_has_chain boolean; v_is_direct boolean;
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_disburse') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+
+  SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب الصرف غير موجود'; END IF;
+
+  SELECT status, phase, pay_installments, req_type INTO v_req_status, v_req_phase, v_req_inst, v_req_type
+    FROM portal_requests WHERE id = v_pay.request_id FOR UPDATE;
+  v_split := EXISTS (SELECT 1 FROM portal_award_lines WHERE request_id = v_pay.request_id);
+  v_multi := v_split OR (coalesce(v_req_inst,false) AND NOT v_split);
+  v_is_direct := (v_req_type = 'direct_expense');
+  v_has_chain := EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement');
+
+  IF v_multi THEN
+    IF v_req_phase <> 'payment' THEN RAISE EXCEPTION 'حالة الطلب لا تسمح بعملية الصرف'; END IF;
+  ELSE
+    IF v_req_status IS DISTINCT FROM 'payment_pending' THEN
+      RAISE EXCEPTION 'حالة الطلب (%) لا تسمح بعملية الصرف', coalesce(v_req_status,'?');
+    END IF;
+  END IF;
+
+  IF p_action = 'approve' THEN
+    -- عند وجود سلسلة صرف، الاعتماد المسطّح غير مطلوب (السلسلة اعتمدت).
+    IF v_has_chain THEN RAISE EXCEPTION 'الصرف مُعتمَد عبر سلسلة الموافقات المالية — نفّذ الصرف مباشرةً'; END IF;
+    IF v_pay.status <> 'pending_pay' THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
+    IF v_pay.requested_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك اعتماد صرفٍ طلبته بنفسك (فصل المهام)'; END IF;
+    v_status := 'approved_pay';
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, approved_by = v_me, approved_at = now(), comment = p_comment,
+      details = coalesce(details,'{}'::jsonb) || v_merge WHERE id = p_payment_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+  ELSIF p_action IN ('reject','return') THEN
+    IF v_pay.status NOT IN ('pending_pay','approved_pay') THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
+    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع'; END IF;
+
+    -- ═══ (044) إعادة فتح التعميد للتسعير (مسار الشراء): خلل عروض/أسعار قبل التنفيذ ═══
+    IF p_action = 'return' AND p_return_to = 'award' AND NOT v_is_direct THEN
+      IF EXISTS (SELECT 1 FROM portal_payments WHERE request_id = v_pay.request_id AND status = 'disbursed') THEN
+        RAISE EXCEPTION 'تعذّر إعادة فتح التعميد — يوجد صرف منفَّذ بالفعل (المال خرج)';
+      END IF;
+      PERFORM set_config('app.portal_transition', '1', true);
+      UPDATE portal_payments SET status = 'returned', comment = p_comment
+        WHERE request_id = v_pay.request_id AND status IN ('pending_pay','approved_pay');
+      UPDATE portal_award SET status = 'rejected' WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_award_lines WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_award_approvals WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_po_approvals WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement';
+      UPDATE portal_requests SET status = 'pricing', phase = 'pricing', po_issued_by = NULL, po_issued_at = NULL,
+             updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      PERFORM set_config('app.portal_transition', '0', true);
+      PERFORM portal_audit_write(v_pay.request_id, 'award_reopened', v_me, 'portal',
+        jsonb_build_object('from', 'payment', 'reason', p_comment, 'payment_id', p_payment_id));
+      RETURN jsonb_build_object('ok', true, 'action', 'reopen', 'status', 'pricing');
+    END IF;
+
+    v_status := CASE p_action WHEN 'return' THEN 'returned' ELSE 'rejected' END;
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, comment = p_comment WHERE id = p_payment_id;
+    IF NOT v_multi THEN
+      UPDATE portal_requests SET status = CASE WHEN v_is_direct THEN 'returned' ELSE 'awarded' END,
+             updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    END IF;
+    PERFORM set_config('app.portal_transition', '0', true);
+    PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+      jsonb_build_object('payment_id', p_payment_id, 'return_to', p_return_to, 'comment', p_comment, 'multi', v_multi));
+    RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
+  ELSE -- disburse
+    -- بوّابة الحالة: بسلسلة صرف يُسمح من pending_pay/approved_pay؛ بلا سلسلة يلزم approved_pay.
+    IF v_has_chain THEN
+      IF v_pay.status NOT IN ('pending_pay','approved_pay') THEN RAISE EXCEPTION 'حالة الصرف غير مطابقة'; END IF;
+      IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement'
+                  AND approver = v_me) AND NOT portal_is_admin() THEN
+        RAISE EXCEPTION 'من اعتمد الصرف في السلسلة لا ينفّذه (فصل المهام)';
+      END IF;
+    ELSE
+      IF v_pay.status <> 'approved_pay' THEN RAISE EXCEPTION 'يلزم اعتماد الصرف أولاً'; END IF;
+      IF v_pay.approved_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ اعتمدته بنفسك (فصل المهام)'; END IF;
+    END IF;
+    IF v_pay.requested_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ طلبته بنفسك (فصل المهام الثلاثي)'; END IF;
+    v_status := 'disbursed';
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, disbursed_by = v_me, disbursed_at = now(),
+      details = coalesce(details,'{}'::jsonb) || v_merge WHERE id = p_payment_id;
+    IF v_split THEN
+      SELECT count(*) INTO v_pending FROM (
+        SELECT DISTINCT al.offer_id FROM portal_award_lines al WHERE al.request_id = v_pay.request_id
+          AND NOT EXISTS (SELECT 1 FROM portal_payments p WHERE p.request_id = al.request_id
+                          AND p.award_offer_id = al.offer_id AND p.status = 'disbursed')) q;
+      IF v_pending = 0 THEN
+        UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      END IF;
+    ELSIF coalesce(v_req_inst,false) THEN
+      v_vat := portal_setting_num('vat', 15);
+      SELECT round(coalesce(winner_total,0) * (1 + v_vat/100.0)) INTO v_agg_max FROM portal_award WHERE request_id = v_pay.request_id AND status = 'approved';
+      SELECT coalesce(sum(amount),0) INTO v_disb_sum FROM portal_payments WHERE request_id = v_pay.request_id AND status = 'disbursed';
+      IF v_disb_sum >= v_agg_max THEN
+        UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      END IF;
+    ELSIF v_is_direct THEN
+      -- الصرف المباشر: لا استلام بضاعة → إقفال مباشر.
+      UPDATE portal_requests SET status = 'closed', phase = 'closed', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    ELSE
+      UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    END IF;
+    PERFORM set_config('app.portal_transition', '0', true);
+  END IF;
+
+  PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+    jsonb_build_object('payment_id', p_payment_id, 'has_proof', (v_merge ? 'proof_key'), 'multi', v_multi, 'via_chain', v_has_chain));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_payment_transition(bigint,text,text,text,jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint,text,text,text,jsonb) TO authenticated;
+
+-- ── (11) المدخل الثاني: بوّابة الصرف على مسار الشراء (اختيارية بمفتاح) ───────
+--   بعد اعتماد أمر الشراء: عند disb_gate_purchase=1 ووجود سلسلة صرف مطابِقة، يدخل
+--   الطلب دورة disbursement بدل الانتقال المباشر للدفع المسطّح. وإلا السلوك كما هو.
+CREATE OR REPLACE FUNCTION portal_po_transition(p_request_id text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_stage portal_po_approvals%ROWTYPE;
+        v_perm boolean; v_remaining int; v_committee jsonb; v_disb_n int;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  IF v_req.status <> 'po_review' THEN RAISE EXCEPTION 'الطلب ليس بانتظار اعتماد أمر الشراء'; END IF;
+  IF v_req.requester = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك اعتماد طلبك (فصل المهام)'; END IF;
+
+  SELECT * INTO v_stage FROM portal_po_approvals WHERE request_id = p_request_id AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RAISE EXCEPTION 'لا توجد مرحلة أمر شراء معلّقة'; END IF;
+
+  IF v_stage.kind = 'committee' THEN
+    SELECT value INTO v_committee FROM portal_settings WHERE key = 'committee_members';
+    IF NOT ( portal_is_admin()
+             OR coalesce((SELECT (permissions ->> 'can_approve_committee')::boolean FROM portal_users WHERE username = v_me), false)
+             OR (v_committee IS NOT NULL AND v_committee ? v_me) ) THEN
+      RAISE EXCEPTION 'لست عضواً في اللجنة المصغّرة';
+    END IF;
+  ELSE
+    SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm FROM portal_users WHERE username = v_me;
+    IF NOT coalesce(v_perm,false) AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لست المُعتمِد لهذه المرحلة'; END IF;
+  END IF;
+
+  IF NOT portal_is_admin() THEN
+    IF EXISTS (SELECT 1 FROM portal_po_approvals WHERE request_id = p_request_id AND approver = v_me AND decision = 'approved') THEN
+      RAISE EXCEPTION 'لا تعتمد أكثر من مرحلة في أمر الشراء نفسه (فصل المهام)';
+    END IF;
+    IF EXISTS (SELECT 1 FROM portal_award WHERE request_id = p_request_id AND awarded_by = v_me) THEN
+      RAISE EXCEPTION 'من رسا التعميد لا يعتمد أمر شرائه (فصل المهام)';
+    END IF;
+  END IF;
+
+  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  IF p_action = 'approve' THEN
+    UPDATE portal_po_approvals SET decision = 'approved', approver = v_me, comment = p_comment, acted_at = now()
+      WHERE request_id = p_request_id AND seq = v_stage.seq;
+    SELECT count(*) INTO v_remaining FROM portal_po_approvals WHERE request_id = p_request_id AND decision = 'pending';
+    IF v_remaining = 0 THEN
+      v_disb_n := 0;
+      IF portal_setting_num('disb_gate_purchase', 0) >= 1 THEN
+        v_disb_n := portal_build_chain(p_request_id, 'disbursement');
+      END IF;
+      IF v_disb_n > 0 THEN
+        -- بوّابة الصرف المتدرّجة: يدخل الطلب دورة disbursement قبل التنفيذ.
+        UPDATE portal_requests SET status = 'in_review', phase = 'disbursement', po_issued_by = v_me, po_issued_at = now(),
+               current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+      ELSE
+        -- السلوك القائم: انتقال مباشر لطور الدفع (الاعتماد المسطّح).
+        UPDATE portal_requests SET status = 'awarded', phase = 'payment', po_issued_by = v_me, po_issued_at = now(),
+               current_seq = 0, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+      END IF;
+    ELSE
+      UPDATE portal_requests SET current_seq = v_stage.seq + 1, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+    END IF;
+  ELSE
+    UPDATE portal_po_approvals SET decision = CASE p_action WHEN 'reject' THEN 'rejected' ELSE 'returned' END,
+           approver = v_me, comment = p_comment, acted_at = now() WHERE request_id = p_request_id AND seq = v_stage.seq;
+    UPDATE portal_award SET status = 'rejected' WHERE request_id = p_request_id;
+    UPDATE portal_requests SET status = 'pricing', phase = 'pricing', updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(p_request_id, 'po_' || p_action, v_me, 'portal', jsonb_build_object('comment', p_comment, 'stage', v_stage.stage_label));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'status', (SELECT status FROM portal_requests WHERE id = p_request_id));
+END $fn$;
+REVOKE ALL ON FUNCTION portal_po_transition(text,text,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_po_transition(text,text,text) TO authenticated;
+
+-- ── (12) وظائف الأدوار المالية الخمسة + مفتاح can_approve_disbursement ──────
+INSERT INTO portal_jobs(key, title, category, scope, permissions, description, active) VALUES
+  ('fin_accountant',   'محاسب (صرف)',        'GA', 'all',
+     '{"can_create":true,"can_see_finance":true}'::jsonb, 'يقدّم طلبات الصرف المباشر', true),
+  ('fin_accounts_mgr', 'رئيس الحسابات',       'GA', 'all',
+     '{"can_approve_disbursement":true,"can_see_finance":true}'::jsonb, 'اعتماد أول للصرف', true),
+  ('fin_manager',      'المدير المالي (صرف)', 'GA', 'all',
+     '{"can_approve_finance":true,"can_see_finance":true}'::jsonb, 'اعتماد مالي للصرف', true),
+  ('bank_officer',     'مسؤول البنك',         'GA', 'all',
+     '{"can_disburse":true}'::jsonb, 'تنفيذ الصرف البنكي', true)
+ON CONFLICT (key) DO UPDATE SET permissions = portal_jobs.permissions || EXCLUDED.permissions, active = true;
+
+-- ── (13) سلسلة صرف افتراضية قابلة للتحرير في المصمّم (cycle='disbursement') ──
+INSERT INTO portal_workflows(id, name, priority, department_id, sector, min_total, max_total, stages, active, cycle)
+VALUES ('wf-disb-default', 'سلسلة الصرف الافتراضية', 100, NULL, NULL, 0, NULL,
+  '[{"seq":1,"label":"رئيس الحسابات","resolver":"role","role_key":"can_approve_disbursement","sla":24},
+    {"seq":2,"label":"المدير المالي","resolver":"role","role_key":"can_approve_finance","sla":24},
+    {"seq":3,"label":"المدير العام","resolver":"role","role_key":"can_manage_users","sla":24}]'::jsonb,
+  true, 'disbursement')
+ON CONFLICT (id) DO NOTHING;
+
+-- تحقّق:
+--   SELECT portal_build_chain('<req>','disbursement');   ⇒ عدد مراحل السلسلة
+--   SELECT has_function_privilege('anon','portal_create_expense(text,numeric,text,text,text,date,jsonb,text)','EXECUTE'); ⇒ false
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 051 (idempotency + إبطال saga) — مطابقة لـ db/portal-migrations/051
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════════
+--  051 — حوكمة مالية متقدّمة (المرحلة 2-أ): exactly-once + إبطال saga
+--  ─────────────────────────────────────────────────────────────────────────
+--  معياران من أقوى الأنظمة العالمية لحركة المال، مطبَّقان داخل القاعدة:
+--
+--   (أ) **Idempotency (exactly-once):** تنفيذ الصرف حسّاس؛ إعادة محاولة الشبكة أو
+--       نقرة مزدوجة قد تُكرّر الأثر. مفتاح idempotency **حتميّ لكل دفعة+فعل** يضمن
+--       أنّ أي إعادة تُرجِع نتيجة أوّل تنفيذ ولا تُكرّره. مخزَّن معامَلاتياً مع أثر
+--       الحالة نفسه (نفس المعاملة) فالضمان صحيح حتى تحت التزامن.
+--
+--   (ب) **إبطال saga (تعويض):** المال لا يُعكَس صمتاً. إبطال صرف منفَّذ مسار محكوم:
+--       صلاحية مالية + فصل مهام (المنفّذ لا يُبطِل تنفيذه) + سبب إلزامي + قيد عكسي
+--       في التدقيق الثابت + انتقال حالة مضبوط. لا يُبطَل صرفٌ استُلمت بضاعته (يُستخدم
+--       مرتجع بدلاً منه).
+--
+--  عدم الانحدار مضمون: `p_idem_key` اختياري (NULL = السلوك الحالي حرفياً).
+--  ⚠️ تُطبَّق حيّاً بعد 050. مدمجة في db/portal-standalone.sql.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── (1) جدول مفاتيح idempotency (خادميّ بحت: RLS مفعّلة بلا سياسة) ──────────
+CREATE TABLE IF NOT EXISTS portal_idempotency (
+  key        TEXT PRIMARY KEY,
+  op         TEXT NOT NULL,               -- مثل 'payment_transition:disburse'
+  ref        BIGINT,                       -- المرجع (payment_id) للتحقّق من عدم إعادة استخدام المفتاح لعملية أخرى
+  result     JSONB NOT NULL,               -- نتيجة أوّل تنفيذ (تُعاد حرفياً عند التكرار)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE portal_idempotency ENABLE ROW LEVEL SECURITY;  -- لا سياسة = لا وصول من العميل
+
+-- ── (2) أعمدة الإبطال على portal_payments ──────────────────────────────────
+ALTER TABLE portal_payments ADD COLUMN IF NOT EXISTS voided_by   TEXT;
+ALTER TABLE portal_payments ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ;
+ALTER TABLE portal_payments ADD COLUMN IF NOT EXISTS void_reason TEXT;
+
+-- ── (3) portal_payment_transition + مفتاح idempotency اختياري ──────────────
+--   يُعاد تعريفها بالكامل (نسخة 050) مع معامل سادس p_idem_key:
+--   • عند وجوده: يُتحقَّق أولاً من جدول idempotency — تطابق ⇒ تُعاد النتيجة المخزَّنة
+--     بلا إعادة تنفيذ؛ تعارض (مفتاح لعملية أخرى) ⇒ خطأ. وعند النجاح تُخزَّن النتيجة.
+DROP FUNCTION IF EXISTS portal_payment_transition(bigint, text, text, text, jsonb);
+CREATE OR REPLACE FUNCTION portal_payment_transition(p_payment_id bigint, p_action text,
+    p_comment text DEFAULT NULL, p_return_to text DEFAULT NULL, p_details jsonb DEFAULT NULL,
+    p_idem_key text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_pay portal_payments%ROWTYPE; v_status text;
+  v_req_status text; v_req_phase text; v_req_inst boolean; v_req_type text; v_split boolean; v_multi boolean;
+  v_pending int; v_vat numeric; v_agg_max numeric; v_disb_sum numeric; v_merge jsonb := coalesce(p_details, '{}'::jsonb);
+  v_has_chain boolean; v_is_direct boolean; v_idem portal_idempotency%ROWTYPE; v_op text; v_res jsonb;
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_disburse') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return','disburse') THEN RAISE EXCEPTION 'إجراء غير صالح'; END IF;
+
+  SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب الصرف غير موجود'; END IF;
+
+  -- idempotency: إعادة محاولة نفس العملية تُرجِع النتيجة المخزَّنة (exactly-once)
+  v_op := 'payment_transition:' || p_action;
+  IF p_idem_key IS NOT NULL THEN
+    SELECT * INTO v_idem FROM portal_idempotency WHERE key = p_idem_key;
+    IF FOUND THEN
+      IF v_idem.op <> v_op OR v_idem.ref IS DISTINCT FROM p_payment_id THEN
+        RAISE EXCEPTION 'مفتاح idempotency مستخدم لعملية أخرى';
+      END IF;
+      RETURN v_idem.result;   -- لا إعادة تنفيذ
+    END IF;
+  END IF;
+
+  SELECT status, phase, pay_installments, req_type INTO v_req_status, v_req_phase, v_req_inst, v_req_type
+    FROM portal_requests WHERE id = v_pay.request_id FOR UPDATE;
+  v_split := EXISTS (SELECT 1 FROM portal_award_lines WHERE request_id = v_pay.request_id);
+  v_multi := v_split OR (coalesce(v_req_inst,false) AND NOT v_split);
+  v_is_direct := (v_req_type = 'direct_expense');
+  v_has_chain := EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement');
+
+  IF v_multi THEN
+    IF v_req_phase <> 'payment' THEN RAISE EXCEPTION 'حالة الطلب لا تسمح بعملية الصرف'; END IF;
+  ELSE
+    IF v_req_status IS DISTINCT FROM 'payment_pending' THEN
+      RAISE EXCEPTION 'حالة الطلب (%) لا تسمح بعملية الصرف', coalesce(v_req_status,'?');
+    END IF;
+  END IF;
+
+  IF p_action = 'approve' THEN
+    IF v_has_chain THEN RAISE EXCEPTION 'الصرف مُعتمَد عبر سلسلة الموافقات المالية — نفّذ الصرف مباشرةً'; END IF;
+    IF v_pay.status <> 'pending_pay' THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
+    IF v_pay.requested_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك اعتماد صرفٍ طلبته بنفسك (فصل المهام)'; END IF;
+    v_status := 'approved_pay';
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, approved_by = v_me, approved_at = now(), comment = p_comment,
+      details = coalesce(details,'{}'::jsonb) || v_merge WHERE id = p_payment_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+  ELSIF p_action IN ('reject','return') THEN
+    IF v_pay.status NOT IN ('pending_pay','approved_pay') THEN RAISE EXCEPTION 'حالة غير مطابقة'; END IF;
+    IF coalesce(trim(p_comment),'') = '' THEN RAISE EXCEPTION 'السبب مطلوب للرفض/الإرجاع'; END IF;
+
+    IF p_action = 'return' AND p_return_to = 'award' AND NOT v_is_direct THEN
+      IF EXISTS (SELECT 1 FROM portal_payments WHERE request_id = v_pay.request_id AND status = 'disbursed') THEN
+        RAISE EXCEPTION 'تعذّر إعادة فتح التعميد — يوجد صرف منفَّذ بالفعل (المال خرج)';
+      END IF;
+      PERFORM set_config('app.portal_transition', '1', true);
+      UPDATE portal_payments SET status = 'returned', comment = p_comment
+        WHERE request_id = v_pay.request_id AND status IN ('pending_pay','approved_pay');
+      UPDATE portal_award SET status = 'rejected' WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_award_lines WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_award_approvals WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_po_approvals WHERE request_id = v_pay.request_id;
+      DELETE FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement';
+      UPDATE portal_requests SET status = 'pricing', phase = 'pricing', po_issued_by = NULL, po_issued_at = NULL,
+             updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      PERFORM set_config('app.portal_transition', '0', true);
+      PERFORM portal_audit_write(v_pay.request_id, 'award_reopened', v_me, 'portal',
+        jsonb_build_object('from', 'payment', 'reason', p_comment, 'payment_id', p_payment_id));
+      RETURN jsonb_build_object('ok', true, 'action', 'reopen', 'status', 'pricing');
+    END IF;
+
+    v_status := CASE p_action WHEN 'return' THEN 'returned' ELSE 'rejected' END;
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, comment = p_comment WHERE id = p_payment_id;
+    IF NOT v_multi THEN
+      UPDATE portal_requests SET status = CASE WHEN v_is_direct THEN 'returned' ELSE 'awarded' END,
+             updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    END IF;
+    PERFORM set_config('app.portal_transition', '0', true);
+    v_res := jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
+    PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+      jsonb_build_object('payment_id', p_payment_id, 'return_to', p_return_to, 'comment', p_comment, 'multi', v_multi));
+    IF p_idem_key IS NOT NULL THEN INSERT INTO portal_idempotency(key,op,ref,result) VALUES (p_idem_key,v_op,p_payment_id,v_res) ON CONFLICT (key) DO NOTHING; END IF;
+    RETURN v_res;
+  ELSE -- disburse
+    IF v_has_chain THEN
+      IF v_pay.status NOT IN ('pending_pay','approved_pay') THEN RAISE EXCEPTION 'حالة الصرف غير مطابقة'; END IF;
+      IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_pay.request_id AND cycle = 'disbursement'
+                  AND approver = v_me) AND NOT portal_is_admin() THEN
+        RAISE EXCEPTION 'من اعتمد الصرف في السلسلة لا ينفّذه (فصل المهام)';
+      END IF;
+    ELSE
+      IF v_pay.status <> 'approved_pay' THEN RAISE EXCEPTION 'يلزم اعتماد الصرف أولاً'; END IF;
+      IF v_pay.approved_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ اعتمدته بنفسك (فصل المهام)'; END IF;
+    END IF;
+    IF v_pay.requested_by = v_me AND NOT portal_is_admin() THEN RAISE EXCEPTION 'لا يمكنك تنفيذ صرفٍ طلبته بنفسك (فصل المهام الثلاثي)'; END IF;
+    v_status := 'disbursed';
+    PERFORM set_config('app.portal_transition', '1', true);
+    UPDATE portal_payments SET status = v_status, disbursed_by = v_me, disbursed_at = now(),
+      details = coalesce(details,'{}'::jsonb) || v_merge WHERE id = p_payment_id;
+    IF v_split THEN
+      SELECT count(*) INTO v_pending FROM (
+        SELECT DISTINCT al.offer_id FROM portal_award_lines al WHERE al.request_id = v_pay.request_id
+          AND NOT EXISTS (SELECT 1 FROM portal_payments p WHERE p.request_id = al.request_id
+                          AND p.award_offer_id = al.offer_id AND p.status = 'disbursed')) q;
+      IF v_pending = 0 THEN
+        UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      END IF;
+    ELSIF coalesce(v_req_inst,false) THEN
+      v_vat := portal_setting_num('vat', 15);
+      SELECT round(coalesce(winner_total,0) * (1 + v_vat/100.0)) INTO v_agg_max FROM portal_award WHERE request_id = v_pay.request_id AND status = 'approved';
+      SELECT coalesce(sum(amount),0) INTO v_disb_sum FROM portal_payments WHERE request_id = v_pay.request_id AND status = 'disbursed';
+      IF v_disb_sum >= v_agg_max THEN
+        UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+      END IF;
+    ELSIF v_is_direct THEN
+      UPDATE portal_requests SET status = 'closed', phase = 'closed', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    ELSE
+      UPDATE portal_requests SET status = 'receipt_pending', phase = 'receipt', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+    END IF;
+    PERFORM set_config('app.portal_transition', '0', true);
+  END IF;
+
+  v_res := jsonb_build_object('ok', true, 'action', p_action, 'status', v_status);
+  PERFORM portal_audit_write(v_pay.request_id, 'payment_' || v_status, v_me, 'portal',
+    jsonb_build_object('payment_id', p_payment_id, 'has_proof', (v_merge ? 'proof_key'), 'multi', v_multi, 'via_chain', v_has_chain));
+  IF p_idem_key IS NOT NULL THEN INSERT INTO portal_idempotency(key,op,ref,result) VALUES (p_idem_key,v_op,p_payment_id,v_res) ON CONFLICT (key) DO NOTHING; END IF;
+  RETURN v_res;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_payment_transition(bigint,text,text,text,jsonb,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_payment_transition(bigint,text,text,text,jsonb,text) TO authenticated;
+
+-- ── (4) إبطال صرف منفَّذ (تعويض saga) ──────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_payment_void(p_payment_id bigint, p_reason text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_pay portal_payments%ROWTYPE; v_req portal_requests%ROWTYPE; v_has_receipt boolean;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_has_perm('can_approve_finance') OR portal_is_admin()) THEN
+    RAISE EXCEPTION 'إبطال الصرف يتطلّب صلاحية مالية';
+  END IF;
+  IF coalesce(trim(p_reason),'') = '' THEN RAISE EXCEPTION 'سبب الإبطال مطلوب'; END IF;
+
+  SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'الصرف غير موجود'; END IF;
+  IF v_pay.status <> 'disbursed' THEN RAISE EXCEPTION 'لا يُبطَل إلا صرفٌ منفَّذ (الحالة: %)', v_pay.status; END IF;
+
+  -- فصل المهام: منفّذ الصرف لا يُبطِل تنفيذه، ولا طالبه.
+  IF NOT portal_is_admin() THEN
+    IF v_pay.disbursed_by = v_me THEN RAISE EXCEPTION 'من نفّذ الصرف لا يُبطِله بنفسه (فصل المهام)'; END IF;
+    IF v_pay.requested_by = v_me THEN RAISE EXCEPTION 'من طلب الصرف لا يُبطِله بنفسه (فصل المهام)'; END IF;
+  END IF;
+
+  SELECT * INTO v_req FROM portal_requests WHERE id = v_pay.request_id FOR UPDATE;
+  -- لا إبطال بعد استلام بضاعة (يُستخدم مرتجع) — يخصّ مسار الشراء.
+  v_has_receipt := EXISTS (SELECT 1 FROM portal_receipts WHERE request_id = v_pay.request_id);
+  IF v_has_receipt THEN RAISE EXCEPTION 'استُلمت بضاعة لهذا الطلب — استخدم مرتجعاً بدل إبطال الصرف'; END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_payments SET status = 'voided', voided_by = v_me, voided_at = now(), void_reason = p_reason WHERE id = p_payment_id;
+  IF v_req.req_type = 'direct_expense' THEN
+    -- الصرف المباشر: يُقفَل مُلغىً (تعويض مسجَّل، لا إعادة إصدار).
+    UPDATE portal_requests SET status = 'cancelled', phase = 'closed', cancel_reason = p_reason,
+           cancelled_by = v_me, cancelled_at = now(), updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+  ELSE
+    -- مسار الشراء (بلا استلام): يعود لطور الدفع لإعادة الإصدار الصحيح.
+    UPDATE portal_requests SET status = 'awarded', phase = 'payment', updated_at = now(), updated_by = v_me WHERE id = v_pay.request_id;
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  -- قيد عكسي في التدقيق الثابت (لا يُعدَّل حتى بمفتاح الخدمة)
+  PERFORM portal_audit_write(v_pay.request_id, 'payment_voided', v_me, 'portal',
+    jsonb_build_object('payment_id', p_payment_id, 'amount', v_pay.amount, 'reason', p_reason,
+                       'reverses_disbursed_by', v_pay.disbursed_by, 'req_type', v_req.req_type));
+  RETURN jsonb_build_object('ok', true, 'status', 'voided');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_payment_void(bigint,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_payment_void(bigint,text) TO authenticated;
+
+-- تحقّق:
+--   SELECT has_function_privilege('anon','portal_payment_void(bigint,text)','EXECUTE'); ⇒ false
+--   SELECT relrowsecurity FROM pg_class WHERE relname='portal_idempotency'; ⇒ t
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 052 (ضبط ميزانية الصرف المستقلّ) — مطابقة لـ db/portal-migrations/052
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════════════════════════════
+--  052 — ضبط ميزانية الصرف المستقلّ (المرحلة 2-ب): Commitment Control للصرف المباشر
+--  ─────────────────────────────────────────────────────────────────────────
+--  ضبط الميزانية القائم (031) يحسب المرتبط من التعميدات (مسار الشراء) فقط. الصرف
+--  المباشر (050) لا تعميد له، فكان يفلت من الضبط. هذه الهجرة تُدرِج التزامات الصرف
+--  المباشر في المرتبط، وتفرض السقف عند الإنشاء (نفس دلالة مفتاح `budget_enforce`:
+--  0 = تحذير غير مانع افتراضياً، 1 = منع).
+--
+--  خامل وآمن: بلا ميزانية معرّفة للقسم/السنة ⇒ لا إنفاذ؛ ومع `budget_enforce=0`
+--  لا منع. عدم انحدار على مسار الشراء (المرتبط الإضافي = 0 حين لا صرف مباشر).
+--  ⚠️ تُطبَّق حيّاً بعد 051. مدمجة في db/portal-standalone.sql.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── (1) توسيع المرتبط ليشمل التزامات الصرف المباشر النشطة ───────────────────
+--   التزام الصرف المباشر = مبلغه شاملاً الضريبة ما دام الطلب نشطاً (غير ملغى/مرفوض/مُعاد).
+CREATE OR REPLACE FUNCTION portal_budget_committed(p_dept text, p_year int)
+RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT
+    -- (أ) المرتبط من التعميدات (مسار الشراء) — بعملة الأساس (035) بلا تغيير
+    COALESCE((SELECT SUM(
+        COALESCE((SELECT sum(al.line_total) FROM portal_award_lines al WHERE al.request_id = a.request_id),
+                 a.winner_total)
+        * (1 + portal_setting_num('vat', 15) / 100.0)
+        * portal_currency_rate(r.currency))
+      FROM portal_award a
+      JOIN portal_requests r ON r.id = a.request_id
+      WHERE a.status IN ('pending','approved')
+        AND r.department_id = p_dept
+        AND EXTRACT(YEAR FROM r.created_at)::int = p_year
+        AND coalesce(r.status,'') <> 'cancelled'), 0)
+    +
+    -- (ب) المرتبط من الصرف المباشر النشط (050) — إضافة هذه الهجرة، بعملة الأساس أيضاً
+    COALESCE((SELECT SUM(r.est_total * (1 + portal_setting_num('vat', 15) / 100.0) * portal_currency_rate(r.currency))
+      FROM portal_requests r
+      WHERE r.req_type = 'direct_expense'
+        AND r.department_id = p_dept
+        AND EXTRACT(YEAR FROM r.created_at)::int = p_year
+        AND coalesce(r.status,'') NOT IN ('cancelled','rejected','returned')), 0);
+$fn$;
+REVOKE ALL ON FUNCTION portal_budget_committed(text, int) FROM anon, authenticated, PUBLIC;
+
+-- ── (2) فرض السقف عند إنشاء الصرف المباشر ──────────────────────────────────
+--   يُعاد تعريف portal_create_expense (نسخة 050) بإضافة فحص الميزانية بعد بناء
+--   السلسلة: عند budget_enforce=1 ووجود ميزانية معرّفة، يُمنع تجاوز المرتبط (شاملاً
+--   هذا الطلب) للسقف — الدالة ذرّية فالمنع يُرجِع الطلب كأنه لم يُنشأ.
+CREATE OR REPLACE FUNCTION portal_create_expense(
+    p_beneficiary text, p_amount numeric, p_kind text, p_purpose text,
+    p_department_id text, p_need_by date, p_details jsonb DEFAULT NULL, p_note text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id text; v_n int; v_details jsonb := coalesce(p_details,'{}'::jsonb); v_iban text;
+        v_year int := EXTRACT(YEAR FROM now())::int; v_budget numeric; v_committed numeric; v_enforce numeric;
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_create') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF coalesce(trim(p_beneficiary),'') = '' THEN RAISE EXCEPTION 'اسم الجهة/المستفيد مطلوب'; END IF;
+  IF coalesce(p_amount,0) <= 0 THEN RAISE EXCEPTION 'المبلغ غير صالح'; END IF;
+  IF coalesce(trim(p_purpose),'') = '' THEN RAISE EXCEPTION 'الغرض مطلوب'; END IF;
+  IF p_kind NOT IN ('bank','custody','credit') THEN RAISE EXCEPTION 'طريقة صرف غير صالحة'; END IF;
+  IF p_department_id IS NULL OR NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = p_department_id) THEN
+    RAISE EXCEPTION 'القسم غير صالح'; END IF;
+  IF p_kind = 'bank' THEN
+    v_iban := upper(regexp_replace(coalesce(v_details->>'iban',''), '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+    IF coalesce(trim(v_details->>'account_name'),'') = '' THEN RAISE EXCEPTION 'اسم الحساب البنكي مطلوب'; END IF;
+    v_details := v_details || jsonb_build_object('iban', v_iban);
+  ELSIF p_kind = 'custody' THEN
+    IF coalesce(v_details->>'custody_to','') = '' OR NOT EXISTS (SELECT 1 FROM portal_users WHERE username = v_details->>'custody_to' AND active) THEN
+      RAISE EXCEPTION 'حدّد مسؤول العهدة (مستخدم نشط)'; END IF;
+  ELSIF p_kind = 'credit' THEN
+    IF (v_details->>'due_date') IS NULL OR (v_details->>'due_date')::date IS NULL THEN
+      RAISE EXCEPTION 'تاريخ الاستحقاق مطلوب للصرف الآجل'; END IF;
+  END IF;
+
+  v_id := 'REQ-' || to_char(now(),'YYYYMMDD') || '-' || substr(md5(random()::text),1,6);
+  PERFORM set_config('app.portal_transition', '1', true);
+  INSERT INTO portal_requests(id, title, department_id, requester, requester_name, req_type, est_total,
+      status, phase, beneficiary, expense_method, project, need_by, note, created_by, created_at)
+    VALUES (v_id, left(p_purpose,200), p_department_id, v_me,
+            (SELECT display_name FROM portal_users WHERE username = v_me), 'direct_expense', p_amount,
+            'draft', 'disbursement', p_beneficiary, p_kind, 'صرف مباشر', p_need_by, p_note, v_me, now());
+  UPDATE portal_requests SET expense_details = v_details WHERE id = v_id;
+
+  -- ضبط الميزانية (Commitment Control): المرتبط يشمل هذا الطلب الآن.
+  v_enforce := portal_setting_num('budget_enforce', 0);
+  SELECT amount INTO v_budget FROM portal_budgets WHERE department_id = p_department_id AND fiscal_year = v_year AND active;
+  IF v_budget IS NOT NULL THEN
+    v_committed := portal_budget_committed(p_department_id, v_year);
+    IF v_committed > v_budget THEN
+      IF v_enforce >= 1 THEN
+        RAISE EXCEPTION 'تجاوز ميزانية القسم % لسنة %: المرتبط % يتجاوز السقف %',
+          p_department_id, v_year, round(v_committed), round(v_budget);
+      ELSE
+        RAISE WARNING 'تحذير: تجاوز ميزانية القسم % (% > %)', p_department_id, round(v_committed), round(v_budget);
+      END IF;
+    END IF;
+  END IF;
+
+  v_n := portal_build_chain(v_id, 'disbursement');
+  IF v_n = 0 THEN
+    INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+      VALUES (v_id, 'disbursement', 1, 'اعتماد الصرف', NULL, 'can_approve_disbursement', NULL);
+    v_n := 1;
+  END IF;
+  UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = v_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(v_id, 'expense_created', v_me, 'portal',
+    jsonb_build_object('beneficiary', p_beneficiary, 'amount', p_amount, 'kind', p_kind, 'stages', v_n));
+  RETURN jsonb_build_object('ok', true, 'id', v_id, 'status', 'in_review');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text) TO authenticated;
+
+-- تحقّق:
+--   SELECT portal_budget_committed('GA', EXTRACT(YEAR FROM now())::int);  -- يشمل الصرف المباشر الآن
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 053 (سجلّ المستفيدين + ضبط تغيير آيبان المستفيد) — مطابقة لـ db/portal-migrations/053
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── (1) جدول سجلّ المستفيدين ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_beneficiaries (
+  id            BIGSERIAL PRIMARY KEY,
+  name          TEXT NOT NULL,
+  btype         TEXT NOT NULL DEFAULT 'company',   -- company | individual | government
+  iban          TEXT,                              -- SA + 22 رقماً (يُتحقَّق عبر RPC)
+  account_name  TEXT,
+  tax_no        TEXT,
+  contact       TEXT,
+  note          TEXT,
+  active        BOOLEAN NOT NULL DEFAULT true,
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_portal_beneficiaries_active ON portal_beneficiaries(active, name);
+
+ALTER TABLE portal_beneficiaries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_beneficiaries_read ON portal_beneficiaries;
+CREATE POLICY portal_beneficiaries_read ON portal_beneficiaries FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')
+  OR portal_has_perm('can_create'));
+REVOKE ALL ON portal_beneficiaries FROM anon, PUBLIC;
+GRANT  SELECT ON portal_beneficiaries TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_beneficiaries TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_beneficiaries_id_seq TO service_role;
+
+-- ── (2) عمود ربط الصرف المباشر بالسجلّ (اختياري، لا انحدار) ─────────────────
+ALTER TABLE portal_requests ADD COLUMN IF NOT EXISTS beneficiary_id BIGINT REFERENCES portal_beneficiaries(id);
+
+-- ── (3) جدول طلبات تغيير آيبان المستفيد (أثر تدقيق دائم) — نمط 032 ───────────
+CREATE TABLE IF NOT EXISTS portal_beneficiary_iban_changes (
+  id             BIGSERIAL PRIMARY KEY,
+  beneficiary_id BIGINT NOT NULL REFERENCES portal_beneficiaries(id) ON DELETE CASCADE,
+  old_iban       TEXT,
+  new_iban       TEXT NOT NULL,
+  reason         TEXT,
+  status         TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
+  requested_by   TEXT,
+  requested_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_by     TEXT,
+  decided_at     TIMESTAMPTZ,
+  decision_note  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_portal_ben_iban_chg ON portal_beneficiary_iban_changes(beneficiary_id, status);
+
+ALTER TABLE portal_beneficiary_iban_changes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_ben_iban_chg_read ON portal_beneficiary_iban_changes;
+CREATE POLICY portal_ben_iban_chg_read ON portal_beneficiary_iban_changes FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement'));
+REVOKE ALL ON portal_beneficiary_iban_changes FROM anon, PUBLIC;
+GRANT  SELECT ON portal_beneficiary_iban_changes TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_beneficiary_iban_changes TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_beneficiary_iban_changes_id_seq TO service_role;
+
+-- ── (4) حارس آيبان المستفيد: يمنع التغيير المباشر عند التفعيل (إلا عبر الاعتماد) ─
+CREATE OR REPLACE FUNCTION portal_beneficiary_iban_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF NEW.iban IS DISTINCT FROM OLD.iban
+     AND portal_setting_num('iban_change_control', 0) >= 1
+     AND coalesce(current_setting('app.iban_change_approved', true), '') <> '1'
+  THEN
+    RAISE EXCEPTION 'تغيير آيبان المستفيد يتطلّب طلب اعتماد مزدوج (فصل مهام) — عبر دوال البوابة';
+  END IF;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_portal_beneficiary_iban_guard ON portal_beneficiaries;
+CREATE TRIGGER trg_portal_beneficiary_iban_guard
+  BEFORE UPDATE ON portal_beneficiaries
+  FOR EACH ROW EXECUTE FUNCTION portal_beneficiary_iban_guard();
+-- تُستدعى عبر المُشغِّل فقط — يُسحَب anon/PUBLIC ويبقى authenticated (كي لا تُكسر S7؛ نمط حارس المورد).
+REVOKE ALL ON FUNCTION portal_beneficiary_iban_guard() FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_iban_guard() TO authenticated;
+
+-- ── (5) حفظ/تحديث مستفيد (أدمن/مالية/مشتريات) ──────────────────────────────
+--   الإنشاء: كل الحقول (بما فيها الآيبان) حرّة. التحديث: الحقول غير البنكية حرّة؛
+--   تغيير الآيبان يمرّ عبر الحارس (يُمنَع مباشرةً عند التفعيل → استخدم مسار الطلب).
+CREATE OR REPLACE FUNCTION portal_beneficiary_save(
+    p_id bigint, p_name text, p_type text DEFAULT 'company', p_iban text DEFAULT NULL,
+    p_account_name text DEFAULT NULL, p_tax_no text DEFAULT NULL, p_contact text DEFAULT NULL, p_note text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_iban text; v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بإدارة سجلّ المستفيدين';
+  END IF;
+  IF coalesce(trim(p_name),'') = '' THEN RAISE EXCEPTION 'اسم المستفيد مطلوب'; END IF;
+  IF coalesce(p_type,'company') NOT IN ('company','individual','government') THEN RAISE EXCEPTION 'نوع مستفيد غير صالح'; END IF;
+  IF p_iban IS NOT NULL AND trim(p_iban) <> '' THEN
+    v_iban := upper(regexp_replace(p_iban, '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+  END IF;
+  IF p_id IS NULL THEN
+    INSERT INTO portal_beneficiaries(name, btype, iban, account_name, tax_no, contact, note, created_by)
+      VALUES (trim(p_name), coalesce(p_type,'company'), v_iban, nullif(trim(coalesce(p_account_name,'')),''),
+              nullif(trim(coalesce(p_tax_no,'')),''), nullif(trim(coalesce(p_contact,'')),''),
+              nullif(trim(coalesce(p_note,'')),''), v_me)
+      RETURNING id INTO v_id;
+  ELSE
+    -- التحديث لا يمسّ الآيبان هنا (يمرّ عبر مسار الاعتماد إن تغيّر عند التفعيل).
+    UPDATE portal_beneficiaries SET
+        name = trim(p_name), btype = coalesce(p_type, btype),
+        account_name = nullif(trim(coalesce(p_account_name,'')),''),
+        tax_no = nullif(trim(coalesce(p_tax_no,'')),''),
+        contact = nullif(trim(coalesce(p_contact,'')),''),
+        note = nullif(trim(coalesce(p_note,'')),''),
+        iban = coalesce(v_iban, iban),   -- إن مرّ آيبان جديد يفعّل الحارس؛ NULL يُبقي القائم
+        updated_at = now()
+      WHERE id = p_id RETURNING id INTO v_id;
+    IF v_id IS NULL THEN RAISE EXCEPTION 'المستفيد غير موجود'; END IF;
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'id', v_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_beneficiary_save(bigint,text,text,text,text,text,text,text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_save(bigint,text,text,text,text,text,text,text) TO authenticated;
+
+-- ── (6) حذف/تعطيل مستفيد (أدمن/مالية) — منع الحذف الصلب لمن له طلبات ─────────
+CREATE OR REPLACE FUNCTION portal_beneficiary_delete(p_id bigint)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_used int;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'حذف المستفيد صلاحية مالية/أدمن';
+  END IF;
+  SELECT count(*) INTO v_used FROM portal_requests WHERE beneficiary_id = p_id;
+  IF v_used > 0 THEN
+    -- سلامة التدقيق: لا حذف صلب لمن له طلبات صرف → تعطيل فقط.
+    UPDATE portal_beneficiaries SET active = false, updated_at = now() WHERE id = p_id;
+    RETURN jsonb_build_object('ok', true, 'disabled', true, 'reason', 'له طلبات صرف — عُطِّل بدل الحذف');
+  END IF;
+  DELETE FROM portal_beneficiaries WHERE id = p_id;
+  RETURN jsonb_build_object('ok', true, 'deleted', true);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_beneficiary_delete(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_delete(bigint) TO authenticated;
+
+-- ── (7) طلب تغيير آيبان المستفيد (لا يُطبَّق فوراً) — نمط 032 ────────────────
+CREATE OR REPLACE FUNCTION portal_beneficiary_iban_request(p_beneficiary_id bigint, p_new_iban text, p_reason text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_old text; v_new text; v_cid bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بطلب تغيير الآيبان';
+  END IF;
+  v_new := upper(regexp_replace(coalesce(p_new_iban,''), '\s+', '', 'g'));
+  IF v_new !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+  SELECT iban INTO v_old FROM portal_beneficiaries WHERE id = p_beneficiary_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المستفيد غير موجود'; END IF;
+  IF v_old IS NOT NULL AND upper(regexp_replace(v_old,'\s+','','g')) = v_new THEN
+    RAISE EXCEPTION 'الآيبان الجديد مطابق للحالي — لا تغيير';
+  END IF;
+  IF EXISTS (SELECT 1 FROM portal_beneficiary_iban_changes WHERE beneficiary_id = p_beneficiary_id AND status = 'pending') THEN
+    RAISE EXCEPTION 'يوجد طلب تغيير معلّق لهذا المستفيد — يُبتّ فيه أولاً';
+  END IF;
+  INSERT INTO portal_beneficiary_iban_changes(beneficiary_id, old_iban, new_iban, reason, requested_by)
+    VALUES (p_beneficiary_id, v_old, v_new, p_reason, v_me) RETURNING id INTO v_cid;
+  RETURN jsonb_build_object('ok', true, 'change_id', v_cid, 'status', 'pending');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_beneficiary_iban_request(bigint, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_iban_request(bigint, text, text) TO authenticated;
+
+-- ── (8) اعتماد التغيير (مالية/أدمن) — فصل مهام: المعتمِد ≠ الطالب ─────────────
+CREATE OR REPLACE FUNCTION portal_beneficiary_iban_approve(p_change_id bigint)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_chg portal_beneficiary_iban_changes%ROWTYPE;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'اعتماد تغيير الآيبان صلاحية مالية/أدمن';
+  END IF;
+  SELECT * INTO v_chg FROM portal_beneficiary_iban_changes WHERE id = p_change_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب التغيير غير موجود'; END IF;
+  IF v_chg.status <> 'pending' THEN RAISE EXCEPTION 'الطلب ليس معلّقاً (%).', v_chg.status; END IF;
+  IF v_chg.requested_by IS NOT NULL AND v_chg.requested_by = v_me THEN
+    RAISE EXCEPTION 'فصل المهام: طالب التغيير لا يعتمده';
+  END IF;
+  PERFORM set_config('app.iban_change_approved', '1', true);
+  UPDATE portal_beneficiaries SET iban = v_chg.new_iban, updated_at = now() WHERE id = v_chg.beneficiary_id;
+  PERFORM set_config('app.iban_change_approved', '0', true);
+  UPDATE portal_beneficiary_iban_changes
+    SET status = 'approved', decided_by = v_me, decided_at = now() WHERE id = p_change_id;
+  RETURN jsonb_build_object('ok', true, 'status', 'approved', 'beneficiary_id', v_chg.beneficiary_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_beneficiary_iban_approve(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_iban_approve(bigint) TO authenticated;
+
+-- ── (9) رفض التغيير (مالية/أدمن) ────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_beneficiary_iban_reject(p_change_id bigint, p_note text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_st text;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'رفض تغيير الآيبان صلاحية مالية/أدمن';
+  END IF;
+  SELECT status INTO v_st FROM portal_beneficiary_iban_changes WHERE id = p_change_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب التغيير غير موجود'; END IF;
+  IF v_st <> 'pending' THEN RAISE EXCEPTION 'الطلب ليس معلّقاً'; END IF;
+  UPDATE portal_beneficiary_iban_changes
+    SET status = 'rejected', decided_by = v_me, decided_at = now(), decision_note = p_note WHERE id = p_change_id;
+  RETURN jsonb_build_object('ok', true, 'status', 'rejected');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_beneficiary_iban_reject(bigint, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_beneficiary_iban_reject(bigint, text) TO authenticated;
+
+-- ── (10) ربط الصرف المباشر بالسجلّ: portal_create_expense يقبل p_beneficiary_id ─
+--   يُعاد تعريف نسخة 052 (مع فحص الميزانية محفوظاً حرفياً) بإضافة معامل تاسع اختياري
+--   `p_beneficiary_id`: عند تحديده يُفرَض السجلّ المُعتمَد (الاسم، وللبنكي: الآيبان/الحساب
+--   يتجاوزان قيم العميل) — كسب وقاية الاحتيال. NULL = السلوك الحرّ القائم (لا انحدار).
+DROP FUNCTION IF EXISTS portal_create_expense(text,numeric,text,text,text,date,jsonb,text);
+CREATE OR REPLACE FUNCTION portal_create_expense(
+    p_beneficiary text, p_amount numeric, p_kind text, p_purpose text,
+    p_department_id text, p_need_by date, p_details jsonb DEFAULT NULL, p_note text DEFAULT NULL,
+    p_beneficiary_id bigint DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id text; v_n int; v_details jsonb := coalesce(p_details,'{}'::jsonb); v_iban text;
+        v_year int := EXTRACT(YEAR FROM now())::int; v_budget numeric; v_committed numeric; v_enforce numeric;
+        v_ben portal_beneficiaries%ROWTYPE; v_name text := p_beneficiary;
+BEGIN
+  IF v_me IS NULL OR NOT portal_has_perm('can_create') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+
+  -- ربط السجلّ (اختياري): يُفرَض المستفيد المُعتمَد وبياناته البنكية.
+  IF p_beneficiary_id IS NOT NULL THEN
+    SELECT * INTO v_ben FROM portal_beneficiaries WHERE id = p_beneficiary_id AND active;
+    IF NOT FOUND THEN RAISE EXCEPTION 'المستفيد المُحدَّد غير موجود أو غير نشط'; END IF;
+    v_name := v_ben.name;
+    IF p_kind = 'bank' THEN
+      IF v_ben.iban IS NULL THEN RAISE EXCEPTION 'المستفيد المُحدَّد بلا آيبان مُعتمَد — أضِفه في السجلّ أولاً'; END IF;
+      v_details := v_details || jsonb_build_object('iban', v_ben.iban, 'account_name', coalesce(v_ben.account_name, v_ben.name));
+    END IF;
+  END IF;
+
+  IF coalesce(trim(v_name),'') = '' THEN RAISE EXCEPTION 'اسم الجهة/المستفيد مطلوب'; END IF;
+  IF coalesce(p_amount,0) <= 0 THEN RAISE EXCEPTION 'المبلغ غير صالح'; END IF;
+  IF coalesce(trim(p_purpose),'') = '' THEN RAISE EXCEPTION 'الغرض مطلوب'; END IF;
+  IF p_kind NOT IN ('bank','custody','credit') THEN RAISE EXCEPTION 'طريقة صرف غير صالحة'; END IF;
+  IF p_department_id IS NULL OR NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = p_department_id) THEN
+    RAISE EXCEPTION 'القسم غير صالح'; END IF;
+  IF p_kind = 'bank' THEN
+    v_iban := upper(regexp_replace(coalesce(v_details->>'iban',''), '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+    IF coalesce(trim(v_details->>'account_name'),'') = '' THEN RAISE EXCEPTION 'اسم الحساب البنكي مطلوب'; END IF;
+    v_details := v_details || jsonb_build_object('iban', v_iban);
+  ELSIF p_kind = 'custody' THEN
+    IF coalesce(v_details->>'custody_to','') = '' OR NOT EXISTS (SELECT 1 FROM portal_users WHERE username = v_details->>'custody_to' AND active) THEN
+      RAISE EXCEPTION 'حدّد مسؤول العهدة (مستخدم نشط)'; END IF;
+  ELSIF p_kind = 'credit' THEN
+    IF (v_details->>'due_date') IS NULL OR (v_details->>'due_date')::date IS NULL THEN
+      RAISE EXCEPTION 'تاريخ الاستحقاق مطلوب للصرف الآجل'; END IF;
+  END IF;
+
+  v_id := 'REQ-' || to_char(now(),'YYYYMMDD') || '-' || substr(md5(random()::text),1,6);
+  PERFORM set_config('app.portal_transition', '1', true);
+  INSERT INTO portal_requests(id, title, department_id, requester, requester_name, req_type, est_total,
+      status, phase, beneficiary, beneficiary_id, expense_method, project, need_by, note, created_by, created_at)
+    VALUES (v_id, left(p_purpose,200), p_department_id, v_me,
+            (SELECT display_name FROM portal_users WHERE username = v_me), 'direct_expense', p_amount,
+            'draft', 'disbursement', v_name, p_beneficiary_id, p_kind, 'صرف مباشر', p_need_by, p_note, v_me, now());
+  UPDATE portal_requests SET expense_details = v_details WHERE id = v_id;
+
+  -- ضبط الميزانية (Commitment Control): المرتبط يشمل هذا الطلب الآن (052).
+  v_enforce := portal_setting_num('budget_enforce', 0);
+  SELECT amount INTO v_budget FROM portal_budgets WHERE department_id = p_department_id AND fiscal_year = v_year AND active;
+  IF v_budget IS NOT NULL THEN
+    v_committed := portal_budget_committed(p_department_id, v_year);
+    IF v_committed > v_budget THEN
+      IF v_enforce >= 1 THEN
+        RAISE EXCEPTION 'تجاوز ميزانية القسم % لسنة %: المرتبط % يتجاوز السقف %',
+          p_department_id, v_year, round(v_committed), round(v_budget);
+      ELSE
+        RAISE WARNING 'تحذير: تجاوز ميزانية القسم % (% > %)', p_department_id, round(v_committed), round(v_budget);
+      END IF;
+    END IF;
+  END IF;
+
+  v_n := portal_build_chain(v_id, 'disbursement');
+  IF v_n = 0 THEN
+    INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+      VALUES (v_id, 'disbursement', 1, 'اعتماد الصرف', NULL, 'can_approve_disbursement', NULL);
+    v_n := 1;
+  END IF;
+  UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = v_id;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(v_id, 'expense_created', v_me, 'portal',
+    jsonb_build_object('beneficiary', v_name, 'beneficiary_id', p_beneficiary_id, 'amount', p_amount, 'kind', p_kind, 'stages', v_n));
+  RETURN jsonb_build_object('ok', true, 'id', v_id, 'status', 'in_review');
+END $fn$;
+REVOKE ALL ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) TO authenticated;
+
+-- تحقّق:
+--   SELECT portal_beneficiary_save(NULL,'شركة نور','company','SA0000000000000000000001','حساب نور');
+--   SELECT has_function_privilege('anon','portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint)','EXECUTE'); ⇒ false
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 054 (الاعتماد الجماعي) — مطابقة لـ db/portal-migrations/054
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE OR REPLACE FUNCTION portal_bulk_transition(
+    p_request_ids text[], p_action text, p_comment text DEFAULT NULL, p_cycle text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id text; v_res jsonb; v_out jsonb := '[]'::jsonb;
+        v_ok int := 0; v_fail int := 0; v_err text; v_n int;
+BEGIN
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF p_action NOT IN ('approve','reject','return') THEN RAISE EXCEPTION 'إجراء غير صالح للاعتماد الجماعي'; END IF;
+  v_n := coalesce(array_length(p_request_ids, 1), 0);
+  IF v_n = 0 THEN RAISE EXCEPTION 'لا طلبات محدَّدة'; END IF;
+  IF v_n > 100 THEN RAISE EXCEPTION 'الحد الأقصى 100 طلب في الدفعة الواحدة'; END IF;
+  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN
+    RAISE EXCEPTION 'سبب مطلوب للرفض/الإرجاع الجماعي';
+  END IF;
+
+  FOREACH v_id IN ARRAY p_request_ids LOOP
+    BEGIN
+      -- كل طلب عبر المحرّك نفسه (الحوكمة كاملة) داخل معاملة فرعية معزولة.
+      v_res := portal_pr_transition(v_id, p_action, p_comment, NULL, 0, p_cycle);
+      v_ok := v_ok + 1;
+      v_out := v_out || jsonb_build_array(jsonb_build_object('id', v_id, 'ok', true, 'status', v_res->>'status'));
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+      v_fail := v_fail + 1;
+      v_out := v_out || jsonb_build_array(jsonb_build_object('id', v_id, 'ok', false, 'error', v_err));
+    END;
+  END LOOP;
+
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'total', v_n,
+    'approved', v_ok, 'failed', v_fail, 'results', v_out);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_bulk_transition(text[], text, text, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_bulk_transition(text[], text, text, text) TO authenticated;
+
+-- تحقّق:
+--   SELECT portal_bulk_transition(ARRAY['REQ-..','REQ-..'], 'approve', NULL, 'disbursement');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 055 (الصرف المتكرّر/المجدوَل) — مطابقة لـ db/portal-migrations/055
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) جدول القوالب المتكرّرة ──────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS portal_recurring_expenses (
+  id             BIGSERIAL PRIMARY KEY,
+  title          TEXT NOT NULL,
+  department_id  TEXT NOT NULL REFERENCES portal_departments(id),
+  beneficiary    TEXT NOT NULL,
+  beneficiary_id BIGINT REFERENCES portal_beneficiaries(id),
+  amount         NUMERIC NOT NULL CHECK (amount > 0),
+  kind           TEXT NOT NULL CHECK (kind IN ('bank','custody')),
+  details        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  frequency      TEXT NOT NULL CHECK (frequency IN ('weekly','monthly','quarterly','yearly')),
+  next_run       DATE NOT NULL,
+  owner          TEXT NOT NULL,       -- هوية صاحب الطلب المُولَّد (requester)
+  active         BOOLEAN NOT NULL DEFAULT true,
+  last_run_at    TIMESTAMPTZ,
+  runs_count     INT NOT NULL DEFAULT 0,
+  created_by     TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_portal_recurring_due ON portal_recurring_expenses(active, next_run);
+
+ALTER TABLE portal_recurring_expenses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS portal_recurring_read ON portal_recurring_expenses;
+CREATE POLICY portal_recurring_read ON portal_recurring_expenses FOR SELECT USING (
+  portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement'));
+REVOKE ALL ON portal_recurring_expenses FROM anon, PUBLIC;
+GRANT  SELECT ON portal_recurring_expenses TO authenticated;
+GRANT  SELECT, INSERT, UPDATE, DELETE ON portal_recurring_expenses TO service_role;
+GRANT  USAGE, SELECT ON SEQUENCE portal_recurring_expenses_id_seq TO service_role;
+
+-- ── (2) حساب الموعد التالي حسب التكرار ──────────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_recurring_next(p_from date, p_freq text) RETURNS date
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$
+  SELECT CASE p_freq
+    WHEN 'weekly'    THEN p_from + INTERVAL '7 day'
+    WHEN 'monthly'   THEN p_from + INTERVAL '1 month'
+    WHEN 'quarterly' THEN p_from + INTERVAL '3 month'
+    WHEN 'yearly'    THEN p_from + INTERVAL '1 year'
+    ELSE p_from + INTERVAL '1 month' END::date;
+$$;
+REVOKE ALL ON FUNCTION portal_recurring_next(date, text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_recurring_next(date, text) TO authenticated;
+
+-- ── (3) حفظ/تحديث قالب (أدمن/مالية/مشتريات) — يتحقّق كـ portal_create_expense ─
+CREATE OR REPLACE FUNCTION portal_recurring_save(
+    p_id bigint, p_title text, p_department_id text, p_amount numeric, p_kind text,
+    p_details jsonb, p_frequency text, p_next_run date, p_beneficiary_id bigint DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_details jsonb := coalesce(p_details,'{}'::jsonb); v_iban text;
+        v_ben portal_beneficiaries%ROWTYPE; v_benef text := nullif(trim(coalesce(p_details->>'beneficiary','')),''); v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح بإدارة الصرف المتكرّر';
+  END IF;
+  IF coalesce(trim(p_title),'') = '' THEN RAISE EXCEPTION 'عنوان القالب مطلوب'; END IF;
+  IF coalesce(p_amount,0) <= 0 THEN RAISE EXCEPTION 'المبلغ غير صالح'; END IF;
+  IF p_kind NOT IN ('bank','custody') THEN RAISE EXCEPTION 'طريقة صرف غير مدعومة للتكرار (bank أو custody)'; END IF;
+  IF p_frequency NOT IN ('weekly','monthly','quarterly','yearly') THEN RAISE EXCEPTION 'تكرار غير صالح'; END IF;
+  IF p_next_run IS NULL THEN RAISE EXCEPTION 'موعد التشغيل التالي مطلوب'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM portal_departments WHERE id = p_department_id) THEN RAISE EXCEPTION 'القسم غير صالح'; END IF;
+
+  -- ربط المستفيد (اختياري): يفرض الاسم وللبنكي الآيبان/الحساب المُعتمَد (نمط 053).
+  IF p_beneficiary_id IS NOT NULL THEN
+    SELECT * INTO v_ben FROM portal_beneficiaries WHERE id = p_beneficiary_id AND active;
+    IF NOT FOUND THEN RAISE EXCEPTION 'المستفيد المُحدَّد غير موجود أو غير نشط'; END IF;
+    v_benef := v_ben.name;
+    IF p_kind = 'bank' THEN
+      IF v_ben.iban IS NULL THEN RAISE EXCEPTION 'المستفيد المُحدَّد بلا آيبان مُعتمَد'; END IF;
+      v_details := v_details || jsonb_build_object('iban', v_ben.iban, 'account_name', coalesce(v_ben.account_name, v_ben.name));
+    END IF;
+  END IF;
+  IF coalesce(trim(v_benef),'') = '' THEN RAISE EXCEPTION 'اسم المستفيد مطلوب'; END IF;
+
+  IF p_kind = 'bank' THEN
+    v_iban := upper(regexp_replace(coalesce(v_details->>'iban',''), '\s+', '', 'g'));
+    IF v_iban !~ '^SA\d{22}$' THEN RAISE EXCEPTION 'آيبان غير صحيح — الصيغة: SA + 22 رقماً'; END IF;
+    IF coalesce(trim(v_details->>'account_name'),'') = '' THEN RAISE EXCEPTION 'اسم الحساب البنكي مطلوب'; END IF;
+    v_details := v_details || jsonb_build_object('iban', v_iban);
+  ELSE  -- custody
+    IF coalesce(v_details->>'custody_to','') = '' OR NOT EXISTS (SELECT 1 FROM portal_users WHERE username = v_details->>'custody_to' AND active) THEN
+      RAISE EXCEPTION 'حدّد مسؤول العهدة (مستخدم نشط)';
+    END IF;
+  END IF;
+  v_details := v_details - 'beneficiary';  -- الاسم يُخزَّن بعموده لا في details
+
+  IF p_id IS NULL THEN
+    INSERT INTO portal_recurring_expenses(title, department_id, beneficiary, beneficiary_id, amount, kind, details, frequency, next_run, owner, created_by)
+      VALUES (trim(p_title), p_department_id, v_benef, p_beneficiary_id, p_amount, p_kind, v_details, p_frequency, p_next_run, v_me, v_me)
+      RETURNING id INTO v_id;
+  ELSE
+    UPDATE portal_recurring_expenses SET
+        title = trim(p_title), department_id = p_department_id, beneficiary = v_benef, beneficiary_id = p_beneficiary_id,
+        amount = p_amount, kind = p_kind, details = v_details, frequency = p_frequency, next_run = p_next_run, updated_at = now()
+      WHERE id = p_id RETURNING id INTO v_id;
+    IF v_id IS NULL THEN RAISE EXCEPTION 'القالب غير موجود'; END IF;
+  END IF;
+  RETURN jsonb_build_object('ok', true, 'id', v_id);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_recurring_save(bigint,text,text,numeric,text,jsonb,text,date,bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_recurring_save(bigint,text,text,numeric,text,jsonb,text,date,bigint) TO authenticated;
+
+-- ── (4) تفعيل/تعطيل/حذف قالب (أدمن/مالية) ──────────────────────────────────
+CREATE OR REPLACE FUNCTION portal_recurring_set_active(p_id bigint, p_active boolean)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_id bigint;
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_procurement')) THEN
+    RAISE EXCEPTION 'غير مصرّح'; END IF;
+  UPDATE portal_recurring_expenses SET active = coalesce(p_active,true), updated_at = now() WHERE id = p_id RETURNING id INTO v_id;
+  IF v_id IS NULL THEN RAISE EXCEPTION 'القالب غير موجود'; END IF;
+  RETURN jsonb_build_object('ok', true, 'id', v_id, 'active', p_active);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_recurring_set_active(bigint, boolean) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_recurring_set_active(bigint, boolean) TO authenticated;
+
+CREATE OR REPLACE FUNCTION portal_recurring_delete(p_id bigint)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username();
+BEGIN
+  IF v_me IS NULL OR NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'حذف القالب صلاحية مالية/أدمن'; END IF;
+  DELETE FROM portal_recurring_expenses WHERE id = p_id;
+  RETURN jsonb_build_object('ok', true, 'deleted', true);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_recurring_delete(bigint) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_recurring_delete(bigint) TO authenticated;
+
+-- ── (5) المولّد المجدوَل (خادميّ فقط) — يُنشئ طلب صرف لكل قالب مستحقّ ─────────
+--   يُدرِج بهوية صاحب القالب (requester=owner) ثم يبني دورة الصرف. طلب واحد لكل
+--   قالب في كل تشغيل؛ next_run يُقدَّم لأوّل موعد مستقبلي (لا فيضان للمواعيد الفائتة).
+CREATE OR REPLACE FUNCTION portal_recurring_run()
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_t portal_recurring_expenses%ROWTYPE; v_id text; v_n int; v_created int := 0; v_next date;
+        v_reqname text;
+BEGIN
+  FOR v_t IN SELECT * FROM portal_recurring_expenses
+      WHERE active AND next_run <= current_date ORDER BY next_run ASC FOR UPDATE
+  LOOP
+    -- تحقّق أنّ صاحب القالب ما زال نشطاً (وإلا يُتخطّى القالب دون إنشاء)
+    SELECT display_name INTO v_reqname FROM portal_users WHERE username = v_t.owner AND active;
+    IF NOT FOUND THEN
+      v_next := v_t.next_run;
+      WHILE v_next <= current_date LOOP v_next := portal_recurring_next(v_next, v_t.frequency); END LOOP;
+      UPDATE portal_recurring_expenses SET next_run = v_next, updated_at = now() WHERE id = v_t.id;
+      CONTINUE;
+    END IF;
+
+    v_id := 'REQ-' || to_char(now(),'YYYYMMDD') || '-' || substr(md5(random()::text),1,6);
+    PERFORM set_config('app.portal_transition', '1', true);
+    INSERT INTO portal_requests(id, title, department_id, requester, requester_name, req_type, est_total,
+        status, phase, beneficiary, beneficiary_id, expense_method, expense_details, project, need_by, note, created_by, created_at)
+      VALUES (v_id, left(v_t.title,200), v_t.department_id, v_t.owner, v_reqname, 'direct_expense', v_t.amount,
+              'draft', 'disbursement', v_t.beneficiary, v_t.beneficiary_id, v_t.kind, v_t.details,
+              'صرف متكرّر', current_date, 'مولَّد آلياً من قالب #' || v_t.id, v_t.owner, now());
+
+    v_n := portal_build_chain(v_id, 'disbursement');
+    IF v_n = 0 THEN
+      INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
+        VALUES (v_id, 'disbursement', 1, 'اعتماد الصرف', NULL, 'can_approve_disbursement', NULL);
+    END IF;
+    UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_t.owner WHERE id = v_id;
+    PERFORM set_config('app.portal_transition', '0', true);
+
+    PERFORM portal_audit_write(v_id, 'expense_created', v_t.owner, 'system',
+      jsonb_build_object('recurring', true, 'template_id', v_t.id, 'amount', v_t.amount, 'kind', v_t.kind));
+
+    -- تقديم next_run لأوّل موعد مستقبلي + تسجيل التشغيل
+    v_next := portal_recurring_next(v_t.next_run, v_t.frequency);
+    WHILE v_next <= current_date LOOP v_next := portal_recurring_next(v_next, v_t.frequency); END LOOP;
+    UPDATE portal_recurring_expenses
+      SET next_run = v_next, last_run_at = now(), runs_count = runs_count + 1, updated_at = now()
+      WHERE id = v_t.id;
+    v_created := v_created + 1;
+  END LOOP;
+  RETURN jsonb_build_object('ok', true, 'created', v_created);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_recurring_run() FROM anon, PUBLIC, authenticated;
+GRANT EXECUTE ON FUNCTION portal_recurring_run() TO service_role;
+
+-- تحقّق:
+--   SELECT portal_recurring_run();   -- (service_role) ينشئ طلبات للقوالب المستحقّة
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 056 (الاعتماد بالبريد لدورة الصرف) — مطابقة لـ db/portal-migrations/056
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── (1) بُعد الدورة على رموز البريد ─────────────────────────────────────────
+ALTER TABLE portal_email_tokens ADD COLUMN IF NOT EXISTS cycle TEXT NOT NULL DEFAULT 'need';
+
+-- ── (2) portal_create_token واعياً بالدورة (إسقاط التوقيع القديم أولاً) ──────
+DROP FUNCTION IF EXISTS portal_create_token(text, text, int, text, numeric);
+CREATE OR REPLACE FUNCTION portal_create_token(p_request_id text, p_kind text, p_seq int, p_approver text,
+    p_ttl_hours numeric DEFAULT 168, p_cycle text DEFAULT 'need')
+RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_token text := portal_gen_token(); v_cycle text := coalesce(nullif(p_cycle,''), 'need');
+BEGIN
+  UPDATE portal_email_tokens SET used = true, used_at = now()
+    WHERE request_id = p_request_id AND kind = p_kind AND seq IS NOT DISTINCT FROM p_seq
+      AND approver = p_approver AND cycle = v_cycle AND used = false;
+  INSERT INTO portal_email_tokens(token, request_id, kind, seq, approver, cycle, expires_at)
+    VALUES (v_token, p_request_id, p_kind, p_seq, p_approver, v_cycle, now() + make_interval(hours => p_ttl_hours::int));
+  RETURN v_token;
+END $fn$;
+-- خادمية بحتة (تُنشئ رموز اعتماد) — تُسحَب من الجميع وتُمنَح لخدمة الخادم فقط (نمط 019/030).
+REVOKE ALL ON FUNCTION portal_create_token(text,text,int,text,numeric,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION portal_create_token(text,text,int,text,numeric,text) TO service_role;
+
+-- ── (3) portal_pr_transition_email واعياً بالدورة ──────────────────────────
+CREATE OR REPLACE FUNCTION portal_pr_transition_email(p_token text, p_action text, p_comment text DEFAULT NULL)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_tok portal_email_tokens%ROWTYPE; v_req portal_requests%ROWTYPE; v_stage portal_approvals%ROWTYPE;
+  v_intended text; v_perm boolean; v_ok boolean := false;
+  v_pending int; v_next_seq int; v_decision text; v_status text; v_phase text;
+  v_cycle text; v_active_phase text;
+BEGIN
+  IF p_action NOT IN ('approve','reject','return') THEN RETURN jsonb_build_object('error','invalid_action','code',400); END IF;
+  IF NOT p_token ~ '^[0-9A-Za-z]{16,128}$' THEN RETURN jsonb_build_object('error','unknown_token','code',400); END IF;
+  SELECT * INTO v_tok FROM portal_email_tokens WHERE token = p_token FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','unknown_token','code',404); END IF;
+  IF v_tok.used THEN RETURN jsonb_build_object('error','used','code',410); END IF;
+  IF v_tok.expires_at < now() THEN RETURN jsonb_build_object('error','expired','code',410); END IF;
+  SELECT * INTO v_req FROM portal_requests WHERE id = v_tok.request_id FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','pr_not_found','code',404); END IF;
+  IF v_req.status <> 'in_review' THEN RETURN jsonb_build_object('error','not_in_review','code',409); END IF;
+
+  v_cycle := coalesce(nullif(v_tok.cycle,''), 'need');
+  v_active_phase := CASE WHEN v_cycle = 'disbursement' THEN 'disbursement' ELSE 'requisition' END;
+
+  SELECT * INTO v_stage FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = v_cycle AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RETURN jsonb_build_object('error','no_pending','code',409); END IF;
+  IF v_stage.seq <> v_tok.seq THEN RETURN jsonb_build_object('error','stage_changed','code',409); END IF;
+
+  IF portal_setting_bool('sod_requester_cannot_approve', true)
+     AND v_req.requester = v_tok.approver THEN RETURN jsonb_build_object('error','sod','code',403); END IF;
+  IF EXISTS (SELECT 1 FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = v_cycle
+              AND approver = v_tok.approver AND decision = 'approved' AND seq < v_stage.seq) THEN
+    RETURN jsonb_build_object('error','sod','code',403);
+  END IF;
+
+  v_intended := portal_resolve_stage(v_tok.request_id, v_stage);
+  IF v_intended IS NOT NULL THEN
+    v_ok := (portal_qualified_approver(v_intended, v_req.requester) = v_tok.approver);
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    SELECT coalesce((permissions ->> v_stage.role_key)::boolean, false) INTO v_perm FROM portal_users WHERE username = v_tok.approver;
+    v_ok := coalesce(v_perm, false);
+  END IF;
+  IF NOT v_ok THEN RETURN jsonb_build_object('error','not_approver','code',403); END IF;
+  IF p_action IN ('reject','return') AND coalesce(trim(p_comment),'') = '' THEN
+    RETURN jsonb_build_object('error','comment_required','code',400);
+  END IF;
+
+  UPDATE portal_email_tokens SET used = true, used_at = now() WHERE token = p_token;
+  v_decision := CASE p_action WHEN 'approve' THEN 'approved' WHEN 'reject' THEN 'rejected' ELSE 'returned' END;
+  SELECT count(*) INTO v_pending FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = v_cycle AND decision = 'pending';
+
+  IF p_action = 'approve' THEN
+    IF v_pending <= 1 THEN
+      IF v_cycle = 'disbursement' THEN
+        v_status := 'payment_pending'; v_phase := 'payment'; v_next_seq := 0;
+      ELSE
+        v_status := 'pricing'; v_phase := 'pricing'; v_next_seq := v_stage.seq;
+      END IF;
+    ELSE
+      SELECT min(seq) INTO v_next_seq FROM portal_approvals WHERE request_id = v_tok.request_id AND cycle = v_cycle AND decision = 'pending' AND seq > v_stage.seq;
+      v_status := 'in_review'; v_phase := v_active_phase;
+    END IF;
+  ELSIF p_action = 'reject' THEN v_status := 'rejected'; v_phase := v_active_phase; v_next_seq := 0;
+  ELSE v_status := 'returned'; v_phase := v_active_phase; v_next_seq := 0;
+  END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_approvals SET decision = v_decision, approver = v_tok.approver, comment = p_comment, acted_at = now(), channel = 'email'
+    WHERE request_id = v_tok.request_id AND cycle = v_cycle AND seq = v_stage.seq;
+  UPDATE portal_requests SET status = v_status, current_seq = coalesce(v_next_seq,0), phase = v_phase, updated_at = now(), updated_by = v_tok.approver
+    WHERE id = v_tok.request_id;
+  -- اكتمال دورة الصرف لطلب صرف مباشر: افتح الدفعة المُعتمَدة بالسلسلة.
+  IF p_action = 'approve' AND v_pending <= 1 AND v_cycle = 'disbursement' AND v_req.req_type = 'direct_expense' THEN
+    PERFORM portal_open_direct_payment(v_tok.request_id, v_tok.approver);
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(v_tok.request_id, 'stage_' || v_decision, v_tok.approver, 'email', jsonb_build_object('cycle', v_cycle, 'stage', v_stage.stage_label, 'comment', p_comment));
+  RETURN jsonb_build_object('ok', true, 'action', p_action, 'decision', v_decision, 'status', v_status,
+    'finalized', v_status <> 'in_review', 'seq', v_stage.seq, 'cycle', v_cycle,
+    'request', jsonb_build_object('id', v_req.id, 'title', v_req.title, 'department_id', v_req.department_id,
+                                   'requester', v_req.requester, 'requester_name', v_req.requester_name));
+END $fn$;
+REVOKE ALL ON FUNCTION portal_pr_transition_email(text,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION portal_pr_transition_email(text,text,text) TO service_role;
+
+-- تحقّق:
+--   SELECT portal_create_token('<req>','approval',1,'<user>',168,'disbursement');
+--   SELECT portal_pr_transition_email('<token>','approve');  ⇒ يتقدّم بدورة الصرف
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 057 (تدقيق مقاوم للعبث — Hash-Chained WORM) — مطابقة لـ db/portal-migrations/057
+-- ═══════════════════════════════════════════════════════════════════════════
+ALTER TABLE portal_audit ADD COLUMN IF NOT EXISTS prev_hash TEXT;
+ALTER TABLE portal_audit ADD COLUMN IF NOT EXISTS row_hash  TEXT;
+
+-- ── دالة التجزئة الكنسيّة لمحتوى الصفّ (تُستعمَل عند الإدراج وعند التحقّق) ───────
+CREATE OR REPLACE FUNCTION portal_audit_hash(p_prev text, p_request_id text, p_event text,
+    p_actor text, p_channel text, p_detail jsonb, p_created_at timestamptz) RETURNS text
+LANGUAGE sql IMMUTABLE SET search_path = public AS $$
+  SELECT encode(sha256(convert_to(
+    coalesce(p_prev,'GENESIS') || '|' || coalesce(p_request_id,'') || '|' || coalesce(p_event,'') || '|' ||
+    coalesce(p_actor,'') || '|' || coalesce(p_channel,'') || '|' || coalesce(p_detail::text,'') || '|' ||
+    coalesce(p_created_at::text,''), 'UTF8')), 'hex');
+$$;
+REVOKE ALL ON FUNCTION portal_audit_hash(text,text,text,text,text,jsonb,timestamptz) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_audit_hash(text,text,text,text,text,jsonb,timestamptz) TO authenticated;
+
+-- ── مُشغِّل سلسلة التجزئة (BEFORE INSERT) — يحسب الحقول ويتجاهل مُدخَل العميل ──
+CREATE OR REPLACE FUNCTION portal_audit_chain() RETURNS trigger
+LANGUAGE plpgsql SET search_path = public AS $fn$
+DECLARE v_prev text;
+BEGIN
+  PERFORM pg_advisory_xact_lock(4923771077);   -- يُسلسِل إلحاق السلسلة (لا تفرّع)
+  SELECT row_hash INTO v_prev FROM portal_audit WHERE row_hash IS NOT NULL ORDER BY id DESC LIMIT 1;
+  v_prev := coalesce(v_prev, 'GENESIS');
+  NEW.prev_hash := v_prev;
+  NEW.row_hash  := portal_audit_hash(v_prev, NEW.request_id, NEW.event, NEW.actor, NEW.channel, NEW.detail, NEW.created_at);
+  RETURN NEW;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_audit_chain() FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_audit_chain() TO authenticated;
+
+DROP TRIGGER IF EXISTS trg_portal_audit_chain ON portal_audit;
+CREATE TRIGGER trg_portal_audit_chain BEFORE INSERT ON portal_audit
+  FOR EACH ROW EXECUTE FUNCTION portal_audit_chain();
+
+-- ── التحقّق: يمشي السلسلة كاملةً ويكشف أوّل عبث ──────────────────────────────
+CREATE OR REPLACE FUNCTION portal_audit_verify() RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE r RECORD; v_prev text := 'GENESIS'; v_calc text; v_checked int := 0; v_broken bigint := NULL;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_has_perm('can_see_finance')) THEN
+    RAISE EXCEPTION 'التحقّق من سلامة التدقيق صلاحية مالية/أدمن';
+  END IF;
+  FOR r IN SELECT * FROM portal_audit WHERE row_hash IS NOT NULL ORDER BY id ASC LOOP
+    v_calc := portal_audit_hash(v_prev, r.request_id, r.event, r.actor, r.channel, r.detail, r.created_at);
+    IF r.prev_hash IS DISTINCT FROM v_prev OR r.row_hash <> v_calc THEN
+      v_broken := r.id; EXIT;
+    END IF;
+    v_prev := r.row_hash; v_checked := v_checked + 1;
+  END LOOP;
+  RETURN jsonb_build_object('ok', v_broken IS NULL, 'checked', v_checked, 'broken_at', v_broken);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_audit_verify() FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_audit_verify() TO authenticated;
+
+-- تحقّق:
+--   SELECT portal_audit_verify();   ⇒ {"ok":true,"checked":N,"broken_at":null}
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 058 (إشعارات معامَلاتية للاعتماد) — مطابقة لـ db/portal-migrations/058
+-- ═══════════════════════════════════════════════════════════════════════════
+-- مفتاح التفعيل التدريجي (خامل)
+UPDATE portal_settings SET value = value || jsonb_build_object('txn_notifications', 0)
+ WHERE key = 'portal_settings' AND NOT (value ? 'txn_notifications');
+
+-- ── مُدرِج إشعارات معتمِدي المرحلة المعلّقة (خادميّ داخليّ) ───────────────────
+--   يعكس منطق مستلِمي portal_run_sla: المعتمِد المُحلّ (مدير قسم/مفوَّض) أو حاملو
+--   role_key + مفوَّضوهم، مع استثناء مُقدّم الطلب (فصل مهام). type='approval'.
+CREATE OR REPLACE FUNCTION portal_enqueue_stage_notifications(p_request_id text, p_cycle text)
+RETURNS int LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_req portal_requests%ROWTYPE; v_stage portal_approvals%ROWTYPE; v_intended text; v_cycle text; v_n int := 0;
+BEGIN
+  IF portal_setting_num('txn_notifications', 0) < 1 THEN RETURN 0; END IF;   -- خامل حتى التفعيل
+  v_cycle := coalesce(nullif(p_cycle,''), 'need');
+  SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id;
+  IF NOT FOUND OR v_req.status <> 'in_review' THEN RETURN 0; END IF;
+  SELECT * INTO v_stage FROM portal_approvals
+    WHERE request_id = p_request_id AND cycle = v_cycle AND decision = 'pending' ORDER BY seq ASC LIMIT 1;
+  IF NOT FOUND THEN RETURN 0; END IF;
+
+  v_intended := portal_resolve_stage(p_request_id, v_stage);
+  IF v_intended IS NOT NULL THEN
+    IF v_intended <> v_req.requester THEN
+      INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+        VALUES ('ntf_'||extract(epoch from clock_timestamp())::bigint||'_'||substr(md5(random()::text),1,8)||'_'||v_intended,
+                v_intended, 'approval', 'طلب بانتظار اعتمادك', v_req.title, 'inbox') ON CONFLICT (id) DO NOTHING;
+      v_n := 1;
+    END IF;
+    -- تفويض عند الغياب
+    INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+      SELECT 'ntf_'||extract(epoch from clock_timestamp())::bigint||'_'||substr(md5(random()::text),1,8)||'_'||u.delegate_to,
+             u.delegate_to, 'approval', 'تفويض: طلب بانتظار اعتمادك (بالنيابة)', v_req.title, 'inbox'
+      FROM portal_users u WHERE u.username = v_intended AND u.is_away AND u.delegate_to IS NOT NULL AND u.delegate_to <> v_req.requester
+      ON CONFLICT (id) DO NOTHING;
+  ELSIF v_stage.role_key IS NOT NULL THEN
+    INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+      SELECT 'ntf_'||extract(epoch from clock_timestamp())::bigint||'_'||substr(md5(random()::text),1,8)||'_'||u.username,
+             u.username, 'approval', 'طلب بانتظار اعتماد مرحلتك ('||coalesce(v_stage.stage_label,'')||')', v_req.title, 'inbox'
+      FROM portal_users u
+      WHERE u.active AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false) AND u.username <> v_req.requester
+      ON CONFLICT (id) DO NOTHING;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    INSERT INTO portal_notifications(id, recipient, type, title, body, link)
+      SELECT 'ntf_'||extract(epoch from clock_timestamp())::bigint||'_'||substr(md5(random()::text),1,8)||'_'||u.delegate_to,
+             u.delegate_to, 'approval', 'تفويض: طلب بانتظار اعتماد مرحلتك بالنيابة', v_req.title, 'inbox'
+      FROM portal_users u WHERE u.active AND u.is_away AND u.delegate_to IS NOT NULL AND u.delegate_to <> v_req.requester
+        AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+      ON CONFLICT (id) DO NOTHING;
+  END IF;
+  RETURN v_n;
+END $fn$;
+REVOKE ALL ON FUNCTION portal_enqueue_stage_notifications(text,text) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_enqueue_stage_notifications(text,text) TO authenticated;
+
+-- ── مُشغِّل الالتقاط: عند دخول/تقدّم مرحلة اعتماد معلّقة ─────────────────────
+CREATE OR REPLACE FUNCTION portal_requests_notify() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  -- يفعل فقط عند دخول in_review أو تقدّم المرحلة (لا يفعل مع تحديثات SLA/الحقول الأخرى).
+  IF NEW.status = 'in_review'
+     AND (OLD.status IS DISTINCT FROM 'in_review' OR OLD.current_seq IS DISTINCT FROM NEW.current_seq) THEN
+    PERFORM portal_enqueue_stage_notifications(NEW.id,
+      CASE WHEN NEW.phase = 'disbursement' THEN 'disbursement' ELSE 'need' END);
+  END IF;
+  RETURN NULL;   -- AFTER trigger
+END $fn$;
+REVOKE ALL ON FUNCTION portal_requests_notify() FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_requests_notify() TO authenticated;
+
+DROP TRIGGER IF EXISTS trg_portal_requests_notify ON portal_requests;
+CREATE TRIGGER trg_portal_requests_notify AFTER UPDATE ON portal_requests
+  FOR EACH ROW EXECUTE FUNCTION portal_requests_notify();
+
+-- تحقّق:
+--   UPDATE portal_settings SET value = value || '{"txn_notifications":1}' WHERE key='portal_settings';
+--   ثم أيّ اعتماد ينتقل لمرحلة تالية يُدرِج إشعاراً يلتقطه الصادر (portal_outbox).

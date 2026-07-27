@@ -74,6 +74,19 @@ async function runSla(env, base) {
   } catch (e) { return { ok: false, detail: String(e).slice(0, 200) }; }
 }
 
+// الصرف المتكرّر المجدوَل (055): يُنشئ طلبات الصرف المستحقّة من القوالب. خادمية
+// (service_role) تُدرِج بهوية صاحب القالب وتبني دورة الصرف — إشعاراتها تُلتقط في الصادر.
+async function runRecurring(env, base) {
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/portal_recurring_run`, {
+      method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json' }, body: '{}',
+    });
+    if (!r.ok) return { ok: false, detail: (await r.text().catch(() => '')).slice(0, 200) };
+    const j = await r.json().catch(() => null);
+    return { ok: true, created: (j && typeof j.created === 'number') ? j.created : 0 };
+  } catch (e) { return { ok: false, detail: String(e).slice(0, 200) }; }
+}
+
 async function claim(env, base, limit) {
   const r = await fetch(`${base}/rest/v1/rpc/portal_outbox_claim`, {
     method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json' },
@@ -102,10 +115,13 @@ async function drain({ request, env }) {
   // (1) تصعيد SLA المجدوَل أولاً — فتُلتقط إشعاراته في الصادر وتُرسَل في نفس هذه الدورة.
   const sla = await runSla(env, base);
 
+  // (1ب) توليد الصرف المتكرّر المستحقّ (055) — قبل السحب فتُرسَل إشعاراته في نفس الدورة.
+  const recurring = await runRecurring(env, base);
+
   // (2) تسليم صندوق الصادر.
   let rows;
-  try { rows = await claim(env, base, limit); } catch (e) { return json({ error: 'claim_failed', detail: String(e).slice(0, 200), sla }, 502); }
-  if (!Array.isArray(rows) || !rows.length) return json({ ok: true, processed: 0, sla });
+  try { rows = await claim(env, base, limit); } catch (e) { return json({ error: 'claim_failed', detail: String(e).slice(0, 200), sla, recurring }, 502); }
+  if (!Array.isArray(rows) || !rows.length) return json({ ok: true, processed: 0, sla, recurring });
 
   let sent = 0, skipped = 0, failed = 0;
   for (const row of rows) {
@@ -120,7 +136,7 @@ async function drain({ request, env }) {
       await mark(env, base, row.id, false, String(e)); failed++;
     }
   }
-  return json({ ok: true, processed: rows.length, sent, skipped, failed, sla });
+  return json({ ok: true, processed: rows.length, sent, skipped, failed, sla, recurring });
 }
 
 export const onRequestPost = drain;

@@ -9,6 +9,8 @@ on:
       - 'db/portal-migrations/**'
       - 'db/portal-tests/**'
       - 'functions/api/portal-*'
+      - 'functions/api/_file-guard.js'
+      - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
   push:
     branches: [main]
@@ -17,6 +19,8 @@ on:
       - 'db/portal-migrations/**'
       - 'db/portal-tests/**'
       - 'functions/api/portal-*'
+      - 'functions/api/_file-guard.js'
+      - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
 
 jobs:
@@ -36,6 +40,9 @@ jobs:
           --health-retries 12
     steps:
       - uses: actions/checkout@v4
+      - name: تأكيدات حارس الملفات المرفوعة (JS)
+        run: node db/portal-tests/file-guard.test.mjs
+
       - name: تشغيل حزمة اختبار البوابة
         env:
           PGHOST: localhost

@@ -57,7 +57,7 @@ BEGIN
   PERFORM portal_pr_transition(v_id,'approve','ok');
   PERFORM set_config('request.jwt.claims','{"email":"b4_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
-  v_r := portal_submit_offer(v_id,'مورد-K',300000,20,90,45,'عرض K',NULL,'[{"seq":1,"price":300000}]');
+  v_r := portal_submit_offer(v_id,'مورد-K',300000,20,90,45,'عرض K','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":300000}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_award(v_id, v_o, NULL);
   PERFORM set_config('request.jwt.claims','{"email":"b4_aw2@aldeyabi.com","role":"authenticated"}',true);
@@ -105,7 +105,7 @@ BEGIN
   PERFORM portal_pr_transition(v_id,'approve','ok');
   PERFORM set_config('request.jwt.claims','{"email":"b4_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
-  v_r := portal_submit_offer(v_id,'مورد-M',10000,10,90,30,'عرض M',NULL,'[{"seq":1,"price":10000}]');
+  v_r := portal_submit_offer(v_id,'مورد-M',10000,10,90,30,'عرض M','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":10000}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_award(v_id, v_o, NULL);
   PERFORM set_config('request.jwt.claims','{"email":"b4_aw2@aldeyabi.com","role":"authenticated"}',true);
@@ -163,7 +163,7 @@ BEGIN
   PERFORM portal_pr_transition(v_id,'approve','ok');
   PERFORM set_config('request.jwt.claims','{"email":"b4_pm@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','تسعير');
-  v_r := portal_submit_offer(v_id,'مورد-R',2000,7,90,30,'عرض R',NULL,'[{"seq":1,"price":100}]');
+  v_r := portal_submit_offer(v_id,'مورد-R',2000,7,90,30,'عرض R','quotes/'||v_id||'/qa.pdf','[{"seq":1,"price":100}]');
   v_o := (v_r->>'id')::bigint;
   v_r := portal_award(v_id, v_o, NULL);
   PERFORM set_config('request.jwt.claims','{"email":"b4_aw2@aldeyabi.com","role":"authenticated"}',true);

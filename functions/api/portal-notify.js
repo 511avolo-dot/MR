@@ -18,7 +18,7 @@
  */
 import {
   loadRequest, deptName, loadApprovals, loadAwardApprovals,
-  notifyPending, notifyResult, notifyInfo, notifyProcurement,
+  notifyPending, notifyResult, notifyInfo, notifyProcurement, notifyDisbPending,
   resolveAwardStageApprovers, currentPendingStage, publicOrigin,
   portalUrl, portalKey, portalConfigured,
 } from './_portal-shared.js';
@@ -164,6 +164,18 @@ export async function onRequestPost({ request, env }) {
         } else {
           return json({ skipped: true, reason: 'status_mismatch' });
         }
+      } else {
+        return json({ error: 'حدث غير معروف' }, 400);
+      }
+    } else if (kind === 'disbursement') {
+      // دورة الصرف (056): اعتماد بضغطة من البريد لمرحلة السلسلة المعلّقة.
+      if (event === 'pending') {
+        if (req.status !== 'in_review') return json({ skipped: true, reason: 'status_mismatch' });
+        const approvals = await loadApprovals(env, base, requestId);
+        res = await notifyDisbPending(env, base, req, deptLabel, approvals, origin);
+      } else if (event === 'approved' || event === 'rejected' || event === 'returned') {
+        res = await notifyResult(env, base, req, deptLabel,
+          event === 'approved' ? 'approved' : event, origin, comment);
       } else {
         return json({ error: 'حدث غير معروف' }, 400);
       }
