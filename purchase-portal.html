@@ -5821,6 +5821,7 @@ function pa_reportsHTML(){
   var deptRows=Object.keys(byDept).map(function(k){return {k:k,v:byDept[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,8);
   var stRows=Object.keys(byStatus).map(function(k){return {k:PA_ST_LABEL[k]||k,v:byStatus[k]};}).sort(function(a,b){return b.v-a.v;});
   var methRows=Object.keys(byMethod).map(function(k){return {k:k,v:byMethod[k]};}).sort(function(a,b){return b.v-a.v;});
+  var bar='<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-ghost btn-sm" onclick="pa_exportCSV()">'+ic('file',14)+' تصدير Excel (CSV)</button></div>';
   var kpis='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">'
     +pa_repKPI('عدد الطلبات المرئية',String(reqs.length),nActive+' نشط')
     +pa_repKPI('إجمالي القيمة المقدّرة',money(totVal),'الطلبات النشطة (بلا ملغى/مرفوض)')
@@ -5835,6 +5836,28 @@ function pa_reportsHTML(){
   if(methRows.length) out+=panel('قيمة الصرف المباشر حسب الطريقة','money', pa_repBars(methRows,{money:true,color:'linear-gradient(90deg,#3a6ea5,#5b8fc9)'}));
   out+='<div class="muted" style="font-size:11px;text-align:center;padding:6px 0">تقارير مُنطاقة بصلاحية رؤيتك — القيم تقديرية من الطلبات المرئية.</div>';
   return out;
+}
+/* تصدير Excel: CSV بترميز UTF-8 + BOM (يفتحه Excel بأعمدة عربية سليمة) — بلا مكتبة خارجية (آمن CSP). */
+function pa_csvCell(v){ v=(v==null?'':String(v)); if(/[",\n\r]/.test(v)) v='"'+v.replace(/"/g,'""')+'"'; return v; }
+function pa_exportCSV(){
+  try{
+    var reqs=(typeof visibleReqs==='function')?(visibleReqs(ME)||[]):(REQS||[]);
+    var head=['رقم الطلب','العنوان','القسم','مقدّم الطلب','النوع','القيمة المقدّرة','الحالة','طريقة الصرف','المستفيد','تاريخ الإنشاء'];
+    var typeTxt={purchase:'شراء',direct_expense:'صرف مباشر'}, methTxt={bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'};
+    var lines=[head.map(pa_csvCell).join(',')];
+    reqs.forEach(function(r){
+      var d=r.createdAt?new Date(r.createdAt):null; var ds=d?(d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)):'';
+      lines.push([ r.id, r.title||'', r.dept||r.deptId||'', (typeof uName==='function'?uName(r.requester):r.requester)||'',
+        typeTxt[r.reqType]||'شراء', (r.estTotal||0), (PA_ST_LABEL[r.status]||r.status||''),
+        methTxt[r.expenseMethod]||'', r.beneficiary||'', ds ].map(pa_csvCell).join(','));
+    });
+    var csv='﻿'+lines.join('\r\n');
+    var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    var url=URL.createObjectURL(blob); var a=document.createElement('a');
+    a.href=url; a.download='aldeyabi-reports-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(url);},1500);
+    if(typeof toast==='function') toast('صُدِّر '+reqs.length+' طلباً إلى ملف Excel/CSV','ok');
+  }catch(e){ if(typeof toast==='function') toast('تعذّر التصدير','err'); }
 }
 
 /* الإقلاع الفعلي */
