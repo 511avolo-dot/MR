@@ -5973,6 +5973,47 @@ function pa_exportCSV(){
   }catch(e){ if(typeof toast==='function') toast('تعذّر التصدير','err'); }
 }
 
+/* ── ضبط تغيير آيبان المورد (032) — طلب/اعتماد (تغليف adminSuppliers المرجعي) ── */
+try{ if(typeof adminSuppliers==='function'){ var _pa_refAdminSuppliers=adminSuppliers;
+  adminSuppliers=function(){ return _pa_refAdminSuppliers.apply(this,arguments) + pa_supplierIbanPanel(); }; }
+}catch(_e){}
+function pa_supNameBySid(sid){ var out='#'+sid; Object.keys(SUPPLIERS||{}).forEach(function(k){ var s=SUPPLIERS[k]; if(s&&String(s._sid)===String(sid)) out=s.n; }); return out; }
+function pa_supplierIbanPanel(){
+  if(!window.__paIbcOK) return '';
+  var a=accessOf(ME)||{}; var isFin=isAdmin()||!!(a.see&&a.see.finance); var canReq=isFin||!!(a.can&&a.can.manageRfq);
+  var ctrlOn=Number((typeof PSET!=='undefined'&&PSET.iban_change_control)||0)>=1;
+  if(!ctrlOn && !((IBANCHG||[]).length)) return '';   /* لا تظهر إلا عند التفعيل أو وجود سجلّ */
+  var pend=(IBANCHG||[]).filter(function(c){return c.status==='pending';});
+  var supOpts=Object.keys(SUPPLIERS||{}).map(function(k){ var s=SUPPLIERS[k]; return (s&&s._sid!=null)?('<option value="'+s._sid+'">'+esc(s.n)+(s.iban?(' — '+esc(s.iban)):'')+'</option>'):''; }).join('');
+  var form = (ctrlOn && canReq) ? '<div style="border-top:1px dashed var(--line,#e2e6ee);margin-top:12px;padding-top:10px">'
+    +'<div class="muted" style="font-size:12px;font-weight:700;margin-bottom:6px">طلب تغيير آيبان مورد</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+      +'<div style="flex:2;min-width:160px"><label style="font-size:11px;display:block;margin-bottom:3px;color:var(--muted,#7a8296);font-weight:700">المورد</label><select class="select" id="sib-sup"><option value="">— اختر —</option>'+supOpts+'</select></div>'
+      +'<div style="flex:2;min-width:180px"><label style="font-size:11px;display:block;margin-bottom:3px;color:var(--muted,#7a8296);font-weight:700">الآيبان الجديد (SA..)</label><input class="input mono" id="sib-iban" dir="ltr" maxlength="24" placeholder="SA............"></div>'
+      +'<div style="flex:2;min-width:150px"><label style="font-size:11px;display:block;margin-bottom:3px;color:var(--muted,#7a8296);font-weight:700">السبب (اختياري)</label><input class="input" id="sib-reason"></div>'
+      +'<button class="btn btn-gold btn-sm" onclick="pa_supIbanRequest()">'+ic('bank',13)+' إرسال الطلب</button></div></div>' : '';
+  var pendHTML='';
+  if(pend.length){
+    pendHTML='<div style="border-top:1px dashed var(--line,#e2e6ee);margin-top:12px;padding-top:10px"><div class="muted" style="font-size:12px;font-weight:700;margin-bottom:6px">طلبات معلّقة</div>'
+      +'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>المورد</th><th>الآيبان الجديد</th><th>الطالب</th><th></th></tr></thead><tbody>'
+      +pend.map(function(c){ var self=(c.requestedBy===ME);
+        return '<tr><td>'+esc(pa_supNameBySid(c.supplierId))+'</td><td class="mono" dir="ltr" style="font-size:11px">'+esc(c.newIban)+'</td><td>'+esc(uName(c.requestedBy))+'</td>'
+          +'<td style="white-space:nowrap">'+((isFin&&!self)?('<button class="btn btn-gold btn-sm" onclick="pa_supIbanApprove('+c.id+')">اعتماد</button> <button class="btn btn-ghost btn-sm" onclick="pa_supIbanReject('+c.id+')">رفض</button>'):'<span class="muted" style="font-size:11px">'+(self?'طلبك':'—')+'</span>')+'</td></tr>';
+      }).join('')+'</tbody></table></div></div>';
+  }
+  if(!form && !pendHTML) return '';
+  return '<div class="card" style="margin-top:14px"><div class="sec-title"><span class="ico">'+ic('bank',16)+'</span>ضبط تغيير آيبان المورد'+(ctrlOn?'':' <span class="muted" style="font-size:11px;font-weight:400">(غير مُفعَّل)</span>')+'</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:6px">تغيير البيانات البنكية للمورد يتطلّب اعتماداً مزدوجاً (فصل مهام) — وقاية احتيال.</div>'+form+pendHTML+'</div>';
+}
+async function pa_supIbanRequest(){
+  var sid=($('sib-sup')||{}).value, iban=(($('sib-iban')||{}).value||'').replace(/\s/g,''), rs=($('sib-reason')||{}).value||null;
+  if(!sid){ toast('اختر المورد','err'); return; }
+  if(!/^SA\d{22}$/.test(iban)){ toast('آيبان غير صحيح (SA + 22 رقماً)','err'); return; }
+  try{ await pa_rpc('portal_supplier_iban_request',{p_supplier_id:Number(sid),p_new_iban:iban,p_reason:rs}); toast('أُرسل طلب تغيير الآيبان للاعتماد','ok'); await loadAll(); render(); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الطلب'),'err'); } }
+async function pa_supIbanApprove(cid){ try{ await pa_rpc('portal_supplier_iban_approve',{p_change_id:cid}); toast('اعتُمد تغيير الآيبان','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الاعتماد'),'err'); } }
+async function pa_supIbanReject(cid){ var n=window.prompt('سبب الرفض (اختياري):','')||null; try{ await pa_rpc('portal_supplier_iban_reject',{p_change_id:cid,p_note:n}); toast('رُفض الطلب','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الرفض'),'err'); } }
+
 /* الإقلاع الفعلي */
 boot();
 </script>
