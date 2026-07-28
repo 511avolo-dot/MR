@@ -27,7 +27,7 @@ must be closed before onboarding real users and money.
 | Auditability | 5 | Append-only + SHA256 hash-chain WORM (057) with tamper detection (`portal_audit_verify`), advisory-locked. |
 | Data protection (PII/IBAN) | 4 | IBANs finance/procurement-gated; IBAN-change control (032/053); **SEC-03** beneficiary breadth open by design (owner decision). |
 | Reliability / workflows | 4.5 | Durable in-DB state machine, transactional outbox (029), `FOR UPDATE` locking; email full-durability activation pending (OPS-02). |
-| Test / CI | 4.5 | 189 automated assertions (171 SQL + 18 file-guard + 5 endpoint), CI on every portal PR; **no browser E2E** (INFO-04). |
+| Test / CI | 4.5 | 194 automated assertions (171 SQL + 18 file-guard + 5 endpoint), CI on every portal PR; **no browser E2E** (INFO-04). |
 | Observability / DR | 2.5 | Health endpoints + loud failure logs added; **backup/PITR tier + RTO/RPO not in repo** — NOT VERIFIABLE. |
 | Frontend correctness | 3 | Converter panels syntax-verified only; **not browser-tested** — flagged as the top second-review priority. |
 

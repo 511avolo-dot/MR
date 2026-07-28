@@ -26,7 +26,7 @@ no PR merge. One code remediation this audit: migration `059` (SEC-01, applied l
 | Status | **READY WITH CONDITIONS** |
 | BLOCKER/CRITICAL/HIGH | **0** |
 | Fixed this audit | SEC-01 (migration 059, live-verified) |
-| Automated suite | **EXIT 0** — 189 assertions (171 SQL + 18 file-guard + 5 endpoint) |
+| Automated suite | **EXIT 0** — 194 assertions (171 SQL + 18 file-guard + 5 endpoint) |
 | Live migrations | `022→059` applied & verified on `mwbjoysuybgbrvfrprex` |
 | Remaining gates | owner config (SEC-02/05, data setup, flag flips, DR) + Codex review + browser E2E |
 

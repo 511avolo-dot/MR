@@ -68,7 +68,7 @@ PDF after `#xx` de-encoding, neutralizing response headers) guards all upload pa
 fail-closed (audit-fixes-round1).
 
 ## 8. Testing & CI (verified)
-`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 189 PASS (171 SQL assertions incl. new AH1/AH2, 18 file-guard
+`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 194 assertions (171 SQL incl. new AH1/AH2, 18 file-guard
 JS, 5 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
 all `functions/api/*.js`. Caveat: the local stub models `authenticated` as inheriting `anon`; the real project does
 not — reconciled for SEC-01 by verifying live grants and making 059 explicit.

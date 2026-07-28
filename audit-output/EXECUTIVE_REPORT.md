@@ -21,7 +21,7 @@ owner controls**, not programming fixes.
   installment cases. Verified.
 - **Can the audit log be tampered with, even by a database administrator?** The log is now cryptographically chained, so
   tampering is detectable. Verified.
-- **Does the code pass its own tests?** Yes — 189 automated checks pass with zero failures, and they run automatically on
+- **Does the code pass its own tests?** Yes — 194 automated checks pass with zero failures, and they run automatically on
   every change.
 
 ## The conditions before real go-live (owner actions, not code)

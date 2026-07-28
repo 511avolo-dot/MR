@@ -10,7 +10,7 @@ No secret values are recorded in this log. Live database mutations were made **o
 ## Chronology
 
 1. **Safety / branch check.** `git status` clean. Referenced audit branch `audit/enterprise-certification-2026-07-27` and commit `54b971a` were **NOT present** on origin (`git ls-remote` → none). Created a fresh audit branch off merged `main` (`b9d9d6d`). Did **not** modify `main`.
-2. **Baseline test evidence.** `bash db/portal-tests/run.sh` on PostgreSQL 16 (local unprivileged cluster, port 5455) → **EXIT 0**, 189 `PASS` assertion lines, 0 failures (171 SQL assertions + 18 file-guard JS + 5 reg-doc endpoint). Captured `/tmp/audit_suite.log`.
+2. **Baseline test evidence.** `bash db/portal-tests/run.sh` on PostgreSQL 16 (local unprivileged cluster, port 5455) → **EXIT 0**, 0 failures, **194 assertions** total = 171 SQL (`NOTICE PASS` lines) + 18 file-guard JS + 5 reg-doc endpoint. (An earlier draft mis-stated this as 189, which dropped the 5 endpoint assertions; corrected here and in all audit-output docs.) Captured `/tmp/audit_suite.log`.
 3. **JS integrity.** `node --check` on every `functions/api/*.js` → all OK. `node db/portal-tests/file-guard.test.mjs` → PASS.
 4. **Inventory.** Enumerated top-level, `functions/api` (20 endpoints), 59 migration files, 11 HTML pages; LOC of the large surfaces (portal 6.0k, index 22.9k, register 4.7k, standalone 7.3k).
 5. **Live DB security advisors** (`get_advisors` security, project `mwbjoysuybgbrvfrprex`): 134 WARN + 5 INFO. All WARN fall into 4 documented-benign classes **except one actionable**: `auth_leaked_password_protection` (disabled).
