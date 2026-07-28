@@ -4,7 +4,7 @@ Branch `audit/enterprise-certification-2026-07-27` (base `main` @ `b9d9d6d`). Ev
 no PR merge. One code remediation this audit: migration `059` (SEC-01, applied live + test 35).
 
 ## Read in this order
-1. **FINAL_CERTIFICATION.md** — verdict (`READY WITH CONDITIONS`), category scores, sign-off.
+1. **FINAL_CERTIFICATION.md** — verdict (`NOT READY`, revised 2026-07-28 after Codex), category scores, must-fix list, sign-off.
 2. **EXECUTIVE_REPORT.md** — plain-language summary for the owner.
 3. **FINDINGS.md** — every finding, severity, confidence, evidence (0 BLOCKER/CRITICAL/HIGH; 3 MEDIUM / 4 LOW / 4 INFO).
 4. **TECHNICAL_REPORT.md** — architecture + control-by-control evidence.
@@ -20,15 +20,16 @@ no PR merge. One code remediation this audit: migration `059` (SEC-01, applied l
 - **API_SECURITY_MATRIX.md** — every endpoint, auth, controls.
 - **BUSINESS_SCENARIO_MATRIX.md** — end-to-end scenarios ↔ tests/evidence.
 
-## Verdict at a glance
+## Verdict at a glance (revised 2026-07-28 after independent Codex review)
 | | |
 |---|---|
-| Status | **READY WITH CONDITIONS** |
-| BLOCKER/CRITICAL/HIGH | **0** |
-| Fixed this audit | SEC-01 (migration 059, live-verified) |
-| Automated suite | **EXIT 0** — 194 assertions (171 SQL + 18 file-guard + 5 endpoint) |
+| Status | **NOT READY** (2 HIGH code defects verified) |
+| BLOCKER/CRITICAL/HIGH | **0 / 0 / 2** (AUTHZ-01 cross-dept expense; SEC-06 unauth reg-doc) |
+| Fixed this audit | SEC-01 (059, live-verified) + audit-accuracy defects (assertion count; vacuous AH1 test) |
+| Automated suite | **EXIT 0** — 195 assertions (172 SQL + 18 file-guard + 5 endpoint) |
 | Live migrations | `022→059` applied & verified on `mwbjoysuybgbrvfrprex` |
-| Remaining gates | owner config (SEC-02/05, data setup, flag flips, DR) + Codex review + browser E2E |
+| Must-fix (code) | AUTHZ-01, SEC-06, + MEDIUM: SEC-07 admin-SoD, SEC-03 beneficiary IBAN, GOV-01 recurring budget |
+| Remaining gates | owner config (SEC-02/05, data setup, flag flips, DR) + browser E2E (Codex review done) |
 
 ## Reproduce
 ```bash

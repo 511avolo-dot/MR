@@ -1,8 +1,24 @@
 # PRODUCTION BLOCKERS
 
-**Status: NO CODE-LEVEL BLOCKERS IDENTIFIED for System 3 (portal).**
+**Status (revised 2026-07-28 after Codex review): 2 HIGH code defects must be fixed before real go-live.**
 
-No verified condition in the audited code makes deployment unacceptable: no auth/authorization bypass, no cross-supplier exposure, no financial-integrity failure, no workflow bypass, no secret exposure, no destructive migration. The portal migrations `022→059` are already applied live and the full assertion suite is green (EXIT 0).
+The first issue of this file said "no code-level blockers." An independent Codex review disproved that; both items were
+re-verified against the source. These are must-fix **before onboarding real users/money**:
+
+1. **AUTHZ-01 (HIGH) — cross-department direct-expense write.** `portal_create_expense` accepts any existing
+   `p_department_id` without binding it to the caller's scope, so a `can_create` user can raise an expense against
+   another department's chain and budget. Fix: mirror `portal_create_request` (derive/validate department from caller).
+2. **SEC-06 (HIGH) — unauthenticated, destructive `reg-doc.js`.** Only a forgeable same-origin header gates a
+   service-role upload that also **deletes** existing files under a known `reg_id/doc` prefix. Fix: require a real
+   credential; make cleanup non-destructive/scoped; use an explicit doc-type allowlist. (Currently inert at `503` while
+   the service key is unset — do not enable the key until fixed.)
+
+**Strongly recommended before go-live (MEDIUM):** SEC-07 (decide/disclose the admin SoD exemption), SEC-03 (require an
+approved beneficiary for bank expenses), GOV-01 (enforce budget in `portal_recurring_run`). LOW: AUD-01 (external
+audit-chain anchor for truncation detection).
+
+The portal migrations `022→059` are applied live and the assertion suite is green (EXIT 0, 195 assertions), but a green
+suite does **not** cover the above — they are logic/authz defects the current tests do not exercise.
 
 ## Conditions that MUST be satisfied before real (non-dummy) go-live
 These are **operational/owner** gates, not code blockers — but production onboarding of real users/money should not proceed until they are done:

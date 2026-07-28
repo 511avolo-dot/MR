@@ -12,11 +12,25 @@
 - **Rollback guidance:** `GRANT SELECT ON portal_users, portal_payments, portal_suppliers, portal_beneficiaries TO anon;` (restores prior state). RLS would still deny rows.
 - **Remaining limitations:** does not change RLS (already correct). `portal_settings` intentionally left with its authenticated read (used pre-scope by UI); revisit under SEC-04 if insider threat is in scope.
 
-## Items NOT auto-remediated (documented, owner/decision-gated)
+## Audit-accuracy defects fixed after Codex review (2026-07-28)
+- **Assertion count** — headline "189/194" corrected to **195** (172 SQL + 18 file-guard + 5 endpoint); per-file breakdown in `run.sh` corrected (11_security 8, 26_disbursement 10).
+- **Vacuous AH1 test** — `35_anon_hardening.sql` now **seeds** the four `anon` SELECT grants, applies 059, then asserts removal (AH0/AH1/AH2), so it genuinely pins the revoke. Suite EXIT 0, 195 assertions.
+- **Documentation honesty** — FINDINGS / FINAL_CERTIFICATION / EXECUTIVE / TECHNICAL / PRODUCTION_BLOCKERS / API_SECURITY_MATRIX / README rewritten to verdict **NOT READY** with the verified findings below.
+
+## Verified code defects — NOT auto-remediated (referred to owner; changes to a live financial system)
+| ID | Severity | Reason not auto-fixed / decision needed |
+|----|----------|------------------------------------------|
+| AUTHZ-01 direct-expense department binding | HIGH | Fix is small (mirror `portal_create_request`), but it's a governance change to a live RPC + needs a migration + live apply (owner's standing rule). Recommend implementing now. |
+| SEC-06 reg-doc unauthenticated write/delete | HIGH | Needs a **product decision**: which credential (signed token vs authenticated session) + non-destructive cleanup. System-1 surface; pair with `system1-storage-hardening.sql`. |
+| SEC-07 admin SoD exemption | MEDIUM | **Policy decision**: is admin-as-superuser intended, or should the admin bypass be removed on payment execution? |
+| SEC-03 manual-IBAN bypass | MEDIUM | **Product decision**: forbid free-typed IBANs for bank expenses (require approved beneficiary) vs keep manual entry. |
+| GOV-01 recurring budget bypass | MEDIUM | Add budget check to `portal_recurring_run`; migration + live apply. Recommend implementing. |
+| AUD-01 audit truncation | LOW | Add an external head-hash checkpoint; design + owner sign-off. |
+
+## Items NOT auto-remediated (owner/config-gated, unchanged)
 | ID | Reason not auto-fixed |
 |----|----------------------|
 | SEC-02 leaked-password protection | Supabase Dashboard toggle — no code. |
-| SEC-03 beneficiary read breadth | Fixing the policy breaks the direct-expense beneficiary picker; needs a UI redesign (names-only) + owner sign-off. |
 | SEC-04 user/settings directory read | Broad blast radius across the UI; needs owner decision on insider-threat model. |
 | OPS-01/OPS-02 dormant flags | Intentional gradual-enforcement; owner flips per launch plan. |
-| SEC-05 System-1 storage policies | Owner-run SQL; frontend already fails safe. |
+| SEC-05 System-1 storage policies | Owner-run SQL; frontend already fails safe (but see SEC-06 for the reg-doc auth gap). |
