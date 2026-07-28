@@ -20,16 +20,16 @@ no PR merge. One code remediation this audit: migration `059` (SEC-01, applied l
 - **API_SECURITY_MATRIX.md** — every endpoint, auth, controls.
 - **BUSINESS_SCENARIO_MATRIX.md** — end-to-end scenarios ↔ tests/evidence.
 
-## Verdict at a glance (revised 2026-07-28 after independent Codex review)
+## Verdict at a glance (rev 2 — 2026-07-28, after Codex review + owner-directed remediation)
 | | |
 |---|---|
-| Status | **NOT READY** (2 HIGH code defects verified) |
-| BLOCKER/CRITICAL/HIGH | **0 / 0 / 2** (AUTHZ-01 cross-dept expense; SEC-06 unauth reg-doc) |
-| Fixed this audit | SEC-01 (059, live-verified) + audit-accuracy defects (assertion count; vacuous AH1 test) |
-| Automated suite | **EXIT 0** — 195 assertions (172 SQL + 18 file-guard + 5 endpoint) |
-| Live migrations | `022→059` applied & verified on `mwbjoysuybgbrvfrprex` |
-| Must-fix (code) | AUTHZ-01, SEC-06, + MEDIUM: SEC-07 admin-SoD, SEC-03 beneficiary IBAN, GOV-01 recurring budget |
-| Remaining gates | owner config (SEC-02/05, data setup, flag flips, DR) + browser E2E (Codex review done) |
+| Status | **READY WITH CONDITIONS** (no open HIGH; blocking items remediated) |
+| BLOCKER/CRITICAL/HIGH | **0 / 0 / 0** open (AUTHZ-01, SEC-06-destructive, GOV-01 fixed & tested) |
+| Fixed this audit | SEC-01 (059) · AUTHZ-01 (060) · GOV-01 (060) · SEC-06 destructive+allowlist (reg-doc.js) · accuracy defects |
+| Owner-accepted | SEC-07 (admin superuser) · SEC-03 (manual IBAN retained) |
+| Automated suite | **EXIT 0** — 200 assertions (177 SQL + 18 file-guard + 5 endpoint) |
+| Live migrations | `022→059` applied on `mwbjoysuybgbrvfrprex`; **`060` pending live apply** |
+| Conditions | apply 060 live · SEC-06-R credential upgrade · SEC-02/05 · data setup · flags · DR · browser E2E |
 
 ## Reproduce
 ```bash

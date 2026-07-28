@@ -2,57 +2,55 @@
 
 Sorted by severity. Confidence: VERIFIED / HIGHLY LIKELY / POSSIBLE / NOT VERIFIABLE.
 
-> **Revision note (2026-07-28).** An independent Codex review of PR #74 surfaced several defects this audit had
-> **understated or overstated**. Each was re-verified against the source and is incorporated below. Net effect: the
-> earlier "0 HIGH" claim was wrong — there are **2 HIGH** code defects. Certification downgraded (see FINAL_CERTIFICATION).
+> **Revision note (2026-07-28).** An independent Codex review of PR #74 surfaced defects this audit had understated or
+> overstated; each was re-verified against the source. **Rev 2 (same day):** after owner direction, the two HIGH items
+> were **remediated in code** (migration `060` + `reg-doc.js`) and two MEDIUM items are **owner-accepted decisions**.
+> Net: **0 open HIGH**; verdict raised back to READY WITH CONDITIONS (see FINAL_CERTIFICATION).
 
-Summary counts: **BLOCKER 0 · CRITICAL 0 · HIGH 2 · MEDIUM 5 · LOW 3 · INFORMATIONAL 3**.
-Fixed this audit: SEC-01 (059, verified) + two audit-accuracy defects (assertion breakdown; AH1 now actually pins the revoke).
-
----
-
-## HIGH
-
-### AUTHZ-01 — `portal_create_expense` does not bind the expense to the caller's department — **VERIFIED**
-- Severity: HIGH · Confidence: VERIFIED (`db/portal-standalone.sql`, `portal_create_expense`)
-- Process: Authorization / cross-department (horizontal privilege)
-- Evidence: the function validates only that `p_department_id` **exists** (`IF p_department_id IS NULL OR NOT EXISTS (SELECT 1 FROM portal_departments …)`); it never compares it against the caller's profile/scope. Contrast `portal_create_request`, which derives the department from the caller. Any `can_create` user can submit `p_department_id` for **another** department, routing the expense through that department's approval chain, visibility, and budget.
-- Impact: cross-department spend initiation and budget consumption; contradicts the "authorization model is sound" claim.
-- Remediation: derive the department from the caller (or reject when `p_department_id` is outside `portal_my_scope()`), mirroring `portal_create_request`. Test: a `can_create` user in dept A is rejected/normalized when passing dept B.
-- Status: OPEN (code fix required; owner-scope decision — see REMEDIATION_REGISTER).
-
-### SEC-06 — `functions/api/reg-doc.js` is an unauthenticated, destructive public write path — **VERIFIED**
-- Severity: HIGH · Confidence: VERIFIED (`functions/api/reg-doc.js`)
-- Process: System-1 storage / authentication
-- Evidence: the only gate is `sameOrigin()` — a check of the `origin`/`referer`/`host` headers, which are **forgeable by any non-browser client**. No caller credential is required. On success the handler uploads with the **service-role key** and then **deletes** every existing object under `${regId}/${doc}/` as "stale". `DOC_RE` (`^[a-z][a-z0-9_]{1,24}$`) is a broad pattern, not a real allowlist.
-- Impact: anyone reaching the endpoint can consume service-role-backed storage and, if a real `reg_id`+`doc` is known, overwrite/delete a supplier's genuine registration documents. My API matrix mischaracterized this as "server-key-authenticated … allowlist" — that was wrong.
-- Mitigating (current): returns `503 not_configured` while `SUPABASE_SERVICE_ROLE_KEY` is unset in prod, so it is presently inert — but the path is unsafe once the key is configured.
-- Remediation: require a real credential (signed token / authenticated session); make cleanup non-destructive or scoped; replace the regex with an explicit doc-type allowlist. Pair with `db/system1-storage-hardening.sql` before real supplier onboarding.
-- Status: OPEN (code fix required).
+Summary counts (open): **BLOCKER 0 · CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFORMATIONAL 3** · plus **2 owner-accepted** (SEC-07, SEC-03).
+Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060)** · **GOV-01 (060)** · **SEC-06 destructive-delete + allowlist (reg-doc.js)** · audit-accuracy defects (assertion breakdown; AH1 now pins the revoke).
 
 ---
 
-## MEDIUM
+## HIGH — none open (both remediated 2026-07-28)
 
-### SEC-07 — Administrators are exempt from all segregation-of-duties checks — **VERIFIED**
-- Severity: MEDIUM · Confidence: VERIFIED (`portal_pr_transition`/`portal_payment_transition`: `AND NOT portal_is_admin()` at the requester≠approver, stage-eligibility, and requester/approver/executor checks; `portal_has_perm` returns true for admins on every key)
-- Process: Segregation of duties
-- Evidence: because every SoD guard is suppressed for `role='admin'` and admins hold all permissions, **one admin can create a direct expense, approve its entire chain, and execute the payment.** The earlier certification scored SoD 5/5 as "universal triple separation" — overstated; separation binds **non-admins only**.
-- Whether intended: admin-as-superuser is common, but for a financial-controls certification it must be disclosed. Recommend removing the admin bypass on **payment execution** specifically, or a compensating control (≥2 admins, admin-action monitoring/alerting, admins excluded from routine operational roles).
-- Status: OPEN (disclosed; policy decision).
+### AUTHZ-01 — `portal_create_expense` cross-department write — **FIXED (060)**
+- Was HIGH · Confidence: VERIFIED (fix + test)
+- Evidence (original): the function validated only that `p_department_id` **exists**, never against the caller's scope, so any `can_create` user could raise an expense against another department's chain/budget.
+- Fix: migration `060` binds the department to the caller exactly as `portal_create_request` (admin may specify any department per owner decision; non-admin is forced to their own — no fall-through to client input). Test `36_authz_expense_recurring_budget.sql` (AZ1 cross-dept rejected, AZ2 own-dept allowed, AZ3 admin cross-dept allowed). Suite EXIT 0. **Applied live: pending (owner runs 060).**
+- Status: FIXED in repo; live-apply pending.
 
-### SEC-03 — Beneficiary bank details: manual-IBAN entry bypasses the vetted-beneficiary control — **VERIFIED (corrected)**
-- Severity: MEDIUM · Confidence: VERIFIED
-- Process: Payments / fraud control
-- Evidence: `portal_create_expense`'s `p_beneficiary_id` is optional; when null, the bank branch validates only the IBAN **format** (`^SA\d{22}$`) and accepts any client-supplied IBAN — the UI exposes this as "manual entry." The earlier finding claimed "the RPC already enforces the vetted IBAN"; that holds **only** when `p_beneficiary_id` is supplied. A requester can thus pay a bank account that never passed the beneficiary master or its IBAN-change approval.
-- Also: `portal_beneficiaries` SELECT policy includes `can_create` (4/15 users), so beneficiary IBANs are readable by every requester (data-minimization gap).
-- Remediation: for `bank` expenses, require an approved `p_beneficiary_id` (at least when `iban_change_control=1`); expose names-only in the picker and resolve IBAN server-side. Status: OPEN (design decision).
+### SEC-06 — `reg-doc.js` unauthenticated/destructive write — **PARTIALLY FIXED (reg-doc.js); residual MEDIUM**
+- Was HIGH · Confidence: VERIFIED
+- Evidence (original): only a forgeable `sameOrigin()` gate; service-role upload then **deleted** existing files under `${regId}/${doc}/`; `DOC_RE` was a broad regex.
+- Fix (this audit): **removed the destructive cleanup entirely** (unique random filenames only — no overwrite/delete vector) and **replaced the regex with an explicit allowlist** (`{cr,vat,gosi,iban,address}`). This closes the worst part (destruction of a supplier's genuine documents).
+- **Residual (MEDIUM, see below):** the endpoint still lacks a real caller credential — once `SUPABASE_SERVICE_ROLE_KEY` is set, an attacker (forgeable same-origin) could still *additively* upload guard-passing files under a known `reg_id`. Currently inert (`503` while key unset). Full credential/token auth requires a change to the registration flow (register.html inserts via anon with no server step to mint a token) and live testing — tracked as a go-live condition paired with `db/system1-storage-hardening.sql`.
+- Status: destructive + allowlist FIXED; credential upgrade OPEN (MEDIUM, go-live condition).
 
-### GOV-01 — Recurring generation bypasses budget enforcement — **VERIFIED**
-- Severity: MEDIUM · Confidence: VERIFIED (`portal_recurring_run`)
-- Process: Budget control
-- Evidence: the generator `INSERT`s into `portal_requests` and calls `portal_build_chain` directly, **without** `portal_create_expense` or a `portal_budget_committed` vs `portal_budgets` check. So even with `budget_enforce=1`, an over-budget recurring expense is still generated. The TECHNICAL_REPORT budget claim is corrected to exclude the recurring path.
-- Remediation: apply the same budget check in `portal_recurring_run` (or route generation through `portal_create_expense`). Status: OPEN.
+---
+
+## MEDIUM (open)
+
+### SEC-06-R — `reg-doc.js` still has no caller credential (residual) — **OPEN**
+- Severity: MEDIUM · Confidence: VERIFIED. Additive-only now (non-destructive), inert until the service key is configured. Remediation: mint a per-registration signed token in the registration flow (server-side), or require an authenticated session; enforce before accepting the upload. Go-live condition.
+
+### SEC-02 — Leaked-password protection disabled (Supabase Auth)
+- Severity: MEDIUM · Confidence: VERIFIED (advisor). Owner action — enable in Dashboard; decide MFA/SSO for finance/admin. Status: OPEN (owner config).
+
+---
+
+## OWNER-ACCEPTED (documented decisions, 2026-07-28)
+
+### SEC-07 — Administrators are exempt from all segregation-of-duties checks — **ACCEPTED**
+- Confidence: VERIFIED (`AND NOT portal_is_admin()` at the requester/stage/executor checks; `portal_has_perm` admin-true ⇒ one admin can create+approve+execute a payment).
+- **Owner decision: keep admin as full superuser.** Documented as an accepted risk. Recommended compensating controls: keep ≥2 admins, exclude admins from routine operational roles, and monitor/alert on admin financial actions. Not a code change.
+
+### SEC-03 — Manual-IBAN entry bypasses the vetted beneficiary — **ACCEPTED**
+- Confidence: VERIFIED (`p_beneficiary_id` optional; null ⇒ any format-valid client IBAN accepted).
+- **Owner decision: keep manual IBAN entry available** for direct expenses. Documented as accepted risk (`iban_change_control` still governs the beneficiary master; the picker path enforces the vetted IBAN when a beneficiary is selected). Also note `portal_beneficiaries` SELECT includes `can_create` (data-minimization) — left as-is per this decision.
+
+### GOV-01 — Recurring generation bypassed budget enforcement — **FIXED (060)**
+- Was MEDIUM · Confidence: VERIFIED (fix + test). `portal_recurring_run` now checks `portal_budget_committed` vs `portal_budgets` per template before creating; with `budget_enforce=1` an over-budget template is **skipped** (advance `next_run` + WARNING) instead of generating an over-budget request; `=0` warns only. Test `36` GOV1/GOV2. Live-apply pending (060).
 
 ### SEC-02 — Leaked-password protection disabled (Supabase Auth)
 - Severity: MEDIUM · Confidence: VERIFIED (advisor). Owner action — enable in Dashboard; decide MFA/SSO for finance/admin. Status: OPEN (owner config).

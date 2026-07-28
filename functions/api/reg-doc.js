@@ -26,8 +26,9 @@ import { inspectUpload } from './_file-guard.js';
 
 const BUCKET = 'supplier-docs';
 const REG_RE = /^DG-[A-Z0-9]{4,12}$/;
-// أنواع الوثائق المعروفة في نموذج التسجيل — قائمة بيضاء صريحة
-const DOC_RE = /^[a-z][a-z0-9_]{1,24}$/;
+// أنواع الوثائق المعروفة في نموذج التسجيل — **قائمة بيضاء صريحة** (لا regex عامّ).
+// تدقيق SEC-06: DOC_RE العامّ كان يقبل أي مُعرّف بصيغة سليمة؛ الآن مجموعة مغلقة تطابق register.html.
+const DOC_ALLOW = new Set(['cr', 'vat', 'gosi', 'iban', 'address']);
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -50,7 +51,7 @@ export async function onRequestPost({ request, env }) {
   const regId = String(url.searchParams.get('reg_id') || '').trim().toUpperCase();
   const doc   = String(url.searchParams.get('doc') || '').trim().toLowerCase();
   if (!REG_RE.test(regId)) return json({ error: 'رقم الطلب غير صالح' }, 400);
-  if (!DOC_RE.test(doc))   return json({ error: 'نوع الوثيقة غير صالح' }, 400);
+  if (!DOC_ALLOW.has(doc))  return json({ error: 'نوع الوثيقة غير صالح' }, 400);
 
   const buf = await request.arrayBuffer();
   const check = inspectUpload(buf);
@@ -78,36 +79,12 @@ export async function onRequestPost({ request, env }) {
     }
   } catch (_) { return json({ error: 'تعذّر الاتصال بخدمة التخزين' }, 502); }
 
-  // تنظيف النسخ السابقة لنفس الوثيقة (بعد نجاح الرفع فقط — ترتيب غير مُتلِف)
-  try {
-    const lr = await fetch(`${base}/storage/v1/object/list/${BUCKET}`, {
-      method: 'POST',
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prefix: `${regId}/${doc}/`, limit: 100 }),
-    });
-    if (lr.ok) {
-      const rows = await lr.json();
-      const stale = (Array.isArray(rows) ? rows : [])
-        .map((f) => `${regId}/${doc}/${f.name}`)
-        .filter((p) => p !== path);
-      if (stale.length) {
-        await fetch(`${base}/storage/v1/object/${BUCKET}`, {
-          method: 'DELETE',
-          headers: {
-            apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-            Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ prefixes: stale }),
-        });
-      }
-    }
-  } catch (_) { /* التنظيف اختياري — لا يُفشِل الرفع */ }
-
+  // ⚠️ تدقيق SEC-06: أُزيل «تنظيف النسخ السابقة» (list + DELETE) عمداً. كان يحذف كل الملفات
+  // تحت `${regId}/${doc}/` عند كل رفع ناجح — فمن يعرف رقم تسجيل مورّد حقيقي (والنقطة بلا
+  // مصادقة مستخدم، فقط same-origin قابل للتزوير) يستطيع محو وثائق المورّد الأصلية بإعادة رفع.
+  // الآن: أسماء ملفات عشوائية فريدة فقط (لا استبدال، لا حذف) — لا ناقل تدميري.
+  // المتبقّي (مُوثَّق): مصادقة حقيقية للرافع (رمز موقَّع مربوط بالتسجيل) = متابعة مع
+  // db/system1-storage-hardening.sql؛ إزالة الحذف تُغلق أخطر جزء (المحو) الآن.
   return json({ ok: true, path });
 }
 

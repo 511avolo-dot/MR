@@ -23,7 +23,7 @@ the **database**, never from client input. All upload paths pass `_file-guard.js
 | `portal-outbox-drain.js` | `CRON_SECRET` | Deliver outbox + SLA + recurring | Bearer/`?key=`; `401` without secret; `FOR UPDATE SKIP LOCKED`; backoff + dead-letter |
 | `portal-signup.js` | ⚠ not independently auth-reviewed | Public/portal signup | **Review before certification** |
 | `portal-supplier-invite.js` | ⚠ not independently auth-reviewed | Supplier invitation flow | **Review before certification** |
-| `reg-doc.js` (System 1) | **NONE (forgeable same-origin only)** | Supplier-registration upload **+ delete** | **SEC-06 (HIGH):** no credential; service-role upload; deletes existing files under known prefix; `DOC_RE` is a broad regex, not an allowlist; currently `503` while key unset. **Must-fix.** |
+| `reg-doc.js` (System 1) | forgeable same-origin (no credential yet) | Supplier-registration upload | **SEC-06 destructive vector FIXED:** delete-existing cleanup removed (unique filenames), explicit doc-type allowlist. **Residual SEC-06-R (MED):** still no caller credential — additive-only, inert while key unset; token upgrade is a go-live condition. |
 | `admin-users.js` (System 2) | ⚠ not independently auth-reviewed | Service-role user administration | Isolated from portal; **review before certification** |
 | `ai.js` (System 2) | ⚠ not independently auth-reviewed | Server-key-backed AI proxy | **Review before certification** (abuse/cost/prompt-injection surface) |
 | `invite-supplier.js` (System 2) | ⚠ not independently auth-reviewed | Supplier invitation email | **Review before certification** |

@@ -13,19 +13,19 @@
 - **Remaining limitations:** does not change RLS (already correct). `portal_settings` intentionally left with its authenticated read (used pre-scope by UI); revisit under SEC-04 if insider threat is in scope.
 
 ## Audit-accuracy defects fixed after Codex review (2026-07-28)
-- **Assertion count** — headline "189/194" corrected to **195** (172 SQL + 18 file-guard + 5 endpoint); per-file breakdown in `run.sh` corrected (11_security 8, 26_disbursement 10).
-- **Vacuous AH1 test** — `35_anon_hardening.sql` now **seeds** the four `anon` SELECT grants, applies 059, then asserts removal (AH0/AH1/AH2), so it genuinely pins the revoke. Suite EXIT 0, 195 assertions.
+- **Assertion count** — headline "189/194" corrected; per-file breakdown in `run.sh` corrected (11_security 8, 26_disbursement 10). After adding test 36, the suite is **200 assertions (177 SQL + 18 file-guard + 5 endpoint)**.
+- **Vacuous AH1 test** — `35_anon_hardening.sql` now **seeds** the four `anon` SELECT grants, applies 059, then asserts removal (AH0/AH1/AH2), so it genuinely pins the revoke. Suite EXIT 0.
 - **Documentation honesty** — FINDINGS / FINAL_CERTIFICATION / EXECUTIVE / TECHNICAL / PRODUCTION_BLOCKERS / API_SECURITY_MATRIX / README rewritten to verdict **NOT READY** with the verified findings below.
 
-## Verified code defects — NOT auto-remediated (referred to owner; changes to a live financial system)
-| ID | Severity | Reason not auto-fixed / decision needed |
-|----|----------|------------------------------------------|
-| AUTHZ-01 direct-expense department binding | HIGH | Fix is small (mirror `portal_create_request`), but it's a governance change to a live RPC + needs a migration + live apply (owner's standing rule). Recommend implementing now. |
-| SEC-06 reg-doc unauthenticated write/delete | HIGH | Needs a **product decision**: which credential (signed token vs authenticated session) + non-destructive cleanup. System-1 surface; pair with `system1-storage-hardening.sql`. |
-| SEC-07 admin SoD exemption | MEDIUM | **Policy decision**: is admin-as-superuser intended, or should the admin bypass be removed on payment execution? |
-| SEC-03 manual-IBAN bypass | MEDIUM | **Product decision**: forbid free-typed IBANs for bank expenses (require approved beneficiary) vs keep manual entry. |
-| GOV-01 recurring budget bypass | MEDIUM | Add budget check to `portal_recurring_run`; migration + live apply. Recommend implementing. |
-| AUD-01 audit truncation | LOW | Add an external head-hash checkpoint; design + owner sign-off. |
+## Code defects — resolution after owner direction (2026-07-28)
+| ID | Severity | Resolution |
+|----|----------|-----------|
+| AUTHZ-01 direct-expense department binding | HIGH | **FIXED** — migration `060`: department bound to caller (admin any / non-admin own). Test 36 (AZ1–3). Live-apply pending. |
+| SEC-06 reg-doc destructive write | HIGH | **PARTIALLY FIXED** — `reg-doc.js`: destructive cleanup removed (unique filenames), explicit doc-type allowlist. **Residual SEC-06-R (MEDIUM):** credential/token upgrade is a go-live condition (registration-flow change + live test). |
+| GOV-01 recurring budget bypass | MEDIUM | **FIXED** — `060`: budget enforced in `portal_recurring_run` (skips over-budget templates when enforce=1). Test 36 (GOV1–2). Live-apply pending. |
+| SEC-07 admin SoD exemption | MEDIUM | **OWNER-ACCEPTED** — admin stays superuser. Documented + recommended compensating controls (≥2 admins, monitoring). No code change. |
+| SEC-03 manual-IBAN bypass | MEDIUM | **OWNER-ACCEPTED** — manual IBAN entry retained. Documented. No code change. |
+| AUD-01 audit truncation | LOW | OPEN (documented) — add an external head-hash checkpoint; design + owner sign-off. |
 
 ## Items NOT auto-remediated (owner/config-gated, unchanged)
 | ID | Reason not auto-fixed |

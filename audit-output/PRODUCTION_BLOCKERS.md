@@ -1,24 +1,31 @@
 # PRODUCTION BLOCKERS
 
-**Status (revised 2026-07-28 after Codex review): 2 HIGH code defects must be fixed before real go-live.**
+**Status (rev 2, 2026-07-28): the two HIGH defects are remediated. No open HIGH code blocker.**
 
-The first issue of this file said "no code-level blockers." An independent Codex review disproved that; both items were
-re-verified against the source. These are must-fix **before onboarding real users/money**:
+Rev 1 (after Codex) identified 2 HIGH code defects. Rev 2 (owner-directed) remediated them; the assertion suite now
+covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, not open blockers:
 
-1. **AUTHZ-01 (HIGH) — cross-department direct-expense write.** `portal_create_expense` accepts any existing
-   `p_department_id` without binding it to the caller's scope, so a `can_create` user can raise an expense against
-   another department's chain and budget. Fix: mirror `portal_create_request` (derive/validate department from caller).
-2. **SEC-06 (HIGH) — unauthenticated, destructive `reg-doc.js`.** Only a forgeable same-origin header gates a
-   service-role upload that also **deletes** existing files under a known `reg_id/doc` prefix. Fix: require a real
-   credential; make cleanup non-destructive/scoped; use an explicit doc-type allowlist. (Currently inert at `503` while
-   the service key is unset — do not enable the key until fixed.)
+- **AUTHZ-01 (HIGH) → FIXED** (migration `060`): `portal_create_expense` binds the department to the caller. Test 36.
+- **GOV-01 (MED) → FIXED** (`060`): budget enforced in `portal_recurring_run`. Test 36.
+- **SEC-06 (HIGH) → destructive vector FIXED** (`reg-doc.js`): the delete-existing-files cleanup is removed (unique
+  filenames only) and the broad regex is replaced with an explicit allowlist. **Residual (SEC-06-R, MEDIUM):** no
+  caller credential — inert while the service key is unset; complete the token/credential upgrade **before** enabling
+  `SUPABASE_SERVICE_ROLE_KEY` for the registration path (pair with `db/system1-storage-hardening.sql`).
 
-**Strongly recommended before go-live (MEDIUM):** SEC-07 (decide/disclose the admin SoD exemption), SEC-03 (require an
-approved beneficiary for bank expenses), GOV-01 (enforce budget in `portal_recurring_run`). LOW: AUD-01 (external
-audit-chain anchor for truncation detection).
+## Conditions before real (non-dummy) go-live
+1. **Apply migration `060` live** (after 059).
+2. Complete **SEC-06-R** (reg-doc credential upgrade) before enabling the registration service key.
+3. SEC-02 leaked-password protection + MFA/SSO decision (owner dashboard).
+4. System-1 storage hardening Phase 1 (owner SQL) + confirm `/api/reg-doc` `{ok:true}`.
+5. Enterprise data setup (committee/GM/managers/jobs/users) — high-value PO chains need a configured committee.
+6. Decide/flip governance enforcement flags per launch plan.
+7. Supabase PITR tier + RTO/RPO; external audit-chain anchor (AUD-01).
+8. Browser E2E of the new converter panels.
 
-The portal migrations `022→059` are applied live and the assertion suite is green (EXIT 0, 195 assertions), but a green
-suite does **not** cover the above — they are logic/authz defects the current tests do not exercise.
+**Owner-accepted risks (documented, not blockers):** SEC-07 (admin superuser) and SEC-03 (manual IBAN retained).
+
+Portal migrations `022→059` are applied live; `060` is in the repo and **pending live apply**. Suite green
+(EXIT 0, 177 SQL + 23 JS).
 
 ## Conditions that MUST be satisfied before real (non-dummy) go-live
 These are **operational/owner** gates, not code blockers — but production onboarding of real users/money should not proceed until they are done:

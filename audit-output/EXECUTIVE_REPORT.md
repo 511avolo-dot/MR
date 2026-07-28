@@ -1,55 +1,59 @@
 # EXECUTIVE REPORT — Procurement & Disbursement Portal Certification
 
-**Audience:** owner / non-technical stakeholders. **Bottom line (revised 2026-07-28):** the workflow engine is solid,
-but an independent review found **two serious code issues that must be fixed before real users and money go live**, plus
-a few controls the first review described too favorably. Verdict is now **NOT READY** until those are fixed.
+**Audience:** owner / non-technical stakeholders. **Bottom line (rev 2, 2026-07-28):** an independent review found two
+serious code issues; **both have now been fixed and re-tested**, so the status is back to **"Ready with Conditions"** —
+a short list of setup steps and one follow-up remain before real users and money go live.
 
 ## One-paragraph verdict
-The Al-Deyabi procurement and disbursement portal (System 3) was put through a rigorous, evidence-based audit, then a
-**second independent review (Codex)** which deliberately tried to disprove the first review's conclusions. That was the
-right thing to do: it found real problems the first pass had missed or described too generously. The core engine — how
-requests flow, get approved, and are paid — is well-built and well-tested. **But two "high" severity code defects were
-confirmed:** (1) a regular user can start a payment against **another department's** budget, and (2) a
-supplier-document upload web address accepts files **without any login** and can delete a supplier's existing documents.
-Several "separation of duties" and "budget" protections were also found to have exceptions the first report did not
-disclose. Because of the two high-severity items, the honest status is **"Not Ready"** until they are fixed and
-re-tested — not merely pending owner setup.
+The portal was put through a rigorous audit, then a **second independent review (Codex)** that deliberately tried to
+disprove the first review's conclusions — which was the right thing to do, and it found real problems the first pass had
+missed or described too generously. Two "high" severity issues were confirmed: (1) a regular user could start a payment
+against **another department's** budget, and (2) a supplier-document upload address accepted files **without a login**
+and could **delete** a supplier's existing documents. **Both are now fixed:** the expense now stays within the user's
+own department, and the upload address no longer deletes anything and only accepts a fixed list of document types. Two
+lesser points were **your explicit decisions** (admins keep full override; typing a bank IBAN by hand stays allowed) —
+both documented. One follow-up remains on the upload address (adding a proper login token) before its server key is
+switched on. Net status: **Ready with Conditions.**
 
 ## What was checked, in plain terms (corrected)
 - **Can someone approve their own payment, or pay without approval?** For **normal users, no** — the system enforces
   three different people across request, approval, and execution. **However, an "admin" user is exempt from these
   checks** and could do all three alone. This must be disclosed and decided (limit admins, or add monitoring).
-- **Can a regular user spend against another department?** **Yes — this is a real defect** (direct-expense creation does
-  not check the user's own department). Must be fixed.
-- **Can a low-level user read everyone's bank details?** Partly: supplier and payment IBANs are limited to
-  finance/procurement, **but the separate "beneficiaries" list (with IBANs) is readable by any user who can create a
-  request.** Also, a "manual entry" option lets a requester type any IBAN, bypassing the approved-beneficiary check.
-- **Can spending exceed the approved amount?** Payments are capped to the approved award (verified). **But** budget
-  limits are **not enforced** on automatically-generated recurring expenses.
-- **Can the audit log be tampered with?** In-place edits are detectable (cryptographic chaining). **But** deleting the
-  end of the log, or all of it, is **not** currently detected — an external checkpoint is recommended.
-- **Does the code pass its own tests?** Yes — 195 automated checks pass with zero failures. (One of those tests was
-  found to be ineffective and was fixed during this review so it now actually catches the regression it claims to.)
+- **Can a regular user spend against another department?** **No longer — fixed.** Direct expenses are now tied to the
+  creator's own department (admins may still choose any, by your decision).
+- **Can a low-level user read everyone's bank details?** Supplier and payment IBANs are limited to finance/procurement.
+  The separate "beneficiaries" list (with IBANs) is readable by anyone who can create a request, and typing an IBAN by
+  hand stays allowed — **both are your accepted decisions**, documented.
+- **Can spending exceed the approved amount?** Payments are capped to the approved award (verified). Budget limits are
+  **now also enforced** on automatically-generated recurring expenses (**fixed**).
+- **Can the audit log be tampered with?** In-place edits are detectable (cryptographic chaining). Deleting the end of
+  the log is not yet detected — an external checkpoint is recommended (low priority, documented).
+- **Does the code pass its own tests?** Yes — 200 automated checks pass with zero failures (including new tests for the
+  two fixes). One earlier test was found ineffective and was corrected so it now actually catches its regression.
 
-## Must-fix (code) before go-live
-1. Bind direct expenses to the requester's own department.
-2. Require a real login on the supplier-document upload endpoint and stop it from deleting existing files.
-3. Decide the admin exception to separation-of-duties (and disclose it).
-4. Require an approved beneficiary for bank payments (don't allow free-typed IBANs).
-5. Enforce budget limits on recurring expenses.
+## Fixed this revision (code)
+1. Direct expenses bound to the creator's own department (was the cross-department defect).
+2. Supplier-document upload no longer deletes existing files, and only accepts a fixed list of document types.
+3. Budget limits enforced on recurring expenses.
 
-## Owner setup (unchanged) before go-live
-6. Turn on leaked-password protection; decide two-factor login for finance/admin.
-7. Apply the supplier-registration storage lock-down (owner script) — tied to item 2.
-8. Enter real organizational data (committee, managers, jobs, staff) — large POs can't complete without a committee.
-9. Choose which budget/IBAN/invoice/contract controls to switch on.
-10. Confirm the backup/disaster-recovery plan.
-11. A hands-on click-through of the new screens in a browser (still pending).
+## Your accepted decisions (documented)
+- Admins keep full override of separation-of-duties (recommend ≥2 admins + monitoring of admin financial actions).
+- Manual IBAN entry stays available for direct expenses.
+
+## Remaining conditions before go-live
+1. Apply the new database migration (060) to the live database.
+2. Add a proper login token to the supplier-upload endpoint **before** its server key is switched on.
+3. Turn on leaked-password protection; decide two-factor login for finance/admin.
+4. Apply the supplier-registration storage lock-down (owner script).
+5. Enter real organizational data (committee, managers, jobs, staff).
+6. Choose which budget/IBAN/invoice/contract controls to switch on; confirm backup/disaster-recovery.
+7. A hands-on click-through of the new screens in a browser (still pending).
 
 ## Risk statement
-There **are** now code-level reasons not to deploy yet: a cross-department spending path and an unauthenticated,
-delete-capable upload endpoint. Both are fixable with targeted changes. Until then, do not onboard real users or money.
+The two high-severity code issues are fixed and re-tested, so there is **no known high-severity code reason to block**.
+Remaining risk is operational (the conditions above) plus the two decisions you have chosen to accept.
 
 ## Recommendation
-Fix the five must-fix items, re-run the tests, then complete the owner setup and the browser click-through. Re-certify
-afterward. Full technical detail is in `TECHNICAL_REPORT.md` and `FINDINGS.md`.
+The blocking code issues are fixed. Apply migration 060 live, complete the upload-endpoint login token, finish the owner
+setup and the browser click-through, then proceed to onboarding. Full technical detail is in `TECHNICAL_REPORT.md` and
+`FINDINGS.md`.

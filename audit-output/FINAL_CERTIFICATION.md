@@ -1,6 +1,6 @@
 # FINAL CERTIFICATION — Al-Deyabi Procurement & Disbursement Portal (System 3)
 
-**Certification status: `NOT READY` (revised 2026-07-28 after independent Codex review)**
+**Certification status: `READY WITH CONDITIONS` (rev 2 — 2026-07-28, after Codex review + owner-directed remediation)**
 
 Audited artifact: branch `audit/enterprise-certification-2026-07-27` (base `main` @ `b9d9d6d`, portal migrations `022→059`).
 Auditor: Claude, combined Principal Engineer / Architect / AppSec / DevSecOps / DB / Procurement / QA / SRE / Production-Readiness roles.
@@ -8,60 +8,71 @@ Date: 2026-07-27; revised 2026-07-28. Evidence basis: static review + live datab
 
 ---
 
-## ⚠️ Revision (2026-07-28) — verdict downgraded from READY WITH CONDITIONS to NOT READY
-The first issue of this certification claimed **0 HIGH** and scored SoD/financial/audit at 5/5. An independent Codex
-review challenged those claims and I **re-verified each against the source**. Two are **confirmed HIGH code defects**:
-- **AUTHZ-01** — `portal_create_expense` accepts a client-supplied `p_department_id` with **no caller-scope binding**, so any `can_create` user can raise a direct expense against another department's workflow and budget (cross-department write).
-- **SEC-06** — `functions/api/reg-doc.js` is an **unauthenticated, destructive** public write path (forgeable same-origin only; service-role upload + deletes existing files under a known prefix).
-Plus MEDIUM corrections: admins are **exempt from all SoD** (SEC-07 — SoD is not "universal"); manual-IBAN entry bypasses the vetted-beneficiary control (SEC-03); recurring generation bypasses budget enforcement (GOV-01); the hash-chain does not detect **truncation** (AUD-01). The earlier scores were overstated. Honest verdict: **NOT READY** until the two HIGH items are remediated and re-tested; the MEDIUM items should be resolved or explicitly risk-accepted by the owner.
+## ⚠️ Revision history (2026-07-28)
+**Rev 1** downgraded the (overstated) first issue to **NOT READY** after an independent Codex review confirmed two HIGH
+code defects and several MEDIUM/LOW corrections — each re-verified against the source.
+**Rev 2 (this document):** after owner direction, the blocking items were **remediated and re-tested**, raising the
+verdict back to **READY WITH CONDITIONS**:
+- **AUTHZ-01 (HIGH) → FIXED** (migration `060`): `portal_create_expense` now binds the department to the caller
+  (mirrors `portal_create_request`; admin may cross-department per owner decision, non-admin forced to own). Test 36.
+- **SEC-06 (HIGH) → destructive vector FIXED** (`reg-doc.js`): removed the delete-existing-files cleanup (unique
+  filenames only) and replaced the broad regex with an explicit doc-type allowlist. **Residual MEDIUM (SEC-06-R):** no
+  caller credential yet — inert while the service key is unset; full token/credential auth is a go-live condition.
+- **GOV-01 (MED) → FIXED** (`060`): `portal_recurring_run` now enforces budget (skips over-budget templates when
+  `budget_enforce=1`). Test 36.
+- **SEC-07 (admin SoD) and SEC-03 (manual IBAN) → OWNER-ACCEPTED** decisions, documented (admin stays superuser with
+  recommended compensating controls; manual IBAN entry retained).
+- **AUD-01 (LOW)** audit-truncation gap remains documented.
 
-## What "NOT READY" means here
-The workflow **engine** (durable state machine, deny-by-default writes re-gated by guards, request-scoped reads for
-non-admins, idempotency/saga, outbox) is sound and well-tested — but **verified HIGH authorization/data-integrity
-defects exist in code** (AUTHZ-01, SEC-06), so the system should **not** onboard real users/money until they are fixed.
-This is in addition to the owner-config gates in `PRODUCTION_BLOCKERS.md` and the still-pending browser E2E.
+## What "READY WITH CONDITIONS" means here
+The workflow engine is sound and well-tested, and the two blocking HIGH defects are remediated (one fully, one's
+destructive vector removed with a documented residual). **No open HIGH code defect remains.** The conditions before
+real go-live are: apply migration `060` live; complete the SEC-06 credential upgrade (paired with System-1 storage
+hardening) before enabling the service key; the owner-config gates in `PRODUCTION_BLOCKERS.md`; and the still-pending
+browser E2E. The owner-accepted items (SEC-07, SEC-03) are risks the owner has explicitly chosen to carry.
 
 ## Category scores (0–5; 5 = enterprise-grade, evidence-backed)
 
 | Category | Score | Basis |
 |---|---|---|
 | Authentication | 3.5 | Supabase Auth + email-matched profiles; **leaked-password protection off (SEC-02)**, MFA/SSO not enforced — owner config. |
-| Authorization / RLS | 2.5 | Deny-by-default writes verified; request-scoped reads for non-admins — **but AUTHZ-01 (cross-department direct-expense write) is a verified HIGH**; SEC-01 anon grants fixed (059). |
-| Segregation of Duties | 3 | Triple separation holds for **non-admins** (tests 26/27/32) — **but admins are exempt from all SoD (SEC-07)**; not "universal." |
-| Financial integrity | 3.5 | Payment ≤ award caps, split/installment caps, idempotency (051), saga void (051), three-way match (033) asserted — **but budget not enforced on recurring generation (GOV-01)** and manual-IBAN bypass (SEC-03). |
-| Auditability | 4 | Append-only + SHA256 hash-chain detects in-place edits (057) — **but does not detect truncation/suffix-deletion (AUD-01)**; no external anchor. |
-| Data protection (PII/IBAN) | 3 | Payment/supplier IBANs finance/procurement-gated; **beneficiary IBANs readable by `can_create` (SEC-03)**; manual-IBAN entry bypasses the vetted beneficiary. |
+| Authorization / RLS | 4 | Deny-by-default writes verified; request-scoped reads for non-admins; **AUTHZ-01 cross-department expense FIXED (060)**; SEC-01 anon grants fixed (059). |
+| Segregation of Duties | 3.5 | Triple separation holds for **non-admins** (tests 26/27/32); **admins are SoD-exempt by owner decision (SEC-07, accepted)** with recommended compensating controls. |
+| Financial integrity | 4.5 | Payment ≤ award caps, split/installment caps, idempotency (051), saga void (051), three-way match (033); **recurring budget FIXED (GOV-01/060)**; manual-IBAN retained by owner decision (SEC-03). |
+| Auditability | 4 | Append-only + SHA256 hash-chain detects in-place edits (057) — **does not detect truncation/suffix-deletion (AUD-01, LOW, documented)**; external anchor recommended. |
+| Data protection (PII/IBAN) | 3.5 | Payment/supplier IBANs finance/procurement-gated; beneficiary IBANs readable by `can_create` and manual entry retained (SEC-03, owner-accepted). |
 | Reliability / workflows | 4 | Durable in-DB state machine, transactional outbox (029), `FOR UPDATE` locking; email full-durability activation pending (OPS-02). |
-| Test / CI | 4 | 172 SQL + 18 file-guard + 5 endpoint assertions, CI on every portal PR; **no browser E2E** (INFO-04); one prior test (AH1) was vacuous and is now fixed. |
+| Test / CI | 4.5 | 177 SQL + 18 file-guard + 5 endpoint assertions (incl. new AZ1–3/GOV1–2), CI on every portal PR; **no browser E2E** (INFO-04); prior vacuous AH1 test fixed. |
 | Observability / DR | 2.5 | Health endpoints + loud failure logs; **backup/PITR tier + RTO/RPO not in repo** — NOT VERIFIABLE. |
-| Frontend correctness | 2.5 | Converter panels syntax-verified only; **not browser-tested** — remains a release gate; API matrix inventory was incomplete (now fixed). |
-| API security review | 2.5 | Portal endpoints JWT/token-gated — **but SEC-06 (reg-doc unauthenticated destructive write) is a verified HIGH**; inventory now complete. |
+| Frontend correctness | 2.5 | Converter panels syntax-verified only; **not browser-tested** — remains a release gate; API matrix inventory now complete. |
+| API security review | 3.5 | Portal endpoints JWT/token-gated; **SEC-06 destructive vector FIXED (reg-doc.js)** — residual credential upgrade (SEC-06-R, MEDIUM) is a go-live condition; inventory now complete. |
 
-## Findings roll-up
-**BLOCKER 0 · CRITICAL 0 · HIGH 2 · MEDIUM 5 · LOW 3 · INFORMATIONAL 3.** SEC-01 (defense-in-depth) and two
-audit-accuracy defects (assertion breakdown; vacuous AH1 test) were fixed this audit. The two HIGH (AUTHZ-01, SEC-06)
-require code fixes before go-live; the MEDIUM (SEC-07 admin-SoD, SEC-03 beneficiary IBAN, GOV-01 recurring budget,
-SEC-02 leaked-password) are code-fix or owner-decision gated. Full detail in `FINDINGS.md`.
+## Findings roll-up (open)
+**BLOCKER 0 · CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFORMATIONAL 3**, plus **2 owner-accepted** (SEC-07, SEC-03).
+Fixed this audit: SEC-01 (059), **AUTHZ-01 (060)**, **GOV-01 (060)**, **SEC-06 destructive+allowlist (reg-doc.js)**, and
+two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgrade — go-live condition) and SEC-02
+(leaked-password — owner config). Full detail in `FINDINGS.md`.
 
-## Must-fix before go-live (code)
-1. **AUTHZ-01** — bind `portal_create_expense` to the caller's department (reject/normalize cross-department `p_department_id`) + test.
-2. **SEC-06** — authenticate `reg-doc.js` with a real credential; make cleanup non-destructive/scoped; explicit doc-type allowlist.
-3. **SEC-07** — decide the admin-SoD policy (remove admin bypass on payment execution, or add a compensating control) and disclose it.
-4. **SEC-03** — require an approved beneficiary for `bank` expenses (names-only picker + server-side IBAN).
-5. **GOV-01** — enforce budget in `portal_recurring_run`.
+## Done this revision (code)
+1. **AUTHZ-01 — FIXED** (migration `060`): department bound to caller in `portal_create_expense` + test 36.
+2. **SEC-06 — destructive vector FIXED** (`reg-doc.js`): removed delete-existing cleanup; explicit doc-type allowlist.
+3. **GOV-01 — FIXED** (`060`): budget enforced in `portal_recurring_run` + test 36.
+4. **SEC-07 / SEC-03 — OWNER-ACCEPTED** and documented (admin superuser; manual IBAN retained).
 
-## Conditions to clear before real go-live (owner/config, from `PRODUCTION_BLOCKERS.md`)
-6. Enable Supabase leaked-password protection; decide MFA/SSO for finance/admin (SEC-02).
-7. Apply System-1 storage hardening Phase 1 + confirm `/api/reg-doc` `{ok:true}` (SEC-05, and see SEC-06).
-8. Configure enterprise data: real committee members, GA/LOG managers, jobs, users (high-value PO chains cannot complete otherwise).
-9. Decide and flip governance enforcement flags per launch plan (OPS-01).
-10. Confirm Supabase PITR tier + documented RTO/RPO; add an external audit-chain anchor (AUD-01).
-11. Independent gates: browser E2E pass of new converter panels (Codex review is now done — findings incorporated).
+## Conditions to clear before real go-live
+1. **Apply migration `060` live** on `mwbjoysuybgbrvfrprex` (after 059).
+2. **SEC-06-R** — complete the reg-doc credential/token upgrade (paired with System-1 storage hardening) **before** setting `SUPABASE_SERVICE_ROLE_KEY` for the registration path.
+3. Enable Supabase leaked-password protection; decide MFA/SSO for finance/admin (SEC-02).
+4. Apply System-1 storage hardening Phase 1 + confirm `/api/reg-doc` `{ok:true}` (SEC-05).
+5. Configure enterprise data: real committee members, GA/LOG managers, jobs, users (high-value PO chains cannot complete otherwise).
+6. Decide and flip governance enforcement flags per launch plan (OPS-01).
+7. Confirm Supabase PITR tier + documented RTO/RPO; add an external audit-chain anchor (AUD-01).
+8. Browser E2E pass of the new converter panels (Codex source review is done — findings incorporated).
 
 ## Sign-off
-On the audited code and database evidence **plus the independent Codex review**, System 3 is **NOT READY** for real
-(non-dummy) production use: two verified HIGH code defects (AUTHZ-01, SEC-06) and several MEDIUM governance gaps remain.
-The workflow engine itself is sound; once the must-fix items are remediated and re-tested, re-certification to READY
-WITH CONDITIONS is expected. This certification covers static + database evidence, the automated suite, and the Codex
-review; it does not substitute for a dynamic web pen-test and browser E2E, which remain release gates. Systems 1 and 2
-were reviewed only for isolation (confirmed); System 1's `reg-doc.js` (SEC-06) is the one shared surface flagged here.
+On the audited code and database evidence, the independent Codex review, and the owner-directed remediation, System 3
+is **READY WITH CONDITIONS**: no open HIGH code defect remains (AUTHZ-01/GOV-01 fixed and tested; SEC-06's destructive
+vector removed with a documented credential-upgrade residual), and the remaining items are conditions or owner-accepted
+risks. This certification covers static + database evidence, the automated suite (177 SQL + 23 JS, EXIT 0), and the
+Codex review; it does not substitute for a dynamic web pen-test and browser E2E, which remain release gates. Systems 1
+and 2 were reviewed only for isolation (confirmed); System 1's `reg-doc.js` is the one shared surface touched here.

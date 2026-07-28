@@ -35,9 +35,9 @@ cycles/features are data (`portal_workflows` rows), not engine rewrites.
   JWT (not `current_user`), enforces SoD and permission predicates. 16 server-only functions pinned by tests S7/S8.
   All DEFINER functions have `search_path` pinned (advisor-clean after 040/055b).
 
-> **AUTHZ-01 (HIGH, verified).** `portal_create_expense` validates only that `p_department_id` exists — it does **not**
-> bind it to the caller's scope (unlike `portal_create_request`). Any `can_create` user can raise a direct expense
-> against another department's chain and budget. Must-fix.
+> **AUTHZ-01 (was HIGH) — FIXED (migration `060`).** `portal_create_expense` originally validated only that
+> `p_department_id` exists. It now binds the department to the caller exactly as `portal_create_request` (admin may
+> specify any department per owner decision; non-admin is forced to their own). Test 36 (AZ1–3). Live-apply of 060 pending.
 
 ## 3. Segregation of duties (verified — with a material exception)
 Triple separation on disbursement — requester ≠ approver(s) ≠ executor — is enforced in `portal_payment_transition` and
@@ -53,11 +53,10 @@ Payment ≤ award+VAT cap; split awards cap each supplier to its share and keep 
 suppliers are disbursed; installments cap to remaining and require full settlement before receipt; idempotency (051,
 `p_idem_key`) makes disburse exactly-once under retry; saga void (051) is a governed compensating reversal with SoD and
 a reverse audit entry, blocked after goods receipt. Three-way match (033, credit-only, tolerance-bounded) present.
-**Gaps:** (a) **GOV-01 (MEDIUM, verified)** — `portal_recurring_run` inserts requests and builds the chain directly,
-**without** the `portal_budget_committed`/`portal_budgets` check, so recurring expenses escape budget enforcement even
-when `budget_enforce=1`; (b) **SEC-03 (MEDIUM)** — when `p_beneficiary_id` is null, `portal_create_expense` accepts any
-format-valid client IBAN (UI "manual entry"), bypassing the vetted-beneficiary control. Multi-currency (035/036)
-normalizes aggregates to base currency.
+**GOV-01 (was MEDIUM) — FIXED (`060`):** `portal_recurring_run` now checks `portal_budget_committed` vs `portal_budgets`
+per template before creating; with `budget_enforce=1` an over-budget template is skipped (advance `next_run` + WARNING).
+Test 36 (GOV1/GOV2). **SEC-03 (MEDIUM) — OWNER-ACCEPTED:** manual-IBAN entry (`p_beneficiary_id` null) is retained by
+owner decision; the vetted IBAN is enforced when a beneficiary is selected. Multi-currency (035/036) normalizes aggregates.
 
 ## 5. Auditability (verified — with a truncation gap)
 Audit is append-only (guard blocks UPDATE/DELETE) **and** hash-chained (057): `row_hash = SHA256(prev_hash || row)`
@@ -78,13 +77,15 @@ send), stage email remains fire-and-forget. No double-send risk while dormant.
 `_file-guard.js` (5-layer: magic-byte allowlist, polyglot detection, structural integrity, active-content rejection in
 PDF after `#xx` de-encoding, neutralizing response headers) guards all upload paths incl. supplier public upload
 (049) and System-1 `reg-doc.js`. 18 file-guard + 5 endpoint assertions pass. `portal-doc.js` download visibility is
-fail-closed. **But SEC-06 (HIGH, verified):** `reg-doc.js` authenticates callers only by a **forgeable** `sameOrigin()`
-header check — no credential — then uploads with the service-role key and **deletes** existing files under a known
-`reg_id/doc` prefix. The file-guard limits *what* can be uploaded, not *who* can upload/delete. Currently inert
-(`503 not_configured` while the service key is unset) but unsafe once configured. Must-fix.
+fail-closed. **SEC-06 (was HIGH) — destructive vector FIXED (`reg-doc.js`):** the delete-existing-files cleanup is
+removed (unique random filenames only — no overwrite/delete) and the broad regex is replaced with an explicit doc-type
+allowlist (`{cr,vat,gosi,iban,address}`). **Residual (SEC-06-R, MEDIUM):** the endpoint still lacks a real caller
+credential (only forgeable same-origin), so once the service key is set an attacker could *additively* upload
+guard-passing files under a known `reg_id`. Inert while the key is unset; the credential/token upgrade (registration-flow
+change + live test) is a go-live condition paired with System-1 storage hardening.
 
 ## 8. Testing & CI (verified)
-`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 195 assertions (172 SQL incl. AH0/AH1/AH2, 18 file-guard
+`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 200 assertions (177 SQL incl. AH0/AH1/AH2, 18 file-guard
 JS, 5 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
 all `functions/api/*.js`. The prior AH1 test was **vacuous in clean CI** (Codex): the standalone never grants `anon`
 SELECT on the four tables, so the assertion passed even if the REVOKE block were deleted. Fixed — test 35 now seeds the
@@ -96,10 +97,11 @@ Backup/PITR tier + RTO/RPO not in repo (NOT VERIFIABLE). Load/soak/chaos and bro
 executed here (INFO-04). SEC-02 (leaked-password) owner-config. SEC-03/SEC-04 read-breadth are design decisions.
 Enforcement flags dormant by design (OPS-01). System 2 not re-audited beyond isolation.
 
-## 10. Conclusion (revised 2026-07-28 after Codex review)
-The workflow **engine** is sound and evidenced (deny-by-default writes, durable state machine, idempotency/saga,
-request-scoped reads for non-admins, in-place audit tamper detection). **However, two HIGH code defects are verified**
-— AUTHZ-01 (cross-department direct-expense write) and SEC-06 (unauthenticated destructive reg-doc endpoint) — plus
-MEDIUM governance gaps (SEC-07 admin-SoD exemption, SEC-03 manual-IBAN bypass, GOV-01 recurring budget) and a LOW audit
-truncation gap (AUD-01). System 3 is therefore **NOT READY** for real production until the must-fix items are remediated
-and re-tested; the engine quality means re-certification to READY WITH CONDITIONS is expected once they are closed.
+## 10. Conclusion (rev 2 — 2026-07-28, after Codex review + owner-directed remediation)
+The workflow engine is sound and evidenced (deny-by-default writes, durable state machine, idempotency/saga,
+request-scoped reads for non-admins, in-place audit tamper detection). The two HIGH defects found by Codex are
+**remediated and re-tested**: AUTHZ-01 (cross-department expense) is FIXED (migration `060`), and SEC-06's destructive
+vector is removed (`reg-doc.js`) with a documented credential-upgrade residual (SEC-06-R, MEDIUM, go-live condition).
+GOV-01 (recurring budget) is FIXED (`060`); SEC-07 (admin superuser) and SEC-03 (manual IBAN) are owner-accepted
+decisions; AUD-01 (audit truncation) remains a documented LOW. **No open HIGH code defect remains**, so System 3 is
+**READY WITH CONDITIONS** (apply `060` live, complete SEC-06-R, plus the owner-config gates and browser E2E).
