@@ -34,12 +34,12 @@ No secret values are recorded in this log. Live database mutations were made **o
     relied on a cross-department write, now forbidden — rewritten to an OPS user). Re-ran suite → **EXIT 0, 201
     assertions** (177 SQL + 18 file-guard + 6 endpoint — the 6th endpoint case pins the closed doc-type allowlist).
     `node --check reg-doc.js` OK. Rewrote the audit docs to verdict **READY WITH CONDITIONS** (0 open HIGH). Migration
-    `060` is in the repo, **pending live apply** (Supabase MCP unauthenticated this session).
+    `060` was subsequently **applied live 2026-07-28** (Supabase re-authorized): migration registered, both function bodies + grants verified, and a rolled-back behavioral proof confirmed cross-dept expense is rejected on production.
 
 ## Commands executed (representative)
 - `bash db/portal-tests/run.sh` (PGHOST=/home/postgres/pt PGPORT=5455)
 - `node --check functions/api/*.js`; `node db/portal-tests/file-guard.test.mjs`
-- Supabase MCP: `get_advisors(security)`, `list_migrations`, `execute_sql` (read-only inspection), `apply_migration(059)`
+- Supabase MCP: `get_advisors(security)`, `list_migrations`, `execute_sql` (read-only inspection), `apply_migration(059)`, `apply_migration(060)` + rolled-back behavioral proof
 - `git checkout -B audit/... origin/main`
 
 ## Remaining uncertainties (see UNRESOLVED_ITEMS.md)

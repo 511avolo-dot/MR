@@ -20,9 +20,9 @@
 ## Code defects — resolution after owner direction (2026-07-28)
 | ID | Severity | Resolution |
 |----|----------|-----------|
-| AUTHZ-01 direct-expense department binding | HIGH | **FIXED** — migration `060`: department bound to caller (admin any / non-admin own). Test 36 (AZ1–3). Live-apply pending. |
+| AUTHZ-01 direct-expense department binding | HIGH | **FIXED** — migration `060`: department bound to caller (admin any / non-admin own). Test 36 (AZ1–3). Applied live 2026-07-28 + verified (rolled-back proof). |
 | SEC-06 reg-doc destructive write | HIGH | **PARTIALLY FIXED** — `reg-doc.js`: destructive cleanup removed (unique filenames), explicit doc-type allowlist. **Residual SEC-06-R (MEDIUM):** credential/token upgrade is a go-live condition (registration-flow change + live test). |
-| GOV-01 recurring budget bypass | MEDIUM | **FIXED** — `060`: budget enforced in `portal_recurring_run` (skips over-budget templates when enforce=1). Test 36 (GOV1–2). Live-apply pending. |
+| GOV-01 recurring budget bypass | MEDIUM | **FIXED** — `060`: budget enforced in `portal_recurring_run` (skips over-budget templates when enforce=1). Test 36 (GOV1–2). Applied live 2026-07-28 + verified (rolled-back proof). |
 | SEC-07 admin SoD exemption | MEDIUM | **OWNER-ACCEPTED** — admin stays superuser. Documented + recommended compensating controls (≥2 admins, monitoring). No code change. |
 | SEC-03 manual-IBAN bypass | MEDIUM | **OWNER-ACCEPTED** — manual IBAN entry retained. Documented. No code change. |
 | AUD-01 audit truncation | LOW | OPEN (documented) — add an external head-hash checkpoint; design + owner sign-off. |

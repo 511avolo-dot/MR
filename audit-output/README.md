@@ -28,7 +28,7 @@ no PR merge. One code remediation this audit: migration `059` (SEC-01, applied l
 | Fixed this audit | SEC-01 (059) · AUTHZ-01 (060) · GOV-01 (060) · SEC-06 destructive+allowlist (reg-doc.js) · accuracy defects |
 | Owner-accepted | SEC-07 (admin superuser) · SEC-03 (manual IBAN retained) |
 | Automated suite | **EXIT 0** — 201 assertions (177 SQL + 18 file-guard + 6 endpoint) |
-| Live migrations | `022→059` applied on `mwbjoysuybgbrvfrprex`; **`060` pending live apply** |
+| Live migrations | `022→060` applied & verified on `mwbjoysuybgbrvfrprex` (060 applied 2026-07-28) |
 | Conditions | apply 060 live · SEC-06-R credential upgrade · SEC-02/05 · data setup · flags · DR · browser E2E |
 
 ## Reproduce

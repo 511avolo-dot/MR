@@ -60,7 +60,7 @@ two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgra
 4. **SEC-07 / SEC-03 — OWNER-ACCEPTED** and documented (admin superuser; manual IBAN retained).
 
 ## Conditions to clear before real go-live
-1. **Apply migration `060` live** on `mwbjoysuybgbrvfrprex` (after 059).
+1. ~~Apply migration `060` live~~ **DONE 2026-07-28** — applied & verified on `mwbjoysuybgbrvfrprex` (rolled-back proof: cross-dept expense rejected).
 2. **SEC-06-R** — complete the reg-doc credential/token upgrade (paired with System-1 storage hardening) **before** setting `SUPABASE_SERVICE_ROLE_KEY` for the registration path.
 3. Enable Supabase leaked-password protection; decide MFA/SSO for finance/admin (SEC-02).
 4. Apply System-1 storage hardening Phase 1 + confirm `/api/reg-doc` `{ok:true}` (SEC-05).

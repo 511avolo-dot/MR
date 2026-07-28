@@ -17,7 +17,7 @@ Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060)** · **GOV-01 (060)** · **SE
 ### AUTHZ-01 — `portal_create_expense` cross-department write — **FIXED (060)**
 - Was HIGH · Confidence: VERIFIED (fix + test)
 - Evidence (original): the function validated only that `p_department_id` **exists**, never against the caller's scope, so any `can_create` user could raise an expense against another department's chain/budget.
-- Fix: migration `060` binds the department to the caller exactly as `portal_create_request` (admin may specify any department per owner decision; non-admin is forced to their own — no fall-through to client input). Test `36_authz_expense_recurring_budget.sql` (AZ1 cross-dept rejected, AZ2 own-dept allowed, AZ3 admin cross-dept allowed). Suite EXIT 0. **Applied live: pending (owner runs 060).**
+- Fix: migration `060` binds the department to the caller exactly as `portal_create_request` (admin may specify any department per owner decision; non-admin is forced to their own — no fall-through to client input). Test `36_authz_expense_recurring_budget.sql` (AZ1 cross-dept rejected, AZ2 own-dept allowed, AZ3 admin cross-dept allowed). Suite EXIT 0. **Applied live 2026-07-28 + verified** (rolled-back behavioral proof: demo_emp_ops OPS→GA rejected).
 - Status: FIXED in repo; live-apply pending.
 
 ### SEC-06 — `reg-doc.js` unauthenticated/destructive write — **PARTIALLY FIXED (reg-doc.js); residual MEDIUM**
@@ -50,7 +50,7 @@ Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060)** · **GOV-01 (060)** · **SE
 - **Owner decision: keep manual IBAN entry available** for direct expenses. Documented as accepted risk (`iban_change_control` still governs the beneficiary master; the picker path enforces the vetted IBAN when a beneficiary is selected). Also note `portal_beneficiaries` SELECT includes `can_create` (data-minimization) — left as-is per this decision.
 
 ### GOV-01 — Recurring generation bypassed budget enforcement — **FIXED (060)**
-- Was MEDIUM · Confidence: VERIFIED (fix + test). `portal_recurring_run` now checks `portal_budget_committed` vs `portal_budgets` per template before creating; with `budget_enforce=1` an over-budget template is **skipped** (advance `next_run` + WARNING) instead of generating an over-budget request; `=0` warns only. Test `36` GOV1/GOV2. Live-apply pending (060).
+- Was MEDIUM · Confidence: VERIFIED (fix + test). `portal_recurring_run` now checks `portal_budget_committed` vs `portal_budgets` per template before creating; with `budget_enforce=1` an over-budget template is **skipped** (advance `next_run` + WARNING) instead of generating an over-budget request; `=0` warns only. Test `36` GOV1/GOV2. Applied live 2026-07-28 (migration 060 registered + function body verified).
 
 ### SEC-02 — Leaked-password protection disabled (Supabase Auth)
 - Severity: MEDIUM · Confidence: VERIFIED (advisor). Owner action — enable in Dashboard; decide MFA/SSO for finance/admin. Status: OPEN (owner config).

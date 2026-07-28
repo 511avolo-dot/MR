@@ -37,7 +37,7 @@ cycles/features are data (`portal_workflows` rows), not engine rewrites.
 
 > **AUTHZ-01 (was HIGH) — FIXED (migration `060`).** `portal_create_expense` originally validated only that
 > `p_department_id` exists. It now binds the department to the caller exactly as `portal_create_request` (admin may
-> specify any department per owner decision; non-admin is forced to their own). Test 36 (AZ1–3). Live-apply of 060 pending.
+> specify any department per owner decision; non-admin is forced to their own). Test 36 (AZ1–3). Applied live 2026-07-28 + verified (rolled-back proof: cross-dept rejected).
 
 ## 3. Segregation of duties (verified — with a material exception)
 Triple separation on disbursement — requester ≠ approver(s) ≠ executor — is enforced in `portal_payment_transition` and
