@@ -1,5 +1,14 @@
 # CODEX HANDOFF — Independent Review Package
 
+> **STATUS (2026-07-28): the Codex source-code review is COMPLETE.** Codex reviewed PR #74 and filed 11 findings; each
+> was re-verified against the source and incorporated (see `FINDINGS.md`). Confirmed: 2 HIGH (AUTHZ-01 cross-department
+> expense, SEC-06 unauthenticated `reg-doc`), 4 MEDIUM/LOW (SEC-07 admin-SoD, SEC-03 manual-IBAN, GOV-01 recurring
+> budget, AUD-01 audit truncation), plus test/inventory accuracy fixes. **The verdict is now NOT READY.** What remains
+> for a second reviewer is the **dynamic** work below (PostgREST replay, financial-boundary probing, concurrency,
+> flag-flip in a scratch DB, and browser E2E) — none of which has passed yet. The "claims requiring verification" list
+> below is retained as the static-review checklist Codex used; items 1–7 are now **confirmed by Codex's source review**,
+> so treat them as the dynamic re-test targets, not open questions.
+
 ## Repository state
 - **Branch:** `audit/enterprise-certification-2026-07-27`
 - **Base commit:** `b9d9d6d` (merged `main`, includes portal migrations 022→058)
