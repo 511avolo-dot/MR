@@ -84,6 +84,8 @@ const epCases = [
   ['بلا إعداد خادم ⇒ 503', 503, ENV_OFF, '?reg_id=DG-ABC123&doc=cr', goodPdfBuf, {}],
   ['رقم تسجيل غير صالح', 400, ENV_OK, '?reg_id=../../etc&doc=cr', goodPdfBuf, {}],
   ['نوع وثيقة غير صالح (اجتياز مسار)', 400, ENV_OK, '?reg_id=DG-ABC123&doc=../x', goodPdfBuf, {}],
+  // SEC-06: نوع سليم الصيغة لكنه خارج القائمة البيضاء المغلقة ⇒ يُرفض (يختبر الـallowlist لا الـregex)
+  ['نوع وثيقة خارج القائمة البيضاء (passport)', 400, ENV_OK, '?reg_id=DG-ABC123&doc=passport', goodPdfBuf, {}],
   ['PDF بمحتوى نشِط يُرفض', 400, ENV_OK, '?reg_id=DG-ABC123&doc=cr', evilPdfBuf, {}],
 ];
 for (const [name, expect, env, qs, body, hdr] of epCases) {

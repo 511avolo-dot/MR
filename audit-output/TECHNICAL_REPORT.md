@@ -76,7 +76,7 @@ send), stage email remains fire-and-forget. No double-send risk while dormant.
 ## 7. Input / file safety (verified — but reg-doc auth is broken)
 `_file-guard.js` (5-layer: magic-byte allowlist, polyglot detection, structural integrity, active-content rejection in
 PDF after `#xx` de-encoding, neutralizing response headers) guards all upload paths incl. supplier public upload
-(049) and System-1 `reg-doc.js`. 18 file-guard + 5 endpoint assertions pass. `portal-doc.js` download visibility is
+(049) and System-1 `reg-doc.js`. 18 file-guard + 6 endpoint assertions pass. `portal-doc.js` download visibility is
 fail-closed. **SEC-06 (was HIGH) — destructive vector FIXED (`reg-doc.js`):** the delete-existing-files cleanup is
 removed (unique random filenames only — no overwrite/delete) and the broad regex is replaced with an explicit doc-type
 allowlist (`{cr,vat,gosi,iban,address}`). **Residual (SEC-06-R, MEDIUM):** the endpoint still lacks a real caller
@@ -85,8 +85,8 @@ guard-passing files under a known `reg_id`. Inert while the key is unset; the cr
 change + live test) is a go-live condition paired with System-1 storage hardening.
 
 ## 8. Testing & CI (verified)
-`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 200 assertions (177 SQL incl. AH0/AH1/AH2, 18 file-guard
-JS, 5 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
+`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 201 assertions (177 SQL incl. AH0/AH1/AH2, 18 file-guard
+JS, 6 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
 all `functions/api/*.js`. The prior AH1 test was **vacuous in clean CI** (Codex): the standalone never grants `anon`
 SELECT on the four tables, so the assertion passed even if the REVOKE block were deleted. Fixed — test 35 now seeds the
 grants, applies 059, and asserts removal (AH0/AH1/AH2). Caveat: the local stub models `authenticated` as inheriting `anon`; the real project does

@@ -25,7 +25,7 @@ covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, 
 **Owner-accepted risks (documented, not blockers):** SEC-07 (admin superuser) and SEC-03 (manual IBAN retained).
 
 Portal migrations `022→059` are applied live; `060` is in the repo and **pending live apply**. Suite green
-(EXIT 0, 177 SQL + 23 JS).
+(EXIT 0, 177 SQL + 24 JS).
 
 ## Conditions that MUST be satisfied before real (non-dummy) go-live
 These are **operational/owner** gates, not code blockers — but production onboarding of real users/money should not proceed until they are done:

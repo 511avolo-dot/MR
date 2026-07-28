@@ -42,7 +42,7 @@ browser E2E. The owner-accepted items (SEC-07, SEC-03) are risks the owner has e
 | Auditability | 4 | Append-only + SHA256 hash-chain detects in-place edits (057) — **does not detect truncation/suffix-deletion (AUD-01, LOW, documented)**; external anchor recommended. |
 | Data protection (PII/IBAN) | 3.5 | Payment/supplier IBANs finance/procurement-gated; beneficiary IBANs readable by `can_create` and manual entry retained (SEC-03, owner-accepted). |
 | Reliability / workflows | 4 | Durable in-DB state machine, transactional outbox (029), `FOR UPDATE` locking; email full-durability activation pending (OPS-02). |
-| Test / CI | 4.5 | 177 SQL + 18 file-guard + 5 endpoint assertions (incl. new AZ1–3/GOV1–2), CI on every portal PR; **no browser E2E** (INFO-04); prior vacuous AH1 test fixed. |
+| Test / CI | 4.5 | 177 SQL + 18 file-guard + 6 endpoint assertions (incl. new AZ1–3/GOV1–2), CI on every portal PR; **no browser E2E** (INFO-04); prior vacuous AH1 test fixed. |
 | Observability / DR | 2.5 | Health endpoints + loud failure logs; **backup/PITR tier + RTO/RPO not in repo** — NOT VERIFIABLE. |
 | Frontend correctness | 2.5 | Converter panels syntax-verified only; **not browser-tested** — remains a release gate; API matrix inventory now complete. |
 | API security review | 3.5 | Portal endpoints JWT/token-gated; **SEC-06 destructive vector FIXED (reg-doc.js)** — residual credential upgrade (SEC-06-R, MEDIUM) is a go-live condition; inventory now complete. |
@@ -73,6 +73,6 @@ two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgra
 On the audited code and database evidence, the independent Codex review, and the owner-directed remediation, System 3
 is **READY WITH CONDITIONS**: no open HIGH code defect remains (AUTHZ-01/GOV-01 fixed and tested; SEC-06's destructive
 vector removed with a documented credential-upgrade residual), and the remaining items are conditions or owner-accepted
-risks. This certification covers static + database evidence, the automated suite (177 SQL + 23 JS, EXIT 0), and the
+risks. This certification covers static + database evidence, the automated suite (177 SQL + 24 JS, EXIT 0), and the
 Codex review; it does not substitute for a dynamic web pen-test and browser E2E, which remain release gates. Systems 1
 and 2 were reviewed only for isolation (confirmed); System 1's `reg-doc.js` is the one shared surface touched here.

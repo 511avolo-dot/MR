@@ -13,7 +13,7 @@
 - **Remaining limitations:** does not change RLS (already correct). `portal_settings` intentionally left with its authenticated read (used pre-scope by UI); revisit under SEC-04 if insider threat is in scope.
 
 ## Audit-accuracy defects fixed after Codex review (2026-07-28)
-- **Assertion count** — headline "189/194" corrected; per-file breakdown in `run.sh` corrected (11_security 8, 26_disbursement 10). After adding test 36, the suite is **200 assertions (177 SQL + 18 file-guard + 5 endpoint)**.
+- **Assertion count** — headline "189/194" corrected; per-file breakdown in `run.sh` corrected (11_security 8, 26_disbursement 10). After adding test 36, the suite is **201 assertions (177 SQL + 18 file-guard + 6 endpoint)**.
 - **Vacuous AH1 test** — `35_anon_hardening.sql` now **seeds** the four `anon` SELECT grants, applies 059, then asserts removal (AH0/AH1/AH2), so it genuinely pins the revoke. Suite EXIT 0.
 - **Documentation honesty** — FINDINGS / FINAL_CERTIFICATION / EXECUTIVE / TECHNICAL / PRODUCTION_BLOCKERS / API_SECURITY_MATRIX / README rewritten to verdict **NOT READY** with the verified findings below.
 
