@@ -7338,3 +7338,16 @@ CREATE TRIGGER trg_portal_requests_notify AFTER UPDATE ON portal_requests
 -- تحقّق:
 --   UPDATE portal_settings SET value = value || '{"txn_notifications":1}' WHERE key='portal_settings';
 --   ثم أيّ اعتماد ينتقل لمرحلة تالية يُدرِج إشعاراً يلتقطه الصادر (portal_outbox).
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  دمج الهجرة 059 (سحب منح anon عن جداول PII/مالية) — مطابقة لـ db/portal-migrations/059
+-- ═══════════════════════════════════════════════════════════════════════════
+REVOKE SELECT ON portal_users         FROM anon;
+REVOKE SELECT ON portal_payments      FROM anon;
+REVOKE SELECT ON portal_suppliers     FROM anon;
+REVOKE SELECT ON portal_beneficiaries FROM anon;
+GRANT  SELECT ON portal_users         TO authenticated;
+GRANT  SELECT ON portal_payments      TO authenticated;
+GRANT  SELECT ON portal_suppliers     TO authenticated;
+GRANT  SELECT ON portal_beneficiaries TO authenticated;
