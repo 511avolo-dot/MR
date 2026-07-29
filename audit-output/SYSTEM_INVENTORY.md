@@ -1,15 +1,23 @@
 # SYSTEM INVENTORY — audited surface (System 3 primary)
 
-## Deployment topology
-- **Frontend:** static HTML on Cloudflare Pages (`purchase-portal.html` ~6.0k LOC; `register.html`, `index.html`,
-  `supplier-quote.html`, `register-portal.html`, others). No Node build system.
-- **Backend:** Cloudflare Pages Functions in `functions/api/*` (20 endpoints). See `API_SECURITY_MATRIX.md`.
-- **Database:** Supabase Postgres — System 3 project `mwbjoysuybgbrvfrprex` (`portal_*`); Systems 1&2 project
-  `yofcaxvstjcrmbgciwym` (`proc_*`/`pr_*`). Physically isolated (separate projects + env vars).
-- **Email:** Resend, domain `suppliers.aldeyabi.com`.
-- **Scheduling:** Cloudflare Cron Worker → `portal-outbox-drain` (outbox delivery + SLA + recurring).
+> **Freshness:** updated at head `0316c68` (Stage 0). Supersedes the earlier "022→059 / 203 assertions / ~40 tables"
+> snapshot. Authoritative status/reconciliation lives in `MASTER_DELIVERY_LEDGER.md`.
 
-## Data model (portal_*, ~40 tables)
+## Deployment topology
+- **Frontend:** static HTML on Cloudflare Pages (`purchase-portal.html` ~6.2k LOC; `register.html`, `index.html`,
+  `requests.html`, `rfq.html`, `supplier-quote.html`, `register-portal.html`, invite pages). No Node build system.
+- **Backend:** Cloudflare Pages Functions `functions/api/*` — **19 endpoints + 3 shared modules** (`_portal-shared.js`,
+  `_pr-shared.js`, `_file-guard.js`). System-3-specific: `portal-notify/action/invite/supplier-invite/doc/quote/
+  supplier-doc/users/config/outbox-drain`, `reg-doc`. See `API_SECURITY_MATRIX.md`. **`portal-config.js` is new**
+  (env-aware fail-closed config; production project no longer embedded in `purchase-portal.html`).
+- **Database:** Supabase Postgres — System 3 project `mwbjoysuybgbrvfrprex` (`portal_*`); Systems 1&2 project
+  `yofcaxvstjcrmbgciwym` (`proc_*`/`pr_*`). Physically isolated (separate projects + `PORTAL_SUPABASE_*` vs `SUPABASE_*`).
+- **Email:** Resend, domain `suppliers.aldeyabi.com`. **All three systems currently share `RESEND_API_KEY`/
+  `NOTIFY_FROM`/`NOTIFY_REPLY_TO`/`PUBLIC_ORIGIN`** (see `EMAIL_ARCHITECTURE_AND_CUTOVER.md`; isolation = E1+).
+- **Scheduling:** Cloudflare Cron Worker → `portal-outbox-drain` (outbox delivery **+ SLA + recurring, coupled** —
+  E2 decoupling pending; owner keeps email legacy for now, `txn_notifications=0`).
+
+## Data model (portal_*, **35 tables**)
 Core: `portal_requests`, `portal_request_items`, `portal_approvals` (cycle-aware), `portal_po_approvals`,
 `portal_offers`/`portal_offer_items`, `portal_award`/`portal_award_lines`, `portal_payments`, `portal_receipts`,
 `portal_returns`, `portal_supplier_invoices`. Governance: `portal_budgets`, `portal_contracts`, `portal_currencies`,
@@ -19,12 +27,17 @@ Core: `portal_requests`, `portal_request_items`, `portal_approvals` (cycle-aware
 `portal_invitations`, `portal_supplier_tokens`, IBAN-change tables. RLS enabled on all; write model deny-by-default.
 
 ## Migrations
-59 files `db/portal-migrations/*` (022→059 relevant to this audit), all merged into `db/portal-standalone.sql` for
-clean install. 059 is new this audit (SEC-01). Live migration list verified via `list_migrations`.
+`db/portal-migrations/*` through **062**, all merged into `db/portal-standalone.sql` for clean install (next free
+number = **063**). Live-applied: 022→059 (059 = SEC-01, verified live). **Repo-only, NOT applied to any database:
+060 (AUTHZ-01), 061 (Codex round-2), 062 (supporting documents — round-3/4 + R1 folded in-place).** 062 verified to
+apply cleanly + idempotently over `portal-standalone.sql` locally. No apply without separate owner authorization on
+isolated staging. Objects in standalone at this head: **35 tables · 171 functions · 27 triggers · 30 policies.**
+New subsystem (062): `portal_request_documents` (normalized, immutable, versioned supporting evidence).
 
 ## Tests / CI
-`db/portal-tests/`: `run.sh` orchestrates `00_roles.sql` + assertion files `10`→`35` (SQL) + `file-guard.test.mjs`
-(Node) + reg-doc endpoint assertions. 203 assertions (178 SQL + 18 file-guard + 7 endpoint), EXIT 0. `.github/workflows/portal-tests.yml` on every
+`db/portal-tests/`: `run.sh` orchestrates `00_roles.sql` + assertion files `10`→`37` (SQL) + `file-guard.test.mjs`
+(Node) + reg-doc endpoint assertions. **222 assertions (197 SQL + 18 file-guard + 7 endpoint), EXIT 0** (incl.
+`37_request_documents.sql` DD1–DD19). `.github/workflows/portal-tests.yml` on every
 portal-touching PR (PostgreSQL 16 container).
 
 ## Environment variables (names only)
