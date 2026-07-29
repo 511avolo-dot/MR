@@ -28,10 +28,9 @@ Core: `portal_requests`, `portal_request_items`, `portal_approvals` (cycle-aware
 
 ## Migrations
 `db/portal-migrations/*` through **062**, all merged into `db/portal-standalone.sql` for clean install (next free
-number = **063**). **Live-apply status (G0-01 reconciliation, see `MIGRATION_HISTORY_RECONCILIATION.md`):** 059
-claimed applied (prior session, re-verify) · **060 applied live + verified (commit `135f5af`)** · 061 NOT VERIFIABLE
-(presumed not applied) · **062 NOT applied to any DB**. Live `list_migrations` confirmation pending Supabase MCP
-re-auth. 062 verified to apply cleanly + idempotently over `portal-standalone.sql` locally. No apply without separate owner authorization on
+number = **063**). **Live-apply status — G0-01 CLOSED (live `list_migrations` on `mwbjoysuybgbrvfrprex`, 2026-07-29):** **059, 060, 061
+applied live; 062 absent (NOT applied)**; next free 063. See `MIGRATION_HISTORY_RECONCILIATION.md`. 062 verified to
+apply cleanly + idempotently over `portal-standalone.sql` locally. No apply without separate owner authorization on
 isolated staging. Objects in standalone at this head: **35 tables · 171 functions · 27 triggers · 30 policies.**
 New subsystem (062): `portal_request_documents` (normalized, immutable, versioned supporting evidence).
 

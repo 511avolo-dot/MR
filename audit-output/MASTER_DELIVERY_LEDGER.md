@@ -17,11 +17,11 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 |---|---|---|
 | Verdict | "READY WITH CONDITIONS" | **NOT READY (WIP)** |
 | Findings | "0 HIGH" | Multiple owner/Codex P1 open (see §4) |
-| Migrations | "059 only" | **See `MIGRATION_HISTORY_RECONCILIATION.md` (G0-01):** 059 applied (prior claim, re-verify) · **060 applied live + verified (commit `135f5af`)** · 061 NOT VERIFIABLE (presumed not applied) · 062 NOT applied. Next free = 063 |
+| Migrations | "059 only" | **G0-01 CLOSED (live-verified `list_migrations` 2026-07-29):** 059/060/061 **applied live**; **062 absent (not applied)**; next free = 063 |
 | Assertions | "194" | **222** (197 SQL + 18 file-guard + 7 endpoint) |
-| PR body | stale | **Updated** (corrected migration state per G0-01) |
+| PR body | stale | **Updated** (live-verified migration state) |
 
-> **G0-01 correction:** an earlier line here read "060–062 repo-only, not applied" — that is **DISPROVED for 060** (commit `135f5af` applied it live + verified via `list_migrations`/advisors/rolled-back proof). Full reconciliation + VERIFIED/NOT-VERIFIABLE labels: `MIGRATION_HISTORY_RECONCILIATION.md`. Live `list_migrations` confirmation is pending Supabase MCP re-auth. **No production change was made to reconcile documentation.**
+> **G0-01 CLOSED:** the earlier "060–062 not applied" line is DISPROVED — live `list_migrations` on `mwbjoysuybgbrvfrprex` (2026-07-29, Supabase MCP re-authorized) shows **059, 060, 061 applied; 062 absent**. Verbatim list + labels: `MIGRATION_HISTORY_RECONCILIATION.md`. **No production change was made to reconcile documentation** (read-only `list_migrations`).
 
 **Inventory of record:** `audit-output/SYSTEM_INVENTORY.md` (updated counts below). System-3 objects in `portal-standalone.sql` at this head: **35 tables · 171 functions · 27 triggers · 30 policies**; **29 test files** (222 assertions); migrations through **062**; **next free migration number = 063**.
 
@@ -31,13 +31,13 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 | Migration | Purpose | Live-applied? (evidence) |
 |---|---|---|
-| 059 | SEC-01 revoke anon sensitive reads | **claimed applied (prior session, PR body)** — NOT VERIFIABLE now, re-verify via live `list_migrations` |
-| 060 | AUTHZ-01 expense dept binding + recurring budget | **YES — applied live + verified** (commit `135f5af`: list_migrations + advisors + rolled-back proof) |
-| 061 | Codex round-2 hardening | **NOT VERIFIABLE** — no apply evidence in repo; **presumed not applied** |
-| 062 | Supporting documents (round-3/4 + R1 folded in-place) | **NO — NOT applied to any DB** (owner + CLAUDE.md:616) |
+| 059 | SEC-01 revoke anon sensitive reads | **YES — applied live (VERIFIED, live `list_migrations` `20260728093548`)** |
+| 060 | AUTHZ-01 expense dept binding + recurring budget | **YES — applied live (VERIFIED, `20260728170320`; commit `135f5af` proof)** |
+| 061 | Codex round-2 hardening | **YES — applied live (VERIFIED, `20260729073619`)** |
+| 062 | Supporting documents (round-3/4 + R1 folded in-place) | **NO — NOT applied (VERIFIED absent from live list)** |
 | **063 (next free)** | reserved — Stage 9 work-items / routing policies (not yet created) | — |
 
-Ordering rule: 059→060→061→062 then 063+. 062 verified to apply cleanly + idempotently on top of `portal-standalone.sql` locally. **No further apply (061/062/063) without separate owner authorization on isolated staging first.** Authoritative live confirmation of the above column is **pending Supabase MCP re-auth** (see `MIGRATION_HISTORY_RECONCILIATION.md`).
+Ordering rule: 059→060→061→062 then 063+. 062 verified to apply cleanly + idempotently on top of `portal-standalone.sql` locally. **No further apply (062/063) without separate owner authorization on isolated staging first.** **G0-01 CLOSED — live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** (`MIGRATION_HISTORY_RECONCILIATION.md`).
 
 ---
 
@@ -332,7 +332,7 @@ Every top-level/inline review thread mapped to a canonical ID. (Codex inline thr
 
 | Gate item | Action taken (this commit) | Status |
 |---|---|---|
-| G0-01 migration history | `MIGRATION_HISTORY_RECONCILIATION.md` + corrected §1/§2 (060 applied-live DISPROVES prior "not applied"); live `list_migrations` pending MCP re-auth | **partial** (repo-evidence done; live confirm pending) |
+| G0-01 migration history | `MIGRATION_HISTORY_RECONCILIATION.md` + corrected §1/§2; **live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** — no production change (read-only) | **CLOSED (live-verified)** |
 | G0-02 per-requirement rows | §7 requirements register (S4–S15, one row per mandate) | **done** |
 | G0-03 complete artifact inventory | `ARTIFACT_INVENTORY.md` (one row per artifact) | **done** |
 | G0-04 phase-matrix contract | `RETURN_ROUTING_PHASE_MATRIX.md` expanded (all columns + committee/GM/payment-prep/approval/execution/partial-receipt/rejected-receipt/return-debit/cancellation/amendment rows) | **done** |
@@ -342,5 +342,5 @@ Every top-level/inline review thread mapped to a canonical ID. (Codex inline thr
 | G0-08 thread traceability | §8 above | **done** |
 | G0-09 evidence labels | heading renamed + evidence-type legend + SEC-01 downgraded to implemented | **done** |
 
-**Gate 0 remains NOT PASSED** until: (a) live `list_migrations` confirms G0-01, and (b) owner confirms the authoritative DoA matrix (G0-05) and independently rechecks this commit.
+**Gate 0 remains NOT PASSED** until: (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) owner confirms the authoritative DoA matrix (G0-05); and (c) owner independently rechecks this commit. Only (b) and (c) remain.
 
