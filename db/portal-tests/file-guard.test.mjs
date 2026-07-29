@@ -94,5 +94,31 @@ for (const [name, expect, env, qs, body, hdr] of epCases) {
   if (!pass) failed++;
   console.log(`${pass ? '✓' : '✗ FAIL'}  ${name.padEnd(34)} HTTP ${res.status} (المتوقّع ${expect})`);
 }
+// ── مسار الرفع الناجح: تأكيد أنّه POST واحد لكائن عشوائي بلا list/DELETE (SEC-06: لا حذف مُتلِف) ──
+{
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    calls.push({ url: String(url), method: (opts.method || 'GET').toUpperCase() });
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  let ok = true;
+  try {
+    const res = await regDocPost({ request: REQ('?reg_id=DG-ABC123&doc=cr', goodPdfBuf, {}), env: ENV_OK });
+    const body = await res.json().catch(() => ({}));
+    const posts = calls.filter(c => c.method === 'POST');
+    const listCalls = calls.filter(c => /\/storage\/v1\/object\/list\//.test(c.url));
+    const deleteCalls = calls.filter(c => c.method === 'DELETE');
+    const uploadOk = res.status === 200 && body.path && posts.length === 1;
+    const noDestruct = listCalls.length === 0 && deleteCalls.length === 0;
+    ok = uploadOk && noDestruct;
+    console.log(`${ok ? '✓' : '✗ FAIL'}  رفع ناجح = POST واحد بلا list/DELETE      status ${res.status}, posts ${posts.length}, list ${listCalls.length}, del ${deleteCalls.length}`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  if (!ok) failed++;
+}
+
 if (failed) { console.error('\n❌ فشل في تأكيدات نقطة الرفع'); process.exit(1); }
-console.log(`\n✅ نقطة /api/reg-doc: ${epCases.length}/${epCases.length} PASS`);
+const epTotal = epCases.length + 1;   // +1 = تأكيد مسار الرفع الناجح
+console.log(`\n✅ نقطة /api/reg-doc: ${epTotal}/${epTotal} PASS`);

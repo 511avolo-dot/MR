@@ -24,7 +24,7 @@ clean install. 059 is new this audit (SEC-01). Live migration list verified via 
 
 ## Tests / CI
 `db/portal-tests/`: `run.sh` orchestrates `00_roles.sql` + assertion files `10`→`35` (SQL) + `file-guard.test.mjs`
-(Node) + reg-doc endpoint assertions. 201 assertions (177 SQL + 18 file-guard + 6 endpoint), EXIT 0. `.github/workflows/portal-tests.yml` on every
+(Node) + reg-doc endpoint assertions. 203 assertions (178 SQL + 18 file-guard + 7 endpoint), EXIT 0. `.github/workflows/portal-tests.yml` on every
 portal-touching PR (PostgreSQL 16 container).
 
 ## Environment variables (names only)

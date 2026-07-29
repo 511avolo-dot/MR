@@ -27,8 +27,15 @@ import { inspectUpload } from './_file-guard.js';
 const BUCKET = 'supplier-docs';
 const REG_RE = /^DG-[A-Z0-9]{4,12}$/;
 // أنواع الوثائق المعروفة في نموذج التسجيل — **قائمة بيضاء صريحة** (لا regex عامّ).
-// تدقيق SEC-06: DOC_RE العامّ كان يقبل أي مُعرّف بصيغة سليمة؛ الآن مجموعة مغلقة تطابق register.html.
-const DOC_ALLOW = new Set(['cr', 'vat', 'gosi', 'iban', 'address']);
+// ⚠️ يجب أن تطابق REQUIRED_DOCS + OPTIONAL_DOCS في register.html تماماً، وإلا فُقِد رفع
+// وثيقة مطلوبة (400 بلا سقوط) وتعطّل التسجيل. (تصحيح تدقيق Codex: القائمة السابقة كانت
+// خاطئة — أسقطت chamber/natl_addr/iban_cert المطلوبة وأدرجت iban/address وهما اسما حقلين لا وثيقتين.)
+const DOC_ALLOW = new Set([
+  // REQUIRED_DOCS
+  'cr', 'vat', 'gosi', 'chamber', 'natl_addr', 'iban_cert',
+  // OPTIONAL_DOCS
+  'municipal', 'quality', 'safety', 'clients', 'brochure',
+]);
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {

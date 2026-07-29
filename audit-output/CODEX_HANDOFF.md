@@ -1,13 +1,15 @@
 # CODEX HANDOFF — Independent Review Package
 
-> **STATUS (2026-07-28, rev 2): Codex source-code review COMPLETE + owner-directed remediation applied.** Codex filed
-> 11 findings on PR #74; each was re-verified against the source. Rev 1 confirmed 2 HIGH (AUTHZ-01, SEC-06) + MEDIUM/LOW.
-> Rev 2: the HIGH items were **remediated and re-tested** — AUTHZ-01 FIXED (migration `060`), SEC-06 destructive vector
-> FIXED (`reg-doc.js`, residual credential upgrade SEC-06-R = go-live condition), GOV-01 FIXED (`060`); SEC-07 and SEC-03
-> are **owner-accepted**; AUD-01 stays a documented LOW. **Verdict: READY WITH CONDITIONS** (0 open HIGH). What remains
-> for a second reviewer is the **dynamic** work below (PostgREST replay, financial-boundary probing, concurrency,
-> flag-flip in a scratch DB, and browser E2E) — none of which has passed yet. Items 1–7 below are the static checklist
-> Codex confirmed; treat them as dynamic re-test targets, not open questions.
+> **STATUS (2026-07-28, rev 3): iterative Codex review + remediation in progress; head is NOT independently certified.**
+> Codex reviewed commit `3b1bfc4` (round 1) and `135f5af` (round 2). Remediations landed **after** those reviews
+> (migrations `060`/`061`, the reg-doc allowlist fix, tests) have **not themselves been independently re-reviewed** — do
+> not treat the current head as independently certified until a fresh Codex pass covers it. Confirmed & fixed so far:
+> AUTHZ-01 (060, live) · GOV-01 (060/061, live) · SEC-06 server-path + client-fallback destructive delete + allowlist ·
+> 061 hardening (active-dept, budget lock, precision, beneficiary refresh, skip-audit). **Open HIGH:** SEC-06 end-to-end
+> (anon fallback, System-1 registration). **Owner-accepted:** SEC-07 (admin superuser), SEC-03 (manual IBAN). Verdict:
+> **System-3 code READY WITH CONDITIONS; System-1 registration NOT READY (SEC-06).** Remaining second-reviewer work is
+> the **dynamic** set below (PostgREST replay, boundary probing, concurrency incl. the budget-lock race, flag-flip,
+> browser E2E) **plus a fresh review of 060/061 and the reg-doc changes** — none independently passed yet.
 
 ## Repository state
 - **Branch:** `audit/enterprise-certification-2026-07-27`

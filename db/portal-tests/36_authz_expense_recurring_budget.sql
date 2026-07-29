@@ -50,7 +50,23 @@ BEGIN
   IF (v_r->>'ok') <> 'true' THEN RAISE EXCEPTION 'AZ3 fail: مُنِع الأدمن من قسم آخر'; END IF;
   RAISE NOTICE 'PASS AZ3 الأدمن يصرف على أي قسم (superuser)';
 
-  RAISE NOTICE '════ AUTHZ-01 (060): AZ1–AZ3 = 3/3 PASS ════';
+  -- AZ4 (061): قسم غير نشط يُرفض حتى للأدمن (مِرآة portal_create_request)
+  PERFORM set_config('app.portal_transition','1',true);
+  INSERT INTO portal_departments(id,name_ar,sector,active) VALUES ('ZZT','قسم مُغلَق للاختبار','OPS',false)
+    ON CONFLICT (id) DO UPDATE SET active=false;
+  PERFORM set_config('app.portal_transition','0',true);
+  PERFORM set_config('request.jwt.claims','{"email":"az_adm@aldeyabi.com","role":"authenticated"}',true);
+  BEGIN
+    v_r := portal_create_expense('جهة', 5000, 'custody', 'غرض', 'ZZT', (now()+interval '5 day')::date, '{"custody_to":"az_ga"}'::jsonb, NULL);
+    RAISE EXCEPTION 'AZ4 fail: قُبِل صرف على قسم مُغلَق';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'AZ4 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%مُغلَق%' THEN RAISE EXCEPTION 'AZ4 fail: سبب آخر: %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS AZ4 الصرف على قسم مُغلَق مرفوض (061)';
+
+  RAISE NOTICE '════ AUTHZ-01 (060) + قسم نشط (061): AZ1–AZ4 = 4/4 PASS ════';
 END $az$;
 
 -- ── GOV-01: ميزانية الصرف المتكرّر ──────────────────────────────────────────

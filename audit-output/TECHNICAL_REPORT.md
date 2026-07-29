@@ -76,20 +76,20 @@ send), stage email remains fire-and-forget. No double-send risk while dormant.
 ## 7. Input / file safety (verified — but reg-doc auth is broken)
 `_file-guard.js` (5-layer: magic-byte allowlist, polyglot detection, structural integrity, active-content rejection in
 PDF after `#xx` de-encoding, neutralizing response headers) guards all upload paths incl. supplier public upload
-(049) and System-1 `reg-doc.js`. 18 file-guard + 6 endpoint assertions pass. `portal-doc.js` download visibility is
+(049) and System-1 `reg-doc.js`. 18 file-guard + 7 endpoint assertions pass. `portal-doc.js` download visibility is
 fail-closed. **SEC-06 (HIGH, System-1 registration — OPEN):** the `reg-doc.js` server path was improved
-(destructive cleanup removed → unique filenames; explicit allowlist `{cr,vat,gosi,iban,address}`; client-fallback
+(destructive cleanup removed → unique filenames; explicit allowlist matched to the real form doc IDs `{cr,vat,gosi,chamber,natl_addr,iban_cert,municipal,quality,safety,clients,brochure}` (the earlier `{…,iban,address}` set would have broken registration); client-fallback
 destructive delete also removed). **But the end-to-end flow is NOT fail-closed (2nd Codex pass, verified):**
 `register.html.uploadDocViaServer` falls back to a **direct anonymous Supabase Storage upload** (`register.html:2962–2974`)
 on `503`/`404`/network-error, which **bypasses the server allowlist and `_file-guard`** and writes to the
 historically-open `supplier-docs` bucket. Since `SUPABASE_SERVICE_ROLE_KEY` is unset in production, this anonymous path
 is **live today** — my earlier "inert" wording was wrong. Consolidated go-live gate (blocker for supplier registration):
-set key → remove the anon fallback → revoke anon Storage writes (`db/system1-storage-hardening.sql`) → add a real upload
+add+verify the upload credential (SEC-06-R) → atomic cutover: deploy authenticated endpoint + set key + remove the anon fallback + revoke anon Storage writes (`db/system1-storage-hardening.sql`) → verify permitted & denied. Enabling the key before the credential would expose a credential-free service-role
 credential (SEC-06-R) → verify the live policy denies anon writes.
 
 ## 8. Testing & CI (verified)
-`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 201 assertions (177 SQL incl. AH0/AH1/AH2, 18 file-guard
-JS, 6 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
+`db/portal-tests/run.sh` on PostgreSQL 16 → **EXIT 0**, 203 assertions (178 SQL incl. AH0/AH1/AH2 + AZ4 inactive-dept, 18 file-guard
+JS, 7 reg-doc endpoint). `.github/workflows/portal-tests.yml` runs on every portal-touching PR. `node --check` clean on
 all `functions/api/*.js`. The prior AH1 test was **vacuous in clean CI** (Codex): the standalone never grants `anon`
 SELECT on the four tables, so the assertion passed even if the REVOKE block were deleted. Fixed — test 35 now seeds the
 grants, applies 059, and asserts removal (AH0/AH1/AH2). Caveat: the local stub models `authenticated` as inheriting `anon`; the real project does

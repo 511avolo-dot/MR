@@ -19,7 +19,7 @@ verdict back to **READY WITH CONDITIONS**:
   destructive cleanup removed + explicit allowlist, **but the endpoint is not "inert"** — `register.html` falls back to
   a **direct anonymous Storage upload** on 503/404/network-error that bypasses the allowlist + `_file-guard`, and that
   is the **live** path while the service key is unset. This is an **open HIGH for System-1 registration** (go-live
-  blocker). Consolidated gate: set key → remove anon fallback → revoke anon Storage writes → add credential → verify
+  blocker). Consolidated gate (**credential-first, atomic**): add+verify upload credential (SEC-06-R) → atomic cutover (deploy authenticated endpoint + set key + remove anon fallback + revoke anon Storage writes) → verify both permitted & denied uploads
   live policy. (The client-side destructive delete was also removed this audit.)
 - **GOV-01 (MED) → FIXED** (`060`): `portal_recurring_run` now enforces budget (skips over-budget templates when
   `budget_enforce=1`). Test 36.
@@ -45,7 +45,7 @@ browser E2E. The owner-accepted items (SEC-07, SEC-03) are risks the owner has e
 | Auditability | 4 | Append-only + SHA256 hash-chain detects in-place edits (057) — **does not detect truncation/suffix-deletion (AUD-01, LOW, documented)**; external anchor recommended. |
 | Data protection (PII/IBAN) | 3.5 | Payment/supplier IBANs finance/procurement-gated; beneficiary IBANs readable by `can_create` and manual entry retained (SEC-03, owner-accepted). |
 | Reliability / workflows | 4 | Durable in-DB state machine, transactional outbox (029), `FOR UPDATE` locking; email full-durability activation pending (OPS-02). |
-| Test / CI | 4.5 | 177 SQL + 18 file-guard + 6 endpoint assertions (incl. new AZ1–3/GOV1–2), CI on every portal PR; **no browser E2E** (INFO-04); prior vacuous AH1 test fixed. |
+| Test / CI | 4.5 | 178 SQL + 18 file-guard + 7 endpoint assertions (incl. new AZ1–3/GOV1–2), CI on every portal PR; **no browser E2E** (INFO-04); prior vacuous AH1 test fixed. |
 | Observability / DR | 2.5 | Health endpoints + loud failure logs; **backup/PITR tier + RTO/RPO not in repo** — NOT VERIFIABLE. |
 | Frontend correctness | 2.5 | Converter panels syntax-verified only; **not browser-tested** — remains a release gate; API matrix inventory now complete. |
 | API security review | 3.5 | Portal endpoints JWT/token-gated; **SEC-06 destructive vector FIXED (reg-doc.js)** — residual credential upgrade (SEC-06-R, MEDIUM) is a go-live condition; inventory now complete. |
@@ -64,7 +64,7 @@ two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgra
 
 ## Conditions to clear before real go-live
 1. ~~Apply migration `060` live~~ **DONE 2026-07-28** — applied & verified on `mwbjoysuybgbrvfrprex` (rolled-back proof: cross-dept expense rejected).
-2. **SEC-06 (System-1 registration, HIGH) — single consolidated gate before enabling registration for real suppliers:** (a) set `SUPABASE_SERVICE_ROLE_KEY`; (b) **remove the anonymous browser fallback** in `register.html`; (c) run `db/system1-storage-hardening.sql` to **revoke anonymous Storage writes**; (d) add a real upload credential to `reg-doc.js` (SEC-06-R); (e) verify the live Storage policy denies anon writes. Until done, the guard-bypassing anonymous upload path is live.
+2. **SEC-06 (System-1 registration, HIGH) — credential-first atomic gate before enabling registration for real suppliers:** (a) **implement + verify an upload credential/token in `reg-doc.js` (SEC-06-R)** while the key is unset; (b) **atomic cutover:** deploy the authenticated endpoint + set `SUPABASE_SERVICE_ROLE_KEY` + remove the anonymous browser fallback in `register.html` + run `db/system1-storage-hardening.sql` to revoke anonymous Storage writes; (c) **live-verify both:** a credentialed upload succeeds and anon direct-Storage / no-credential calls are denied. Enabling the key before (a) would expose a credential-free service-role endpoint.
 3. Enable Supabase leaked-password protection; decide MFA/SSO for finance/admin (SEC-02).
 4. Apply System-1 storage hardening Phase 1 + confirm `/api/reg-doc` `{ok:true}` (SEC-05).
 5. Configure enterprise data: real committee members, GA/LOG managers, jobs, users (high-value PO chains cannot complete otherwise).
@@ -77,7 +77,7 @@ On the audited code and database evidence, the independent Codex review, and the
 is READY WITH CONDITIONS** — its own code has **no open HIGH** (AUTHZ-01/GOV-01 fixed, tested, applied live). Separately,
 **System-1 registration carries an open HIGH (SEC-06)**: the anonymous browser upload fallback bypasses the file guard
 and is live while the service key is unset — a go-live blocker for the supplier-registration surface until the
-consolidated gate (set key → remove fallback → revoke anon Storage writes → add credential → verify) is complete. This
-certification covers static + database evidence, the automated suite (177 SQL + 24 JS, EXIT 0), and the
+consolidated gate (credential-first: add+verify credential → atomic cutover [deploy authed endpoint + set key + remove fallback + revoke anon writes] → verify permitted & denied) is complete. This
+certification covers static + database evidence, the automated suite (178 SQL + 25 JS, EXIT 0), and the
 Codex review; it does not substitute for a dynamic web pen-test and browser E2E, which remain release gates. Systems 1
 and 2 were reviewed only for isolation (confirmed); System 1's `reg-doc.js` is the one shared surface touched here.

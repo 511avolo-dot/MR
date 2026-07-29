@@ -11,8 +11,8 @@ covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, 
   cleanup removed, explicit allowlist; client-fallback destructive delete also removed). **But NOT inert (2nd Codex
   pass, verified):** `register.html` falls back to a **direct anonymous Storage upload** on 503/404/network-error that
   **bypasses the allowlist + `_file-guard`** — and that is the **live** path while `SUPABASE_SERVICE_ROLE_KEY` is unset.
-  Consolidated gate: set key → **remove the anon fallback** → **revoke anon Storage writes** (`db/system1-storage-hardening.sql`)
-  → add a real upload credential (SEC-06-R) → verify the live Storage policy denies anon writes.
+  Consolidated gate (**credential-first, atomic**): add+verify upload credential (SEC-06-R) → atomic cutover (deploy authenticated endpoint + set key + **remove the anon fallback** + **revoke anon Storage writes** `db/system1-storage-hardening.sql`)
+  → verify the live Storage policy denies anon writes (a credentialed upload succeeds; anon writes are denied).
 
 ## Conditions before real (non-dummy) go-live
 1. **Apply migration `060` live** (after 059). ✅ done 2026-07-28.
@@ -27,7 +27,7 @@ covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, 
 **Owner-accepted risks (documented, not blockers):** SEC-07 (admin superuser) and SEC-03 (manual IBAN retained).
 
 Portal migrations `022→059` are applied live; `060` **applied live 2026-07-28 + verified**. Suite green
-(EXIT 0, 177 SQL + 24 JS).
+(EXIT 0, 178 SQL + 25 JS).
 
 ## Conditions that MUST be satisfied before real (non-dummy) go-live
 These are **operational/owner** gates, not code blockers — but production onboarding of real users/money should not proceed until they are done:
