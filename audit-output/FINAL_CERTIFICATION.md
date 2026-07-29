@@ -15,9 +15,12 @@ code defects and several MEDIUM/LOW corrections — each re-verified against the
 verdict back to **READY WITH CONDITIONS**:
 - **AUTHZ-01 (HIGH) → FIXED** (migration `060`): `portal_create_expense` now binds the department to the caller
   (mirrors `portal_create_request`; admin may cross-department per owner decision, non-admin forced to own). Test 36.
-- **SEC-06 (HIGH) → destructive vector FIXED** (`reg-doc.js`): removed the delete-existing-files cleanup (unique
-  filenames only) and replaced the broad regex with an explicit doc-type allowlist. **Residual MEDIUM (SEC-06-R):** no
-  caller credential yet — inert while the service key is unset; full token/credential auth is a go-live condition.
+- **SEC-06 (HIGH) → server path improved; end-to-end STILL OPEN** (corrected by 2nd Codex pass): `reg-doc.js` had its
+  destructive cleanup removed + explicit allowlist, **but the endpoint is not "inert"** — `register.html` falls back to
+  a **direct anonymous Storage upload** on 503/404/network-error that bypasses the allowlist + `_file-guard`, and that
+  is the **live** path while the service key is unset. This is an **open HIGH for System-1 registration** (go-live
+  blocker). Consolidated gate: set key → remove anon fallback → revoke anon Storage writes → add credential → verify
+  live policy. (The client-side destructive delete was also removed this audit.)
 - **GOV-01 (MED) → FIXED** (`060`): `portal_recurring_run` now enforces budget (skips over-budget templates when
   `budget_enforce=1`). Test 36.
 - **SEC-07 (admin SoD) and SEC-03 (manual IBAN) → OWNER-ACCEPTED** decisions, documented (admin stays superuser with
@@ -48,7 +51,7 @@ browser E2E. The owner-accepted items (SEC-07, SEC-03) are risks the owner has e
 | API security review | 3.5 | Portal endpoints JWT/token-gated; **SEC-06 destructive vector FIXED (reg-doc.js)** — residual credential upgrade (SEC-06-R, MEDIUM) is a go-live condition; inventory now complete. |
 
 ## Findings roll-up (open)
-**BLOCKER 0 · CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFORMATIONAL 3**, plus **2 owner-accepted** (SEC-07, SEC-03).
+**BLOCKER 0 · CRITICAL 0 · HIGH 1** (SEC-06, System-1 registration) **· MEDIUM 2 · LOW 3 · INFORMATIONAL 3**, plus **2 owner-accepted** (SEC-07, SEC-03). System-3's own code has **0 open HIGH**.
 Fixed this audit: SEC-01 (059), **AUTHZ-01 (060)**, **GOV-01 (060)**, **SEC-06 destructive+allowlist (reg-doc.js)**, and
 two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgrade — go-live condition) and SEC-02
 (leaked-password — owner config). Full detail in `FINDINGS.md`.
@@ -61,7 +64,7 @@ two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgra
 
 ## Conditions to clear before real go-live
 1. ~~Apply migration `060` live~~ **DONE 2026-07-28** — applied & verified on `mwbjoysuybgbrvfrprex` (rolled-back proof: cross-dept expense rejected).
-2. **SEC-06-R** — complete the reg-doc credential/token upgrade (paired with System-1 storage hardening) **before** setting `SUPABASE_SERVICE_ROLE_KEY` for the registration path.
+2. **SEC-06 (System-1 registration, HIGH) — single consolidated gate before enabling registration for real suppliers:** (a) set `SUPABASE_SERVICE_ROLE_KEY`; (b) **remove the anonymous browser fallback** in `register.html`; (c) run `db/system1-storage-hardening.sql` to **revoke anonymous Storage writes**; (d) add a real upload credential to `reg-doc.js` (SEC-06-R); (e) verify the live Storage policy denies anon writes. Until done, the guard-bypassing anonymous upload path is live.
 3. Enable Supabase leaked-password protection; decide MFA/SSO for finance/admin (SEC-02).
 4. Apply System-1 storage hardening Phase 1 + confirm `/api/reg-doc` `{ok:true}` (SEC-05).
 5. Configure enterprise data: real committee members, GA/LOG managers, jobs, users (high-value PO chains cannot complete otherwise).
@@ -70,9 +73,11 @@ two audit-accuracy defects. Remaining MEDIUM: SEC-06-R (reg-doc credential upgra
 8. Browser E2E pass of the new converter panels (Codex source review is done — findings incorporated).
 
 ## Sign-off
-On the audited code and database evidence, the independent Codex review, and the owner-directed remediation, System 3
-is **READY WITH CONDITIONS**: no open HIGH code defect remains (AUTHZ-01/GOV-01 fixed and tested; SEC-06's destructive
-vector removed with a documented credential-upgrade residual), and the remaining items are conditions or owner-accepted
-risks. This certification covers static + database evidence, the automated suite (177 SQL + 24 JS, EXIT 0), and the
+On the audited code and database evidence, the independent Codex review, and the owner-directed remediation, **System 3
+is READY WITH CONDITIONS** — its own code has **no open HIGH** (AUTHZ-01/GOV-01 fixed, tested, applied live). Separately,
+**System-1 registration carries an open HIGH (SEC-06)**: the anonymous browser upload fallback bypasses the file guard
+and is live while the service key is unset — a go-live blocker for the supplier-registration surface until the
+consolidated gate (set key → remove fallback → revoke anon Storage writes → add credential → verify) is complete. This
+certification covers static + database evidence, the automated suite (177 SQL + 24 JS, EXIT 0), and the
 Codex review; it does not substitute for a dynamic web pen-test and browser E2E, which remain release gates. Systems 1
 and 2 were reviewed only for isolation (confirmed); System 1's `reg-doc.js` is the one shared surface touched here.

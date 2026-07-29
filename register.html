@@ -2960,17 +2960,14 @@ async function uploadDocViaServer(regIdVal, docId, file, realType, ext){
   }
 
   // ── المسار القديم (مؤقّت): رفع مباشر بمفتاح anon ──
+  // ⚠️ تدقيق SEC-06: هذا المسار **يتجاوز حارس الخادم (`_file-guard`) والقائمة البيضاء**
+  //   لأنّه يرفع مباشرةً إلى Storage بمفتاح anon العام. يبقى مؤقّتاً كي لا يتعطّل تسجيل
+  //   الموردين الحقيقيين ما دام `SUPABASE_SERVICE_ROLE_KEY` غير مضبوط. **يُزال بالكامل**
+  //   عند تفعيل المفتاح، ومعه تُلغى كتابة anon على المخزن (db/system1-storage-hardening.sql).
+  //   أُزيل منه الحذف المُتلِف (list+remove) مطابقةً لإصلاح الخادم — لا محو لوثائق قائمة.
   const path = `${regIdVal}/${docId}/${Date.now()}.${ext}`;
   const {error} = await SB.storage.from(BUCKET).upload(path, file, { contentType: realType, upsert: true });
   if (error) throw error;
-  try {
-    const folder = `${regIdVal}/${docId}`;
-    const { data: existing } = await SB.storage.from(BUCKET).list(folder);
-    if (existing && existing.length) {
-      const stale = existing.map(f => `${folder}/${f.name}`).filter(p => p !== path);
-      if (stale.length) await SB.storage.from(BUCKET).remove(stale).catch(()=>{});
-    }
-  } catch(_) {}
   return path;
 }
 

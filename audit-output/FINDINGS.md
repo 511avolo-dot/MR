@@ -3,16 +3,18 @@
 Sorted by severity. Confidence: VERIFIED / HIGHLY LIKELY / POSSIBLE / NOT VERIFIABLE.
 
 > **Revision note (2026-07-28).** An independent Codex review of PR #74 surfaced defects this audit had understated or
-> overstated; each was re-verified against the source. **Rev 2 (same day):** after owner direction, the two HIGH items
-> were **remediated in code** (migration `060` + `reg-doc.js`) and two MEDIUM items are **owner-accepted decisions**.
-> Net: **0 open HIGH**; verdict raised back to READY WITH CONDITIONS (see FINAL_CERTIFICATION).
+> overstated; each was re-verified against the source. **Rev 2:** after owner direction, AUTHZ-01/GOV-01 were fixed
+> (migration `060`, applied live) and SEC-07/SEC-03 are owner-accepted. **Rev 3 (2026-07-28, 2nd Codex pass):** Codex
+> correctly showed SEC-06 is **not "inert"** — `register.html` falls back to a **guard-bypassing anonymous Storage
+> upload**, which is the **live** path while the service key is unset. SEC-06 is therefore an **open HIGH for System-1
+> registration** (go-live blocker), corrected below. System-3's own code has 0 open HIGH.
 
-Summary counts (open): **BLOCKER 0 · CRITICAL 0 · HIGH 0 · MEDIUM 2 · LOW 3 · INFORMATIONAL 3** · plus **2 owner-accepted** (SEC-07, SEC-03).
-Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060)** · **GOV-01 (060)** · **SEC-06 destructive-delete + allowlist (reg-doc.js)** · audit-accuracy defects (assertion breakdown; AH1 now pins the revoke).
+Summary counts (open): **BLOCKER 0 · CRITICAL 0 · HIGH 1** (SEC-06 — System-1 registration) **· MEDIUM 2 · LOW 3 · INFORMATIONAL 3** · plus **2 owner-accepted** (SEC-07, SEC-03).
+Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060, live)** · **GOV-01 (060, live)** · SEC-06 **server-path** destructive-delete + allowlist (`reg-doc.js`) + client-fallback destructive-delete removed · audit-accuracy defects (assertion breakdown; AH1 now pins the revoke).
 
 ---
 
-## HIGH — none open (both remediated 2026-07-28)
+## HIGH — 1 open (SEC-06, System-1 registration); AUTHZ-01 remediated
 
 ### AUTHZ-01 — `portal_create_expense` cross-department write — **FIXED (060)**
 - Was HIGH · Confidence: VERIFIED (fix + test)
@@ -20,19 +22,20 @@ Fixed this audit: SEC-01 (059) · **AUTHZ-01 (060)** · **GOV-01 (060)** · **SE
 - Fix: migration `060` binds the department to the caller exactly as `portal_create_request` (admin may specify any department per owner decision; non-admin is forced to their own — no fall-through to client input). Test `36_authz_expense_recurring_budget.sql` (AZ1 cross-dept rejected, AZ2 own-dept allowed, AZ3 admin cross-dept allowed). Suite EXIT 0. **Applied live 2026-07-28 + verified** (rolled-back behavioral proof: demo_emp_ops OPS→GA rejected).
 - Status: FIXED in repo; live-apply pending.
 
-### SEC-06 — `reg-doc.js` unauthenticated/destructive write — **PARTIALLY FIXED (reg-doc.js); residual MEDIUM**
-- Was HIGH · Confidence: VERIFIED
-- Evidence (original): only a forgeable `sameOrigin()` gate; service-role upload then **deleted** existing files under `${regId}/${doc}/`; `DOC_RE` was a broad regex.
-- Fix (this audit): **removed the destructive cleanup entirely** (unique random filenames only — no overwrite/delete vector) and **replaced the regex with an explicit allowlist** (`{cr,vat,gosi,iban,address}`). This closes the worst part (destruction of a supplier's genuine documents).
-- **Residual (MEDIUM, see below):** the endpoint still lacks a real caller credential — once `SUPABASE_SERVICE_ROLE_KEY` is set, an attacker (forgeable same-origin) could still *additively* upload guard-passing files under a known `reg_id`. Currently inert (`503` while key unset). Full credential/token auth requires a change to the registration flow (register.html inserts via anon with no server step to mint a token) and live testing — tracked as a go-live condition paired with `db/system1-storage-hardening.sql`.
-- Status: destructive + allowlist FIXED; credential upgrade OPEN (MEDIUM, go-live condition).
+### SEC-06 — Registration-document upload is unauthenticated; the browser falls back to a guard-bypassing anonymous Storage write — **SERVER PATH improved; end-to-end NOT fail-closed (HIGH, go-live blocker for System-1 registration)**
+- Severity: HIGH (System-1 registration) · Confidence: VERIFIED (`functions/api/reg-doc.js` + `register.html:2934–2975`)
+- Evidence (original): the server endpoint's only gate is a forgeable `sameOrigin()`; it uploaded with the service-role key and **deleted** existing files under `${regId}/${doc}/`; `DOC_RE` was a broad regex.
+- Server-path fix (this audit): removed the destructive cleanup (unique filenames only) and replaced the regex with an explicit allowlist (`{cr,vat,gosi,iban,address}`). Client-side destructive delete in the fallback also removed (this audit).
+- **⚠️ Corrected by Codex (VERIFIED): the endpoint is NOT "inert" while the key is unset.** `register.html.uploadDocViaServer` **falls back to a direct anonymous Supabase Storage upload** (`SB.storage.from('supplier-docs').upload(...)`, lines 2962–2974) on `503 not_configured`, `404`, **or any network error**. Because `SUPABASE_SERVICE_ROLE_KEY` is currently unset in production, **this anonymous fallback is the live path today** — and it **bypasses the server allowlist and `_file-guard` entirely** (the client-side check is trivially skippable by calling Storage directly), writing to the historically-open `supplier-docs` bucket. So SEC-06 is a **live exposure**, not dormant; my earlier "inert" characterization was wrong.
+- Consolidated remediation (single release gate): (1) set `SUPABASE_SERVICE_ROLE_KEY`; (2) **remove the anonymous browser fallback** in `register.html` (only after the key is set, or registration uploads break); (3) run `db/system1-storage-hardening.sql` to **revoke anonymous Storage writes**; (4) add a real upload credential/token to `reg-doc.js` (SEC-06-R); (5) verify the live Storage policy denies anon writes. Ties directly to SEC-05.
+- Status: server path improved; **end-to-end OPEN — System-1 registration go-live blocker** until the consolidated gate above is complete.
 
 ---
 
 ## MEDIUM (open)
 
-### SEC-06-R — `reg-doc.js` still has no caller credential (residual) — **OPEN**
-- Severity: MEDIUM · Confidence: VERIFIED. Additive-only now (non-destructive), inert until the service key is configured. Remediation: mint a per-registration signed token in the registration flow (server-side), or require an authenticated session; enforce before accepting the upload. Go-live condition.
+### SEC-06-R — `reg-doc.js` still has no caller credential (residual of SEC-06) — **OPEN**
+- Severity: MEDIUM · Confidence: VERIFIED. Even after the anon fallback is removed and Storage writes are locked down, the server endpoint authenticates only by a forgeable same-origin header. Remediation: mint a per-registration signed token in the registration flow (server-side), or require an authenticated session; enforce before accepting the upload. Part of the SEC-06 consolidated gate.
 
 ### SEC-02 — Leaked-password protection disabled (Supabase Auth)
 - Severity: MEDIUM · Confidence: VERIFIED (advisor). Owner action — enable in Dashboard; decide MFA/SSO for finance/admin. Status: OPEN (owner config).

@@ -33,4 +33,4 @@
 | SEC-02 leaked-password protection | Supabase Dashboard toggle — no code. |
 | SEC-04 user/settings directory read | Broad blast radius across the UI; needs owner decision on insider-threat model. |
 | OPS-01/OPS-02 dormant flags | Intentional gradual-enforcement; owner flips per launch plan. |
-| SEC-05 System-1 storage policies | Owner-run SQL; frontend already fails safe (but see SEC-06 for the reg-doc auth gap). |
+| SEC-05 System-1 storage policies | Owner-run SQL. **Correction (2nd Codex pass):** the frontend does **not** fail safe — `register.html` falls back to a direct anonymous Storage upload (bypassing the guard) when the server endpoint is unconfigured/unreachable. This anon write path is live until the SEC-06 consolidated gate (set key + remove fallback + revoke anon Storage writes + credential) is done. Tightly coupled with SEC-06. |

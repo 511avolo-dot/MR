@@ -9,8 +9,11 @@ The portal was put through a rigorous audit, then a **second independent review 
 disprove the first review's conclusions — which was the right thing to do, and it found real problems the first pass had
 missed or described too generously. Two "high" severity issues were confirmed: (1) a regular user could start a payment
 against **another department's** budget, and (2) a supplier-document upload address accepted files **without a login**
-and could **delete** a supplier's existing documents. **Both are now fixed:** the expense now stays within the user's
-own department, and the upload address no longer deletes anything and only accepts a fixed list of document types. Two
+and could **delete** a supplier's existing documents. The department issue is **fully fixed and live**. The upload issue
+is **partly fixed** — the server no longer deletes files or accepts odd document types — **but a second Codex check found
+that the registration page silently falls back to uploading directly with a public key when the secure server path isn't
+switched on, which is the situation today.** That fallback skips the server's safety checks, so it must be closed before
+real suppliers register (set the server key, remove the fallback, and lock down anonymous uploads). Two
 lesser points were **your explicit decisions** (admins keep full override; typing a bank IBAN by hand stays allowed) —
 both documented. One follow-up remains on the upload address (adding a proper login token) before its server key is
 switched on. Net status: **Ready with Conditions.**
@@ -50,10 +53,13 @@ switched on. Net status: **Ready with Conditions.**
 7. A hands-on click-through of the new screens in a browser (still pending).
 
 ## Risk statement
-The two high-severity code issues are fixed and re-tested, so there is **no known high-severity code reason to block**.
+The cross-department issue is fixed and live. **One high-severity item remains open for the supplier-registration page**
+(the anonymous upload fallback), which must be closed before real suppliers register — it does not affect the main
+System-3 portal.
 Remaining risk is operational (the conditions above) plus the two decisions you have chosen to accept.
 
 ## Recommendation
-The blocking code issues are fixed. Apply migration 060 live, complete the upload-endpoint login token, finish the owner
-setup and the browser click-through, then proceed to onboarding. Full technical detail is in `TECHNICAL_REPORT.md` and
-`FINDINGS.md`.
+The main-portal code issues are fixed (migration 060 is live). Before onboarding **real suppliers**, close the
+registration-upload gate (set the server key, remove the anonymous fallback, lock down anonymous uploads, add a login
+token). Then finish the owner setup and the browser click-through and proceed. Full technical detail is in
+`TECHNICAL_REPORT.md` and `FINDINGS.md`.

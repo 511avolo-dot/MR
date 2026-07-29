@@ -7,14 +7,16 @@ covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, 
 
 - **AUTHZ-01 (HIGH) → FIXED** (migration `060`): `portal_create_expense` binds the department to the caller. Test 36.
 - **GOV-01 (MED) → FIXED** (`060`): budget enforced in `portal_recurring_run`. Test 36.
-- **SEC-06 (HIGH) → destructive vector FIXED** (`reg-doc.js`): the delete-existing-files cleanup is removed (unique
-  filenames only) and the broad regex is replaced with an explicit allowlist. **Residual (SEC-06-R, MEDIUM):** no
-  caller credential — inert while the service key is unset; complete the token/credential upgrade **before** enabling
-  `SUPABASE_SERVICE_ROLE_KEY` for the registration path (pair with `db/system1-storage-hardening.sql`).
+- **SEC-06 (HIGH, System-1 registration) → OPEN go-live blocker.** Server path improved (`reg-doc.js`: destructive
+  cleanup removed, explicit allowlist; client-fallback destructive delete also removed). **But NOT inert (2nd Codex
+  pass, verified):** `register.html` falls back to a **direct anonymous Storage upload** on 503/404/network-error that
+  **bypasses the allowlist + `_file-guard`** — and that is the **live** path while `SUPABASE_SERVICE_ROLE_KEY` is unset.
+  Consolidated gate: set key → **remove the anon fallback** → **revoke anon Storage writes** (`db/system1-storage-hardening.sql`)
+  → add a real upload credential (SEC-06-R) → verify the live Storage policy denies anon writes.
 
 ## Conditions before real (non-dummy) go-live
-1. **Apply migration `060` live** (after 059).
-2. Complete **SEC-06-R** (reg-doc credential upgrade) before enabling the registration service key.
+1. **Apply migration `060` live** (after 059). ✅ done 2026-07-28.
+2. **SEC-06 consolidated gate** (above) before enabling supplier registration for real suppliers — this is a **blocker**, not merely a residual.
 3. SEC-02 leaked-password protection + MFA/SSO decision (owner dashboard).
 4. System-1 storage hardening Phase 1 (owner SQL) + confirm `/api/reg-doc` `{ok:true}`.
 5. Enterprise data setup (committee/GM/managers/jobs/users) — high-value PO chains need a configured committee.
