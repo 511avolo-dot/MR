@@ -109,7 +109,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | BOOT-STATES | P2 | UI | accessible bootstrap states (aria-busy/timeout/retry/offline/fatal focus) | Stage 10 | open |
 | PAY-DOCS-COMPLETE | P1 | payments | configurable payment-document completeness (H) enforcing migration | Stage 8 | open |
 | SCHED-DECOUPLE | P1 | ops | **(G0-07)** `portal-outbox-drain.js:109` returns on missing/invalid Resend key **before** SLA (`:116`) + recurring (`:119`) → **SLA escalation + recurring generation stop.** This is separable from the email freeze: decoupling `portal-scheduler` (SLA+recurring) from `portal-email-drain` changes **no email delivery behavior**. Owner froze email; owner did **not** accept loss of SLA/recurring execution | Stage 12 (scheduler split, email-neutral) — else record launch impact + request explicit owner risk acceptance | **open (not deferred)** |
-| DOA-THRESHOLD-CONFLICT | P1 | workflow/config | **(G0-05)** small-committee upper bound: **owner business matrix = 25,000–125,000**; **code/seed `portal_doa` = 25,001–150,000** (`portal-standalone.sql:1832`); test values follow code. Do NOT implement/certify thresholds until owner confirms authoritative matrix; threshold tests must use confirmed values exactly ±1 | Stage 5 (blocked on owner confirmation) | open |
+| DOA-THRESHOLD-CONFLICT | P1 | workflow/config | **(G0-05) OWNER CONFIRMED 2026-07-29: authoritative small-committee band = 25,001–125,000.** Code/seed `portal_doa` currently uses **150,000** (`portal-standalone.sql:1832`) → **must be changed 150,000 → 125,000** in Stage 5 (seed edit + migration 063+ region), with boundary tests at **125,000 ±1**. **Not changed now** — implementation is gated (owner chose "hold for recheck") | Stage 5 | **owner-confirmed (125,000); implementation gated** |
 | CRON-SECRET | P2 | ops | cron secret via `?key=` query string + non-constant-time compare | Stage 12 | open |
 
 ### Program stages (documents/implementation not yet started)
@@ -336,11 +336,11 @@ Every top-level/inline review thread mapped to a canonical ID. (Codex inline thr
 | G0-02 per-requirement rows | §7 requirements register (S4–S15, one row per mandate) | **done** |
 | G0-03 complete artifact inventory | `ARTIFACT_INVENTORY.md` (one row per artifact) | **done** |
 | G0-04 phase-matrix contract | `RETURN_ROUTING_PHASE_MATRIX.md` expanded (all columns + committee/GM/payment-prep/approval/execution/partial-receipt/rejected-receipt/return-debit/cancellation/amendment rows) | **done** |
-| G0-05 DoA threshold conflict | DOA-THRESHOLD-CONFLICT row (owner 125k vs code 150k); not certified pending owner confirmation | **done (awaiting owner value)** |
+| G0-05 DoA threshold conflict | **Owner confirmed authoritative = 125,000 (2026-07-29).** Recorded; seed change 150k→125k + boundary tests deferred to Stage 5 (owner chose hold-for-recheck) | **resolved (value confirmed; impl gated)** |
 | G0-06 email-freeze compat | §9 above + patch in `RETURN_ROUTING_TARGET_MODEL.md` | **done** |
 | G0-07 scheduler ≠ email freeze | SCHED-DECOUPLE reclassified **open (not deferred)**, email-neutral split | **done** |
 | G0-08 thread traceability | §8 above | **done** |
 | G0-09 evidence labels | heading renamed + evidence-type legend + SEC-01 downgraded to implemented | **done** |
 
-**Gate 0 remains NOT PASSED** until: (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) owner confirms the authoritative DoA matrix (G0-05); and (c) owner independently rechecks this commit. Only (b) and (c) remain.
+**Gate 0 remains NOT PASSED** until: (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) ~~owner confirms the authoritative DoA matrix (G0-05)~~ **✅ DONE (owner confirmed 125,000, 2026-07-29)**; and **(c) owner independently rechecks the Stage-0 commits.** Only (c) remains — owner elected to hold Stage-1/063 implementation for that recheck.
 
