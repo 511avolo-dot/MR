@@ -2561,10 +2561,35 @@ try{document.documentElement.style.setProperty('--wm','url('+LOGO_COL+')');}catc
      يُعرّف الدوال بعد سكربت المرجع فيُلغيها (آخر تعريف يفوز) ويربط الواجهة بجداول portal_*.
      ══════════════════════════════════════════════════════════════════════════ -->
 <script>
-/* ── عميل Supabase (مشروع البوابة المستقل) ── */
-const SUPABASE_URL='https://mwbjoysuybgbrvfrprex.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
-const SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+/* ── عميل Supabase الواعي بالبيئة (env-aware, fail-closed) ──
+   لم يعُد عنوان/مفتاح المشروع مُضمَّناً هنا (كان يُجبِر معاينة الفرع على الإنتاج). يُجلَب
+   وقت التشغيل من /api/portal-config الذي يُحدّده حسب بيئة Cloudflare (إنتاج/معاينة) ويرفض
+   استخدام مشروع الإنتاج في المعاينة. عند فشل الإعداد لا نتّصل — نُظهر خطأ إعداد ظاهر. */
+let SUPABASE_URL=null, SUPABASE_ANON_KEY=null, SB=null;
+async function __bootConfig(){
+  try{
+    const r = await fetch('/api/portal-config', { cache:'no-store' });
+    const c = await r.json().catch(()=>null);
+    if(!r.ok || !c || c.ok!==true || !c.url || !c.anonKey){
+      throw new Error((c&&c.error) || 'تعذّر تحميل إعداد البيئة');
+    }
+    SUPABASE_URL=c.url; SUPABASE_ANON_KEY=c.anonKey;
+    SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+    return true;
+  }catch(e){
+    try{
+      document.body.innerHTML =
+        '<div dir="rtl" style="max-width:640px;margin:16vh auto;padding:28px;border:1px solid #e11d48;'
+        +'border-radius:14px;background:#fff;color:#0f172a;font-family:system-ui,\'Segoe UI\',sans-serif;line-height:1.9">'
+        +'<h2 style="margin:0 0 10px;color:#e11d48">خطأ إعداد البيئة</h2>'
+        +'<p>لم يُضبَط مشروع Supabase لهذه البيئة، أو أنّ معاينة الفرع مُوجَّهة لمشروع الإنتاج (مرفوض).</p>'
+        +'<p style="font-size:14px;color:#475569">'+(e&&e.message?String(e.message):'')+'</p>'
+        +'<p style="font-size:13px;color:#64748b">اضبط <code>PORTAL_SUPABASE_URL</code> + <code>PORTAL_SUPABASE_ANON_KEY</code> '
+        +'في متغيّرات Cloudflare لهذه البيئة (بيئة Preview تستخدم مشروع staging منفصلاً).</p></div>';
+    }catch(_){}
+    return false;
+  }
+}
 
 /* ── لا شيء (no-op): طبقة التخزين المحلي وبذور العرض التوضيحي مُعطّلة تماماً ── */
 function saveState(){}
@@ -6015,7 +6040,8 @@ async function pa_supIbanApprove(cid){ try{ await pa_rpc('portal_supplier_iban_a
 async function pa_supIbanReject(cid){ var n=window.prompt('سبب الرفض (اختياري):','')||null; try{ await pa_rpc('portal_supplier_iban_reject',{p_change_id:cid,p_note:n}); toast('رُفض الطلب','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الرفض'),'err'); } }
 
 /* الإقلاع الفعلي */
-boot();
+/* بوابة الإقلاع الواعية بالبيئة: لا يبدأ التطبيق إلا بعد جلب إعداد Supabase بنجاح (fail-closed). */
+(async()=>{ if(await __bootConfig()) boot(); })();
 </script>
 
 </body>

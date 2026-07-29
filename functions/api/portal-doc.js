@@ -16,18 +16,21 @@
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
 import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
 
-const KEY_RE = /^docs\/(pay|grn|inst|inv|ret|disb)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
+const KEY_RE = /^docs\/(pay|grn|inst|inv|ret|disb|reqdoc)\/[A-Za-z0-9._-]{3,40}\/[A-Za-z0-9._-]{6,80}\.(pdf|jpg|jpeg|png)$/;
 const REQID_RE = /^[A-Za-z0-9._-]{3,40}$/;
 // pay=محضر صرف (مالية) · grn=مشهد استلام (مستودع) · inst=مرفق دفعة (مشتريات) · inv=أصل فاتورة المورد (مشتريات/مالية)
 // ret=محضر مرتجع/تالف (استلام/جودة أو مشتريات) · disb=سند تحويل الصرف المباشر (مسؤول البنك).
-// القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع.
+// reqdoc=مستند داعم لطلب الصرف المباشر (062) — يرفعه المُقدِّم/المحرِّر على مسودّته؛ ثم تُنشئ
+//   الواجهة صفّ portal_request_documents عبر RPC (portal_attach_document) الذي يفرض الحالة/النوع/الصيغة.
+// القيمة مصفوفة صلاحيات — يكفي امتلاك إحداها للرفع (والـRPC يفرض التحكّم الدقيق: المُقدّم/can_edit/أدمن + مسودّة).
 const KIND_PERM = {
-  pay:  ['can_disburse'],
-  grn:  ['can_verify_stock'],
-  inst: ['can_manage_procurement'],
-  inv:  ['can_manage_procurement', 'can_see_finance'],
-  ret:  ['can_verify_stock', 'can_manage_procurement'],
-  disb: ['can_disburse'],
+  pay:    ['can_disburse'],
+  grn:    ['can_verify_stock'],
+  inst:   ['can_manage_procurement'],
+  inv:    ['can_manage_procurement', 'can_see_finance'],
+  ret:    ['can_verify_stock', 'can_manage_procurement'],
+  disb:   ['can_disburse'],
+  reqdoc: ['can_create', 'can_edit'],
 };
 
 function json(obj, status = 200) {
