@@ -93,10 +93,12 @@ async function reqdocTargetOk(env, base, jwt, reqId) {
     return rows[0].status === 'draft' || rows[0].status === 'returned';
   } catch (_) { return false; }
 }
-// تحقّق أنّ للمفتاح صفّاً نشطاً في portal_request_documents (مستند لم يُزَل) — لعرض reqdoc فقط.
-async function reqdocActiveRowExists(env, base, jwt, key) {
+// تحقّق أنّ للمفتاح صفّاً في portal_request_documents (لعرض reqdoc). الوجود يكفي (لا شرط active):
+//  • المُزال (portal_remove_document) يحذف الصفّ ⇒ لا صفّ ⇒ 404 (يُغلق الكشف بعد الإزالة).
+//  • المُستبدَل/المؤرشف (active=false) يبقى صفّه ⇒ يظلّ قابلاً للعرض في سجلّ الإصدارات (طلب المالك).
+async function reqdocRowExists(env, base, jwt, key) {
   try {
-    const r = await fetch(`${base}/rest/v1/portal_request_documents?storage_key=eq.${encodeURIComponent(key)}&active=eq.true&select=id&limit=1`,
+    const r = await fetch(`${base}/rest/v1/portal_request_documents?storage_key=eq.${encodeURIComponent(key)}&select=id&limit=1`,
       { headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}` } });
     if (!r.ok) return false;
     const rows = await r.json();
@@ -170,8 +172,8 @@ export async function onRequestGet({ request, env }) {
   } catch (_) { canSee = false; }
   if (!canSee) return new Response('forbidden', { status: 403 });
 
-  // (Codex round-3) مستند طلب داعم (reqdoc): لا يُبَثّ إلا إن كان له صفّ نشط — المُزال يصير غير قابل للعرض.
-  if (key.startsWith('docs/reqdoc/') && !(await reqdocActiveRowExists(env, base, jwt, key))) {
+  // (Codex round-3) مستند طلب داعم (reqdoc): لا يُبَثّ إلا إن كان له صفّ — المُزال (المحذوف) يصير غير قابل للعرض.
+  if (key.startsWith('docs/reqdoc/') && !(await reqdocRowExists(env, base, jwt, key))) {
     return new Response('not found', { status: 404 });
   }
 

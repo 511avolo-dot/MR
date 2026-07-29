@@ -421,6 +421,13 @@ BEGIN
   PERFORM set_config('app.portal_transition','1',true);
   UPDATE portal_approvals SET decision='pending', approver=NULL, comment=NULL, acted_at=NULL, channel='portal'
    WHERE request_id = p_request_id AND cycle = v_cycle;
+  SELECT min(seq) INTO v_first FROM portal_approvals WHERE request_id = p_request_id AND cycle = v_cycle;
+  UPDATE portal_requests SET status='in_review', phase=v_phase, current_seq = coalesce(v_first,1),
+         updated_at=now(), updated_by=v_me WHERE id = p_request_id;
+  PERFORM set_config('app.portal_transition','0',true);
+  PERFORM portal_audit_write(p_request_id,'resubmitted',v_me,'portal',jsonb_build_object('comment',p_comment,'cycle',v_cycle));
+  RETURN jsonb_build_object('ok', true, 'status', 'in_review');
+END $fn$;
 REVOKE ALL ON FUNCTION portal_resubmit_request(text,text) FROM public;
 GRANT EXECUTE ON FUNCTION portal_resubmit_request(text,text) TO authenticated;
 
@@ -543,8 +550,6 @@ BEGIN
 END $fn$;
 REVOKE ALL ON FUNCTION portal_recurring_run() FROM anon, PUBLIC, authenticated;
 GRANT EXECUTE ON FUNCTION portal_recurring_run() TO service_role;
-
-
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --  إجراء التراجع (Rollback) — 062:
