@@ -436,15 +436,14 @@ BEGIN
   IF v_req.requester <> v_me AND NOT portal_is_admin() THEN
     RAISE EXCEPTION 'إعادة التقديم تقتصر على مُقدّم الطلب';
   END IF;
-  -- (Codex round-3) بوّابة المستندات: الصرف المباشر لا يُعاد تقديمه بلا مستند داعم نشط (يمنع
-  -- حذف كل الأدلّة على المُعاد ثم إعادة التقديم عبر هذا المسار متجاوزاً portal_submit_expense).
-  IF v_req.req_type = 'direct_expense' AND portal_setting_num('expense_docs_required', 1) >= 1
-     AND (SELECT count(*) FROM portal_request_documents
-            WHERE request_id = p_request_id AND active AND payment_id IS NULL) < 1 THEN
-    RAISE EXCEPTION 'لا يمكن إعادة تقديم طلب الصرف بلا مستند داعم واحد صالح على الأقل';
+  -- (Codex round-4/R1) مسار تقديم موحّد للصرف المباشر: فوّض إلى portal_submit_expense كي تُطبَّق كل
+  -- الثوابت (المستندات + إعادة تحقّق المستفيد + قفل/فحص الميزانية + الطور + إبطال الرموز) بلا ازدواج
+  -- أو انحراف بين دالّتين — يمنع الالتفاف عبر هذا المسار البديل. (portal_submit_expense يقبل returned.)
+  IF v_req.req_type = 'direct_expense' THEN
+    RETURN portal_submit_expense(p_request_id);
   END IF;
-  -- (Codex round-4) الدورة من نوع الطلب (الصرف المباشر=disbursement) لا الطور — المُعاد من الدفع phase=payment.
-  v_cycle := CASE WHEN v_req.req_type = 'direct_expense' THEN 'disbursement' ELSE 'need' END;
+  -- (need cycle: الطلبات غير الصرف المباشر)
+  v_cycle := 'need';
   v_phase := CASE WHEN v_cycle = 'disbursement' THEN 'disbursement' ELSE 'requisition' END;
 
   PERFORM set_config('app.portal_transition','1',true);

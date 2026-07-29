@@ -23,7 +23,7 @@ BEGIN
 END $seed$;
 
 DO $t$
-DECLARE v_r jsonb; v_id text; v_doc bigint; v_doc2 bigint; v_err text; v_cnt int; v_ns text;
+DECLARE v_r jsonb; v_id text; v_doc bigint; v_doc2 bigint; v_err text; v_cnt int; v_ns text; v_ben bigint;
 BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"d7_req@aldeyabi.com","role":"authenticated"}',true);
 
@@ -231,5 +231,54 @@ BEGIN
     RAISE EXCEPTION 'DD17 fail: رمز بريد قديم بقي بعد إعادة التقديم'; END IF;
   RAISE NOTICE 'PASS DD17 إعادة التقديم تُبطِل رموز البريد القديمة (لا اعتماد برابط قديم)';
 
-  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD17 = 17/17 PASS ════';
+  -- ── round-4 (owner R1): مسار إعادة التقديم الموحّد يطبّق كل الثوابت (لا التفاف عبر portal_resubmit_request) ──
+  -- DD18: مستفيد مربوط ثم مُعطَّل ⇒ resubmit العامّ (المفوَّض للـsubmit) يمنع (لا التفاف على تحقّق المستفيد)
+  PERFORM set_config('request.jwt.claims','{"email":"d7_req@aldeyabi.com","role":"authenticated"}',true);
+  PERFORM set_config('app.portal_transition','1',true);
+  INSERT INTO portal_beneficiaries(name,btype,iban,account_name,active)
+    VALUES('مستفيد-د7','company','SA1100000000000000000022','مستفيد-د7',true) RETURNING id INTO v_ben;
+  PERFORM set_config('app.portal_transition','0',true);
+  v_r := portal_create_expense_draft('x','3000','bank','خدمة بنكية','GA',(now()+interval '5 day')::date,'{}'::jsonb,NULL,v_ben);
+  v_id := v_r->>'id'; v_ns := 'docs/reqdoc/'||v_id||'/';
+  PERFORM portal_attach_document(v_id,'beneficiary_bank',v_ns||'b.pdf','application/pdf','بنك',NULL,'b.pdf',400,NULL,NULL,NULL);
+  PERFORM portal_submit_expense(v_id);   -- المستفيد نشط ⇒ ينجح
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_requests SET status='returned' WHERE id=v_id;
+  UPDATE portal_beneficiaries SET active=false WHERE id=v_ben;
+  PERFORM set_config('app.portal_transition','0',true);
+  BEGIN
+    PERFORM portal_resubmit_request(v_id, NULL);
+    RAISE EXCEPTION 'DD18 fail: قبِلت resubmit العامّ بمستفيد مُعطَّل (التفاف)';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD18 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%غير نشط%' THEN RAISE EXCEPTION 'DD18 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD18 resubmit العامّ مفوَّض للمسار الموحّد ⇒ يطبّق تحقّق المستفيد';
+
+  -- DD19: تجاوز الميزانية (enforce=1) يمنع resubmit العامّ أيضاً (لا التفاف على فحص الميزانية)
+  v_r := portal_create_expense_draft('جهة3','9000','custody','خدمة','GA',(now()+interval '5 day')::date,'{"custody_to":"d7_req"}'::jsonb,NULL,NULL);
+  v_id := v_r->>'id'; v_ns := 'docs/reqdoc/'||v_id||'/';
+  PERFORM portal_attach_document(v_id,'memo',v_ns||'m.pdf','application/pdf','مذكّرة',NULL,'m.pdf',300,NULL,NULL,NULL);
+  PERFORM portal_submit_expense(v_id);   -- بلا ميزانية ⇒ ينجح
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_requests SET status='returned' WHERE id=v_id;
+  INSERT INTO portal_budgets(department_id,fiscal_year,amount,active) VALUES('GA', EXTRACT(YEAR FROM now())::int, 1, true)
+    ON CONFLICT (department_id, fiscal_year) DO UPDATE SET amount=1, active=true;
+  UPDATE portal_settings SET value = value || '{"budget_enforce":1}'::jsonb WHERE key='portal_settings';
+  PERFORM set_config('app.portal_transition','0',true);
+  BEGIN
+    PERFORM portal_resubmit_request(v_id, NULL);
+    RAISE EXCEPTION 'DD19 fail: قبِلت resubmit العامّ رغم تجاوز الميزانية (التفاف)';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD19 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%ميزانية%' THEN RAISE EXCEPTION 'DD19 fail: سبب آخر %', v_err; END IF;
+  END;
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_settings SET value = value || '{"budget_enforce":0}'::jsonb WHERE key='portal_settings';
+  PERFORM set_config('app.portal_transition','0',true);
+  RAISE NOTICE 'PASS DD19 resubmit العامّ مفوَّض للمسار الموحّد ⇒ يطبّق فحص الميزانية (enforce=1)';
+
+  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD19 = 19/19 PASS ════';
 END $t$;
