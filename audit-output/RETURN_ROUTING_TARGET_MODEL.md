@@ -23,7 +23,8 @@ Target state machine for the **Enterprise Correction & Work Routing Engine** (St
 2. Separate: request owner · business department · process phase/state · active approval stage · current work item · assignee/queue · delegate · correction scope · document/data revision reviewed.
 3. **No arbitrary-user routing by default** — every destination validated by server routing policy for the source phase/action.
 4. Post-financial/post-receipt history is not destructively rewound — governed amendment / void / debit-note / return / receipt-correction / dispute.
-5. Every transition: server-authorized · row-locked (`FOR UPDATE`) · idempotent where retryable · append-only audited · outbox-notified in the same transaction · browser-visible.
+5. Every transition: server-authorized · row-locked (`FOR UPDATE`) · idempotent where retryable · append-only audited · **durable internal notification intent recorded in the same transaction** · browser-visible.
+   - **(G0-06) email-freeze clarification:** "notification intent in the same transaction" = a **durable internal** `portal_notifications`/work-item-event/`portal_outbox` row (DB state), **not** email sending. Under the owner email freeze (`txn_notifications=0`), the legacy immediate `portal-notify` path stays authoritative, **no outbox-authoritative email is activated, and no Resend/Cloudflare binding changes** until separate E1–E6 authorization. Stage-9 correction/reassignment/delegation events notify users via the **existing legacy path**; the durable outbox intent remains unsent (shadow-equivalent). **No duplicate email.**
 6. Owner exceptions unchanged: admin superuser (labeled+audited), manual IBAN (reason+badge+audit).
 
 ## 3. Governed RPC surface (target, all SECURITY DEFINER, server-only writes)

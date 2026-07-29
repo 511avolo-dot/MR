@@ -44,3 +44,8 @@ No secret values are recorded in this log. Live database mutations were made **o
 
 ## Remaining uncertainties (see UNRESOLVED_ITEMS.md)
 Dynamic web pen-testing, load/soak/chaos testing, and full browser E2E of the new converter UI panels were **not** executed in this environment and are marked NOT VERIFIABLE.
+
+## 2026-07-29 — Stage-0 Gate-0 remediation (G0-01…G0-09)
+- G0-01 migration history reconciled from repo evidence: **060 applied live + verified** (commit `135f5af`) — corrects the prior "060–062 not applied" error; 062 NOT applied; 061 NOT VERIFIABLE. Live `list_migrations` confirmation pending Supabase MCP re-auth. **No production change made to reconcile docs.** New: `MIGRATION_HISTORY_RECONCILIATION.md`. PR body + ledger + inventory updated consistently.
+- G0-02 per-requirement register (S4–S15) added to ledger. G0-03 `ARTIFACT_INVENTORY.md` (one row per artifact) added. G0-04 phase matrix expanded (all columns + committee/GM/payment-prep/approval/execution/partial-receipt/rejected-receipt/return-debit/cancellation/amendment). G0-05 `DOA-THRESHOLD-CONFLICT` (owner 125k vs code 150k) recorded, not certified. G0-06 email-freeze compatibility clarified in target model + ledger. G0-07 `SCHED-DECOUPLE` reclassified open (email-neutral). G0-08 review-thread traceability table. G0-09 evidence labels corrected (implemented vs verified).
+- Constraints held: no DB/config change; migration 062/063 not applied; PR draft.
