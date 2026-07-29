@@ -1,8 +1,12 @@
-# ARTIFACT INVENTORY — MACHINE-DERIVED APPENDIX (G0-R4)
+# ARTIFACT INVENTORY — MACHINE-DERIVED APPENDIX (G0-R4 · access classes G0-F2)
 
-> Generated from `db/portal-standalone.sql` + `functions/api/` + repo root at head `1b97cc4`. One row per concrete artifact. Companion to `ARTIFACT_INVENTORY.md` (narrative). Ownership: all `portal_*` = System 3 unless noted.
+> Generated from `db/portal-standalone.sql` + `functions/api/` + repo root; source snapshot used for generation = head `1e44e33`. One row per concrete artifact. Companion to `ARTIFACT_INVENTORY.md` (narrative). Ownership: all `portal_*` = System 3 unless noted.
 
 **Totals:** 35 tables · 120 functions · 27 triggers · 12 policies · endpoints/pages enumerated below.
+
+**Access-class methodology (G0-F2 correction).** The earlier uniform line "RLS on; SELECT scoped / writes deny-by-default via guards" was **inaccurate for server-only / service-role-only tables and for functions** and has been replaced with **source-derived** classes:
+- **Tables** (verified from the RLS-enable loop `portal-standalone.sql:1680-1687`, the `auth_all` loop `:1696-1703`, and each `CREATE POLICY` / `REVOKE` / `GRANT`): `auth_all` (13, incl. `portal_po_approvals`) · scoped SELECT via `portal_can_see_request` (5) · perm-gated / anon-revoked SELECT + service-role writes (10) · own-row (`portal_notifications`) · SELECT-only append-only (`portal_audit`) · **server-only, RLS on with NO policy** (`portal_email_tokens`, `portal_idempotency`, `portal_supplier_tokens`) · **service-role-only** (`portal_invitations`, `portal_outbox`). A guard trigger is **only** claimed where source confirms one (see Triggers section) — not for every table.
+- **Functions** (from `REVOKE ALL ON FUNCTION … FROM …` in source): **service_role/server-only** (14; revoked from anon+authenticated) · **authenticated+service_role** (anon/PUBLIC revoked) · **trigger-only** (`*_guard`/`*_chain`, invoked by triggers) · **PUBLIC default execute** (no REVOKE — SECURITY DEFINER with identity/authz enforced in the body). Full per-signature overload enumeration + a fresh Stage-2 least-privilege review of every SECURITY DEFINER grant/`search_path` remains **open** (ledger Stage-2); the classes here are facts, not the closure of that review.
 
 ## Pages (one row each)
 | # | Page | System | Boundary |
@@ -46,167 +50,167 @@
 | 22 | `verify.js` | 1 | see ARTIFACT_INVENTORY.md §B |
 
 ## Tables (one row each, System 3)
-| # | Table | RLS |
+| # | Table | Access class (source-derived: access class · write mechanism) |
 |--|--|--|
-| 1 | `portal_users` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 2 | `portal_departments` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 3 | `portal_jobs` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 4 | `portal_doa` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 5 | `portal_workflows` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 6 | `portal_requests` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 7 | `portal_request_items` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 8 | `portal_approvals` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 9 | `portal_offers` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 10 | `portal_award` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 11 | `portal_award_approvals` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 12 | `portal_payments` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 13 | `portal_receipts` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 14 | `portal_audit` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 15 | `portal_email_tokens` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 16 | `portal_notifications` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 17 | `portal_settings` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 18 | `portal_po_approvals` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 19 | `portal_invitations` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 20 | `portal_suppliers` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 21 | `portal_offer_items` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 22 | `portal_award_lines` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 23 | `portal_outbox` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 24 | `portal_budgets` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 25 | `portal_supplier_iban_changes` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 26 | `portal_supplier_invoices` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 27 | `portal_returns` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 28 | `portal_currencies` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 29 | `portal_contracts` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 30 | `portal_supplier_tokens` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 31 | `portal_idempotency` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 32 | `portal_beneficiaries` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 33 | `portal_beneficiary_iban_changes` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 34 | `portal_recurring_expenses` | RLS on; SELECT scoped / writes deny-by-default via guards |
-| 35 | `portal_request_documents` | RLS on; SELECT scoped / writes deny-by-default via guards |
+| 1 | `portal_users` | auth_all (FOR ALL authenticated); writes governed by admin/can_manage_users + config guard |
+| 2 | `portal_departments` | auth_all; writes governed by config/admin guard |
+| 3 | `portal_jobs` | auth_all; writes governed by config/admin guard (self-escalation blocked) |
+| 4 | `portal_doa` | auth_all; writes governed by portal_doa guard + admin |
+| 5 | `portal_workflows` | auth_all; writes governed by config/admin guard |
+| 6 | `portal_requests` | SELECT scoped (see_scoped→portal_can_see_request); INSERT/UPDATE/DELETE authenticated, governed by status guard + transition GUC |
+| 7 | `portal_request_items` | auth_all; writes governed by portal_locked_guard + transition GUC |
+| 8 | `portal_approvals` | auth_all; writes governed by portal_approvals_guard + transition GUC |
+| 9 | `portal_offers` | auth_all; writes governed by portal_locked_guard |
+| 10 | `portal_award` | auth_all; writes governed by portal_award_guard |
+| 11 | `portal_award_approvals` | auth_all; writes governed by portal_award_approvals_guard |
+| 12 | `portal_payments` | SELECT request/finance-scoped (see_by_request); writes guarded |
+| 13 | `portal_receipts` | auth_all; writes governed by portal_locked_guard |
+| 14 | `portal_audit` | SELECT-only authenticated (audit_read); NO client write policy → append-only via portal_audit_write (service) + hash-chain trigger; immutable |
+| 15 | `portal_email_tokens` | server-only — RLS on, NO policy → zero client access (service_role bypass only) |
+| 16 | `portal_notifications` | own-row — FOR ALL authenticated USING recipient=portal_username() |
+| 17 | `portal_settings` | auth_all; writes governed by portal_config_guard (admin/privileged) |
+| 18 | `portal_po_approvals` | auth_all (explicit, line 931); writes authenticated + guard |
+| 19 | `portal_invitations` | service-role-only — RLS on + REVOKE anon/authenticated/PUBLIC + GRANT service_role |
+| 20 | `portal_suppliers` | SELECT perm-gated (manage_procurement/see_finance/manage_users/admin); write authenticated + IBAN guard |
+| 21 | `portal_offer_items` | SELECT scoped (offer_items_read→portal_can_see_request); writes service_role-only + portal_locked_guard |
+| 22 | `portal_award_lines` | SELECT scoped (award_lines_read→portal_can_see_request); writes service_role-only |
+| 23 | `portal_outbox` | service-role-only — RLS on + REVOKE anon/authenticated/PUBLIC + GRANT service_role |
+| 24 | `portal_budgets` | SELECT perm-gated (admin/see_finance/manage_procurement); anon revoked; writes service_role-only |
+| 25 | `portal_supplier_iban_changes` | SELECT authenticated (anon revoked); writes service_role-only |
+| 26 | `portal_supplier_invoices` | SELECT authenticated (anon revoked); writes service_role-only |
+| 27 | `portal_returns` | SELECT authenticated (anon revoked); writes service_role-only |
+| 28 | `portal_currencies` | SELECT authenticated (anon revoked from writes); writes service_role-only |
+| 29 | `portal_contracts` | SELECT authenticated (anon revoked from writes); writes service_role-only + contract enforce trigger |
+| 30 | `portal_supplier_tokens` | server-only — RLS on, NO policy → zero client access (service_role bypass only) |
+| 31 | `portal_idempotency` | server-only — RLS on, NO policy → zero client access (service_role bypass only) |
+| 32 | `portal_beneficiaries` | SELECT authenticated (anon revoked); writes service_role-only + IBAN guard |
+| 33 | `portal_beneficiary_iban_changes` | SELECT authenticated (anon revoked); writes service_role-only |
+| 34 | `portal_recurring_expenses` | SELECT authenticated (anon revoked); writes service_role-only |
+| 35 | `portal_request_documents` | SELECT scoped (portal_reqdoc_read); GRANT SELECT authenticated, writes service_role-only + portal_reqdoc_guard |
 
 ## Functions (one row each, System 3)
-| # | Function | Exec grant |
+| # | Function | Execute grant (source-derived) |
 |--|--|--|
-| 1 | `portal_username` | authenticated (or per REVOKE/GRANT in source) |
-| 2 | `portal_is_admin` | authenticated (or per REVOKE/GRANT in source) |
-| 3 | `portal_is_service` | authenticated (or per REVOKE/GRANT in source) |
-| 4 | `portal_is_privileged` | authenticated (or per REVOKE/GRANT in source) |
-| 5 | `portal_has_perm` | authenticated (or per REVOKE/GRANT in source) |
-| 6 | `portal_effective_approver` | authenticated (or per REVOKE/GRANT in source) |
-| 7 | `portal_approvals_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 8 | `portal_request_status_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 9 | `portal_award_approvals_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 10 | `portal_award_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 11 | `portal_payments_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 12 | `portal_users_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 13 | `portal_config_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 14 | `portal_audit_immutable` | authenticated (or per REVOKE/GRANT in source) |
-| 15 | `portal_locked_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 16 | `portal_audit_write` | service_role only (server) |
-| 17 | `portal_resolve_stage` | authenticated (or per REVOKE/GRANT in source) |
-| 18 | `portal_create_request` | authenticated (or per REVOKE/GRANT in source) |
-| 19 | `portal_submit_request` | authenticated (or per REVOKE/GRANT in source) |
-| 20 | `portal_pr_transition` | authenticated (or per REVOKE/GRANT in source) |
-| 21 | `portal_submit_offer` | authenticated (or per REVOKE/GRANT in source) |
-| 22 | `portal_po_approvals_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 23 | `portal_build_po_chain` | authenticated (or per REVOKE/GRANT in source) |
-| 24 | `portal_award` | authenticated (or per REVOKE/GRANT in source) |
-| 25 | `portal_award_transition` | authenticated (or per REVOKE/GRANT in source) |
-| 26 | `portal_po_transition` | authenticated (or per REVOKE/GRANT in source) |
-| 27 | `portal_payment_request` | authenticated (or per REVOKE/GRANT in source) |
-| 28 | `portal_payment_transition` | authenticated (or per REVOKE/GRANT in source) |
-| 29 | `portal_record_receipt` | authenticated (or per REVOKE/GRANT in source) |
-| 30 | `portal_cancel_request` | authenticated (or per REVOKE/GRANT in source) |
-| 31 | `portal_gen_token` | authenticated (or per REVOKE/GRANT in source) |
-| 32 | `portal_create_token` | service_role only (server) |
-| 33 | `portal_pr_transition_email` | service_role only (server) |
-| 34 | `portal_resubmit_request` | authenticated (or per REVOKE/GRANT in source) |
-| 35 | `portal_setting_bool` | authenticated (or per REVOKE/GRANT in source) |
-| 36 | `portal_setting_num` | authenticated (or per REVOKE/GRANT in source) |
-| 37 | `portal_qualified_approver` | authenticated (or per REVOKE/GRANT in source) |
-| 38 | `portal_resume_hold` | authenticated (or per REVOKE/GRANT in source) |
-| 39 | `portal_sla_hours` | authenticated (or per REVOKE/GRANT in source) |
-| 40 | `portal_set_due` | authenticated (or per REVOKE/GRANT in source) |
-| 41 | `portal_run_sla` | authenticated (or per REVOKE/GRANT in source) |
-| 42 | `portal_sla_tick` | authenticated (or per REVOKE/GRANT in source) |
-| 43 | `portal_my_scope` | authenticated (or per REVOKE/GRANT in source) |
-| 44 | `portal_my_sector` | authenticated (or per REVOKE/GRANT in source) |
-| 45 | `portal_can_see_request` | authenticated (or per REVOKE/GRANT in source) |
-| 46 | `portal_email_allowed` | authenticated (or per REVOKE/GRANT in source) |
-| 47 | `portal_set_committee` | authenticated (or per REVOKE/GRANT in source) |
-| 48 | `portal_delete_user` | authenticated (or per REVOKE/GRANT in source) |
-| 49 | `portal_apply_job` | authenticated (or per REVOKE/GRANT in source) |
-| 50 | `portal_save_job` | authenticated (or per REVOKE/GRANT in source) |
-| 51 | `portal_delete_job` | authenticated (or per REVOKE/GRANT in source) |
-| 52 | `portal_save_department` | authenticated (or per REVOKE/GRANT in source) |
-| 53 | `portal_delete_department` | authenticated (or per REVOKE/GRANT in source) |
-| 54 | `portal_delete_supplier` | authenticated (or per REVOKE/GRANT in source) |
-| 55 | `portal_award_split` | authenticated (or per REVOKE/GRANT in source) |
-| 56 | `portal_set_installments` | authenticated (or per REVOKE/GRANT in source) |
-| 57 | `portal_bounce_to_requester` | authenticated (or per REVOKE/GRANT in source) |
-| 58 | `portal_outbox_enqueue` | authenticated (or per REVOKE/GRANT in source) |
-| 59 | `portal_outbox_claim` | authenticated (or per REVOKE/GRANT in source) |
-| 60 | `portal_outbox_mark` | service_role only (server) |
-| 61 | `portal_outbox_purge` | service_role only (server) |
-| 62 | `portal_budget_committed` | authenticated (or per REVOKE/GRANT in source) |
-| 63 | `portal_budget_status` | authenticated (or per REVOKE/GRANT in source) |
-| 64 | `portal_budget_set` | authenticated (or per REVOKE/GRANT in source) |
-| 65 | `portal_budget_delete` | authenticated (or per REVOKE/GRANT in source) |
-| 66 | `portal_budget_enforce` | authenticated (or per REVOKE/GRANT in source) |
-| 67 | `portal_supplier_iban_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 68 | `portal_supplier_iban_request` | authenticated (or per REVOKE/GRANT in source) |
-| 69 | `portal_supplier_iban_approve` | authenticated (or per REVOKE/GRANT in source) |
-| 70 | `portal_supplier_iban_reject` | authenticated (or per REVOKE/GRANT in source) |
-| 71 | `portal_award_total` | authenticated (or per REVOKE/GRANT in source) |
-| 72 | `portal_invoiced_total` | authenticated (or per REVOKE/GRANT in source) |
-| 73 | `portal_three_way_status` | authenticated (or per REVOKE/GRANT in source) |
-| 74 | `portal_invoice_record` | authenticated (or per REVOKE/GRANT in source) |
-| 75 | `portal_three_way_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 76 | `portal_returns_total` | authenticated (or per REVOKE/GRANT in source) |
-| 77 | `portal_return_record` | authenticated (or per REVOKE/GRANT in source) |
-| 78 | `portal_return_status` | authenticated (or per REVOKE/GRANT in source) |
-| 79 | `portal_currency_rate` | authenticated (or per REVOKE/GRANT in source) |
-| 80 | `portal_currency_set` | authenticated (or per REVOKE/GRANT in source) |
-| 81 | `portal_currency_delete` | authenticated (or per REVOKE/GRANT in source) |
-| 82 | `portal_set_request_currency` | authenticated (or per REVOKE/GRANT in source) |
-| 83 | `portal_contract_consumed` | authenticated (or per REVOKE/GRANT in source) |
-| 84 | `portal_contract_status` | authenticated (or per REVOKE/GRANT in source) |
-| 85 | `portal_contract_set` | authenticated (or per REVOKE/GRANT in source) |
-| 86 | `portal_contract_close` | authenticated (or per REVOKE/GRANT in source) |
-| 87 | `portal_link_request_contract` | authenticated (or per REVOKE/GRANT in source) |
-| 88 | `portal_contract_enforce` | authenticated (or per REVOKE/GRANT in source) |
-| 89 | `portal_update_request` | authenticated (or per REVOKE/GRANT in source) |
-| 90 | `portal_supplier_invite` | authenticated (or per REVOKE/GRANT in source) |
-| 91 | `portal_supplier_rfq` | authenticated (or per REVOKE/GRANT in source) |
-| 92 | `portal_supplier_submit` | authenticated (or per REVOKE/GRANT in source) |
-| 93 | `portal_supplier_token_request` | service_role only (server) |
-| 94 | `portal_build_chain` | authenticated (or per REVOKE/GRANT in source) |
-| 95 | `portal_create_expense` | authenticated (or per REVOKE/GRANT in source) |
-| 96 | `portal_open_direct_payment` | authenticated (or per REVOKE/GRANT in source) |
-| 97 | `portal_payment_void` | authenticated (or per REVOKE/GRANT in source) |
-| 98 | `portal_beneficiary_iban_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 99 | `portal_beneficiary_save` | authenticated (or per REVOKE/GRANT in source) |
-| 100 | `portal_beneficiary_delete` | authenticated (or per REVOKE/GRANT in source) |
-| 101 | `portal_beneficiary_iban_request` | authenticated (or per REVOKE/GRANT in source) |
-| 102 | `portal_beneficiary_iban_approve` | authenticated (or per REVOKE/GRANT in source) |
-| 103 | `portal_beneficiary_iban_reject` | authenticated (or per REVOKE/GRANT in source) |
-| 104 | `portal_bulk_transition` | authenticated (or per REVOKE/GRANT in source) |
-| 105 | `portal_recurring_next` | authenticated (or per REVOKE/GRANT in source) |
-| 106 | `portal_recurring_save` | authenticated (or per REVOKE/GRANT in source) |
-| 107 | `portal_recurring_set_active` | authenticated (or per REVOKE/GRANT in source) |
-| 108 | `portal_recurring_delete` | authenticated (or per REVOKE/GRANT in source) |
-| 109 | `portal_recurring_run` | service_role only (server) |
-| 110 | `portal_audit_hash` | authenticated (or per REVOKE/GRANT in source) |
-| 111 | `portal_audit_chain` | authenticated (or per REVOKE/GRANT in source) |
-| 112 | `portal_audit_verify` | authenticated (or per REVOKE/GRANT in source) |
-| 113 | `portal_enqueue_stage_notifications` | authenticated (or per REVOKE/GRANT in source) |
-| 114 | `portal_requests_notify` | authenticated (or per REVOKE/GRANT in source) |
-| 115 | `portal_reqdoc_guard` | authenticated (or per REVOKE/GRANT in source) |
-| 116 | `portal_create_expense_draft` | authenticated (or per REVOKE/GRANT in source) |
-| 117 | `portal_attach_document` | authenticated (or per REVOKE/GRANT in source) |
-| 118 | `portal_remove_document` | authenticated (or per REVOKE/GRANT in source) |
-| 119 | `portal_replace_document` | authenticated (or per REVOKE/GRANT in source) |
-| 120 | `portal_submit_expense` | authenticated (or per REVOKE/GRANT in source) |
+| 1 | `portal_username` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 2 | `portal_is_admin` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 3 | `portal_is_service` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 4 | `portal_is_privileged` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 5 | `portal_has_perm` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 6 | `portal_effective_approver` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 7 | `portal_approvals_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 8 | `portal_request_status_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 9 | `portal_award_approvals_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 10 | `portal_award_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 11 | `portal_payments_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 12 | `portal_users_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 13 | `portal_config_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 14 | `portal_audit_immutable` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 15 | `portal_locked_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 16 | `portal_audit_write` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 17 | `portal_resolve_stage` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 18 | `portal_create_request` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 19 | `portal_submit_request` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 20 | `portal_pr_transition` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 21 | `portal_submit_offer` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 22 | `portal_po_approvals_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 23 | `portal_build_po_chain` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 24 | `portal_award` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 25 | `portal_award_transition` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 26 | `portal_po_transition` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 27 | `portal_payment_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 28 | `portal_payment_transition` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 29 | `portal_record_receipt` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 30 | `portal_cancel_request` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 31 | `portal_gen_token` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 32 | `portal_create_token` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 33 | `portal_pr_transition_email` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 34 | `portal_resubmit_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 35 | `portal_setting_bool` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 36 | `portal_setting_num` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 37 | `portal_qualified_approver` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 38 | `portal_resume_hold` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 39 | `portal_sla_hours` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 40 | `portal_set_due` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 41 | `portal_run_sla` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 42 | `portal_sla_tick` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 43 | `portal_my_scope` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 44 | `portal_my_sector` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 45 | `portal_can_see_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 46 | `portal_email_allowed` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 47 | `portal_set_committee` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 48 | `portal_delete_user` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 49 | `portal_apply_job` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 50 | `portal_save_job` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 51 | `portal_delete_job` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 52 | `portal_save_department` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 53 | `portal_delete_department` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 54 | `portal_delete_supplier` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 55 | `portal_award_split` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 56 | `portal_set_installments` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 57 | `portal_bounce_to_requester` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 58 | `portal_outbox_enqueue` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 59 | `portal_outbox_claim` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 60 | `portal_outbox_mark` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 61 | `portal_outbox_purge` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 62 | `portal_budget_committed` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 63 | `portal_budget_status` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 64 | `portal_budget_set` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 65 | `portal_budget_delete` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 66 | `portal_budget_enforce` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 67 | `portal_supplier_iban_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 68 | `portal_supplier_iban_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 69 | `portal_supplier_iban_approve` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 70 | `portal_supplier_iban_reject` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 71 | `portal_award_total` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 72 | `portal_invoiced_total` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 73 | `portal_three_way_status` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 74 | `portal_invoice_record` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 75 | `portal_three_way_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 76 | `portal_returns_total` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 77 | `portal_return_record` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 78 | `portal_return_status` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 79 | `portal_currency_rate` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 80 | `portal_currency_set` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 81 | `portal_currency_delete` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 82 | `portal_set_request_currency` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 83 | `portal_contract_consumed` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 84 | `portal_contract_status` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 85 | `portal_contract_set` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 86 | `portal_contract_close` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 87 | `portal_link_request_contract` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 88 | `portal_contract_enforce` | PUBLIC default execute — no REVOKE in source; SECURITY DEFINER, identity/authz enforced in body |
+| 89 | `portal_update_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 90 | `portal_supplier_invite` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 91 | `portal_supplier_rfq` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 92 | `portal_supplier_submit` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 93 | `portal_supplier_token_request` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 94 | `portal_build_chain` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 95 | `portal_create_expense` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 96 | `portal_open_direct_payment` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 97 | `portal_payment_void` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 98 | `portal_beneficiary_iban_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 99 | `portal_beneficiary_save` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 100 | `portal_beneficiary_delete` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 101 | `portal_beneficiary_iban_request` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 102 | `portal_beneficiary_iban_approve` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 103 | `portal_beneficiary_iban_reject` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 104 | `portal_bulk_transition` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 105 | `portal_recurring_next` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 106 | `portal_recurring_save` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 107 | `portal_recurring_set_active` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 108 | `portal_recurring_delete` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 109 | `portal_recurring_run` | service_role/server-only (REVOKE from anon+authenticated; GRANT service_role) |
+| 110 | `portal_audit_hash` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 111 | `portal_audit_chain` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 112 | `portal_audit_verify` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 113 | `portal_enqueue_stage_notifications` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 114 | `portal_requests_notify` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 115 | `portal_reqdoc_guard` | trigger-only — invoked by BEFORE/AFTER trigger; not a callable API |
+| 116 | `portal_create_expense_draft` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 117 | `portal_attach_document` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 118 | `portal_remove_document` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 119 | `portal_replace_document` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
+| 120 | `portal_submit_expense` | authenticated + service_role (anon/PUBLIC revoked); SECURITY DEFINER |
 
 ## Triggers (one row each)
 | # | Trigger | Table |
@@ -261,4 +265,4 @@
 | `portal-outbox-drain` (Cron) | 3 | SLA + recurring + outbox email (SCHED-DECOUPLE, CRON-SECRET) |
 | R2 `QUOTES_BUCKET` | 3 | portal evidence (DOC-RECEIPT gate) |
 | Storage `supplier-docs` | 1 | registration docs (SEC-06) |
-| `ai.js` (Gemini proxy) | shared | server-only `GEMINI_API_KEY`, model allowlist; NOT wired to System-1/2/3 data or governance workflow |
+| `ai.js` (Gemini OCR proxy) | **System 1 + 2** | Used by `register.html` (Sys-1 OCR) and `index.html`/`requests.html`/`rfq.html` (Sys-2 OCR); **not** used by System 3. Keeps `GEMINI_API_KEY` server-side + model allowlist, **but abuse controls incomplete** (see G0-F4 / ledger `AI-PROXY-ABUSE`): GET has no auth/origin check; POST relies only on forgeable Origin/Referer; no JWT/Turnstile/rate-limit/quota/cost cap; 16 MiB body; size check only fires when Content-Length present (chunked bypass). **Classify: key concealed, abuse controls incomplete — NOT simply "secure".** |

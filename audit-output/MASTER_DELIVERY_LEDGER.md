@@ -4,7 +4,7 @@
 Every requirement/finding has a stable ID and a status. **No item disappears silently**; scope may only grow by adding explicit rows.
 **Rule:** `verified` requires the stated test type actually run — never from static inspection or code comments alone.
 
-- **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Head:** `1b97cc4` (updated each commit)
+- **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Source snapshot used for generation:** `1e44e33` (the head the owner independently rechecked; the G0-F fixes in this commit are applied on top of it — this line names the snapshot, it is not auto-updated each commit)
 - **Binding constraints:** no production/DB/storage/config change; `budget_enforce=0`; `txn_notifications=0`; Systems 1/2 unchanged; manual IBAN allowed (reason+badge+audit); admin superuser accepted (labeled+audited).
 
 Status vocabulary: `open` · `implemented` (code merged, not yet independently test-verified) · `verified` (test type run) · `accepted-risk` (owner-approved) · `deferred-with-approval`.
@@ -13,7 +13,7 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 ## 1. Reconciliation (supersedes stale certification language)
 
-| Item | Stale claim (old PR body) | **Current truth (head 1b97cc4)** |
+| Item | Stale claim (old PR body) | **Current truth (source snapshot `1e44e33`)** |
 |---|---|---|
 | Verdict | "READY WITH CONDITIONS" | **NOT READY (WIP)** |
 | Findings | "0 HIGH" | Multiple owner/Codex P1 open (see §4) |
@@ -58,6 +58,8 @@ Ordering rule: 059→060→061→062 then 063+. 062 verified to apply cleanly + 
 ## 4. Requirement / finding ledger
 
 Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source: O=owner, C=Codex, K=Claude/static.
+
+**Canonical-ID aliases (G0-F3 — the `REVIEW_THREAD_TRACEABILITY.md` appendix uses these Stage-prefixed forms; each resolves to one ledger row):** `S8-PAY-EVID` = `PAY-DOCS-COMPLETE` · `S8-RECUR-BLOCK` = `RECUR-BLOCKED` · `S8-EXPENSE-EDIT` = `RET-EXPENSE-EDIT` · `S10-STATES` = `BOOT-STATES` · `AUTHZ-EXPENSE-DEPT (060)` = live authz item (implemented @135f5af) · `CFG-ENV`/`CDX3-*`/`CDX4-*`/`DOC-*`/`R1-CANONICAL` = the implemented rows in this §4 · `DOC-SIZE-LIMIT`/`DOC-ROLLBACK-FLAG` = implemented 062 doc-config items · `TEST-COVERAGE`/`DOC-ACCURACY`/`MIG-ROLLBACK-DOC` = open Stage-2 test/doc items.
 
 ### Implemented (this branch) — evidence type per row (G0-09)
 
@@ -104,6 +106,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | RECUR-BLOCKED | P1 | recurring | over-budget/no-doc recurring → durable blocked work item (not `request_id=NULL` audit) | Stage 8/9 | open |
 | HISTORY-PRESERVE | P1 | workflow | resubmit clears approver/comment/timestamps — target: new revision/cycle, retain prior | Stage 5/9 | open |
 | FISCAL-POLICY | P2 | budget | document + freeze `budget_period` at submit (not inferred from created_at forever) | Stage 8 (doc) | open |
+| S1-GUARD-COUPLE | P1 | deploy | **(G0-F3)** command-coupled environment guard — `scripts/env-guard.mjs` binds host-canonicalisation to the E2E `--url` command path; staging/deploy safety must not depend on invoking a specific command. Decouple into a standalone guard invariant | Stage 1 | open |
 | SUPPLIER-ENV | P1 | deploy | `supplier-quote.html` still embeds prod project — route via `/api/portal-config` | Stage 1 | open |
 | PAGES-DEPLOY | P1 | deploy | GitHub Pages publishes System-3 portal that needs `/api/portal-config` (404 there) — exclude or disable | Stage 1 | open |
 | BOOT-STATES | P2 | UI | accessible bootstrap states (aria-busy/timeout/retry/offline/fatal focus) | Stage 10 | open |
@@ -111,6 +114,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | SCHED-DECOUPLE | P1 | ops | **(G0-07)** `portal-outbox-drain.js:109` returns on missing/invalid Resend key **before** SLA (`:116`) + recurring (`:119`) → **SLA escalation + recurring generation stop.** This is separable from the email freeze: decoupling `portal-scheduler` (SLA+recurring) from `portal-email-drain` changes **no email delivery behavior**. Owner froze email; owner did **not** accept loss of SLA/recurring execution | Stage 12 (scheduler split, email-neutral) — else record launch impact + request explicit owner risk acceptance | **open (not deferred)** |
 | DOA-THRESHOLD-CONFLICT | P1 | workflow/config | **(G0-05) OWNER CONFIRMED 2026-07-29: authoritative small-committee band = 25,001–125,000.** Code/seed `portal_doa` currently uses **150,000** (`portal-standalone.sql:1832`) → **must be changed 150,000 → 125,000** in Stage 5 (seed edit + migration 063+ region), with boundary tests at **125,000 ±1**. **Not changed now** — implementation is gated (owner chose "hold for recheck") | Stage 5 | **owner-confirmed (125,000); implementation gated** |
 | CRON-SECRET | P2 | ops | cron secret via `?key=` query string + non-constant-time compare | Stage 12 | open |
+| AI-PROXY-ABUSE | P1 | deploy/security | **(G0-F4)** `functions/api/ai.js` shared Gemini **OCR** proxy for System 1 (`register.html`) + System 2 (`index/requests/rfq.html`) — **not** System 3. Key concealed server-side + model allowlist, **but abuse controls incomplete**: GET has no auth/origin check and calls the provider; POST relies only on forgeable Origin/Referer; no JWT/Turnstile/rate-limit/per-user quota/cost cap; 16 MiB body; size check only fires when `Content-Length` present (chunked bypass). Publicly-deployable quota/cost-abuse surface (no procurement data). **Actions:** add auth/rate/quota + deployment ownership; determine per-deployment need and **disable/exclude where unused**; tests for unauthenticated GET/POST, forged Origin, body limit without Content-Length, rate limiting, allowed deployment ownership | Stage 2/12 | open |
 
 ### Program stages (documents/implementation not yet started)
 | ID | Stage | Scope | Status |
@@ -388,7 +392,7 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 |---|---|---|
 | G0-01 migration history | `MIGRATION_HISTORY_RECONCILIATION.md` + corrected §1/§2; **live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** — no production change (read-only) | **CLOSED (live-verified)** |
 | G0-02 per-requirement rows | §7 requirements register (S4–S15, one row per mandate) | **done** |
-| G0-03 complete artifact inventory | `ARTIFACT_INVENTORY.md` (one row per artifact) | **done** |
+| G0-03 complete artifact inventory | **`ARTIFACT_INVENTORY_APPENDIX.md`** (one row per artifact — the actual enumeration; `ARTIFACT_INVENTORY.md` is the narrative companion) | **done** |
 | G0-04 phase-matrix contract | `RETURN_ROUTING_PHASE_MATRIX.md` expanded (all columns + committee/GM/payment-prep/approval/execution/partial-receipt/rejected-receipt/return-debit/cancellation/amendment rows) | **done** |
 | G0-05 DoA threshold conflict | **Owner confirmed authoritative = 125,000 (2026-07-29).** Recorded; seed change 150k→125k + boundary tests deferred to Stage 5 (owner chose hold-for-recheck) | **resolved (value confirmed; impl gated)** |
 | G0-06 email-freeze compat | §9 above + patch in `RETURN_ROUTING_TARGET_MODEL.md` | **done** |
@@ -414,4 +418,17 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 | G0-R8 closure mechanics | Gate checklist → 125k; this single closure commit; closure table returned; PR draft; no Stage-1/063; no DB/config/storage change | done |
 
 **Remaining to clear Gate 0:** owner's independent recheck of this commit. G0-01/G0-05 resolved; all G0-R consistency items corrected. Implementation (Stage 1 / migration 063 / DoA seed 150→125) stays gated per owner "hold for recheck."
+
+## 12. G0-F1…G0-F4 closure table (owner recheck of `1e44e33`)
+
+Documentation-accuracy corrections from the owner's independent recheck of `1e44e33`. **The G0 gate/closure checklist is NOT flipped to passed — per owner, it is updated only after this recheck is accepted.**
+
+| ID | Recheck note | Correction (this commit) | State |
+|---|---|---|---|
+| G0-F1 | Ledger head `1b97cc4`/"updated each commit" vs reviewed head `1e44e33`; G0-03 pointed at narrative not appendix | Head line → **source snapshot `1e44e33`** (not auto-updated); §1 truth header → `1e44e33`; appendix intro snapshot → `1e44e33`; **G0-03 closure now points at `ARTIFACT_INVENTORY_APPENDIX.md`** (the one-row enumeration). Gate/closure table intentionally left un-flipped pending acceptance | corrected — awaiting recheck |
+| G0-F2 | Appendix asserted the same "RLS on; SELECT scoped / writes deny-by-default via guards" for **every** table (false for server-only/service-role tables); functions got placeholder "authenticated (or per REVOKE/GRANT)" | **Source-derived** per-table access class (verified from RLS-enable loop `:1680`, auth_all loop `:1696`, each policy/REVOKE/GRANT): server-only no-policy (`portal_email_tokens`/`portal_idempotency`/`portal_supplier_tokens`), service-role-only (`portal_invitations`/`portal_outbox`), own-row (`portal_notifications`), append-only (`portal_audit`), scoped/perm-gated/auth_all for the rest — guard claimed only where source confirms. **Per-function grant class** from `REVOKE … FROM …`: service_role-only (14) / authenticated+service_role / trigger-only / PUBLIC-default. Exhaustive per-signature + Stage-2 least-privilege review kept explicitly open | corrected — awaiting recheck |
+| G0-F3 | Thread appendix: commit blank on ~100/102, findings truncated, generic "CDX3/CDX4 fixed" bucket misclassified known-open items | Regenerated: **reviewed commit = `not returned by API`** (the review API does not return it — honest, never blank); **findings preserved** (title + explanation, badge/markup stripped); **one stable canonical ID per thread** with owner-named opens carrying exact IDs (`S1-GUARD-COUPLE`, `BOOT-STATES/S10-STATES`, `PAY-DOCS-COMPLETE/S8-PAY-EVID`, `RECUR-BLOCKED/S8-RECUR-BLOCK`, `RET-EXPENSE-EDIT/S8-EXPENSE-EDIT`, `PAY-ROLES` → **open**); `fixed @<sha>` carries the fixing commit; **0 untriaged**. Alias table added to §4 so every ID resolves | corrected — awaiting recheck |
+| G0-F4 | `ai.js` classified too positively ("secure … NOT wired") | Reclassified: **System-1/2 OCR proxy** (`register.html` + `index/requests/rfq.html`), **not** System 3; **"key concealed, abuse controls incomplete"** (GET unauth; POST forgeable Origin/Referer; no JWT/Turnstile/rate-limit/quota/cost cap; 16 MiB; Content-Length-gated size check → chunked bypass). New ledger risk item **`AI-PROXY-ABUSE` (Stage 2/12)** with actions: add auth/rate/quota + deployment ownership, disable/exclude where unused, and the owed tests (unauth GET/POST, forged Origin, body-limit-without-Content-Length, rate limit, deployment ownership) | corrected — awaiting recheck |
+
+**Gate 0 remains HELD.** No Stage 1, no migration 063, no DoA seed change, no production/DB/config/storage change. One focused documents-only commit closes G0-F1…G0-F4; the gate flips only when the owner accepts this recheck.
 

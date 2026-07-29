@@ -32,7 +32,7 @@ Counts (**distinct**): **11 HTML pages · 19 API endpoints + 3 shared modules ·
 | `portal-register.js`,`portal-signup.js` | 3 | portal register/signup backend | POST | token/gate | `portal_users` | W | `PORTAL_SUPABASE_*` | SRC | naming (portal-signup) |
 | `reg-doc.js` | 1 | server-side registration upload (file-guard) | POST | origin + reg_id allowlist | `supplier-docs` | W | `SUPABASE_SERVICE_ROLE_KEY` | EP (7 assertions) | depends SEC-06 |
 | `notify.js`,`verify.js`,`invite-supplier.js`,`admin-users.js`,`pr-action.js` | 1/2 | legacy email/verify/admin/PR-action | POST/GET | legacy | `proc_*`/`pr_*` | R/W | `SUPABASE_*`, `RESEND_API_KEY` | SRC | preserve (OWN-SYS12) |
-| `ai.js` | **shared** | secure Google Gemini proxy (keeps key server-side) | GET/POST | none (no portal_*/proc_* data) | none | R | `GEMINI_API_KEY` only; model allowlist | SRC | **classified: shared AI proxy; NOT wired to System-1/2/3 data or the governance workflow (owner: no AI before deterministic integrity)** |
+| `ai.js` | **System 1 + 2** | Google Gemini **OCR** proxy (keeps key server-side) | GET/POST | **GET: none; POST: forgeable Origin/Referer only** | none (no portal_*/proc_* data) | R | `GEMINI_API_KEY` only; model allowlist | SRC | **AI-PROXY-ABUSE (Stage 2/12):** used by `register.html`(S1) + `index/requests/rfq.html`(S2) OCR, not S3. Key concealed **but abuse controls incomplete** — no JWT/Turnstile/rate-limit/quota/cost cap; 16 MiB body; Content-Length-gated size check (chunked bypass). Determine per-deployment need + disable where unused; tests owed |
 | `_portal-shared.js` | 3 | portal email/util module | import | — | — | — | `NOTIFY_FROM/REPLY_TO/PUBLIC_ORIGIN/RESEND_API_KEY`(shared) | SRC | E1 |
 | `_pr-shared.js` | 2 | legacy PR email module | import | — | — | — | `SUPABASE_*`, `RESEND_*` | — | preserve |
 | `_file-guard.js` | shared | magic-byte/polyglot/active-content guard | import | — | — | — | — | EP (18) | — |
@@ -63,4 +63,4 @@ Guard triggers (deny-by-default write control): `*_guard` on `portal_offers`/`po
 | Storage `supplier-docs` | 1 | supplier registration docs | `reg-doc.js` / register.html | service key | SEC-06 |
 
 ## G. Known coverage gaps (rollup)
-No E2E/CONC/LIVE-behavioral evidence on this branch. Open P0: DOC-RECEIPT, SEC-06, E2E. Open P1s per ledger §4. `ai.js` **now classified** (shared Gemini proxy, above). **Full enumeration:** `ARTIFACT_INVENTORY_APPENDIX.md`.
+No E2E/CONC/LIVE-behavioral evidence on this branch. Open P0: DOC-RECEIPT, SEC-06, E2E. Open P1s per ledger §4. `ai.js` reclassified (**System-1/2 OCR proxy; key concealed, abuse controls incomplete → ledger `AI-PROXY-ABUSE`, Stage 2/12** — not "secure"). **Full enumeration + source-derived access classes:** `ARTIFACT_INVENTORY_APPENDIX.md`.
