@@ -187,8 +187,10 @@ BEGIN
     SELECT * INTO v_pay FROM portal_payments WHERE id = p_payment_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'الدفعة غير موجودة'; END IF;
     IF v_pay.request_id <> p_request_id THEN RAISE EXCEPTION 'الدفعة لا تخصّ هذا الطلب'; END IF;
-    IF NOT (portal_has_perm('can_disburse') OR portal_has_perm('can_see_finance') OR portal_is_admin()) THEN
-      RAISE EXCEPTION 'لا صلاحية لإرفاق مستند دفعة (يتطلّب صلاحية مالية/صرف)'; END IF;
+    -- (Codex round-4) can_see_finance للقراءة فقط — إرفاق مستند دفعة يتطلّب can_disburse (أو أدمن)، ولا يُعدَّل مستند دفعة مُبطَلة.
+    IF NOT (portal_has_perm('can_disburse') OR portal_is_admin()) THEN
+      RAISE EXCEPTION 'لا صلاحية لإرفاق مستند دفعة (يتطلّب can_disburse)'; END IF;
+    IF coalesce(v_pay.status,'') = 'voided' THEN RAISE EXCEPTION 'لا تُعدَّل مستندات دفعة مُبطَلة'; END IF;
     IF p_storage_key NOT LIKE 'docs/%/' || p_request_id || '/%' THEN
       RAISE EXCEPTION 'مفتاح التخزين لا يقع ضمن مجال هذا الطلب'; END IF;
   END IF;
@@ -221,11 +223,13 @@ GRANT EXECUTE ON FUNCTION portal_attach_document(text,text,text,text,text,text,t
 -- ── (6) إزالة مستند (قبل التقديم فقط — مسودّة) ──────────────────────────────
 CREATE OR REPLACE FUNCTION portal_remove_document(p_doc_id bigint)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
-DECLARE v_me text := portal_username(); v_doc portal_request_documents%ROWTYPE; v_req portal_requests%ROWTYPE;
+DECLARE v_me text := portal_username(); v_doc portal_request_documents%ROWTYPE; v_req portal_requests%ROWTYPE; v_del bigint;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
-  SELECT * INTO v_doc FROM portal_request_documents WHERE id = p_doc_id;
+  SELECT * INTO v_doc FROM portal_request_documents WHERE id = p_doc_id FOR UPDATE;   -- قفل يُسلسِل الحذف المتزامن
   IF NOT FOUND THEN RAISE EXCEPTION 'المستند غير موجود'; END IF;
+  -- (Codex round-4) مستندات الدفعة تُدار عبر مسار مالي منفصل — لا يحذفها المُقدّم/المحرّر.
+  IF v_doc.payment_id IS NOT NULL THEN RAISE EXCEPTION 'مستندات الدفعة تُدار عبر مسار مالي منفصل'; END IF;
   SELECT * INTO v_req FROM portal_requests WHERE id = v_doc.request_id FOR UPDATE;
   -- (Codex round-3) الحذف الصلب في المسودّة فقط — بعد الإرجاع يُستبدَل بإصدار جديد (يبقى القديم مرئيّاً).
   IF v_req.status <> 'draft' THEN
@@ -233,8 +237,9 @@ BEGIN
   IF NOT (v_doc.uploaded_by = v_me OR v_req.requester = v_me OR portal_is_admin()) THEN
     RAISE EXCEPTION 'لا صلاحية لحذف هذا المستند'; END IF;
   PERFORM set_config('app.portal_transition', '1', true);
-  DELETE FROM portal_request_documents WHERE id = p_doc_id;
+  DELETE FROM portal_request_documents WHERE id = p_doc_id RETURNING id INTO v_del;   -- (Codex round-4) تدقيق واحد لحذف فعليّ واحد
   PERFORM set_config('app.portal_transition', '0', true);
+  IF v_del IS NULL THEN RAISE EXCEPTION 'المستند أُزيل بالفعل — أعد التحميل'; END IF;
   PERFORM portal_audit_write(v_doc.request_id, 'document_removed', v_me, 'portal',
     jsonb_build_object('doc_id', p_doc_id, 'type', v_doc.document_type));
   RETURN jsonb_build_object('ok', true);
@@ -257,6 +262,8 @@ BEGIN
   -- (Codex round-3) الاستبدال حصراً على الطلب المُعاد (returned) — لا تغيير للدليل بعد الاعتماد/الدفع/الإقفال.
   IF v_req.status <> 'returned' THEN
     RAISE EXCEPTION 'لا يُستبدَل المستند إلا للطلب المُعاد (returned) — الدليل المُعتمَد ثابت'; END IF;
+  -- (Codex round-4) مستندات الدفعة (payment_id) دليل ماليّ — لا يستبدلها المُقدّم/المحرّر عبر هذا المسار.
+  IF v_old.payment_id IS NOT NULL THEN RAISE EXCEPTION 'مستندات الدفعة تُدار عبر مسار مالي منفصل'; END IF;
   IF NOT (v_req.requester = v_me OR portal_has_perm('can_edit') OR portal_is_admin()) THEN
     RAISE EXCEPTION 'لا صلاحية لاستبدال هذا المستند'; END IF;
   IF p_mime_type NOT IN ('application/pdf','image/jpeg','image/png') THEN
@@ -288,7 +295,7 @@ GRANT EXECUTE ON FUNCTION portal_replace_document(bigint,text,text,text,text,tex
 CREATE OR REPLACE FUNCTION portal_submit_expense(p_request_id text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 DECLARE v_me text := portal_username(); v_req portal_requests%ROWTYPE; v_n int; v_docs int;
-        v_year int := EXTRACT(YEAR FROM now())::int; v_budget numeric; v_committed numeric; v_enforce numeric;
+        v_year int; v_budget numeric; v_committed numeric; v_enforce numeric; v_ben portal_beneficiaries%ROWTYPE;
 BEGIN
   IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
@@ -296,8 +303,25 @@ BEGIN
   IF v_req.req_type <> 'direct_expense' THEN RAISE EXCEPTION 'هذه الدالة للصرف المباشر فقط'; END IF;
   -- (Codex round-3) مسار مُوحَّد مُبوَّب بالمستندات للتقديم وإعادة التقديم بعد الإرجاع.
   IF v_req.status NOT IN ('draft','returned') THEN RAISE EXCEPTION 'الطلب ليس مسودّة/مُعاداً (الحالة: %)', v_req.status; END IF;
-  IF NOT (v_req.requester = v_me OR portal_has_perm('can_edit') OR portal_is_admin()) THEN
-    RAISE EXCEPTION 'لا صلاحية لتقديم هذا الطلب'; END IF;
+  -- (Codex round-4/R1) سلطة التقديم = المُقدّم أو الأدمن فقط (فصلها عن can_edit الذي يعدّل المحتوى نيابةً).
+  IF NOT (v_req.requester = v_me OR portal_is_admin()) THEN
+    RAISE EXCEPTION 'التقديم يقتصر على مُقدّم الطلب أو الأدمن'; END IF;
+  -- (Codex round-4) السنة المالية من created_at (اتّساق مع portal_budget_committed) لا now() — يمنع اختلاف عبر السنة.
+  v_year := EXTRACT(YEAR FROM v_req.created_at)::int;
+
+  -- (Codex round-4) إعادة التحقّق من المستفيد المربوط وقت التقديم (قد يُعطَّل/يتغيّر آيبانه بعد الإنشاء).
+  IF v_req.beneficiary_id IS NOT NULL THEN
+    SELECT * INTO v_ben FROM portal_beneficiaries WHERE id = v_req.beneficiary_id FOR UPDATE;
+    IF NOT FOUND OR NOT v_ben.active THEN RAISE EXCEPTION 'المستفيد المربوط غير نشط — حدِّث الطلب قبل التقديم'; END IF;
+    IF v_req.expense_method = 'bank' THEN
+      IF v_ben.iban IS NULL THEN RAISE EXCEPTION 'المستفيد المربوط بلا آيبان مُعتمَد'; END IF;
+      PERFORM set_config('app.portal_transition','1',true);
+      UPDATE portal_requests SET expense_details = coalesce(expense_details,'{}'::jsonb)
+        || jsonb_build_object('iban', v_ben.iban, 'account_name', coalesce(v_ben.account_name, v_ben.name), 'iban_source','master')
+        WHERE id = p_request_id;
+      PERFORM set_config('app.portal_transition','0',true);
+    END IF;
+  END IF;
 
   -- (A) التحقّق الإلزامي: ≥1 مستند داعم نشط عند تفعيل الإلزام (افتراضي 1).
   IF portal_setting_num('expense_docs_required', 1) >= 1 THEN
@@ -324,13 +348,17 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
+  -- (Codex round-4) إبطال رموز الاعتماد بالبريد القديمة قبل إعادة بناء السلسلة (يمنع رابطاً قديماً يعتمد دون مراجعة الأدلّة الجديدة).
+  DELETE FROM portal_email_tokens WHERE request_id = p_request_id;
   v_n := portal_build_chain(p_request_id, 'disbursement');
   IF v_n = 0 THEN
     INSERT INTO portal_approvals(request_id, cycle, seq, stage_label, resolver, role_key, approver)
       VALUES (p_request_id, 'disbursement', 1, 'اعتماد الصرف', NULL, 'can_approve_disbursement', NULL);
     v_n := 1;
   END IF;
-  UPDATE portal_requests SET status = 'in_review', current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
+  -- (Codex round-4) ضبط الطور disbursement صراحةً (المُعاد من الدفع قد يكون phase=payment) كي تستنتج
+  -- portal_pr_transition/portal_run_sla الدورة الصحيحة (disbursement) لا need.
+  UPDATE portal_requests SET status = 'in_review', phase = 'disbursement', current_seq = 1, updated_at = now(), updated_by = v_me WHERE id = p_request_id;
   PERFORM set_config('app.portal_transition', '0', true);
 
   PERFORM portal_audit_write(p_request_id, 'expense_submitted', v_me, 'portal',
@@ -415,10 +443,12 @@ BEGIN
             WHERE request_id = p_request_id AND active AND payment_id IS NULL) < 1 THEN
     RAISE EXCEPTION 'لا يمكن إعادة تقديم طلب الصرف بلا مستند داعم واحد صالح على الأقل';
   END IF;
-  v_cycle := CASE WHEN v_req.phase = 'disbursement' THEN 'disbursement' ELSE 'need' END;
+  -- (Codex round-4) الدورة من نوع الطلب (الصرف المباشر=disbursement) لا الطور — المُعاد من الدفع phase=payment.
+  v_cycle := CASE WHEN v_req.req_type = 'direct_expense' THEN 'disbursement' ELSE 'need' END;
   v_phase := CASE WHEN v_cycle = 'disbursement' THEN 'disbursement' ELSE 'requisition' END;
 
   PERFORM set_config('app.portal_transition','1',true);
+  DELETE FROM portal_email_tokens WHERE request_id = p_request_id;   -- (Codex round-4) إبطال الرموز القديمة قبل إعادة البناء
   UPDATE portal_approvals SET decision='pending', approver=NULL, comment=NULL, acted_at=NULL, channel='portal'
    WHERE request_id = p_request_id AND cycle = v_cycle;
   SELECT min(seq) INTO v_first FROM portal_approvals WHERE request_id = p_request_id AND cycle = v_cycle;

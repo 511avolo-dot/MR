@@ -4767,15 +4767,17 @@ async function pa_docReplaceDo(){
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر الاستبدال'),'err'); }
 }
 /* تقديم مسودّة الصرف بعد استيفاء المستندات — لا إشعار إلا بعد نجاح التقديم الفعلي */
+function pa_expDocsRequired(){ try{ return !(typeof PSET!=='undefined'&&PSET&&Number(PSET.expense_docs_required)===0); }catch(e){ return true; } }
 async function pa_submitExpenseDraft(id){
   var r=(REQS||[]).find(function(x){return x.id===id;});
   var nActive=r?((r.docs||[]).filter(function(d){return d.active&&!d.paymentId;}).length):0;
-  if(nActive<1){ toast('أرفِق مستنداً داعماً واحداً على الأقل قبل التقديم','err'); return; }
+  if(pa_expDocsRequired() && nActive<1){ toast('أرفِق مستنداً داعماً واحداً على الأقل قبل التقديم','err'); return; }
   var btn=$('pa-exp-submit'); if(btn) btn.disabled=true;
   try{
     var res=await pa_rpc('portal_submit_expense',{ p_request_id:id });
     toast('قُدِّم طلب الصرف للاعتماد','ok');
-    try{ pa_notify('request',id,'submitted'); pa_notify('disbursement',id,'pending'); }catch(_e){}
+    /* (Codex round-4) إشعار دورة الصرف فقط (واعٍ بالدورة) — لا نُرسل request/submitted (يصكّ رمزاً بدورة need خاطئة ويُكرِّر البريد). */
+    try{ pa_notify('disbursement',id,'pending'); }catch(_e){}
     await loadAll(); CURRENT=id; VIEW='detail'; render();
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر التقديم'),'err'); }
 }
@@ -5865,6 +5867,8 @@ function pa_expenseDetail(r){
   var canSubmit=(isDraft||isReturned) && (r.requester===ME || isAdmin() || !!((accessOf(ME)||{}).can||{}).edit);
   if(isDraft||isReturned){
     var nActive=(r.docs||[]).filter(function(d){return d.active&&!d.paymentId;}).length;
+    var docsReq=(typeof pa_expDocsRequired==='function')?pa_expDocsRequired():true;   /* (Codex round-4) احترام إعداد الإلزام */
+    var blockSubmit=(docsReq && nActive<1);
     var bannerTxt=isReturned
       ? '<b>مُعاد للتعديل</b> — عدّل المستندات (يبقى القديم في السجلّ) ثم أعِد التقديم لسلسلة الاعتماد.'
       : '<b>مسودّة</b> — أرفِق المستندات الداعمة ثم قدِّم الطلب لسلسلة الاعتماد. لن يُخطَر المعتمِدون قبل التقديم الفعليّ.';
@@ -5872,8 +5876,8 @@ function pa_expenseDetail(r){
     body = head + banner + pa_docCenter(r, true);
     if(canSubmit){
       body += '<div class="card"><div style="display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap">'
-        + (nActive<1?'<span class="muted" style="font-size:12px">أرفِق مستنداً داعماً واحداً على الأقل لتفعيل التقديم.</span>':'')
-        + '<button class="btn btn-gold" id="pa-exp-submit" onclick="pa_submitExpenseDraft(\''+esc(r.id)+'\')"'+(nActive<1?' disabled':'')+'>'+ic('check',15)+(isReturned?' إعادة التقديم للاعتماد':' تقديم الطلب للاعتماد')+'</button>'
+        + (blockSubmit?'<span class="muted" style="font-size:12px">أرفِق مستنداً داعماً واحداً على الأقل لتفعيل التقديم.</span>':'')
+        + '<button class="btn btn-gold" id="pa-exp-submit" onclick="pa_submitExpenseDraft(\''+esc(r.id)+'\')"'+(blockSubmit?' disabled':'')+'>'+ic('check',15)+(isReturned?' إعادة التقديم للاعتماد':' تقديم الطلب للاعتماد')+'</button>'
       +'</div></div>';
     }
     if(isReturned){ body += pa_disbChainPanel(r); }   /* عرض السلسلة/سبب الإرجاع */

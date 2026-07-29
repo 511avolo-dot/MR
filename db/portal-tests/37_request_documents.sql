@@ -16,7 +16,8 @@ BEGIN
   DELETE FROM portal_users WHERE username LIKE 'd7_%';
   INSERT INTO portal_users(username,email,display_name,role,permissions,department_id) VALUES
     ('d7_req','d7_req@aldeyabi.com','مقدّم','user','{"can_create":true}','GA'),
-    ('d7_oth','d7_oth@aldeyabi.com','آخر','user','{"can_create":true}','OPS');
+    ('d7_oth','d7_oth@aldeyabi.com','آخر','user','{"can_create":true}','OPS'),
+    ('d7_edit','d7_edit@aldeyabi.com','محرّر','user','{"can_create":true,"can_edit":true}','GA');
   UPDATE portal_settings SET value = value || '{"expense_docs_required":1,"budget_enforce":0}'::jsonb WHERE key='portal_settings';
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
@@ -194,5 +195,41 @@ BEGIN
   IF portal_can_see_request(v_id) THEN RAISE EXCEPTION 'DD8 fail: مستخدم قسم آخر يرى الطلب'; END IF;
   RAISE NOTICE 'PASS DD8 مستخدم قسم آخر لا يرى الطلب/مستنداته (RLS predicate)';
 
-  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD14 = 14/14 PASS ════';
+  -- ── round-4: تقديم بسلطة المُقدّم/الأدمن + ضبط الطور + إبطال الرموز ──
+  PERFORM set_config('request.jwt.claims','{"email":"d7_req@aldeyabi.com","role":"authenticated"}',true);
+  v_r := portal_create_expense_draft('جهة2','2000','custody','خدمة','GA',(now()+interval '4 day')::date,'{"custody_to":"d7_req"}'::jsonb,NULL,NULL);
+  v_id := v_r->>'id'; v_ns := 'docs/reqdoc/'||v_id||'/';
+  v_r := portal_attach_document(v_id,'memo',v_ns||'m.pdf','application/pdf','مذكّرة',NULL,'m.pdf',300,NULL,NULL,NULL);
+
+  -- DD15: محرّر (can_edit) غير المُقدّم لا يملك سلطة التقديم (فصل التحرير عن التقديم)
+  PERFORM set_config('request.jwt.claims','{"email":"d7_edit@aldeyabi.com","role":"authenticated"}',true);
+  BEGIN
+    PERFORM portal_submit_expense(v_id);
+    RAISE EXCEPTION 'DD15 fail: قبِل محرّر غير المُقدّم التقديم';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD15 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%يقتصر على مُقدّم%' THEN RAISE EXCEPTION 'DD15 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD15 التقديم مقصور على المُقدّم/الأدمن (لا can_edit)';
+
+  -- DD16: المُقدّم يقدّم ⇒ in_review + phase=disbursement (استنتاج الدورة سليم)
+  PERFORM set_config('request.jwt.claims','{"email":"d7_req@aldeyabi.com","role":"authenticated"}',true);
+  v_r := portal_submit_expense(v_id);
+  IF (v_r->>'status') <> 'in_review' THEN RAISE EXCEPTION 'DD16 fail: لم يُقدَّم'; END IF;
+  IF (SELECT phase FROM portal_requests WHERE id=v_id) <> 'disbursement' THEN RAISE EXCEPTION 'DD16 fail: الطور ليس disbursement'; END IF;
+  RAISE NOTICE 'PASS DD16 التقديم يضبط phase=disbursement (استنتاج دورة صحيح)';
+
+  -- DD17: إبطال رموز البريد القديمة عند إعادة التقديم بعد الإرجاع
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_requests SET status='returned' WHERE id=v_id;
+  INSERT INTO portal_email_tokens(token,request_id,kind,seq,approver,expires_at)
+    VALUES ('d7-stale-tok', v_id, 'approval', 1, 'someone', now()+interval '3 day');
+  PERFORM set_config('app.portal_transition','0',true);
+  PERFORM portal_submit_expense(v_id);   -- إعادة التقديم (يقبل returned)
+  IF EXISTS (SELECT 1 FROM portal_email_tokens WHERE request_id=v_id) THEN
+    RAISE EXCEPTION 'DD17 fail: رمز بريد قديم بقي بعد إعادة التقديم'; END IF;
+  RAISE NOTICE 'PASS DD17 إعادة التقديم تُبطِل رموز البريد القديمة (لا اعتماد برابط قديم)';
+
+  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD17 = 17/17 PASS ════';
 END $t$;

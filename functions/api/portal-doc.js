@@ -81,16 +81,20 @@ async function canSeeRequest(env, base, jwt, reqId) {
     return r.ok && (await r.json()) === true;
   } catch (_) { return false; }
 }
-// (Codex round-3) قبل كتابة كائن reqdoc إلى R2: تأكّد أنّ الطلب موجود ومرئيّ للمُستدعي وفي حالة
-// مسودّة/مُعاد — يمنع تراكم كائنات يتيمة تحت معرّفات طلبات عشوائية أو لا يملكها المُستدعي.
-async function reqdocTargetOk(env, base, jwt, reqId) {
+// (Codex round-3/round-4) قبل كتابة كائن reqdoc إلى R2: تأكّد أنّ الطلب موجود ومرئيّ للمُستدعي،
+// وفي حالة مسودّة/مُعاد، **وأنّ المُستدعي هو المُقدّم أو يملك can_edit** — يمنع تراكم كائنات يتيمة
+// تحت معرّفات طلبات لا يملكها المُستدعي (مستخدم can_create برؤية قطاع/كلّ). المطابقة النهائية في الـRPC.
+async function reqdocTargetOk(env, base, jwt, reqId, username) {
   try {
     if (!(await canSeeRequest(env, base, jwt, reqId))) return false;
-    const r = await fetch(`${base}/rest/v1/portal_requests?id=eq.${encodeURIComponent(reqId)}&select=status`, { headers: svcHeaders(env) });
+    const r = await fetch(`${base}/rest/v1/portal_requests?id=eq.${encodeURIComponent(reqId)}&select=status,requester`, { headers: svcHeaders(env) });
     if (!r.ok) return false;
     const rows = await r.json();
     if (!Array.isArray(rows) || !rows.length) return false;
-    return rows[0].status === 'draft' || rows[0].status === 'returned';
+    const row = rows[0];
+    if (row.status !== 'draft' && row.status !== 'returned') return false;
+    if (row.requester === username) return true;                 // المُقدّم نفسه
+    return await hasPerm(env, base, jwt, 'can_edit');            // أو محرّر مخوَّل (تعديل نيابةً)
   } catch (_) { return false; }
 }
 // تحقّق أنّ للمفتاح صفّاً في portal_request_documents (لعرض reqdoc). الوجود يكفي (لا شرط active):
@@ -127,9 +131,9 @@ export async function onRequestPost({ request, env }) {
 
   const reqId = String(url.searchParams.get('request_id') || '').trim();
   if (!REQID_RE.test(reqId)) return json({ error: 'معرّف طلب غير صالح' }, 400);
-  // (Codex round-3) مستند طلب داعم: تحقّق من الطلب الهدف (وجود/رؤية/حالة مسودّة-مُعاد) قبل الكتابة إلى R2.
-  if (kind === 'reqdoc' && !(await reqdocTargetOk(env, base, jwt, reqId))) {
-    return json({ error: 'طلب غير صالح لإرفاق مستند (غير مرئي لك أو ليس مسودّة/مُعاداً)' }, 403);
+  // (Codex round-3/4) مستند طلب داعم: تحقّق من الطلب الهدف (وجود/رؤية/حالة + ملكية المُقدّم/can_edit) قبل الكتابة إلى R2.
+  if (kind === 'reqdoc' && !(await reqdocTargetOk(env, base, jwt, reqId, vs.username))) {
+    return json({ error: 'طلب غير صالح لإرفاق مستند (غير مرئي لك، أو ليس مسودّة/مُعاداً، أو لست مُقدّمه/محرّراً)' }, 403);
   }
 
   const buf = await request.arrayBuffer();
