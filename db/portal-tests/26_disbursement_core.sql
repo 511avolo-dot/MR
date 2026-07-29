@@ -23,6 +23,9 @@ BEGIN
     ('d6_fin',  'd6_fin@aldeyabi.com',  'المدير المالي','user', '{"can_approve_finance":true,"can_see_finance":true}', 'GA'),
     ('d6_gm',   'd6_gm@aldeyabi.com',   'المدير العام', 'user', '{"can_manage_users":true}', 'GA'),
     ('d6_bank', 'd6_bank@aldeyabi.com', 'مسؤول البنك',  'user', '{"can_disburse":true}', 'GA');
+  -- هذا الاختبار يفحص محرّك الصرف (السلسلة/التنفيذ)؛ نُطفئ إلزام مستندات 062 هنا
+  -- (تدفّق المسودّة+المستندات مُغطّى في 37) كي يبقى portal_create_expense ذرّياً.
+  UPDATE portal_settings SET value = value || '{"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
 
@@ -35,7 +38,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"d6_acc@aldeyabi.com","role":"authenticated"}',true);
   v_r := portal_create_expense('مؤسسة الكهرباء', 5000, 'bank', 'سداد فاتورة كهرباء', 'GA',
            (now()+interval '5 day')::date,
-           '{"iban":"SA1234567890123456789012","account_name":"مؤسسة الكهرباء"}'::jsonb, 'عاجل');
+           '{"iban":"SA1234567890123456789012","account_name":"مؤسسة الكهرباء","iban_manual_reason":"اختبار محرّك الصرف"}'::jsonb, 'عاجل');
   v_id := v_r->>'id';
   SELECT status, phase, req_type INTO v_status, v_phase, v_type FROM portal_requests WHERE id=v_id;
   IF v_type <> 'direct_expense' THEN RAISE EXCEPTION 'E1a fail: النوع %', v_type; END IF;
@@ -167,7 +170,7 @@ BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"d6_acc@aldeyabi.com","role":"authenticated"}',true);
   v_r := portal_create_expense('مورّد قرطاسية', 1200, 'bank', 'قرطاسية', 'GA',
            (now()+interval '4 day')::date,
-           '{"iban":"SA9999999999999999999999","account_name":"مورّد قرطاسية"}'::jsonb, NULL);
+           '{"iban":"SA9999999999999999999999","account_name":"مورّد قرطاسية","iban_manual_reason":"اختبار"}'::jsonb, NULL);
   v_id := v_r->>'id';
   SELECT count(*) INTO v_n FROM portal_approvals WHERE request_id=v_id AND cycle='disbursement';
   IF v_n <> 2 THEN RAISE EXCEPTION 'E4 fail: توقّعت مرحلتين حصلت %', v_n; END IF;

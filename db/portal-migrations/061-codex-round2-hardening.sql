@@ -231,13 +231,12 @@ REVOKE ALL ON FUNCTION portal_recurring_run() FROM anon, PUBLIC, authenticated;
 GRANT EXECUTE ON FUNCTION portal_recurring_run() TO service_role;
 
 -- ═══════════════════════════════════════════════════════════════════════════
---  إجراء التراجع (Rollback) — تدقيق Codex: توفير مسار عكس آمن دون إعادة فتح الثغرات.
---  ⚠️ لا تُستعِد تعريفات 053/055 القديمة (تُعيد فتح AUTHZ-01 وتُلغي ضبط الميزانية).
---  للتراجع الآمن عن 061 مع الحفاظ على ثوابت الأمان: أعِد تطبيق تعريفات 060 (التي تحمل
---  ربط القسم بالمُنشئ + فحص ميزانية الصرف المتكرّر) — أي شغّل db/portal-migrations/060-*.sql.
---  إن لزم تعطيل فوري (fail-closed) لدالة مشبوهة أثناء نشر إصلاح أمامي:
+--  إجراء التراجع (Rollback) — **fail-closed أولاً** (تصحيح تدقيق Codex).
+--  ⚠️ لا تُعِد تطبيق 060 كتراجع: ذلك يُعيد فتح عيوب 061 (سباق الميزانية، التقريب غير
+--     المتّسق، لقطة المستفيد القديمة، قبول القسم غير النشط). وبالأولى لا تُستعِد 053/055.
+--  التراجع الآمن الوحيد هو **التعطيل fail-closed** حتى نشر إصلاح أمامي مُراجَع:
 --    REVOKE EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) FROM authenticated;
---    -- (portal_recurring_run خادميّة أصلاً؛ لإيقافها عطّل عامل الكرون portal-outbox-cron.)
---  ثم أعِد المنح بعد التحقّق:
+--    -- portal_recurring_run خادميّة (service_role)؛ أوقفها بتعطيل عامل الكرون portal-outbox-cron.
+--  يبقى النظام مُغلَقاً (لا إنشاء صرف مباشر) بدل العودة لسلوك هشّ؛ ثم بعد الإصلاح والتحقّق:
 --    GRANT EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) TO authenticated;
 -- ═══════════════════════════════════════════════════════════════════════════

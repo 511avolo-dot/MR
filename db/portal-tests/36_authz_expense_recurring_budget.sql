@@ -19,7 +19,8 @@ BEGIN
   INSERT INTO portal_users(username,email,display_name,role,permissions,department_id) VALUES
     ('az_ga','az_ga@aldeyabi.com','موظّف GA','user','{"can_create":true}','GA'),
     ('az_adm','az_adm@aldeyabi.com','أدمن','admin','{}','GA');
-  UPDATE portal_settings SET value = value || '{"budget_enforce":0}'::jsonb WHERE key='portal_settings';
+  -- يفحص ربط القسم/الميزانية عبر المسار الذرّي؛ نُطفئ إلزام المستندات (062) هنا.
+  UPDATE portal_settings SET value = value || '{"budget_enforce":0,"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
 

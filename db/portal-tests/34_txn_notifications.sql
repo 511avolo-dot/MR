@@ -11,6 +11,12 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $docsoff$ BEGIN
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_settings SET value = value || '{"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
+  PERFORM set_config('app.portal_transition','0',true);
+END $docsoff$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);

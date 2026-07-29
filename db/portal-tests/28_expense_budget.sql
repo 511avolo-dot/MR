@@ -22,7 +22,8 @@ BEGIN
     -- b8_ops في OPS: لاختبار «بلا ميزانية» ضمن قسمه (بعد AUTHZ-01: الصرف مقيَّد بقسم المُنشئ)
     ('b8_ops','b8_ops@aldeyabi.com','محاسب OPS','user','{"can_create":true}','OPS');
   -- صفّ الإعدادات موجود؛ نضبط vat=15 (افتراضي) ونُطفئ الإنفاذ ابتداءً
-  UPDATE portal_settings SET value = value || '{"budget_enforce":0}'::jsonb WHERE key='portal_settings';
+  -- هذا الاختبار يفحص الميزانية/الصلاحية عبر المسار الذرّي؛ نُطفئ إلزام المستندات (062) هنا.
+  UPDATE portal_settings SET value = value || '{"budget_enforce":0,"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
 
