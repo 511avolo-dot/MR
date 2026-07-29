@@ -611,6 +611,34 @@ JWT (كعب `auth.jwt()` مطابق لدلالات Supabase + مطابقة `port
 - **المراحل التالية (روadmap معتمَد):** 2) حوكمة متقدّمة (idempotency/إبطال saga/ميزانية الصرف/سجلّ مستفيدين) ·
   3) إنتاجية (اعتماد جماعي/صرف متكرّر) · 4) تقارير ومستندات (لوحة تحليلات/سند صرف PDF/تصدير Excel) · 5) تميّز الجوال والإشعارات.
 
+### 📎 المستندات الداعمة للصرف المباشر + جولة Codex الثالثة (2026-07-29، الفرع `audit/enterprise-certification-2026-07-27`، PR #74 مسودّة)
+**متطلّب المالك الإلزامي:** رفع مستندات داعمة إجباري لطلبات الصرف المباشر (نموذج مُطبَّع + مسودّة→رفع→تقديم +
+معاينة داخلية) عبر قاعدة/API/واجهة/اختبارات. **الهجرة 062 (`062-request-documents.sql`) — لم تُطبَّق على أي قاعدة
+(قرار المالك: لا تطبيق قبل staging معزول + إذن صريح).** جدول `portal_request_documents` (مُطبَّع/ثابت/مُصدَّر) +
+`portal_create_expense_draft`/`portal_attach_document`/`portal_remove_document`/`portal_replace_document`/
+`portal_submit_expense` + إعداد `expense_docs_required` (افتراضي 1).
+- **تصليب جولة Codex الثالثة (كله في 062 قبل أي تطبيق، مُختبَر):** تفويض مستند الدفعة (تطابق الدفعة/الطلب +
+  صلاحية مالية) · ربط `storage_key` بمجال `docs/reqdoc/<request_id>/` (يمنع مفتاحاً مُلفَّقاً) · الاستبدال للطلب
+  المُعاد فقط + مطالبة ذرّية (`WHERE id=? AND active`) · الحذف في المسودّة فقط · `portal_submit_expense` يقبل
+  `returned` + بوّابة مستند في `portal_resubmit_request` (يسدّ حذف الأدلّة ثم إعادة التقديم) · استبعاد المسوّدات من
+  `portal_budget_committed` · `portal_recurring_run` يُبقي المُولَّد مسودّةً بانتظار الأدلّة · `doc_max_bytes`=10MiB
+  (مطابقة `_file-guard`) · أُسقِط `payment_docs_required` (كان بلا إنفاذ). اختبار `37_request_documents.sql` = **14 تأكيداً**.
+- **`functions/api/portal-doc.js`:** نوع `reqdoc` (POST يتحقّق من الطلب الهدف: موجود/مرئي/مسودّة-مُعاد قبل الكتابة؛
+  GET يشترط وجود صفّ فيصير المُزال غير قابل للعرض ويبقى المُستبدَل مرئيّاً) + أُزيل `target=_blank` من عارض `pa_docView`.
+- **`functions/api/portal-config.js` (env-aware، fail-closed):** أزيل عنوان الإنتاج المُضمَّن من `purchase-portal.html`
+  (تُجلب القيم من `/api/portal-config` وقت التشغيل). تصليب Codex round-3: تحليل URL قانونيّ (يرفض `user@host`/منفذ/مسار) ·
+  تحديد البيئة بإيجاب (CF_PAGES_BRANCH/PORTAL_ENV وإلّا 503) · التحقّق أنّ المفتاح anon فعلاً (يرفض service_role/`sb_secret_`) ·
+  جاهزية الخادم (مفتاح الخدمة + الحاوية). `scripts/env-guard.mjs`: تحليل hostname قانونيّ (يسدّ خداع `user@prod`).
+- **واجهة المُحوِّل (draft→upload→submit):** `submitExpense` صار يُنشئ **مسودّة** (`portal_create_expense_draft`، بلا إشعار)
+  ثم «مركز المستندات» (`pa_docCenter`: رفع مصنَّف/عنوان/وصف/معاينة blob داخلية/سجلّ إصدارات/حذف-مسودّة/استبدال-مُعاد) ثم
+  زرّ تقديم مُعطَّل حتى وجود مستند نشط → `portal_submit_expense` (عندها فقط الإشعار). ضابط الآيبان اليدوي (حقل سبب
+  إلزاميّ + شارة استثناء) + قفل القسم لغير الأدمن + تصحيح شارات مسودّة/مُعاد. `loadAll` يجلب `portal_request_documents`.
+- **⚠️ ما لم يُطبَّق حيّاً/متبقٍّ (بترتيب المالك A→J):** تطبيق 062 على staging معزول (بانتظار إعداد المالك + إذن) ·
+  معاينة/E2E متصفّح (لا تُدَّعى قبل staging) · الملف الموحّد لمعاملة الشراء عند الدفع (dossier، U4) · إنفاذ اكتمال مستند
+  الدفعة (H) · `supplier-quote.html` env-config · حالات إقلاع وصولية (aria-busy/إعادة محاولة) · مندوبات مانداتة UX
+  الكبرى (U0–U7: shell/tabs/decision workspace/dashboards/search…) كوثائق ثم تنفيذ متدرّج. **الحزمة: 192 SQL + 18 حارس
+  + 7 نقطة، خروج 0. الكوميتات: `8cd7890` (تصليب backend/config) + `b3d949f` (واجهة). PR #74 مسودّة، لا دمج، لا main.**
+
 ### 🔖 نقطة الاستئناف (2026-07-26، آخر جلسة) — اقرأها أولاً لأي جلسة جديدة
 **الفرع النشط:** `claude/supabase-connection-check-t01so9` (PR #73، مسودّة). آخر كوميت `20d1cbe` (052). الشجرة
 نظيفة، الدفع مكتمل، **CI أخضر** (portal-tests run #46 = success)، ومعاينة Cloudflare منشورة بنجاح.
