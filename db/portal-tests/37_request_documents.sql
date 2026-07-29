@@ -1,6 +1,8 @@
 -- ════════════════════════════════════════════════════════════════════════════
 --  37 — المستندات الداعمة للصرف المباشر (062): نموذج مُطبَّع + مسودّة→رفع→تقديم.
 --  عبر RPC فعلي بهوية مُنتحَلة. RAISE عند الفشل ⇒ خروج ≠ 0. (متطلّب المالك)
+--  يشمل تصليب Codex round-3: تقييد مجال المفتاح، تفويض مستند الدفعة، الاستبدال للمُعاد فقط،
+--  الحذف في المسودّة فقط، مطالبة الاستبدال الذرّية، وبوّابة إعادة التقديم.
 -- ════════════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
 SET client_min_messages = notice;
@@ -20,13 +22,14 @@ BEGIN
 END $seed$;
 
 DO $t$
-DECLARE v_r jsonb; v_id text; v_doc bigint; v_doc2 bigint; v_err text; v_cnt int;
+DECLARE v_r jsonb; v_id text; v_doc bigint; v_doc2 bigint; v_err text; v_cnt int; v_ns text;
 BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"d7_req@aldeyabi.com","role":"authenticated"}',true);
 
   -- DD1: مسودّة ثم تقديم بلا مستندات ⇒ مرفوض
   v_r := portal_create_expense_draft('جهة','1000','custody','إيجار','GA',(now()+interval '5 day')::date,'{"custody_to":"d7_req"}'::jsonb,NULL,NULL);
   v_id := v_r->>'id';
+  v_ns := 'docs/reqdoc/'||v_id||'/';
   IF (v_r->>'status') <> 'draft' THEN RAISE EXCEPTION 'DD1 fail: لم تُنشأ مسودّة'; END IF;
   BEGIN
     PERFORM portal_submit_expense(v_id);
@@ -38,9 +41,9 @@ BEGIN
   END;
   RAISE NOTICE 'PASS DD1 التقديم بلا مستند مرفوض';
 
-  -- DD4: صيغة غير مدعومة عند الإرفاق ⇒ مرفوضة
+  -- DD4: صيغة غير مدعومة عند الإرفاق ⇒ مرفوضة (بمفتاح ضمن المجال حتى نصل لفحص الصيغة)
   BEGIN
-    PERFORM portal_attach_document(v_id,'quotation','quotes/x.docx','application/msword','عرض',NULL,'x.docx',1000,NULL,NULL,NULL);
+    PERFORM portal_attach_document(v_id,'quotation',v_ns||'x.docx','application/msword','عرض',NULL,'x.docx',1000,NULL,NULL,NULL);
     RAISE EXCEPTION 'DD4 fail: قُبِلت صيغة غير مدعومة';
   EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
@@ -49,9 +52,20 @@ BEGIN
   END;
   RAISE NOTICE 'PASS DD4 صيغة غير مدعومة (docx) مرفوضة';
 
+  -- DD12: مفتاح خارج مجال reqdoc لهذا الطلب ⇒ مرفوض (Codex round-3)
+  BEGIN
+    PERFORM portal_attach_document(v_id,'supplier_invoice','docs/reqdoc/REQ-OTHER/inv.pdf','application/pdf','فاتورة',NULL,'inv.pdf',1000,NULL,NULL,NULL);
+    RAISE EXCEPTION 'DD12 fail: قُبِل مفتاح خارج مجال الطلب';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD12 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%مجال مستندات هذا الطلب%' THEN RAISE EXCEPTION 'DD12 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD12 مفتاح تخزين خارج مجال الطلب مرفوض (ربط المفتاح بالطلب)';
+
   -- DD5: «أخرى» بلا وصف ⇒ مرفوض
   BEGIN
-    PERFORM portal_attach_document(v_id,'other','docs/o.pdf','application/pdf',NULL,NULL,'o.pdf',1000,NULL,NULL,NULL);
+    PERFORM portal_attach_document(v_id,'other',v_ns||'o.pdf','application/pdf',NULL,NULL,'o.pdf',1000,NULL,NULL,NULL);
     RAISE EXCEPTION 'DD5 fail: قُبِل «أخرى» بلا وصف';
   EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
@@ -60,14 +74,25 @@ BEGIN
   END;
   RAISE NOTICE 'PASS DD5 «أخرى» بلا وصف مرفوض';
 
+  -- DD11: مستند دفعة بمعرّف دفعة غير موجود ⇒ مرفوض (Codex round-3 — تفويض/مطابقة الدفعة)
+  BEGIN
+    PERFORM portal_attach_document(v_id,'supplier_invoice',v_ns||'p.pdf','application/pdf','دفعة',NULL,'p.pdf',1000,NULL,999999,NULL);
+    RAISE EXCEPTION 'DD11 fail: قُبِل مستند دفعة بمعرّف غير موجود';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD11 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%الدفعة غير موجودة%' THEN RAISE EXCEPTION 'DD11 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD11 مستند دفعة بمعرّف غير موجود مرفوض (فرع تفويض الدفعة)';
+
   -- DD2: إرفاق مستند PDF صالح ثم تقديم ⇒ نجاح (in_review + سلسلة)
-  v_r := portal_attach_document(v_id,'supplier_invoice','docs/inv1.pdf','application/pdf','فاتورة','فاتورة المورد','inv1.pdf',2048,'abc',NULL,NULL);
+  v_r := portal_attach_document(v_id,'supplier_invoice',v_ns||'inv1.pdf','application/pdf','فاتورة','فاتورة المورد','inv1.pdf',2048,'abc',NULL,NULL);
   v_doc := (v_r->>'doc_id')::bigint;
   v_r := portal_submit_expense(v_id);
   IF (v_r->>'status') <> 'in_review' THEN RAISE EXCEPTION 'DD2 fail: لم يُقدَّم بعد إرفاق مستند'; END IF;
   RAISE NOTICE 'PASS DD2 مسودّة + مستند صالح ⇒ تقديم ناجح وبناء سلسلة';
 
-  -- DD9: تقديم ثانٍ (ليس مسودّة) ⇒ مرفوض (لا تكرار)
+  -- DD9: تقديم ثانٍ (ليس مسودّة/مُعاداً) ⇒ مرفوض (لا تكرار)
   BEGIN
     PERFORM portal_submit_expense(v_id);
     RAISE EXCEPTION 'DD9 fail: قُبِل تقديم ثانٍ';
@@ -78,14 +103,25 @@ BEGIN
   END;
   RAISE NOTICE 'PASS DD9 التقديم المكرّر مرفوض (لا ازدواج)';
 
-  -- DD7: بعد التقديم — لا حذف صامت: RPC الحذف يُرفَض + الحذف المباشر يُمنَع بالحارس
+  -- DD13: الاستبدال يُرفَض ما لم يكن الطلب مُعاداً (Codex round-3) — الطلب الآن in_review
+  BEGIN
+    PERFORM portal_replace_document(v_doc,v_ns||'inv_v2.pdf','application/pdf','ب',NULL,'v2.pdf',1,NULL);
+    RAISE EXCEPTION 'DD13 fail: قُبِل الاستبدال على طلب غير مُعاد';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD13 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%المُعاد%' THEN RAISE EXCEPTION 'DD13 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD13 الاستبدال مقيَّد بالطلب المُعاد فقط';
+
+  -- DD7: بعد التقديم — لا حذف صامت: RPC الحذف يُرفَض (المسودّة فقط) + الحذف المباشر يُمنَع بالحارس
   BEGIN
     PERFORM portal_remove_document(v_doc);
     RAISE EXCEPTION 'DD7 fail: حُذف مستند بعد التقديم عبر RPC';
   EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
     IF v_err LIKE 'DD7 fail%' THEN RAISE; END IF;
-    IF v_err NOT LIKE '%بعد التقديم%' THEN RAISE EXCEPTION 'DD7 fail: سبب آخر %', v_err; END IF;
+    IF v_err NOT LIKE '%المسودّة%' THEN RAISE EXCEPTION 'DD7 fail: سبب آخر %', v_err; END IF;
   END;
   BEGIN
     DELETE FROM portal_request_documents WHERE id = v_doc;   -- حذف مباشر بلا علم الانتقال
@@ -95,13 +131,13 @@ BEGIN
     IF v_err LIKE 'DD7 fail%' THEN RAISE; END IF;
     IF v_err NOT LIKE '%غير قابلة للتعديل المباشر%' THEN RAISE EXCEPTION 'DD7 fail: سبب آخر %', v_err; END IF;
   END;
-  RAISE NOTICE 'PASS DD7 لا حذف للمستند بعد التقديم (RPC + حارس مباشر)';
+  RAISE NOTICE 'PASS DD7 لا حذف للمستند بعد التقديم (RPC مسودّة-فقط + حارس مباشر)';
 
   -- DD10: إرجاع الطلب ثم استبدال المستند بإصدار جديد (القديم يبقى مرئيّاً)
   PERFORM set_config('app.portal_transition','1',true);
   UPDATE portal_requests SET status='returned' WHERE id=v_id;
   PERFORM set_config('app.portal_transition','0',true);
-  v_r := portal_replace_document(v_doc,'docs/inv1_v2.pdf','application/pdf','فاتورة مُعدّلة','نسخة أحدث','inv1_v2.pdf',2100,'def');
+  v_r := portal_replace_document(v_doc,v_ns||'inv1_v2.pdf','application/pdf','فاتورة مُعدّلة','نسخة أحدث','inv1_v2.pdf',2100,'def');
   v_doc2 := (v_r->>'doc_id')::bigint;
   IF (v_r->>'version')::int <> 2 THEN RAISE EXCEPTION 'DD10 fail: الإصدار ليس 2'; END IF;
   SELECT count(*) INTO v_cnt FROM portal_request_documents WHERE request_id=v_id;   -- القديم + الجديد
@@ -110,16 +146,41 @@ BEGIN
   IF NOT (SELECT active FROM portal_request_documents WHERE id=v_doc2) THEN RAISE EXCEPTION 'DD10 fail: الجديد غير نشط'; END IF;
   RAISE NOTICE 'PASS DD10 الإرجاع يسمح بإصدار جديد والقديم يبقى مرئيّاً في التاريخ';
 
+  -- DD10b: مطالبة الاستبدال الذرّية — استبدالٌ ثانٍ لنفس المصدر (غير النشط) يُرفَض (لا تفرّع)
+  BEGIN
+    PERFORM portal_replace_document(v_doc,v_ns||'inv1_v3.pdf','application/pdf','ثالث',NULL,'v3.pdf',1,NULL);
+    RAISE EXCEPTION 'DD10b fail: قُبِل استبدال مصدر غير نشط (تفرّع)';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD10b fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%غير نشط%' THEN RAISE EXCEPTION 'DD10b fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD10b الاستبدال المكرّر لمصدر غير نشط مرفوض (مطالبة ذرّية)';
+
   -- DD3: تعدّد المستندات مرتبطة وقابلة للقراءة (أضِف ثانياً للمسودّة المُعادة)
-  v_r := portal_attach_document(v_id,'memo','docs/memo.pdf','application/pdf','مذكّرة',NULL,'memo.pdf',500,NULL,NULL,NULL);
+  v_r := portal_attach_document(v_id,'memo',v_ns||'memo.pdf','application/pdf','مذكّرة',NULL,'memo.pdf',500,NULL,NULL,NULL);
   SELECT count(*) INTO v_cnt FROM portal_request_documents WHERE request_id=v_id AND active;
   IF v_cnt < 2 THEN RAISE EXCEPTION 'DD3 fail: المستندات النشطة أقل من 2 (%)', v_cnt; END IF;
   RAISE NOTICE 'PASS DD3 تعدّد المستندات مرتبط وقابل للقراءة (% نشط)', v_cnt;
 
+  -- DD14: بوّابة إعادة التقديم — إزالة كل الأدلّة (مباشرةً عبر علم الانتقال) ثم resubmit ⇒ مرفوض
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_request_documents SET active=false WHERE request_id=v_id;
+  PERFORM set_config('app.portal_transition','0',true);
+  BEGIN
+    PERFORM portal_resubmit_request(v_id, NULL);
+    RAISE EXCEPTION 'DD14 fail: قُبِلت إعادة التقديم بلا مستند نشط';
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
+    IF v_err LIKE 'DD14 fail%' THEN RAISE; END IF;
+    IF v_err NOT LIKE '%بلا مستند%' THEN RAISE EXCEPTION 'DD14 fail: سبب آخر %', v_err; END IF;
+  END;
+  RAISE NOTICE 'PASS DD14 إعادة التقديم بلا مستند نشط مرفوضة (سدّ ثغرة resubmit)';
+
   -- DD6: آيبان يدوي بلا سبب ⇒ مرفوض (الضابط التعويضي SEC-03)
   BEGIN
     PERFORM portal_create_expense_draft('مورد','5000','bank','دفعة','GA',(now()+interval '3 day')::date,
-      '{"iban":"SA1234567890123456789012","account_name":"مورد"}'::jsonb,NULL,NULL,NULL);
+      '{"iban":"SA1234567890123456789012","account_name":"مورد"}'::jsonb,NULL,NULL);
     RAISE EXCEPTION 'DD6 fail: قُبِل آيبان يدوي بلا سبب';
   EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_err = MESSAGE_TEXT;
@@ -133,5 +194,5 @@ BEGIN
   IF portal_can_see_request(v_id) THEN RAISE EXCEPTION 'DD8 fail: مستخدم قسم آخر يرى الطلب'; END IF;
   RAISE NOTICE 'PASS DD8 مستخدم قسم آخر لا يرى الطلب/مستنداته (RLS predicate)';
 
-  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD10 = 10/10 PASS ════';
+  RAISE NOTICE '════ REQUEST DOCUMENTS (062): DD1–DD14 = 14/14 PASS ════';
 END $t$;

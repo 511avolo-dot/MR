@@ -18,8 +18,21 @@ function arg(name) {
 }
 function refOf(s) {
   if (!s) return null;
-  const m = /^https:\/\/([a-z0-9]+)\.supabase\.co/i.exec(s);
-  return (m ? m[1] : s).toLowerCase();
+  // (Codex round-3) تحليل قانونيّ: مرجع من hostname القانوني حصراً (لا regex بادئة يُخدَع بـ user@host).
+  // إن كان الوسيط عنواناً، حلِّله؛ وإلّا عامله كمرجع مجرّد (لكن ارفض ما يحوي '@' أو '/' أو ':').
+  const raw = String(s).trim();
+  if (/^https?:\/\//i.test(raw)) {
+    let u;
+    try { u = new URL(raw); } catch (_) { return null; }
+    if (u.protocol !== 'https:') return null;
+    if (u.username || u.password) return null;
+    if (u.port && u.port !== '443') return null;
+    const m = /^([a-z0-9]{20})\.supabase\.co$/i.exec(u.hostname.toLowerCase());
+    return m ? m[1] : null;
+  }
+  // مرجع مجرّد: 20 محرفاً بلا فواصل مسار/مضيف — أي شيء آخر يُرفض (لا يُقارَن نصّاً خام).
+  const bare = raw.toLowerCase();
+  return /^[a-z0-9]{20}$/.test(bare) ? bare : null;
 }
 function die(msg) { console.error('❌ حارس البيئة رفض: ' + msg); process.exit(2); }
 

@@ -71,6 +71,38 @@ async function hasPerm(env, base, jwt, perm) {
     return (await r.json()) === true;
   } catch (_) { return false; }
 }
+async function canSeeRequest(env, base, jwt, reqId) {
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/portal_can_see_request`, {
+      method: 'POST',
+      headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_id: reqId }),
+    });
+    return r.ok && (await r.json()) === true;
+  } catch (_) { return false; }
+}
+// (Codex round-3) قبل كتابة كائن reqdoc إلى R2: تأكّد أنّ الطلب موجود ومرئيّ للمُستدعي وفي حالة
+// مسودّة/مُعاد — يمنع تراكم كائنات يتيمة تحت معرّفات طلبات عشوائية أو لا يملكها المُستدعي.
+async function reqdocTargetOk(env, base, jwt, reqId) {
+  try {
+    if (!(await canSeeRequest(env, base, jwt, reqId))) return false;
+    const r = await fetch(`${base}/rest/v1/portal_requests?id=eq.${encodeURIComponent(reqId)}&select=status`, { headers: svcHeaders(env) });
+    if (!r.ok) return false;
+    const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) return false;
+    return rows[0].status === 'draft' || rows[0].status === 'returned';
+  } catch (_) { return false; }
+}
+// تحقّق أنّ للمفتاح صفّاً نشطاً في portal_request_documents (مستند لم يُزَل) — لعرض reqdoc فقط.
+async function reqdocActiveRowExists(env, base, jwt, key) {
+  try {
+    const r = await fetch(`${base}/rest/v1/portal_request_documents?storage_key=eq.${encodeURIComponent(key)}&active=eq.true&select=id&limit=1`,
+      { headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}` } });
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (_) { return false; }
+}
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
@@ -86,13 +118,17 @@ export async function onRequestPost({ request, env }) {
   const url = new URL(request.url);
   const kind = String(url.searchParams.get('kind') || '').trim();
   const perms = KIND_PERM[kind];
-  if (!perms) return json({ error: 'نوع مستند غير صالح (pay|grn|inst|inv|ret|disb)' }, 400);
+  if (!perms) return json({ error: 'نوع مستند غير صالح (pay|grn|inst|inv|ret|disb|reqdoc)' }, 400);
   let permitted = false;
   for (const p of perms) { if (await hasPerm(env, base, jwt, p)) { permitted = true; break; } }
   if (!permitted) return json({ error: 'صلاحية غير كافية لرفع هذا المستند' }, 403);
 
   const reqId = String(url.searchParams.get('request_id') || '').trim();
   if (!REQID_RE.test(reqId)) return json({ error: 'معرّف طلب غير صالح' }, 400);
+  // (Codex round-3) مستند طلب داعم: تحقّق من الطلب الهدف (وجود/رؤية/حالة مسودّة-مُعاد) قبل الكتابة إلى R2.
+  if (kind === 'reqdoc' && !(await reqdocTargetOk(env, base, jwt, reqId))) {
+    return json({ error: 'طلب غير صالح لإرفاق مستند (غير مرئي لك أو ليس مسودّة/مُعاداً)' }, 403);
+  }
 
   const buf = await request.arrayBuffer();
   // حارس الملفات الطبقي المشترك
@@ -133,6 +169,11 @@ export async function onRequestGet({ request, env }) {
     if (r.ok) canSee = (await r.json()) === true;
   } catch (_) { canSee = false; }
   if (!canSee) return new Response('forbidden', { status: 403 });
+
+  // (Codex round-3) مستند طلب داعم (reqdoc): لا يُبَثّ إلا إن كان له صفّ نشط — المُزال يصير غير قابل للعرض.
+  if (key.startsWith('docs/reqdoc/') && !(await reqdocActiveRowExists(env, base, jwt, key))) {
+    return new Response('not found', { status: 404 });
+  }
 
   const obj = await env.QUOTES_BUCKET.get(key);
   if (!obj) return new Response('not found', { status: 404 });
