@@ -39,3 +39,8 @@ This supersedes the incorrect "060–062 repo-only / not applied" line in the ea
 4. Live state matches this reconstruction (once 061 corrected to "applied"). **No production change was made.**
 
 **Status: G0-01 CLOSED (live-verified).** The list also confirms the **environment safety invariant**: `mwbjoysuybgbrvfrprex` (production) has **not** received 062 or 063 — consistent with all owner constraints.
+
+## Verification party (G0-R7 — precise labeling)
+- **LIVE verified by Claude session** (read-only `list_migrations` executed via Supabase MCP in this session).
+- **Independent reviewer (owner): NOT re-executed** — the owner reviews via the GitHub-only channel and did not independently rerun the Supabase live query. Independent live re-execution **requires Supabase read access or an owner-provided export.**
+- This is **single-party live verification (Claude) + documentary review (owner)** — not two-party independent live verification. Do not imply otherwise.

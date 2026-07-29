@@ -4,7 +4,7 @@
 Every requirement/finding has a stable ID and a status. **No item disappears silently**; scope may only grow by adding explicit rows.
 **Rule:** `verified` requires the stated test type actually run — never from static inspection or code comments alone.
 
-- **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Head at ledger creation:** `d103215`
+- **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Head:** `1b97cc4` (updated each commit)
 - **Binding constraints:** no production/DB/storage/config change; `budget_enforce=0`; `txn_notifications=0`; Systems 1/2 unchanged; manual IBAN allowed (reason+badge+audit); admin superuser accepted (labeled+audited).
 
 Status vocabulary: `open` · `implemented` (code merged, not yet independently test-verified) · `verified` (test type run) · `accepted-risk` (owner-approved) · `deferred-with-approval`.
@@ -13,7 +13,7 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 ## 1. Reconciliation (supersedes stale certification language)
 
-| Item | Stale claim (old PR body) | **Current truth (head d103215)** |
+| Item | Stale claim (old PR body) | **Current truth (head 1b97cc4)** |
 |---|---|---|
 | Verdict | "READY WITH CONDITIONS" | **NOT READY (WIP)** |
 | Findings | "0 HIGH" | Multiple owner/Codex P1 open (see §4) |
@@ -23,7 +23,7 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 > **G0-01 CLOSED:** the earlier "060–062 not applied" line is DISPROVED — live `list_migrations` on `mwbjoysuybgbrvfrprex` (2026-07-29, Supabase MCP re-authorized) shows **059, 060, 061 applied; 062 absent**. Verbatim list + labels: `MIGRATION_HISTORY_RECONCILIATION.md`. **No production change was made to reconcile documentation** (read-only `list_migrations`).
 
-**Inventory of record:** `audit-output/SYSTEM_INVENTORY.md` (updated counts below). System-3 objects in `portal-standalone.sql` at this head: **35 tables · 171 functions · 27 triggers · 30 policies**; **29 test files** (222 assertions); migrations through **062**; **next free migration number = 063**.
+**Inventory of record:** `audit-output/SYSTEM_INVENTORY.md` (updated counts below). System-3 objects in `portal-standalone.sql` at this head: **35 tables · 120 functions (distinct; 171 = raw CREATE-OR-REPLACE occurrences across merged migrations) · 27 triggers · 12 policies (distinct)**; **29 test files** (222 assertions); migrations through **062**; **next free migration number = 063**.
 
 ---
 
@@ -65,7 +65,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 
 | ID | Sev | Subsystem | Item | Commit | Evidence type | Status |
 |---|---|---|---|---|---|---|
-| SEC-01 | P1 | RLS | revoke anon SELECT on users/payments/suppliers/beneficiaries | 059 | SQL (`35_anon_hardening.sql` AH0–AH2) · LIVE claimed prior session (re-verify) | implemented (SQL-verified; LIVE re-verify pending) |
+| SEC-01 | P1 | RLS | revoke anon SELECT on users/payments/suppliers/beneficiaries | 059 | SQL (`35_anon_hardening.sql` AH0–AH2) · **LIVE verified by Claude session** (059 present in live `list_migrations`) | implemented (SQL + LIVE-by-Claude) |
 | DOC-DB | P0 | documents | 062 normalized immutable versioned model + draft→submit | ca5c7ba | SQL (`37` DD1–DD19) | implemented |
 | DOC-API | P1 | documents | reqdoc endpoint (internal preview, ownership pre-check) | 8cd7890/b43ae88 | node --check; DD8/DD12 | implemented |
 | DOC-UI | P1 | UI | draft→upload→submit + Document Center + manual-IBAN + dept lock | b3d949f | script parse; visual pending | implemented |
@@ -115,7 +115,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 ### Program stages (documents/implementation not yet started)
 | ID | Stage | Scope | Status |
 |---|---|---|---|
-| S0 | 0 | this ledger + 5 routing docs + inventory reconciliation | **in progress (this commit)** |
+| S0 | 0 | ledger + 5 routing docs + inventory + G0/G0-R remediation | **delivered — awaiting owner Gate-0 clearance** |
 | S1 | 1 | isolated staging + deployment safety (guards, manifest, Pages fix) | open |
 | S2 | 2 | security/RLS/privacy/service-boundary review + SEC-06 | open |
 | S3 | 3 | trusted document lifecycle (upload receipt, doc capabilities) | open |
@@ -124,7 +124,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | S6 | 6 | committee engine | open |
 | S7 | 7 | procurement lifecycle (RFQ/comparison/award/PO) | open |
 | S8 | 8 | disbursement/payment/financial integrity | open |
-| S9 | 9 | Correction & Work Routing Engine (R0–R8) | R0 docs in progress |
+| S9 | 9 | Correction & Work Routing Engine (R0–R8) | **R0 docs delivered**; R2+ implementation gated |
 | S10 | 10 | UI/UX modernization (U0–U7) | open |
 | S11 | 11 | current-email validation only (legacy) | open |
 | S12 | 12 | reliability/perf/observability/ops | open |
@@ -156,7 +156,7 @@ Owner senior reviews → captured as OWN-* + the open rows in §4.
 - [ ] G2 no unresolved Critical/High authz/privacy/storage; dynamic negative-authz tests pass; SEC-06 closed
 - [ ] G3 zero fake evidence satisfies submission; inline evidence viewable by every approver in staging
 - [ ] G4 each role positive+negative caps dynamically tested
-- [ ] G5 DoA boundary tests at 25k/150k/250k/500k ±1; deterministic or fail-closed
+- [ ] G5 DoA boundary tests at 25k/**125k (owner-confirmed)**/250k/500k ±1; deterministic or fail-closed
 - [ ] G6 committee quorum/recusal/alternate/concurrency tests pass
 - [ ] G7 full purchase path scenarios pass
 - [ ] G8 financial invariants + concurrency pass; disabled controls honest
@@ -175,6 +175,60 @@ Owner senior reviews → captured as OWN-* + the open rows in §4.
 ## 7. Requirements register — one row per requirement/mandate (G0-02)
 
 Every prior owner requirement / Codex finding / design mandate has its own stable ID. Source: O=owner, C=Codex, K=Claude. Ev = evidence type when done (SRC/SQL/EP/E2E/CONC/LIVE). Status: open / implemented / verified / accepted-risk / deferred-with-approval.
+
+### Stage 1 — isolated staging & deployment safety
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S1-STAGING | O | P0 | separate Supabase project + separate R2 bucket/bindings + Preview-only vars + test users + non-prod email recipients | 1 | open (design: `STAGING_SETUP_PLAN.md`) |
+| S1-GUARD-COUPLE | O | P1 | environment validation **coupled to the exact migrate/E2E command** (impossible to validate one target, execute another) | 1 | open (`env-guard.mjs` exists but not command-coupled) |
+| S1-PAGES-EXCL | O | P1 | GitHub Pages must not publish a broken/misleading System-3 portal that needs `/api/portal-config` — exclude entry points or disable workflow (=PAGES-DEPLOY) | 1 | open |
+| S1-SUPPLIER-ENV | O | P1 | `supplier-quote.html` env-aware config (remove embedded prod ref) (=SUPPLIER-ENV) | 1 | open |
+| S1-MANIFEST | O | P2 | deployment manifest mapping files/routes → Systems 1/2/3 | 1 | open (partial: `ARTIFACT_INVENTORY*`) |
+| S1-NOSECRET | O | P1 | no secrets in static output/logs; validate anon key role/project + server bindings | 1 | implemented (portal-config; SRC) |
+
+### Stage 2 — security / identity / RLS / privacy / service boundaries
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S2-LEASTCOL | O | P1 | least-privilege column exposure (beneficiaries/payments/users/suppliers) | 2 | open |
+| S2-IBAN-MASK | O | P1 | do not expose full beneficiary IBAN to ordinary can_create; restricted view/RPC + masking (=SEC-IBAN-EXPOSE) | 2 | open |
+| S2-XDEPT | O | P1 | cross-department/cross-role denial tests with real JWT/PostgREST | 2 | open |
+| S2-ADMIN-LABEL | O | accepted | admin override explicitly labeled/audited | 2 | open (UI labeling) |
+| S2-USERSTATE | O | P1 | active/suspended/deleted user behavior; role revocation immediate for new actions | 2 | open |
+| S2-TOKEN | O | P1 | token expiry/one-time/replay/brute-force controls + invalidation on state/revision change | 2 | partial (email-token invalidation done) |
+| S2-DEFINER | O | P1 | strict search_path + explicit execute grants; no direct mutable-table write bypassing guards | 2 | partial (040/030 hardening) |
+| S2-REDACT | O | P2 | secrets/log redaction | 2 | open |
+| S2-AUDIT-VERIFY | O | P1 | audit-chain full-history verification + truncation/gap detection | 2 | implemented (057 `portal_audit_verify`, SQL) |
+| SEC-06 | O/C | P0 | System-1 `register.html` anon Storage fallback → signed registration-bound upload + revoke anon writes; recoverable, never insecure fallback | 2 | open |
+
+### Stage 3 — trusted document/evidence lifecycle
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S3-RECEIPT | O/C | P0 | server-issued single-use upload receipt: server key + bind user/request/payment/type/MIME/size/checksum/state/expiry + verify R2 object + consume once + compensate on failure + submit counts only verified docs (=DOC-RECEIPT) | 3 | open |
+| S3-DOCCAPS | O | P1 | dedicated doc capabilities (request/payment-prep/disbursement-proof/receipt-quality/procurement-quote) | 3 | open |
+| S3-LINK | O | P1 | enforce request/payment linkage, state, ownership, scope, immutable/versioned replacement | 3 | partial (062 request-scope; payment linkage pending) |
+| S3-REMOVED | O | P1 | removed docs unreadable; superseded viewable only in authorized version history | 3 | implemented (reqdoc GET row-exists, SRC) |
+| S3-SIZE | O | P2 | unified size policy + magic-byte/content validation + rate limit + checksums + no public URLs | 3 | partial (file-guard EP; rate-limit open) |
+| S3-ORPHAN | O | P2 | orphan reconciliation + auditable cleanup | 3 | open |
+| S3-DOSSIER | O | P1 | full dossier continuity request→payment | 3/10 | open |
+| S3-NEGTESTS | O | P0 | negative tests: fabricated key, missing object, reused/expired/mismatched receipt, wrong request/payment/user, post-submit mutation, cross-dept, partial upload, DB-fail-after-upload | 3 | open |
+
+### Stage 9 — Correction & Work Routing Engine (R0–R8)
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S9-WORKITEMS | O | P1 | `portal_work_items` table (source phase/cycle/stage/seq, work_type, status, destination_type, assignee/role/dept/queue, scope, SLA, lineage) | 9 | open (R0 design) |
+| S9-EVENTS | O | P1 | append-only `portal_work_item_events` | 9 | open |
+| S9-POLICIES | O | P1 | versioned `portal_routing_policies` (server-enforced permitted destinations) | 9 | open |
+| S9-RPCS | O | P1 | governed RPCs (`portal_return_options`/create/accept/reassign/complete/clarify/reopen/cancel) with locks + expected-version + idempotency | 9 | open |
+| S9-DEST | O | P1 | user/role/dept/queue destinations only when policy permits; no arbitrary user | 9 | open |
+| S9-DELEG | O | P1 | reassignment/delegation/escalation/collaboration distinct; loop/depth/SLA-reset abuse prevention | 9 | open |
+| S9-SCOPE | O | P1 | scoped editable fields/documents; material-change impact class resets only affected downstream | 9 | open |
+| S9-HISTORY | O/C | P1 | preserve requester/department/approval-history/document versions (=HISTORY-PRESERVE) | 9 | open |
+| S9-COMPENSATE | O | P1 | post-payment/receipt via amendment/void/return/debit-note/dispute, not rewind | 9 | partial (void 051, returns 034) |
+| S9-AWARD-RET | O/C | P1 | award return-for-correction ≠ reject (=ROUTE-AWARD-RETURN) | 9 | open |
+| S9-PO-RET | O/C | P1 | PO minor-correction ≠ reject/material-reopen (=ROUTE-PO-RETURN) | 9 | open |
+| S9-PAY-ENUM | O/C | P1 | validate `p_return_to` closed enum (=ROUTE-PAY-ENUM) | 9 | open |
+| S9-EMAIL-PARITY | O/C | P1 | email return parity / safe portal handoff, legacy-email-only (=ROUTE-EMAIL-PARITY) | 9 | open |
+| S9-TESTS | O | P1 | RR-01…RR-25 + browser journeys incl. forged destinations + concurrent queue acceptance | 9 | open (`RETURN_ROUTING_TEST_MATRIX.md`) |
 
 ### Stage 4 — users / jobs / roles / departments / sectors
 | ID | Src | Sev | Requirement | Stage | Status |
@@ -205,7 +259,7 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 | S5-VALIDATE | O | P1 | validation: empty approvers, unreachable, loops, dup, requester-as-approver, missing high-value coverage | 5 | open |
 | S5-SIMPUB | O | P1 | simulation before publish (named resulting approvers) + impact preview + rollback | 5 | open |
 | S5-NO-CLEAR | O | P1 | do not delete/rewrite prior approvals on resubmission — new revision/cycle (=HISTORY-PRESERVE) | 5 | open |
-| S5-BOUNDARY | O | P1 | boundary tests at 25k/150k(→125k?)/250k/500k ±1 (blocked by DOA-THRESHOLD-CONFLICT) | 5 | open |
+| S5-BOUNDARY | O | P1 | boundary tests at 25k/**125k (owner-confirmed)**/250k/500k ±1; seed currently 150k → change to 125k in Stage 5 | 5 | open |
 
 ### Stage 6 — committee engine
 | ID | Src | Sev | Requirement | Stage | Status |
@@ -297,9 +351,9 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 
 ---
 
-## 8. Review-thread traceability (G0-08)
+## 8. Review-thread traceability (G0-08 / G0-R6)
 
-Every top-level/inline review thread mapped to a canonical ID. (Codex inline threads are grouped by their canonical finding; owner reviews are dated.) Full inline-comment IDs are retrievable via `pull_request_read get_review_comments`; this table maps content→disposition.
+**The complete one-row-per-thread appendix (all 102 inline threads with thread ID, reviewed commit, file:line, severity, finding, GitHub state, canonical disposition) is `REVIEW_THREAD_TRACEABILITY.md`** — generated from `get_review_comments`. Summary: all 102 threads captured; every CDX3/CDX4 finding fixed except the tracked open IDs (DOC-RECEIPT P0, SUPPLIER-ENV, PAGES-DEPLOY, SEC-06). (Threads were deliberately not mass-resolved on GitHub to avoid hiding genuinely-open items.) The theme-level table below remains as the summary map.
 
 | Thread (commit reviewed) | Canonical ID | Duplicate-of | State | Fixing commit / disposition |
 |---|---|---|---|---|
@@ -312,7 +366,7 @@ Every top-level/inline review thread mapped to a canonical ID. (Codex inline thr
 | Owner "@codex review" workflow-routing (`8cd7890`) | ROUTE-* (award/PO/pay-enum/email-parity) | — | documented (R0) | Stage 7/9 |
 | Owner UX mandate v1/v2 | S10-* | — | documented (R0/ledger) | Stage 10 |
 | Owner email mandate E0–E6 | E0 (done) + E1–E6 | — | E0 implemented; rest deferred (OWN-EMAIL) | d103215 |
-| Owner MASTER PROGRAM | S0–S15 | — | S0 in progress | 0316c68 + this commit |
+| Owner MASTER PROGRAM | S0–S15 | — | S0 delivered (Gate-0 + G0-R remediation) | 0316c68…this commit |
 | Owner Stage-0 review | G0-01…G0-09 | — | this commit | (SHA below) |
 
 **No thread dropped:** any Codex inline not individually rowed above is subsumed by its CDX3-*/CDX4-* canonical ID; the `verified`-vs-`implemented` labeling (G0-09) applies.
@@ -343,4 +397,21 @@ Every top-level/inline review thread mapped to a canonical ID. (Codex inline thr
 | G0-09 evidence labels | heading renamed + evidence-type legend + SEC-01 downgraded to implemented | **done** |
 
 **Gate 0 remains NOT PASSED** until: (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) ~~owner confirms the authoritative DoA matrix (G0-05)~~ **✅ DONE (owner confirmed 125,000, 2026-07-29)**; and **(c) owner independently rechecks the Stage-0 commits.** Only (c) remains — owner elected to hold Stage-1/063 implementation for that recheck.
+
+---
+
+## 11. G0-R1…G0-R8 closure table (owner independent recheck)
+
+| Item | Action taken | Status |
+|---|---|---|
+| G0-R1 PR body contradicts DoA decision | PR body updated — DoA no longer "awaiting confirmation"; records owner-confirmed 125,000 | done |
+| G0-R2 stale/contradictory ledger | Head → `1b97cc4`; SEC-01 → LIVE-verified-by-Claude; S0/R0 → delivered; G5 & S5-BOUNDARY → 125k; counts corrected (120 functions / 12 policies distinct) | done |
+| G0-R3 phase matrix superseded 150k | Head → `1b97cc4`; labeled current-code 150k vs target-authoritative 125k; removed "unresolved" | done |
+| G0-R4 artifact inventory not one-row-per | **Generated `ARTIFACT_INVENTORY_APPENDIX.md`** (every page/API/table/function/trigger/policy/job/bucket); `ai.js` classified (shared Gemini proxy) | done |
+| G0-R5 per-requirement register incomplete | Added Stage-1/2/3/9 per-requirement sections to §7 (incl. SEC-06 sub-controls, upload-receipt invariants + negative tests, R0–R8 items) | done |
+| G0-R6 thread traceability | **Generated `REVIEW_THREAD_TRACEABILITY.md`** — all 102 threads (ID/commit/file:line/sev/finding/state/disposition) | done |
+| G0-R7 G0-01 independent-verification label | Reconciliation doc: **LIVE verified by Claude session; independent reviewer NOT re-executed** (needs Supabase read/export) — no two-party claim | done |
+| G0-R8 closure mechanics | Gate checklist → 125k; this single closure commit; closure table returned; PR draft; no Stage-1/063; no DB/config/storage change | done |
+
+**Remaining to clear Gate 0:** owner's independent recheck of this commit. G0-01/G0-05 resolved; all G0-R consistency items corrected. Implementation (Stage 1 / migration 063 / DoA seed 150→125) stays gated per owner "hold for recheck."
 

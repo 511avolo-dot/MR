@@ -1,7 +1,7 @@
 # ARTIFACT INVENTORY (Gate-0 blocker G0-03)
 
-One row per concrete artifact, source-verified at head `bdf0972`. Columns: **Artifact/path · System (1/2/3/shared) · Purpose · Caller/entry · AuthN/AuthZ boundary · Data touched · R/W · Env/binding dependency · Test coverage · Gaps/ledger IDs.**
-Counts: **11 HTML pages · 19 API endpoints + 3 shared modules · 35 `portal_*` tables · 171 functions · 27 triggers · 30 policies · 2 storage buckets · 1 scheduled job.**
+Narrative inventory of key artifacts, source-verified at head `1b97cc4`. **The complete one-row-per-artifact enumeration (every page/API/module/table/function/trigger/policy/job/bucket) is the machine-generated `ARTIFACT_INVENTORY_APPENDIX.md` — that appendix satisfies G0-03/G0-R4; this file is the annotated narrative companion.** Columns: **Artifact/path · System (1/2/3/shared) · Purpose · Caller/entry · AuthN/AuthZ boundary · Data touched · R/W · Env/binding dependency · Test coverage · Gaps/ledger IDs.**
+Counts (**distinct**): **11 HTML pages · 19 API endpoints + 3 shared modules · 35 `portal_*` tables · 120 functions · 27 triggers · 12 policies · 2 storage buckets · 1 scheduled job.** (Earlier "171 functions / 30 policies" were raw `CREATE OR REPLACE` occurrence counts inflated by merged-migration duplicates.)
 
 > Test-type codes: SRC=static · SQL=assertion · EP=endpoint/Node · E2E=browser(none) · CONC=concurrency(none) · LIVE=live config.
 
@@ -32,7 +32,7 @@ Counts: **11 HTML pages · 19 API endpoints + 3 shared modules · 35 `portal_*` 
 | `portal-register.js`,`portal-signup.js` | 3 | portal register/signup backend | POST | token/gate | `portal_users` | W | `PORTAL_SUPABASE_*` | SRC | naming (portal-signup) |
 | `reg-doc.js` | 1 | server-side registration upload (file-guard) | POST | origin + reg_id allowlist | `supplier-docs` | W | `SUPABASE_SERVICE_ROLE_KEY` | EP (7 assertions) | depends SEC-06 |
 | `notify.js`,`verify.js`,`invite-supplier.js`,`admin-users.js`,`pr-action.js` | 1/2 | legacy email/verify/admin/PR-action | POST/GET | legacy | `proc_*`/`pr_*` | R/W | `SUPABASE_*`, `RESEND_API_KEY` | SRC | preserve (OWN-SYS12) |
-| `ai.js` | ? | (inventory: verify usage/ownership) | — | — | — | — | — | — | **classify (unknown owner — flag)** |
+| `ai.js` | **shared** | secure Google Gemini proxy (keeps key server-side) | GET/POST | none (no portal_*/proc_* data) | none | R | `GEMINI_API_KEY` only; model allowlist | SRC | **classified: shared AI proxy; NOT wired to System-1/2/3 data or the governance workflow (owner: no AI before deterministic integrity)** |
 | `_portal-shared.js` | 3 | portal email/util module | import | — | — | — | `NOTIFY_FROM/REPLY_TO/PUBLIC_ORIGIN/RESEND_API_KEY`(shared) | SRC | E1 |
 | `_pr-shared.js` | 2 | legacy PR email module | import | — | — | — | `SUPABASE_*`, `RESEND_*` | — | preserve |
 | `_file-guard.js` | shared | magic-byte/polyglot/active-content guard | import | — | — | — | — | EP (18) | — |
@@ -44,15 +44,15 @@ Identity/config: `portal_users` · `portal_jobs` · `portal_departments` · `por
 Integrity/infra: `portal_audit`(hash-chain) · `portal_outbox` · `portal_idempotency` · `portal_notifications` · `portal_email_tokens`(server-only) · `portal_invitations`(server-only) · `portal_supplier_tokens`(server-only).
 **R/W model:** RLS SELECT scoped by `portal_can_see_request`/`portal_my_scope`; writes deny-by-default (open policy + `*_guard` BEFORE triggers checking `app.portal_transition`). Server-only tables have no RLS policy. **Gaps:** SEC-IBAN-EXPOSE (beneficiary IBAN column exposure); per-table least-privilege review = Stage 2.
 
-## D. Functions (171) — governance-critical enumerated; full list in `portal-standalone.sql`
+## D. Functions (120 distinct) — governance-critical enumerated; full one-row list in `ARTIFACT_INVENTORY_APPENDIX.md`
 Transition/routing: `portal_pr_transition` · `portal_pr_transition_email` · `portal_submit_request` · `portal_submit_expense` · `portal_create_expense[_draft]` · `portal_resubmit_request` · `portal_update_request` · `portal_award[_transition|_split]` · `portal_po_transition` · `portal_payment_request` · `portal_payment_transition` · `portal_payment_void` · `portal_reopen` · `portal_bounce_to_requester` · `portal_bulk_transition` · `portal_build_chain` · `portal_run_sla` · `portal_recurring_run`.
 Documents: `portal_attach_document` · `portal_remove_document` · `portal_replace_document` · `portal_reqdoc_guard`.
 Governance: `portal_budget_committed/set/status` · `portal_beneficiary_*` · `portal_supplier_iban_*` · `portal_three_way_status` · `portal_return_record` · `portal_contract_*` · `portal_currency_rate`.
 Integrity: `portal_audit_write` · `portal_audit_verify` · audit hash-chain trigger fn · `portal_outbox_claim/mark/purge` · idempotency helpers.
 AuthZ helpers: `portal_username` · `portal_has_perm` · `portal_is_admin` · `portal_can_see_request` · `portal_my_scope` · `portal_qualified_approver` · `portal_effective_approver` · `portal_resolve_stage`.
-**Note:** individually rowing all 171 is generated from source, not hand-maintained; the governance/financial/routing/document subset above is the audit-relevant surface. **Gap:** Stage-2 fresh review of all SECURITY DEFINER grants/search_path.
+**Note:** individually rowing all 120 distinct functions is machine-generated in `ARTIFACT_INVENTORY_APPENDIX.md`, not hand-maintained; the governance/financial/routing/document subset above is the audit-relevant surface. **Gap:** Stage-2 fresh review of all SECURITY DEFINER grants/search_path.
 
-## E. Triggers (27) & Policies (30)
+## E. Triggers (27) & Policies (12 distinct)
 Guard triggers (deny-by-default write control): `*_guard` on `portal_offers`/`portal_request_items`/`portal_receipts`/`portal_request_documents`(reqdoc)/`portal_suppliers`(iban)/`portal_beneficiaries`(iban)/`portal_doa` + deferred-constraint enforcers (`budget`/`contract`/`three_way`) + audit hash-chain (`trg_portal_audit_chain`) + notify triggers (029 outbox, 058 txn-notify). Policies: RLS SELECT per transaction table + server-only tables (no policy). **Full enumeration:** `portal-standalone.sql`; **Gap:** Stage-2 policy/trigger completeness audit.
 
 ## F. Jobs & storage
@@ -63,4 +63,4 @@ Guard triggers (deny-by-default write control): `*_guard` on `portal_offers`/`po
 | Storage `supplier-docs` | 1 | supplier registration docs | `reg-doc.js` / register.html | service key | SEC-06 |
 
 ## G. Known coverage gaps (rollup)
-No E2E/CONC/LIVE evidence on this branch. Open P0: DOC-RECEIPT, SEC-06, E2E. Open P1s per ledger §4. `ai.js` ownership **unclassified — flagged for Stage-2 classification.**
+No E2E/CONC/LIVE-behavioral evidence on this branch. Open P0: DOC-RECEIPT, SEC-06, E2E. Open P1s per ledger §4. `ai.js` **now classified** (shared Gemini proxy, above). **Full enumeration:** `ARTIFACT_INVENTORY_APPENDIX.md`.

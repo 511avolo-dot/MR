@@ -1,8 +1,8 @@
 # RETURN & WORK ROUTING — PHASE MATRIX (R0, expanded per G0-04)
 
-Full per-phase contract, source-verified at head `bdf0972`. Each phase records: **RPC / UI entry · actions · destination types · editable scope · resulting state · approvals reset (none/partial/full + which rows) · document version · SLA · notifications/tokens · authz & SoD · TARGET + test IDs**. Gap IDs → `MASTER_DELIVERY_LEDGER.md`. Test IDs → `RETURN_ROUTING_TEST_MATRIX.md`.
+Full per-phase contract, source-verified at head `1b97cc4`. Each phase records: **RPC / UI entry · actions · destination types · editable scope · resulting state · approvals reset (none/partial/full + which rows) · document version · SLA · notifications/tokens · authz & SoD · TARGET + test IDs**. Gap IDs → `MASTER_DELIVERY_LEDGER.md`. Test IDs → `RETURN_ROUTING_TEST_MATRIX.md`.
 
-DoA note (blocked): thresholds shown as code/seed values (`portal_doa`, `portal-standalone.sql:1828+`): 0–25k · 25,001–**150,000** · 150,001–250,000 · 250,001–500,000 · >500,000. **Owner business matrix says small committee = 25,000–125,000 → DOA-THRESHOLD-CONFLICT (unresolved; do not certify).**
+DoA note: **current-code behavior** (`portal_doa` seed, `portal-standalone.sql:1828+`): 0–25k · 25,001–**150,000** · 150,001–250,000 · 250,001–500,000 · >500,000. **Target-authoritative behavior (OWNER CONFIRMED 2026-07-29):** small committee = **25,001–125,000**. The seed change 150,000 → 125,000 (+ boundary tests) is **Stage-5 work, not done here** (implementation gated). Until then, current-code = 150,000; target = 125,000.
 
 ---
 
@@ -40,7 +40,7 @@ DoA note (blocked): thresholds shown as code/seed values (`portal_doa`, `portal-
 - **Approvals reset:** award approvals rebuilt on reject. **Doc version:** comparison doc generated. **SLA:** —.
 - **Authz/SoD:** `can_approve_award` by DoA; recommender ≠ approver. **TARGET:** distinct return-for-correction + material reopen; preserve award revisions. **Tests:** RR-20.
 
-### P5 · Committee review (25,001–150,000 / DoA-conflict) — *(added per G0-04)*
+### P5 · Committee review (current-code 25,001–150,000 · target-authoritative 25,001–125,000) — *(added per G0-04)*
 - **RPC:** `portal_po_transition` committee stage (`portal_set_committee` / `can_approve_committee` / `committee_members`). · **UI:** PO approval panel.
 - **Actions:** approve · reject. **Destinations:** —. **Editable scope:** none. **Resulting state:** advances PO chain or rejects.
 - **Approvals reset:** PO chain stage. **Doc version:** n/a. **SLA:** per-stage.
