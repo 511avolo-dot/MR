@@ -249,7 +249,14 @@ Additive governed milestone-payment domain. **Design/docs only now; implementati
 `pay_installments`(027)/`portal_receipts`(023); those + migrations 023/027/037 stay immutable.
 | ID | Src | Sev | Requirement | Stage | Status |
 |---|---|---|---|---|---|
-| CEM-DOCS | O | P1 | architecture doc + ledger/routing/inventory registration (this deliverable) | 3–13 | **done (docs)** |
+| CEM-DOCS | O | P1 | architecture doc + ledger/routing/inventory registration | 3–13 | **done (docs)** |
+| CEM-P0 | O | P1 | **CEM v2 design freeze** (arch doc §15: 5 mandatory corrections + expanded domain + P0–P9 packages + ≥24 tests + rollout/DoD) — docs-only | 3–13 | **done (docs, design freeze)** |
+| CEM-V2-01 | O | P1 | contract cardinality = one per **awarded party/PO slice** (single: award_offer_id=NULL; split: per offer); request dossier aggregates; parent closes when all contracts closed | 7 | open (planned; supersedes v1 one-per-request) |
+| CEM-V2-02 | O | P1 | separate earned_value vs advance vs retention_release vs adjustment; Σ earned_value = net value; cash events never inflate value/ceiling | 8 | open (planned) |
+| CEM-V2-03 | O | **P0** | append-only `portal_contract_financial_events` ledger (16 event classes) as source of truth; computed status RPC/view; no mutable running-balance authority | 8 | open (planned) |
+| CEM-V2-04 | O | P1 | structured `portal_contract_amendments`/`_guarantees`/`portal_supplier_invoices`/`portal_claim_adjustments`; version reduction below certified/paid fails closed absent recovery plan | 7/8 | open (planned) |
+| CEM-V2-05 | O | **P0** | acceptance engine must NOT call `portal_record_receipt` closure; goods via internal compat helper (no parent close on non-final); services/works by period/value | 8 | open (planned) |
+| CEM-P1..P9 | O | P1 | staged packages: P1 schema-disabled · P2 contract/version/doc/guarantee RPC · P3 schedule engine · P4 acceptance · P5 claims/invoices/adjustments/ledger · P6 claim-payment · P7 amendments/routing · P8 dossier UI · P9 staging acceptance/rollout | 7–13 | open (planned) |
 | CEM-EC-TABLES | O | P1 | `portal_execution_contracts` + immutable `portal_execution_contract_versions` (draft→under_review→published→superseded/terminated) + `portal_execution_contract_documents` (versioned, trusted-object links only) | 7 | open (planned) |
 | CEM-SCHEDULE | O | P1 | `portal_contract_milestones` + explicit `..._dependencies` (acyclic) + `portal_milestone_evidence_requirements`; publish-time validation (dup/cycle/sum=basis±tol/non-neg/advance+retention defined/≤remaining) | 7 | open (planned) |
 | CEM-ACCEPT | O | P1 | `portal_acceptance_records` (typed: site_visit…final_acceptance/defect/return) + `portal_acceptance_lines`; evidence-only vs eligibility-creating per milestone policy | 8 | open (planned) |
