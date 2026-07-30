@@ -267,3 +267,47 @@
 | R2 `QUOTES_BUCKET` | 3 | portal evidence (DOC-RECEIPT gate) |
 | Storage `supplier-docs` | 1 | registration docs (SEC-06) |
 | `ai.js` (Gemini OCR proxy) | **System 1 + 2** | Used by `register.html` (Sys-1 OCR) and `index.html`/`requests.html`/`rfq.html` (Sys-2 OCR); **not** used by System 3. Keeps `GEMINI_API_KEY` server-side + model allowlist, **but abuse controls incomplete** (see G0-F4 / ledger `AI-PROXY-ABUSE`): GET has no auth/origin check; POST relies only on forgeable Origin/Referer; no JWT/Turnstile/rate-limit/quota/cost cap; 16 MiB body; size check only fires when Content-Length present (chunked bypass). **Classify: key concealed, abuse controls incomplete — NOT simply "secure".** |
+
+---
+
+## CEM — Contract Execution & Milestone-Payment engine (PLANNED / OPEN — owner mandate 2026-07-30)
+
+**Status: design only — none implemented.** Additive artifacts; no migration number assigned (allocate contiguous
+after `063`). Model + governance: `CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`. Existing `portal_contracts`(037)/
+`pay_installments`(027)/`portal_receipts`(023) unchanged.
+
+### Planned tables
+| Table | Purpose | Class (planned) |
+|---|---|---|
+| `portal_execution_contracts` | one active execution contract per awarded request | RPC-write; RLS request-scoped (planned) |
+| `portal_execution_contract_versions` | immutable published version snapshot (value/VAT/retention/advance) | RPC-write; immutable-after-publish (planned) |
+| `portal_execution_contract_documents` | versioned contract/scope/BOQ/guarantee docs (trusted-object links) | RPC-write; supersede-only (planned) |
+| `portal_contract_milestones` | payment schedule (trigger/allocation/due/retention) | RPC-write (planned) |
+| `portal_contract_milestone_dependencies` | explicit acyclic dependency graph | RPC-write (planned) |
+| `portal_milestone_evidence_requirements` | required doc role/count/issuer/verifier/acceptance | RPC-write (planned) |
+| `portal_acceptance_records` | typed acceptance (site_visit…final/defect/return) | RPC-write; request-scoped (planned) |
+| `portal_acceptance_lines` | per-line delivered/inspected/accepted/rejected qty+value | RPC-write (planned) |
+| `portal_milestone_claims` | certified claims (multi/partial) + retention/advance/VAT/net | RPC-write; certified-immutable (planned) |
+| (claim/acceptance events) | append-only event logs | server-write append-only (planned) |
+
+### Planned columns (additive, nullable) on existing tables
+`portal_payments`: `milestone_claim_id`, `execution_contract_version_id`, `certified_gross`, `deductions`,
+`retention`, `advance_recovery`, `vat`, `net_payable`, `currency`/`fx_rate` snapshots.
+
+### Planned RPCs (families — §7 of the architecture doc)
+`portal_ec_create_draft/update_draft/submit_version/publish_version/return_version/terminate` ·
+`portal_ms_define/validate/publish_schedule` · `portal_ec_create_amendment` ·
+`portal_acc_create/submit/return/accept` · `portal_claim_create/submit/return/certify` ·
+`portal_create_payment_from_claim` · `portal_retention_release/waive` · `portal_ec_suspend/resume/close` ·
+read-only `portal_ec_dossier/portal_execution_status/portal_ec_simulate`.
+
+### Planned views / jobs / UI
+- View/RPC: `portal_execution_status(request_id)` (computed parent-request execution state).
+- Job: milestone due/SLA escalation (reuse outbox/SLA cadence).
+- UI (Stage 10, converter-only): contract dossier + timeline + schedule + payment-monitor tab.
+
+### Planned capabilities (Stage 4)
+`can_manage_execution_contract · can_define_payment_schedule · can_publish_execution_contract ·
+can_submit_milestone_evidence · can_verify_site_visit · can_record_acceptance · can_certify_milestone_claim ·
+can_prepare_payment · can_approve_payment · can_execute_payment · can_release_retention · can_amend_contract ·
+can_close_execution_contract`.

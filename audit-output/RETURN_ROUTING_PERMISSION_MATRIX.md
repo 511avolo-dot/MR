@@ -35,3 +35,18 @@ Who may initiate each routing action, per phase. **CURRENT** = enforced at head 
 
 ## 5. Destination eligibility (TARGET, server-computed by `portal_return_options`)
 Permitted only: eligible active member of the same authorized role/queue · eligible user in the permitted destination department · recipient's manager/escalation route · return-to-sender · approved specialist queue. **Rejected:** inactive/suspended user · user without request visibility · unauthorized department crossing · arbitrary named user not in policy.
+
+## 6. CEM contract-execution routes (owner mandate 2026-07-30 — planned, Stage 4 capabilities)
+New granular capabilities (Stage 4; not broad reuse of `can_manage_procurement`/`can_disburse`). Model:
+`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md` §6.
+| Route | Required authority (TARGET) | SoD |
+|---|---|---|
+| CEM-RT-CONTRACT (contract → author) | `can_manage_execution_contract` | author ≠ publisher (`can_publish_execution_contract`) |
+| CEM-RT-EVIDENCE (evidence → submitter) | `can_submit_milestone_evidence` | submitter ≠ sole verifier |
+| CEM-RT-ACCEPT (acceptance → verifier) | `can_record_acceptance` / `can_verify_site_visit` | verifier ≠ claimant/certifier |
+| CEM-RT-CLAIM (claim → claimant) | `can_certify_milestone_claim` (to return) | claimant ≠ certifier |
+| CEM-RT-PAYMENT (payment → preparer) | `can_prepare_payment` | preparer ≠ approver (`can_approve_payment`) ≠ executor (`can_execute_payment`) |
+| CEM-RT-AMEND (amendment) | `can_amend_contract` + Stage-5 workflow | amendment approval per DoA |
+| retention release | `can_release_retention` | ≠ payment executor |
+| contract close | `can_close_execution_contract` | close blocked while any milestone/payment/retention/dispute open |
+Admin (`role='admin'`) override only with explicit label + reason + immutable audit (057).

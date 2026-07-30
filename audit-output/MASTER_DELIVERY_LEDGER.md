@@ -36,6 +36,7 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 | 061 | Codex round-2 hardening | **YES — applied live (VERIFIED, `20260729073619`)** |
 | 062 | Supporting documents (round-3/4 + R1 folded in-place) | **NO — NOT applied (VERIFIED absent from live list)** |
 | **063 (next free)** | reserved — Stage 9 work-items / routing policies (not yet created) | — |
+| **CEM (post-063)** | Contract Execution & Milestone engine — additive tables/views/RPCs; **no number assigned in design**, allocate next contiguous after all earlier authorized work (`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`); 023/027/037 never edited | — (design only) |
 
 Ordering rule: 059→060→061→062 then 063+. 062 verified to apply cleanly + idempotently on top of `portal-standalone.sql` locally. **No further apply (062/063) without separate owner authorization on isolated staging first.** **G0-01 CLOSED — live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** (`MIGRATION_HISTORY_RECONCILIATION.md`).
 
@@ -142,6 +143,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | S13 | 13 | full staging acceptance + regression | open |
 | S14 | 14 | independent adversarial review on final SHA | open |
 | S15 | 15 | merge + release rehearsal (owner sign-off) | open |
+| CEM | 3–13 | Contract Execution & Milestone-Payment engine (owner mandate 2026-07-30) — additive; spans S3 (docs) · S4 (caps) · S5 (workflow) · S7 (contract/schedule) · S8 (acceptance/claims/payment/ledgers) · S9 (routing) · S10 (dossier UI) · S13 (E2E) | **docs delivered (`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`, CEM-* register); implementation gated** |
 
 ---
 
@@ -240,6 +242,28 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 | S9-PAY-ENUM | O/C | P1 | validate `p_return_to` closed enum (=ROUTE-PAY-ENUM) | 9 | open |
 | S9-EMAIL-PARITY | O/C | P1 | email return parity / safe portal handoff, legacy-email-only (=ROUTE-EMAIL-PARITY) | 9 | open |
 | S9-TESTS | O | P1 | RR-01…RR-25 + browser journeys incl. forged destinations + concurrent queue acceptance | 9 | open (`RETURN_ROUTING_TEST_MATRIX.md`) |
+
+### CEM — Contract Execution & Milestone-Payment Engine (owner mandate 2026-07-30, cross-stage 3–13)
+Additive governed milestone-payment domain. **Design/docs only now; implementation gated per stage.** Full model:
+`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`. Non-breaking: does **not** repurpose `portal_contracts`(037)/
+`pay_installments`(027)/`portal_receipts`(023); those + migrations 023/027/037 stay immutable.
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| CEM-DOCS | O | P1 | architecture doc + ledger/routing/inventory registration (this deliverable) | 3–13 | **done (docs)** |
+| CEM-EC-TABLES | O | P1 | `portal_execution_contracts` + immutable `portal_execution_contract_versions` (draft→under_review→published→superseded/terminated) + `portal_execution_contract_documents` (versioned, trusted-object links only) | 7 | open (planned) |
+| CEM-SCHEDULE | O | P1 | `portal_contract_milestones` + explicit `..._dependencies` (acyclic) + `portal_milestone_evidence_requirements`; publish-time validation (dup/cycle/sum=basis±tol/non-neg/advance+retention defined/≤remaining) | 7 | open (planned) |
+| CEM-ACCEPT | O | P1 | `portal_acceptance_records` (typed: site_visit…final_acceptance/defect/return) + `portal_acceptance_lines`; evidence-only vs eligibility-creating per milestone policy | 8 | open (planned) |
+| CEM-CLAIM | O | P1 | `portal_milestone_claims` (multi/partial) + certified amount/deductions/retention/advance/VAT/net-payable + append-only claim events | 8 | open (planned) |
+| CEM-PAY | O | **P0** | nullable `portal_payments` links/snapshots + `portal_create_payment_from_claim` (locks, server-derived, certified+unpaid, evidence accepted, balances, one active payment/claim); legacy free-form path fails closed when active EC exists | 8 | open (planned) |
+| CEM-INVARIANTS | O | **P0** | server-side one-transaction financial invariants (§5): earned-value/cash/claim/milestone ceilings, retention & advance as ledger balances, immutability, exact rounding, no duplicate payment | 8 | open (planned) |
+| CEM-CAPS | O | P1 | 13 versioned capabilities (§6) + SoD (submitter≠certifier, preparer≠approver≠executor); admin override labeled+audited | 4 | open (planned) |
+| CEM-RPC | O | P1 | RPC-only boundary (§7): every mutating RPC validates state/capability/SoD/expected-revision/evidence/ceilings/idempotency + writes event+audit in same txn | 5/7/8 | open (planned) |
+| CEM-DOCLAYER | O | **P0** | all contract/acceptance/claim/payment evidence via Stage-3 trusted document objects (upload receipt) — **hard dependency on `DOC-RECEIPT`/`S3-RECEIPT`** | 3 | open (blocked by S3-RECEIPT) |
+| CEM-PARENT | O | P1 | parent-request compatibility: non-final milestone does not close/force final receipt; close only when §4 (1–6) all hold; computed `portal_execution_status` view/RPC | 8/10 | open (planned) |
+| CEM-ROUTING | O | P1 | corrections/amendments via Stage-9 engine (CEM-RT-* routes), no ad-hoc return_to; history preserved | 9 | open (planned) |
+| CEM-DOSSIER | O | P1 | unified contract dossier + timeline + schedule + payment-monitor UI | 10 | open (planned) |
+| CEM-MIGRATE | O | P1 | additive-first; classify legacy rows (single/split/installments/framework) with **no** auto-conversion; disabled-by-default flag; safe rollback (disable-create, preserve history) | 7–8 | open (planned) |
+| CEM-TESTS | O | **P0** | 20-case regression+acceptance suite (§12): 5 legacy-unchanged + 15 governance/financial/SoD/dossier/closure + full browser journey | 13 | open (planned) |
 
 ### Stage 4 — users / jobs / roles / departments / sectors
 | ID | Src | Sev | Requirement | Stage | Status |

@@ -107,3 +107,18 @@ DoA note: **current-code behavior** (`portal_doa` seed, `portal-standalone.sql:1
 
 ---
 **Invariant across all phases:** no arbitrary-user routing today (preserved as target invariant); audit chain (057) retains every event even where live approval rows are overwritten (the HISTORY-PRESERVE compensating control until Stage 5/9 snapshots land).
+
+---
+
+### CEM · Contract-execution correction routes (owner mandate 2026-07-30 — planned, Stage 9)
+Model: `CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md` §9. All routed through the Stage-9 engine
+(`portal_work_items`/`portal_routing_policies`) — **no ad-hoc `return_to` strings**. History preserved; a
+correction creates a new revision/cycle and never clears prior actors/comments/timestamps.
+- **CEM-RT-CONTRACT** — execution contract → contract author. Guard `can_manage_execution_contract`; only version `draft`/`returned` (published/certified-referenced versions immutable). Editable scope: unpublished version fields. Approvals reset: version review chain only.
+- **CEM-RT-EVIDENCE** — acceptance evidence → submitter. Guard `can_submit_milestone_evidence`; only while acceptance not yet accepted. Does not touch certified claims.
+- **CEM-RT-ACCEPT** — acceptance record → receiver/verifier. Guard `can_record_acceptance`/`can_verify_site_visit`. Partial acceptance allowed; remainder stays open.
+- **CEM-RT-CLAIM** — claim → claimant/procurement. Guard `can_certify_milestone_claim` (returns); only while claim not certified. Correction = new claim revision, old preserved.
+- **CEM-RT-PAYMENT** — payment → preparer / certified-claim correction. Guard `can_prepare_payment`; only while payment not executed (executed → void/return/debit-note, not rewind).
+- **CEM-RT-AMEND** — amendment → procurement/legal/finance/DoA workflow. Guard `can_amend_contract` + Stage-5 workflow. Creates a new contract version; prior version/milestones/claims/payments preserved, only future eligibility changes.
+- **CEM-RT-DEFECT** — defect/dispute/suspension work item. Guard `can_record_acceptance`/procurement. Blocks parent-request closure until resolved (§4).
+**Invariant:** no arbitrary-user routing; destinations permitted only where `portal_routing_policies` allows (role/dept/queue/sender). Test IDs → `RETURN_ROUTING_TEST_MATRIX.md` CEM-RT-01…07.

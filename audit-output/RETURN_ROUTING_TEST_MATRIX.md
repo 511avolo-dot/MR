@@ -52,3 +52,17 @@ approver returns to requester with scoped changes · requester edits + versioned
 
 ## 7. Gate
 Gate 9 requires RR-01…RR-25 (SQL/INT/CONC) green + the browser E2E journeys on isolated staging. **These tests are not yet implemented** (Stage 9 code = migration 063+, not started). This matrix is the acceptance contract.
+
+## 8. CEM contract-execution route tests (owner mandate 2026-07-30 — planned)
+Acceptance contract for the milestone-payment routing (`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md` §9/§12).
+Negative controls must remove/relax the actual guard and prove the test fails for the intended reason.
+| ID | Scenario | T | Expect |
+|---|---|---|---|
+| CEM-RT-01 | contract returned to author; published/certified-referenced version immutable | SQL/INT | return allowed on draft/returned only; published edit rejected |
+| CEM-RT-02 | evidence returned to submitter while acceptance not accepted | SQL/INT | allowed; blocked once accepted |
+| CEM-RT-03 | acceptance returned to verifier; partial acceptance leaves remainder open | SQL/INT | allowed; remainder open |
+| CEM-RT-04 | claim returned to claimant while not certified; certified claim immutable | SQL/INT | allowed pre-certify; certified edit rejected (new revision) |
+| CEM-RT-05 | payment returned to preparer while not executed; executed → void/return only | SQL/INT | allowed pre-execute; executed rewind rejected |
+| CEM-RT-06 | amendment preserves prior version/claims/payments; changes only future eligibility | SQL/INT | prior rows intact; new version governs future |
+| CEM-RT-07 | forged destination / arbitrary user not in policy | SQL/INT/CONC | rejected server-side |
+**Not implemented** (CEM = post-063 additive engine, gated). This matrix is the acceptance contract.
