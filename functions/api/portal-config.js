@@ -59,32 +59,27 @@ function keyKind(key) {
   if (!payloadRaw) return { anon: false, ref: null, opaque: false };
   let payload;
   try { payload = JSON.parse(payloadRaw); } catch (_) { return { anon: false, ref: null, opaque: false }; }
-  const anon = !!payload && payload.role === 'anon';          // يُرفض service_role وأي دور آخر
+  let anon = !!payload && payload.role === 'anon';            // يُرفض service_role وأي دور آخر
+  // (G1-R2-03) تحقّق من المطالبات الثابتة حيثما وُجدت: المُصدِر supabase، وعدم انتهاء الصلاحية.
+  if (anon && typeof payload.iss === 'string' && payload.iss !== 'supabase') anon = false;
+  if (anon && typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) anon = false;
   const ref = (payload && typeof payload.ref === 'string') ? payload.ref.toLowerCase() : null;
-  return { anon, ref, opaque: false };
+  // مفتاح anon بلا مطالبة ref = غير مربوط (يُعامَل كالمبهم: يلزمه expected-ref خارجي).
+  return { anon, ref, opaque: ref === null };
 }
 
 export function onRequestGet({ env }) {
   const url     = env.PORTAL_SUPABASE_URL || '';
   const anonKey = env.PORTAL_SUPABASE_ANON_KEY || '';
 
-  // (1 · G1-02) البيئة: الفرع (CF_PAGES_BRANCH) **مرجع قاطع** إن وُجد؛ PORTAL_ENV لا يتجاوزه.
-  const branch     = env.CF_PAGES_BRANCH || '';
-  const prodBranch = env.PORTAL_PROD_BRANCH || 'main';
-  const override   = String(env.PORTAL_ENV || '').toLowerCase();   // 'production' | 'preview' (اختياري)
-  const branchMode = branch ? (branch === prodBranch ? 'production' : 'preview') : null;
-  let mode = null;
-  if (branch) {
-    mode = branchMode;                                            // الفرع قاطع
-    if (override && override !== branchMode) {                    // PORTAL_ENV يناقض الفرع ⇒ رفض
-      return json({ ok: false, env: branchMode,
-        error: `PORTAL_ENV=«${override}» يناقض الفرع «${branch}» (=${branchMode}) — مرفوض (fail-closed). الفرع هو المرجع القاطع.` }, 409);
-    }
-  } else if (override === 'production' || override === 'preview') {
-    mode = override;   // إشارة المنصّة غائبة — يُسمح بالتجاوز فقط بهوية نشر صريحة (يُتحقَّق بعد تحليل العنوان)
-  } else {
-    return json({ ok: false, error: 'تعذّر تحديد البيئة (production/preview) بإيجاب — اضبط CF_PAGES_BRANCH أو PORTAL_ENV. (fail-closed)' }, 503);
+  // (1 · G1-R2-02) هوية النشر ثابتة في الكود: الفرع الموثوق للإنتاج = 'main' (لا يُتجاوَز بمتغيّر بيئة
+  // مثل PORTAL_PROD_BRANCH/PORTAL_ENV على النقطة العامّة). غياب CF_PAGES_BRANCH ⇒ فشل مغلق.
+  const PROD_BRANCH = 'main';
+  const branch = env.CF_PAGES_BRANCH || '';
+  if (!branch) {
+    return json({ ok: false, error: 'CF_PAGES_BRANCH غائب — النقطة العامّة تفشل مغلقةً (fail-closed). لا تجاوز ببيئة على النقطة المنشورة.' }, 503);
   }
+  const mode = branch === PROD_BRANCH ? 'production' : 'preview';
   const isPreview = mode === 'preview';
 
   // (5) جاهزية الخادم لازمة لتدفّق المستندات (مفتاح الخدمة + تخزين الملفات) — بوليانات فقط.
@@ -101,32 +96,31 @@ export function onRequestGet({ env }) {
   if (!parsed) {
     return json({ ok: false, env: mode, error: 'عنوان Supabase غير صالح — يجب أن يكون https://<ref>.supabase.co بلا userinfo/منفذ/مسار. (fail-closed)' }, 503);
   }
-  // (1b · G1-02) غياب الفرع + استخدام PORTAL_ENV ⇒ تلزم هوية نشر صريحة تُسمّي المشروع بالضبط،
-  //             وإلّا لا نثق بـ PORTAL_ENV وحده (يمنع ادّعاء production لتخطّي حارس المعاينة).
-  if (!branch) {
-    if (String(env.PORTAL_ENV_IDENTITY || '').toLowerCase() !== parsed.ref) {
-      return json({ ok: false, env: mode,
-        error: 'PORTAL_ENV بلا إشارة منصّة (CF_PAGES_BRANCH) يتطلّب PORTAL_ENV_IDENTITY=<مرجع المشروع> مطابقاً للعنوان — مرفوض (fail-closed).' }, 409);
-    }
+  // (3 · G1-R2-02) الإنتاج يلزمه (main + مرجع الإنتاج)؛ المعاينة يلزمها (≠main + ≠الإنتاج).
+  if (mode === 'production' && parsed.ref !== PROD_REF) {
+    return json({ ok: false, env: mode,
+      error: 'نشر الإنتاج (الفرع main) يجب أن يشير لمشروع الإنتاج — إعداد خاطئ (fail-closed).' }, 409);
   }
-  // (3) الحارس الحاسم: معاينة فرع لا يجوز أن تتّصل بمشروع الإنتاج.
   if (isPreview && parsed.ref === PROD_REF) {
     return json({ ok: false, env: 'preview',
       error: 'معاينة الفرع مضبوطة على مشروع الإنتاج — مرفوض (fail-closed). اضبط مشروع staging منفصلاً في متغيّرات Preview.' }, 409);
   }
-  // (4 · G1-02) المفتاح: anon/publishable عامّ + مربوط بنفس المشروع الذي يشير إليه العنوان.
+  // (4 · G1-02/G1-R2-03) المفتاح: anon عامّ + مربوط بمشروع العنوان.
   const ki = keyKind(anonKey);
   if (!ki.anon) {
     return json({ ok: false, env: mode,
-      error: 'المفتاح المضبوط ليس مفتاح anon/publishable عامّاً — مرفوض (fail-closed). لا تضع مفتاح service_role أو سرّاً في PORTAL_SUPABASE_ANON_KEY.' }, 500);
+      error: 'المفتاح المضبوط ليس مفتاح anon/publishable عامّاً صالحاً (أو انتهت صلاحيته/مُصدِره غير supabase) — مرفوض (fail-closed).' }, 500);
   }
-  if (ki.ref && ki.ref !== parsed.ref) {                        // مطالبة ref في JWT ≠ مرجع العنوان
-    return json({ ok: false, env: mode,
-      error: `مفتاح anon يخصّ مشروعاً (${ki.ref}) مختلفاً عن مشروع العنوان (${parsed.ref}) — مرفوض (fail-closed).` }, 500);
-  }
-  if (ki.opaque && String(env.PORTAL_SUPABASE_EXPECTED_REF || '').toLowerCase() !== parsed.ref) {
-    return json({ ok: false, env: mode,                        // publishable مبهم بلا ربط مشروع مؤكَّد
-      error: 'مفتاح publishable مبهم يتطلّب PORTAL_SUPABASE_EXPECTED_REF مطابقاً لمرجع العنوان لإثبات الربط بالمشروع — مرفوض (fail-closed).' }, 500);
+  if (ki.ref) {                                                 // مفتاح مربوط: مطالبة ref يجب أن تطابق العنوان
+    if (ki.ref !== parsed.ref) {
+      return json({ ok: false, env: mode,
+        error: `مفتاح anon يخصّ مشروعاً (${ki.ref}) مختلفاً عن مشروع العنوان (${parsed.ref}) — مرفوض (fail-closed).` }, 500);
+    }
+  } else {                                                      // (G1-R2-03) غير مربوط (مبهم أو JWT بلا ref)
+    if (String(env.PORTAL_SUPABASE_EXPECTED_REF || '').toLowerCase() !== parsed.ref) {
+      return json({ ok: false, env: mode,
+        error: 'مفتاح anon غير مربوط بمشروع (publishable مبهم أو JWT بلا مطالبة ref) يتطلّب PORTAL_SUPABASE_EXPECTED_REF مطابقاً لمرجع العنوان — مرفوض (fail-closed).' }, 500);
+    }
   }
   // (5) جاهزية الخادم.
   if (!hasService || !hasBucket) {

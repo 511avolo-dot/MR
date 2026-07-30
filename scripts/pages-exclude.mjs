@@ -95,7 +95,8 @@ if (needSet) {
 
 const targets = needSet ? [...needSet] : [...declaredSet];
 
-// (G1-04) كعب إعادة توجيه يحفظ query string و hash.
+// (G1-04 + G1-R2-04) كعب إعادة توجيه يحفظ query string و hash — والسكربت في نهاية الجسم
+// (بعد وجود <a id="go">) كي يُحدَّث الرابط القابل للنقر فعليّاً لا فقط location.replace.
 function stubFor(page) {
   const base = origin.replace(/\/+$/, '') + '/' + page;
   const j = JSON.stringify(base);   // آمن للحقن داخل <script>
@@ -103,12 +104,12 @@ function stubFor(page) {
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="robots" content="noindex">
 <title>يتطلب النشر الرسمي</title>
-<script>(function(){var b=${j};var u=b+location.search+location.hash;try{var a=document.getElementById('go');if(a)a.href=u;}catch(e){}location.replace(u);})();</script>
 </head><body style="font-family:system-ui,'Segoe UI',sans-serif;max-width:640px;margin:16vh auto;padding:28px;line-height:1.9;color:#0f172a">
 <h2 style="color:#0f172a">هذه الصفحة تُخدَم من النشر الرسمي فقط</h2>
 <p>تعتمد هذه الصفحة على دوال الخادم (Cloudflare Functions) غير المتوفّرة على GitHub Pages. جارٍ تحويلك مع الحفاظ على رابطك بالكامل…</p>
 <p><a id="go" href="${hEsc}">${hEsc}</a></p>
 <noscript><p>فعّل JavaScript، أو افتح الرابط أعلاه (أضِف مُعاملات رابطك الأصلية يدويّاً إن لزم).</p></noscript>
+<script>(function(){var b=${j};var u=b+location.search+location.hash;var a=document.getElementById('go');if(a)a.href=u;location.replace(u);})();</script>
 </body></html>\n`;
 }
 

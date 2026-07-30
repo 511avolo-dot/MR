@@ -28,32 +28,33 @@ production — and only with explicit owner authorization.
    preview must return `env:"preview"` with the **staging** ref (never `mwbjoysuybgbrvfrprex`), or fail closed.
 
 ## Migration 062 apply (staging only) — guarded, command-coupled
-The guard supports a **command-coupled `--exec` mode (Stage-1 item 3, G1-01)** that **binds the command's target** to the
-validated ref — not merely injecting environment variables (which a shell would have already expanded, so they cannot
-change an explicit argument). Two enforced mechanisms: (a) the **`{GUARDED_REF}` sentinel** in the command is replaced
-with the validated ref after validation; (b) any **explicit target argument** (`--project-ref`/`--url`/`--db-url`/… or a
-bare `https://<ref>.supabase.co` / 20-char ref) that does **not** equal the validated ref is **rejected before the command
-is spawned**.
+The guard uses **command-specific adapters (Stage-1 item 3; hardened per G1-R2-01)** — it does **not** accept an arbitrary
+passthrough command (token heuristics were bypassable via `sh -c '… --project-ref <prod>'`, `db.<ref>.supabase.co`, etc.).
+Each named adapter **constructs the target argument internally** from the validated ref; the caller cannot supply a target
+URL/ref. `migrate`/`e2e` **require** `--command`; `--purpose check` is validation-only and authorizes nothing. Unknown
+flags, unknown commands, and the old `--exec` are rejected (fail-closed).
 ```bash
-# Correct (coupled) — use the {GUARDED_REF} sentinel; the guard substitutes the validated ref itself:
+# migrate — Supabase CLI adapter (builds `supabase db push --project-ref <validated ref>` internally):
+node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push
+# migrate — psql adapter (builds postgresql://postgres:<SUPABASE_DB_PASSWORD>@db.<validated ref>.supabase.co:5432/postgres):
 node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
-  --exec -- supabase db push --project-ref '{GUARDED_REF}'
-
-# UNSAFE (do NOT use): the shell expands "$STAGING_PROJECT_REF" before the guard runs, so passing an explicit
-# production ref here would be REJECTED — the guard refuses any explicit target that differs from the validated ref:
-#   … --exec -- supabase db push --project-ref mwbjoysuybgbrvfrprex     # ← rejected, command not spawned
+  --command psql-migration --file db/portal-migrations/062-request-documents.sql       # + SUPABASE_DB_PASSWORD in env
+# e2e — builds E2E_SUPABASE_URL=https://<validated ref>.supabase.co and runs the given spec under scripts/|tests/:
+node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF" --confirm STAGING --command browser-e2e --spec scripts/e2e/portal.mjs
+# Preview the constructed command without running it (no secrets printed):
+node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push --dry-run
 ```
-Do **not** run any apply command without the guard passing first. The guard hard-blocks `mwbjoysuybgbrvfrprex` and, in
-`--exec` mode, **never spawns the command when the target is rejected or a mismatched explicit target is present**
-(proven by `scripts/stage1-tests.mjs` negative controls).
+An explicit production target can no longer be smuggled in: `--project-ref mwbjoysuybgbrvfrprex`, `--db-url postgresql://…@db.<prod>…`,
+and `sh -c` wrappers are all rejected (proven by `scripts/stage1-tests.mjs` negatives). The guard also hard-blocks
+`mwbjoysuybgbrvfrprex` as the target ref.
 
-## GitHub Pages ambiguity removed (Stage-1 items 4–5)
-- **`deploy/system3-manifest.json`** declares every System-1/2/3 page, the Cloudflare Functions it requires, and the
-  set that must **not** be served as broken static files on GitHub Pages (`github_pages_exclude.pages`).
+## GitHub Pages ambiguity removed (Stage-1 items 4–5; hardened per G1-R2-04)
+- **`deploy/system3-manifest.json`** models Cloudflare-Functions dependency **per page** (`pages[].needs_functions`). The
+  exclusion set is **derived** into `github_pages_exclude.derived_pages` = { pages where `needs_functions === true` }.
 - **`scripts/pages-exclude.mjs`** runs in `.github/workflows/pages.yml` **before** the Pages artifact upload; it replaces
-  each Function-dependent page with a redirect stub to `canonical_origin` (the Cloudflare deployment). A GitHub Pages
-  visitor is redirected to the working deployment instead of a broken `/api/*`-less page. `--check` fails the build if a
-  declared page is missing (manifest ↔ tree drift) or `canonical_origin` is invalid (fail-closed).
+  each Function-dependent page with a redirect stub to `canonical_origin` **preserving `location.search` + `location.hash`**
+  (so a supplier `?t=…` link survives). `--check` enforces **set-equality**: the build fails if any `needs_functions` page
+  is not excluded, or any excluded entry is stale/missing, or `canonical_origin` is invalid (fail-closed).
 - This changes **no live deployment now**: `pages.yml`/`deploy.yml` run only on push to `main`, and this PR is Draft.
 
 ## supplier-quote.html env-config (Stage-1 item 6)
@@ -70,10 +71,12 @@ on any config error it shows a visible config-error state and does not connect),
 - Delete staging test requests/documents; empty the staging R2 namespace; optionally pause/delete the staging Supabase
   project. Production is never touched.
 
-## Browser E2E gating (enforced)
-- E2E must call `node scripts/env-guard.mjs --purpose e2e --url "$E2E_SUPABASE_URL" --confirm STAGING` first; it refuses
-  when the ref equals `mwbjoysuybgbrvfrprex`. E2E completion will NOT be claimed until a genuinely isolated staging
-  project exists and 062 has been applied there with explicit owner authorization.
+## Browser E2E gating (enforced, command-coupled)
+- E2E must run **through the guard's coupled adapter**: `node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF"
+  --confirm STAGING --command browser-e2e --spec <spec>`. The guard builds `E2E_SUPABASE_URL=https://<validated ref>.supabase.co`
+  itself and refuses `mwbjoysuybgbrvfrprex`. Running E2E as a separate command after a bare validation is no longer a
+  supported path (`migrate`/`e2e` require `--command`). E2E completion will NOT be claimed until a genuinely isolated
+  staging project exists and 062 has been applied there with explicit owner authorization.
 
 ## Proof that production is untouched by this PR
 - No migration was applied to any database in this PR (062 is repo-only). `list_migrations` on production still ends at

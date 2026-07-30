@@ -1,111 +1,105 @@
 #!/usr/bin/env node
 /**
- * env-guard.mjs — حارس البيئة لعزل staging عن الإنتاج (متطلّب المالك، البند 6).
+ * env-guard.mjs — حارس عزل staging (Stage 1، البند 3؛ مُعاد تصميمه لـ G1-R2-01).
  * ════════════════════════════════════════════════════════════════════════════
- * يُستخدَم قبل: (أ) تطبيق هجرات staging، (ب) تشغيل E2E على المتصفّح.
- * يمنع لمس مشروع الإنتاج، ويطبع المرجع المستهدَف، ويطلب تأكيد STAGING صريحاً.
+ * الدرس من المراجعة: تأمين تمرير أمر حرّ بالاستدلال على الرموز قابل للتجاوز
+ * (‏`sh -c '… --project-ref <prod>'`‏، ‏`db.<ref>.supabase.co`‏، تداخل نصّي…). لذا:
+ *   • لا تمرير أمر حرّ إطلاقاً. فقط **مُحوّلات (adapters) مسمّاة** تبني وسيط الهدف داخليّاً
+ *     من المرجع المُتحقَّق منه، ولا تقبل عنوان/مرجع هدف من المتّصل.
+ *   • `migrate`/`e2e` **يُلزمان التنفيذ المقترن** (`--command <adapter>`)؛ لا خروج-0 مجرّد.
+ *   • `--purpose check` وضع تحقّق صريح لا يأذن بتشغيل أيّ أمر منفصل.
+ *   • أيّ عَلَم غير معروف أو `--exec` (القديم) أو مُفسِّر صدفة ⇒ رفض (fail-closed).
  *
  * الاستخدام:
- *   node scripts/env-guard.mjs --purpose migrate  --ref "$STAGING_PROJECT_REF" --confirm "$STAGING_CONFIRM"
- *   node scripts/env-guard.mjs --purpose e2e       --url "$E2E_SUPABASE_URL"    --confirm "$STAGING_CONFIRM"
- * يخرج 0 إذا كان الهدف staging مؤكَّداً؛ وإلا يخرج ≠ 0 ويطبع سبب الرفض.
- *
- * وضع الاقتران بالأمر (البند 3 — «الهدف المُتحقَّق منه = الهدف المُستخدَم فعلاً»):
- *   node scripts/env-guard.mjs --purpose migrate --ref X --confirm STAGING --exec -- <command...>
- * لا يكتفي بالتحقّق: بعد القبول **يُشغّل الأمر بنفسه** ويحقن المرجع المُتحقَّق منه في بيئته
- * (GUARDED_REF + STAGING_PROJECT_REF + E2E target)، فلا يمكن للأمر أن يستهدف مرجعاً غير المُتحقَّق منه.
- * رمز خروج العملية = رمز خروج الأمر. غياب أمر بعد `--` مع `--exec` ⇒ رفض.
+ *   node scripts/env-guard.mjs --purpose migrate --ref "$REF" --confirm STAGING --command supabase-db-push
+ *   node scripts/env-guard.mjs --purpose migrate --ref "$REF" --confirm STAGING --command psql-migration --file db/portal-migrations/062-request-documents.sql
+ *   node scripts/env-guard.mjs --purpose e2e     --ref "$REF" --confirm STAGING --command browser-e2e --spec scripts/e2e/portal.mjs
+ *   node scripts/env-guard.mjs --purpose check   --ref "$REF" --confirm STAGING        # تحقّق فقط، لا أمر
+ *   (+ --dry-run لطباعة الأمر المُنشأ دون تنفيذ — للاختبار/المعاينة، بلا أسرار.)
  */
 import { spawnSync } from 'node:child_process';
-const PROD_REF = 'mwbjoysuybgbrvfrprex';   // مرجع مشروع الإنتاج — ممنوع منعاً باتّاً
+import { existsSync } from 'node:fs';
 
-function arg(name) {
-  const i = process.argv.indexOf('--' + name);
-  return i >= 0 ? process.argv[i + 1] : undefined;
-}
-function refOf(s) {
+const PROD_REF = 'mwbjoysuybgbrvfrprex';   // مرجع الإنتاج — ممنوع منعاً باتّاً
+
+const KNOWN_FLAGS = new Set(['--purpose', '--ref', '--url', '--confirm', '--command', '--file', '--spec', '--dry-run']);
+
+function arg(name) { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1] : undefined; }
+function has(name) { return process.argv.includes('--' + name); }
+function die(msg) { console.error('❌ حارس البيئة رفض: ' + msg); process.exit(2); }
+
+function refOf(s) {                          // مرجع من عنوان قانوني أو رمز مجرّد 20 محرفاً فقط
   if (!s) return null;
-  // (Codex round-3) تحليل قانونيّ: مرجع من hostname القانوني حصراً (لا regex بادئة يُخدَع بـ user@host).
-  // إن كان الوسيط عنواناً، حلِّله؛ وإلّا عامله كمرجع مجرّد (لكن ارفض ما يحوي '@' أو '/' أو ':').
   const raw = String(s).trim();
   if (/^https?:\/\//i.test(raw)) {
-    let u;
-    try { u = new URL(raw); } catch (_) { return null; }
-    if (u.protocol !== 'https:') return null;
-    if (u.username || u.password) return null;
+    let u; try { u = new URL(raw); } catch (_) { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
     if (u.port && u.port !== '443') return null;
     const m = /^([a-z0-9]{20})\.supabase\.co$/i.exec(u.hostname.toLowerCase());
     return m ? m[1] : null;
   }
-  // مرجع مجرّد: 20 محرفاً بلا فواصل مسار/مضيف — أي شيء آخر يُرفض (لا يُقارَن نصّاً خام).
-  const bare = raw.toLowerCase();
-  return /^[a-z0-9]{20}$/.test(bare) ? bare : null;
+  return /^[a-z0-9]{20}$/i.test(raw) ? raw.toLowerCase() : null;
 }
-function die(msg) { console.error('❌ حارس البيئة رفض: ' + msg); process.exit(2); }
+function safePath(p, re) { return (typeof p === 'string' && re.test(p) && existsSync(p)) ? p : null; }
 
-const purpose = arg('purpose') || 'unknown';
+// ── رفض الأعلام المجهولة و--exec القديم (منع تهريب هدف عبر أعلام غير مُصرّح بها) ──
+if (has('exec')) die('«--exec» أُزيل (كان قابلاً للتجاوز). استخدم --command <adapter> بمُحوّل مسمّى.');
+for (let i = 2; i < process.argv.length; i++) {
+  const tok = process.argv[i];
+  if (tok.startsWith('--') && !KNOWN_FLAGS.has(tok)) die(`عَلَم غير معروف: ${tok} (fail-closed — لا تهريب هدف).`);
+}
+
+const purpose = arg('purpose') || '';
 const ref = refOf(arg('ref') || arg('url') || '');
 const confirm = arg('confirm') || process.env.STAGING_CONFIRM || '';
+const dryRun = has('dry-run');
 
-console.log(`▶ env-guard: purpose=${purpose}  target_ref=${ref || '(غير محدَّد)'}`);   // (د) اطبع الهدف دائماً
+console.log(`▶ env-guard: purpose=${purpose}  target_ref=${ref || '(غير محدَّد)'}`);
+if (!ref)                 die('لم يُحدَّد مرجع مشروع الهدف (--ref/--url) بشكل قانوني.');
+if (ref === PROD_REF)     die(`الهدف هو مشروع الإنتاج (${PROD_REF}) — مرفوض. staging مشروع منفصل.`);
+if (confirm !== 'STAGING') die('تأكيد staging مفقود — مرّر STAGING_CONFIRM=STAGING (تأكيد صريح).');
 
-if (!ref)                 die('لم يُحدَّد مرجع مشروع الهدف (--ref/--url).');
-if (ref === PROD_REF)     die(`الهدف هو مشروع الإنتاج (${PROD_REF}) — مرفوض. staging يجب أن يكون مشروعاً منفصلاً.`);
-if (confirm !== 'STAGING') die('تأكيد staging مفقود — مرّر STAGING_CONFIRM=STAGING (تأكيد صريح مطلوب).');
-
-// (أ/ب) الهدف ليس الإنتاج + التأكيد موجود ⇒ مسموح.
-console.log(`✅ حارس البيئة: الهدف «${ref}» ليس الإنتاج، وتأكيد STAGING موجود — يُسمح بـ${purpose}.`);
-
-// (البند 3 + G1-01) وضع الاقتران: يربط الأمر بالهدف المُتحقَّق منه فعليّاً — لا حقن بيئة فقط.
-const execIdx = process.argv.indexOf('--exec');
-if (execIdx >= 0) {
-  const sep = process.argv.indexOf('--', execIdx);
-  let cmd = sep >= 0 ? process.argv.slice(sep + 1) : [];
-  if (cmd.length === 0) die('«--exec» بلا أمر بعد «--» — لا شيء لتشغيله (fail-closed).');
-
-  // (1) استبدال العلامة {GUARDED_REF} بالمرجع المُتحقَّق منه — الطريقة الآمنة لتمرير الهدف.
-  cmd = cmd.map(tok => tok.split('{GUARDED_REF}').join(ref));
-
-  // (2) استخلاص أي مرجع مشروع صريح داخل الأمر ورفض ما لا يطابق الهدف المُتحقَّق منه.
-  //     يمنع: `--project-ref <prod>` و `https://<prod>.supabase.co` و مرجعاً مجرّداً مغايراً.
-  const TARGET_FLAGS = new Set(['--project-ref', '--ref', '--url', '--db-url', '--database', '--project', '-p']);
-  function refIn(token) {
-    // عنوان supabase → مرجعه؛ أو مرجع مجرّد 20 محرفاً؛ وإلّا null.
-    const t = String(token);
-    const um = /https?:\/\/([a-z0-9]{20})\.supabase\.co/i.exec(t);
-    if (um) return um[1].toLowerCase();
-    if (/^[a-z0-9]{20}$/i.test(t)) return t.toLowerCase();
-    return null;
-  }
-  const offenders = [];
-  for (let i = 0; i < cmd.length; i++) {
-    const tok = cmd[i];
-    // شكل --flag=value
-    const eq = /^(--[a-z-]+|-p)=(.+)$/i.exec(tok);
-    if (eq && TARGET_FLAGS.has(eq[1].toLowerCase())) {
-      const r = refIn(eq[2]); if (r && r !== ref) offenders.push(`${eq[1]}=${eq[2]}`);
-      continue;
-    }
-    // شكل --flag value
-    if (TARGET_FLAGS.has(tok.toLowerCase())) {
-      const val = cmd[i + 1]; const r = val != null ? refIn(val) : null;
-      if (r && r !== ref) offenders.push(`${tok} ${val}`);
-      continue;
-    }
-    // أي رمز يحمل مرجعاً صريحاً (عنوان supabase أو مرجع مجرّد) مغايراً للهدف
-    const r = refIn(tok);
-    if (r && r !== ref) offenders.push(tok);
-  }
-  if (offenders.length) {
-    die(`الأمر يستهدف مرجعاً غير المُتحقَّق منه (${ref}) — مرفوض قبل التشغيل: ${offenders.join(' | ')}. ` +
-        `استخدم العلامة {GUARDED_REF} بدل تمرير مرجع صريح.`);
-  }
-
-  const childEnv = { ...process.env, GUARDED_REF: ref, STAGING_PROJECT_REF: ref };
-  if (/^https?:\/\//i.test(String(arg('url') || ''))) childEnv.E2E_SUPABASE_URL = arg('url');
-  console.log(`▶ env-guard --exec: ${cmd.join(' ')}  (GUARDED_REF=${ref})`);
-  const r = spawnSync(cmd[0], cmd.slice(1), { stdio: 'inherit', env: childEnv });
-  if (r.error) die(`تعذّر تشغيل الأمر: ${r.error.message}`);
-  process.exit(typeof r.status === 'number' ? r.status : 1);
+// ── وضع التحقّق فقط: لا يأذن بتشغيل أيّ أمر ──
+if (purpose === 'check') {
+  console.log(`✅ تحقّق فقط: الهدف «${ref}» ليس الإنتاج، وتأكيد STAGING موجود. `
+    + '(هذا الوضع لا يأذن بتشغيل أيّ أمر منفصل — استخدم --purpose migrate/e2e مع --command للتنفيذ المقترن.)');
+  process.exit(0);
 }
-process.exit(0);
+if (purpose !== 'migrate' && purpose !== 'e2e') die('الغرض يجب أن يكون migrate أو e2e أو check.');
+
+// ── المُحوّلات المسمّاة: تبني وسيط الهدف داخليّاً من المرجع المُتحقَّق منه ──
+const ADAPTERS = {
+  'supabase-db-push': { purpose: 'migrate', build(r) {
+    return { program: 'supabase', args: ['db', 'push', '--project-ref', r], env: {}, show: `supabase db push --project-ref ${r}` };
+  } },
+  'psql-migration': { purpose: 'migrate', build(r) {
+    const file = safePath(arg('file'), /^db\/portal-(migrations\/[A-Za-z0-9._-]+|standalone)\.sql$/);
+    if (!file) die('psql-migration يتطلّب --file مساراً صالحاً موجوداً تحت db/portal-migrations/*.sql أو db/portal-standalone.sql.');
+    const pw = process.env.SUPABASE_DB_PASSWORD || '';
+    if (!pw) die('psql-migration يتطلّب SUPABASE_DB_PASSWORD في البيئة (لا يُطبَع).');
+    const url = `postgresql://postgres:${pw}@db.${r}.supabase.co:5432/postgres`;
+    const shown = `psql postgresql://postgres:REDACTED@db.${r}.supabase.co:5432/postgres -v ON_ERROR_STOP=1 -f ${file}`;
+    return { program: 'psql', args: [url, '-v', 'ON_ERROR_STOP=1', '-f', file], env: {}, show: shown };
+  } },
+  'browser-e2e': { purpose: 'e2e', build(r) {
+    const spec = safePath(arg('spec'), /^(scripts|tests|db\/portal-tests)\/[A-Za-z0-9._/-]+\.(mjs|js|cjs)$/);
+    if (!spec) die('browser-e2e يتطلّب --spec ملفّاً صالحاً موجوداً تحت scripts/|tests/|db/portal-tests/ بامتداد mjs/js/cjs.');
+    return { program: 'node', args: [spec], env: { E2E_SUPABASE_URL: `https://${r}.supabase.co` }, show: `node ${spec}  (E2E_SUPABASE_URL=https://${r}.supabase.co)` };
+  } },
+};
+
+const command = arg('command');
+if (!command) die(`${purpose} يتطلّب تنفيذاً مقترناً: --command <adapter> (${Object.keys(ADAPTERS).join(' | ')}).`);
+const adapter = ADAPTERS[command];
+if (!adapter) die(`أمر غير معروف «${command}». المسموح: ${Object.keys(ADAPTERS).join(' | ')} (لا تمرير أمر حرّ).`);
+if (adapter.purpose !== purpose) die(`الأمر «${command}» للغرض «${adapter.purpose}» لا «${purpose}».`);
+
+const built = adapter.build(ref);
+if (dryRun) {
+  console.log(`✅ (dry-run) الأمر المُنشأ داخليّاً بالهدف المُتحقَّق منه «${ref}»:\n   ${built.show}`);
+  process.exit(0);
+}
+console.log(`▶ env-guard: تشغيل «${command}» ← ${built.show}`);
+const r = spawnSync(built.program, built.args, { stdio: 'inherit', env: { ...process.env, GUARDED_REF: ref, ...built.env } });
+if (r.error) die(`تعذّر تشغيل «${built.program}»: ${r.error.message}`);
+process.exit(typeof r.status === 'number' ? r.status : 1);

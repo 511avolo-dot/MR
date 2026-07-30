@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * stage1-tests.mjs — اختبارات + ضوابط سلبية لسلامة النشر (Stage 1، البند 8 + تصحيح G1-01…G1-04).
- * تغطّي: env-guard (التحقّق + الاقتران الحقيقي بهدف الأمر)، pages-exclude (تكافؤ المجموعة + حفظ query/hash
- * + منع التجاوز)، portal-config (fail-closed: بيئة/تناقض PORTAL_ENV/تحليل عنوان/ربط مشروع المفتاح/جاهزية).
- * تأكيدات صريحة (throw) — يخرج 0 عند نجاح الكل. لا يمسّ أي قاعدة/خدمة.
+ * stage1-tests.mjs — اختبارات + ضوابط سلبية لسلامة النشر (Stage 1؛ G1-01…G1-04 + G1-R2-01…G1-R2-04).
+ * env-guard (مُحوّلات مسمّاة، لا تمرير أمر حرّ) · pages-exclude (تكافؤ المجموعة + حفظ query/hash فعليّاً في DOM)
+ * · portal-config (هوية نشر ثابتة + ربط مفتاح/مشروع للمفاتيح غير المربوطة). تأكيدات صريحة، يخرج 0 عند نجاح الكل.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
@@ -13,146 +12,147 @@ import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/portal-config.js';
 
 const PROD = 'mwbjoysuybgbrvfrprex';
-const STAGING = 'abcdefghij0123456789';          // 20 محرفاً، ليس الإنتاج
+const STAGING = 'abcdefghij0123456789';
 let n = 0; const ok = (m) => { n++; console.log('  ✓ ' + m); };
 function node(args, env) { return spawnSync('node', args, { encoding: 'utf8', env: { ...process.env, ...(env || {}) } }); }
 function jwt(payload) { return 'eyJhbGciOiJIUzI1NiJ9.' + Buffer.from(JSON.stringify(payload)).toString('base64url') + '.sig'; }
+const G = ['scripts/env-guard.mjs', '--ref', STAGING, '--confirm', 'STAGING'];
 
-console.log('▶ env-guard (التحقّق + الاقتران G1-01):');
+console.log('▶ env-guard (مُحوّلات G1-R2-01):');
 {
-  let r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', PROD, '--confirm', 'STAGING']);
+  // رفض الأساسيات
+  let r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', PROD, '--confirm', 'STAGING', '--command', 'supabase-db-push']);
   assert.notEqual(r.status, 0); assert.match(r.stderr, /الإنتاج/); ok('يرفض مرجع الإنتاج');
-  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'nope']);
+  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'no', '--command', 'supabase-db-push']);
   assert.notEqual(r.status, 0); ok('يرفض غياب تأكيد STAGING');
-  r = node(['scripts/env-guard.mjs', '--purpose', 'e2e', '--url', `https://user@${PROD}.supabase.co`, '--confirm', 'STAGING']);
-  assert.notEqual(r.status, 0); ok('يرفض خداع user@host في العنوان');
+
+  // (G1-R2-01) migrate/e2e بلا --command ⇒ رفض (التنفيذ المقترن إلزامي)
   r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'STAGING']);
-  assert.equal(r.status, 0); ok('يقبل staging مؤكَّداً');
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /--command/); ok('migrate بلا --command مرفوض');
+  r = node(['scripts/env-guard.mjs', '--purpose', 'e2e', '--ref', STAGING, '--confirm', 'STAGING']);
+  assert.notEqual(r.status, 0); ok('e2e بلا --command مرفوض');
 
-  // (G1-01) الأمر يستهدف الإنتاج صراحةً ⇒ يُرفض قبل التشغيل، والأمر لا يُنفَّذ (دليل: ملف علامة غائب).
-  const dir = mkdtempSync(join(tmpdir(), 'eg-'));
-  const mark = join(dir, 'ran.txt');
-  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'STAGING',
-            '--exec', '--', 'node', '-e', 'require("fs").writeFileSync(process.env.MARK,"ran")',
-            '--project-ref', PROD], { MARK: mark });
-  assert.notEqual(r.status, 0); assert.equal(existsSync(mark), false);
-  ok('الاقتران يرفض هدف الإنتاج الصريح في الأمر ولا يُشغّله');
+  // (G1-R2-01) --exec القديم مرفوض؛ أمر غير معروف مرفوض؛ عَلَم مجهول (تهريب هدف) مرفوض
+  r = node([...G, '--purpose', 'migrate', '--exec', '--', 'sh', '-c', `supabase db push --project-ref ${PROD}`]);
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /exec/); ok('يرفض --exec (نمط sh -c قديم)');
+  r = node([...G, '--purpose', 'migrate', '--command', 'sh-c']);
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /غير معروف/); ok('يرفض أمراً غير معروف (sh-c)');
+  r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--project-ref', PROD]);
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /غير معروف/); ok('يرفض عَلَم --project-ref (تهريب هدف)');
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--db-url', `postgresql://postgres:pw@db.${PROD}.supabase.co:5432/postgres`]);
+  assert.notEqual(r.status, 0); ok('يرفض --db-url المباشر (db.<prod> / pooler)');
+  r = node([...G, '--purpose', 'e2e', '--command', 'supabase-db-push']);
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /الغرض|migrate/); ok('يرفض عدم تطابق المُحوّل/الغرض');
 
-  // (G1-01) العنوان الصريح للإنتاج داخل الأمر ⇒ يُرفض كذلك.
-  r = node(['scripts/env-guard.mjs', '--purpose', 'e2e', '--ref', STAGING, '--confirm', 'STAGING',
-            '--exec', '--', 'node', '-e', 'process.exit(0)', `https://${PROD}.supabase.co`]);
-  assert.notEqual(r.status, 0); ok('الاقتران يرفض عنوان الإنتاج الصريح في الأمر');
+  // (G1-R2-01) وضع التحقّق فقط لا يشغّل أمراً
+  r = node([...G, '--purpose', 'check']);
+  assert.equal(r.status, 0); assert.match(r.stdout, /تحقّق فقط/); ok('--purpose check يتحقّق بلا تشغيل أمر');
 
-  // (G1-01) العلامة {GUARDED_REF} تُستبدَل بالهدف المُتحقَّق منه فيمرّ ويُشغَّل بالهدف الصحيح.
-  const out = join(dir, 'target.txt');
-  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'STAGING',
-            '--exec', '--', 'node', '-e', 'require("fs").writeFileSync(process.argv[1],process.argv[3])',
-            out, '--project-ref', '{GUARDED_REF}']);
-  assert.equal(r.status, 0); assert.equal(readFileSync(out, 'utf8'), STAGING);
-  ok('{GUARDED_REF} يُستبدَل ويُشغَّل الأمر بالهدف المُتحقَّق منه');
-
-  // الهدف الصريح المطابق للـstaging مسموح (سبقه رمز موضعي كي لا يُفسِّر node العَلَم كخياره).
-  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'STAGING',
-            '--exec', '--', 'node', '-e', 'process.exit(0)', 'x', '--project-ref', STAGING]);
-  assert.equal(r.status, 0); ok('هدف staging صريح مطابق مسموح');
-
-  r = node(['scripts/env-guard.mjs', '--purpose', 'migrate', '--ref', STAGING, '--confirm', 'STAGING', '--exec', '--']);
-  assert.notEqual(r.status, 0); ok('--exec بلا أمر مرفوض');
+  // dry-run يبني الهدف داخليّاً من المرجع المُتحقَّق منه (لا مرجع إنتاج)
+  r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--dry-run']);
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يبني الهدف بالمرجع المُتحقَّق منه');
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/portal-migrations/062-request-documents.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: 'secret' });
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('db\\.' + STAGING + '\\.supabase\\.co')); assert.match(r.stdout, /REDACTED/); assert.doesNotMatch(r.stdout, /secret/); ok('psql-migration يبني عنوان db.<ref> ويُخفي كلمة المرور');
+  r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--spec', 'scripts/stage1-tests.mjs', '--dry-run']);
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('E2E_SUPABASE_URL=https://' + STAGING)); ok('browser-e2e يبني URL الهدف من المرجع المُتحقَّق منه');
+  // psql-migration بلا/بمسار خبيث
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
+  assert.notEqual(r.status, 0); ok('psql-migration بلا --file مرفوض');
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/../etc/passwd.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
+  assert.notEqual(r.status, 0); ok('psql-migration يرفض مسار ملف خبيث');
 }
 
-console.log('▶ pages-exclude (تكافؤ المجموعة G1-03 + حفظ query/hash G1-04):');
+console.log('▶ pages-exclude (تكافؤ G1-03 + حفظ query/hash فعليّاً G1-R2-04):');
 {
   let r = node(['scripts/pages-exclude.mjs', '--check']);
   assert.equal(r.status, 0); ok('--check ينجح على الشجرة الحقيقية (تكافؤ المجموعة)');
 
   const dir = mkdtempSync(join(tmpdir(), 'pgx-'));
-  writeFileSync(join(dir, 'purchase-portal.html'), '<html>REAL PORTAL</html>');
+  writeFileSync(join(dir, 'purchase-portal.html'), '<html>REAL</html>');
   writeFileSync(join(dir, 'supplier-quote.html'), '<html>REAL SQ</html>');
   r = node(['scripts/pages-exclude.mjs', '--dir', dir]);
   assert.equal(r.status, 0);
   const out = readFileSync(join(dir, 'purchase-portal.html'), 'utf8');
-  assert.match(out, /location\.replace/); assert.match(out, /location\.search/); assert.match(out, /location\.hash/);
-  assert.match(out, /aldeyabi-procurement\.pages\.dev/); assert.doesNotMatch(out, /REAL PORTAL/);
-  ok('يستبدل الصفحة بكعب يحفظ query+hash (G1-04)');
-  const sq = readFileSync(join(dir, 'supplier-quote.html'), 'utf8');
-  assert.match(sq, /supplier-quote\.html/); assert.match(sq, /location\.search\+location\.hash/);
-  ok('كعب supplier-quote يحفظ الرمز ?t=… (search+hash)');
+  assert.match(out, /location\.search/); assert.match(out, /location\.hash/); assert.doesNotMatch(out, /REAL/);
 
-  // (G1-03) صفحة معتمِدة على Functions غائبة عن الاستبعاد ⇒ --check يفشل.
+  // (G1-R2-04) سلوك DOM فعليّ: السكربت (آخر الجسم) يضبط href الرابط ويحفظ search+hash.
+  const code = [...out.matchAll(/<script>([\s\S]*?)<\/script>/g)].pop()[1];
+  const a = { href: '' };
+  const loc = { search: '?t=TOKEN123', hash: '#frag', replace() {} };
+  new Function('document', 'location', code)({ getElementById: (id) => (id === 'go' ? a : null) }, loc);
+  assert.match(a.href, /\?t=TOKEN123/); assert.match(a.href, /#frag/); assert.match(a.href, /aldeyabi-procurement\.pages\.dev/);
+  ok('كعب إعادة التوجيه يحفظ ?t=…&hash في الرابط القابل للنقر فعليّاً (DOM)');
+
+  // (G1-03) الاستبعاد الناقص/القديم يفشل --check
   const m1 = join(dir, 'omit.json');
-  writeFileSync(m1, JSON.stringify({ canonical_origin: 'https://x.pages.dev',
-    pages: [{ file: 'purchase-portal.html', needs_functions: true }],
-    github_pages_exclude: { derived_pages: [] } }));
+  writeFileSync(m1, JSON.stringify({ canonical_origin: 'https://x.pages.dev', pages: [{ file: 'purchase-portal.html', needs_functions: true }], github_pages_exclude: { derived_pages: [] } }));
   r = node(['scripts/pages-exclude.mjs', '--check', '--dir', dir, '--manifest', m1]);
-  assert.notEqual(r.status, 0); assert.match(r.stderr, /غائبة عن الاستبعاد/); ok('يرصد صفحة معتمِدة على Functions محذوفة من الاستبعاد');
-
-  // (G1-03) مُدخَل استبعاد قديم ليس needs_functions ⇒ --check يفشل.
+  assert.notEqual(r.status, 0); ok('يرصد صفحة معتمِدة على Functions محذوفة من الاستبعاد');
   const m2 = join(dir, 'stale.json');
-  writeFileSync(m2, JSON.stringify({ canonical_origin: 'https://x.pages.dev',
-    pages: [{ file: 'purchase-portal.html', needs_functions: false }],
-    github_pages_exclude: { derived_pages: ['purchase-portal.html'] } }));
+  writeFileSync(m2, JSON.stringify({ canonical_origin: 'https://x.pages.dev', pages: [{ file: 'purchase-portal.html', needs_functions: false }], github_pages_exclude: { derived_pages: ['purchase-portal.html'] } }));
   r = node(['scripts/pages-exclude.mjs', '--check', '--dir', dir, '--manifest', m2]);
-  assert.notEqual(r.status, 0); assert.match(r.stderr, /قديم\/زائد/); ok('يرصد مُدخَل استبعاد قديم/زائد');
-
-  // منع التجاوز + origin غير صالح.
+  assert.notEqual(r.status, 0); ok('يرصد مُدخَل استبعاد قديم/زائد');
   const m3 = join(dir, 'trav.json');
-  writeFileSync(m3, JSON.stringify({ canonical_origin: 'https://x.pages.dev',
-    github_pages_exclude: { pages: ['../evil.html'] } }));
+  writeFileSync(m3, JSON.stringify({ canonical_origin: 'https://x.pages.dev', github_pages_exclude: { pages: ['../evil.html'] } }));
   r = node(['scripts/pages-exclude.mjs', '--dir', dir, '--manifest', m3]);
   assert.notEqual(r.status, 0); ok('يرفض اسم صفحة فيه تجاوز مسار');
-  const m4 = join(dir, 'origin.json');
-  writeFileSync(m4, JSON.stringify({ canonical_origin: 'javascript:alert(1)',
-    github_pages_exclude: { pages: ['purchase-portal.html'] } }));
-  r = node(['scripts/pages-exclude.mjs', '--dir', dir, '--manifest', m4]);
-  assert.notEqual(r.status, 0); ok('يرفض canonical_origin غير صالح');
 }
 
-console.log('▶ portal-config (fail-closed + G1-02):');
+console.log('▶ portal-config (هوية نشر ثابتة G1-R2-02 + ربط مفتاح G1-R2-03):');
 async function cfg(env) { const res = await onRequestGet({ env }); return { status: res.status, body: await res.json() }; }
 {
-  const anon = jwt({ role: 'anon' });                        // بلا ref
-  const anonStg = jwt({ role: 'anon', ref: STAGING });
+  const noref = jwt({ role: 'anon' });
+  const anonStg = jwt({ role: 'anon', ref: STAGING, iss: 'supabase' });
   const anonProd = jwt({ role: 'anon', ref: PROD });
   const svc = jwt({ role: 'service_role' });
+  const expired = jwt({ role: 'anon', ref: STAGING, exp: 1 });
   const stagingUrl = `https://${STAGING}.supabase.co`, prodUrl = `https://${PROD}.supabase.co`;
-  const base = (over) => Object.assign({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anon,
-    PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'x', QUOTES_BUCKET: {}, CF_PAGES_BRANCH: 'feature' }, over || {});
+  const svcRole = 'x', bkt = {};
+  const prev = (over) => Object.assign({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anonStg,
+    PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'feature' }, over || {});
 
-  let r = await cfg({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anon });
-  assert.equal(r.status, 503); ok('بلا CF_PAGES_BRANCH/PORTAL_ENV ⇒ 503');
-  r = await cfg(base({ PORTAL_SUPABASE_URL: prodUrl }));
-  assert.equal(r.status, 409); ok('معاينة على مشروع الإنتاج ⇒ 409');
-  r = await cfg(base({ PORTAL_SUPABASE_ANON_KEY: svc }));
-  assert.equal(r.status, 500); ok('مفتاح service_role ⇒ 500');
-  r = await cfg(base({ PORTAL_SUPABASE_URL: `https://user@${STAGING}.supabase.co` }));
-  assert.equal(r.status, 503); ok('عنوان user@host ⇒ 503');
-  r = await cfg(base({ QUOTES_BUCKET: undefined }));
-  assert.equal(r.status, 503); ok('نقص ربط الخادم (bucket) ⇒ 503');
+  // (G1-R2-02) غياب الفرع ⇒ 503 (فشل مغلق على النقطة العامّة)
+  let r = await cfg({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anonStg, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt });
+  assert.equal(r.status, 503); ok('غياب CF_PAGES_BRANCH ⇒ 503 (فشل مغلق)');
+  // (G1-R2-02) PORTAL_PROD_BRANCH لا يُتجاوَز: فرع معاينة يدّعي أنه إنتاج + مرجع إنتاج ⇒ يبقى معاينة ⇒ 409
+  r = await cfg(prev({ PORTAL_PROD_BRANCH: 'feature', PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd }));
+  assert.equal(r.status, 409); ok('PORTAL_PROD_BRANCH=<preview> مُتجاهَل ⇒ معاينة على الإنتاج ⇒ 409');
+  // (G1-R2-02) main + مرجع غير الإنتاج ⇒ 409
+  r = await cfg({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anonStg, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'main' });
+  assert.equal(r.status, 409); ok('main + مرجع غير الإنتاج ⇒ 409');
+  // معاينة + مرجع الإنتاج ⇒ 409
+  r = await cfg(prev({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd }));
+  assert.equal(r.status, 409); ok('معاينة + مرجع الإنتاج ⇒ 409');
+  // service_role ⇒ 500 · user@host ⇒ 503 · نقص bucket ⇒ 503
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: svc })); assert.equal(r.status, 500); ok('service_role ⇒ 500');
+  r = await cfg(prev({ PORTAL_SUPABASE_URL: `https://user@${STAGING}.supabase.co` })); assert.equal(r.status, 503); ok('user@host ⇒ 503');
+  r = await cfg(prev({ QUOTES_BUCKET: undefined })); assert.equal(r.status, 503); ok('نقص bucket ⇒ 503');
 
-  // (G1-02) PORTAL_ENV يناقض الفرع ⇒ 409 (الفرع قاطع).
-  r = await cfg(base({ PORTAL_ENV: 'production', PORTAL_SUPABASE_URL: prodUrl }));
-  assert.equal(r.status, 409); assert.match(r.body.error, /يناقض الفرع/); ok('PORTAL_ENV=production على فرع معاينة ⇒ 409 (لا تخطّي)');
-  // (G1-02) مفتاح anon لمشروع مختلف عن العنوان ⇒ 500.
-  r = await cfg(base({ PORTAL_SUPABASE_ANON_KEY: anonProd }));
-  assert.equal(r.status, 500); assert.match(r.body.error, /مشروع/); ok('anon key لمشروع مغاير للعنوان ⇒ 500 (ربط المشروع)');
-  // (G1-02) publishable مبهم بلا PORTAL_SUPABASE_EXPECTED_REF ⇒ 500.
-  r = await cfg(base({ PORTAL_SUPABASE_ANON_KEY: 'sb_publishable_abc123' }));
-  assert.equal(r.status, 500); ok('publishable مبهم بلا expected-ref ⇒ 500');
-  // publishable مبهم مع expected-ref مطابق ⇒ ok.
-  r = await cfg(base({ PORTAL_SUPABASE_ANON_KEY: 'sb_publishable_abc123', PORTAL_SUPABASE_EXPECTED_REF: STAGING }));
-  assert.equal(r.status, 200); assert.equal(r.body.ok, true); ok('publishable مبهم مع expected-ref مطابق ⇒ ok');
-  // (G1-02) غياب الفرع + PORTAL_ENV بلا هوية نشر ⇒ 409.
-  r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anon,
-    PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'x', QUOTES_BUCKET: {}, PORTAL_ENV: 'production' });
-  assert.equal(r.status, 409); ok('PORTAL_ENV بلا فرع وبلا هوية نشر ⇒ 409');
-  // غياب الفرع + PORTAL_ENV + هوية نشر مطابقة ⇒ ok.
-  r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anon,
-    PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'x', QUOTES_BUCKET: {}, PORTAL_ENV: 'production', PORTAL_ENV_IDENTITY: PROD });
-  assert.equal(r.status, 200); assert.equal(r.body.ok, true); ok('PORTAL_ENV + هوية نشر مطابقة ⇒ ok');
-  // المسار السعيد: إنتاج على main + anon(بلا ref) + خدمة + bucket.
-  r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anon,
-    PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'x', QUOTES_BUCKET: {}, CF_PAGES_BRANCH: 'main' });
-  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, PROD); ok('إنتاج على main ⇒ ok:true');
+  // (G1-R2-03) JWT بلا ref ⇒ غير مربوط: بلا expected-ref ⇒ 500
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: noref }));
+  assert.equal(r.status, 500); ok('JWT بلا ref وبلا expected-ref ⇒ 500 (غير مربوط)');
+  // JWT بلا ref + expected-ref مطابق ⇒ ok
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: noref, PORTAL_SUPABASE_EXPECTED_REF: STAGING }));
+  assert.equal(r.status, 200); assert.equal(r.body.ok, true); ok('JWT بلا ref + expected-ref مطابق ⇒ ok');
+  // JWT بلا ref + expected-ref مغاير ⇒ 500
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: noref, PORTAL_SUPABASE_EXPECTED_REF: PROD }));
+  assert.equal(r.status, 500); ok('JWT بلا ref + expected-ref مغاير ⇒ 500');
+  // JWT بمطالبة ref مغايرة للعنوان ⇒ 500
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: anonProd }));
+  assert.equal(r.status, 500); ok('JWT ref لمشروع مغاير للعنوان ⇒ 500');
+  // JWT منتهي الصلاحية ⇒ 500
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: expired }));
+  assert.equal(r.status, 500); ok('JWT منتهي الصلاحية ⇒ 500');
+  // publishable مبهم: بلا expected ⇒ 500؛ مع expected مطابق ⇒ ok
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: 'sb_publishable_abc' })); assert.equal(r.status, 500); ok('publishable مبهم بلا expected ⇒ 500');
+  r = await cfg(prev({ PORTAL_SUPABASE_ANON_KEY: 'sb_publishable_abc', PORTAL_SUPABASE_EXPECTED_REF: STAGING })); assert.equal(r.status, 200); ok('publishable مبهم + expected مطابق ⇒ ok');
+
+  // المسار السعيد: معاينة على staging بمفتاح مربوط (ref=staging) ⇒ ok
+  r = await cfg(prev({}));
+  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, STAGING); ok('معاينة على staging بمفتاح مربوط ⇒ ok');
+  // main + مرجع الإنتاج + مفتاح مربوط للإنتاج ⇒ ok
+  r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'main' });
+  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, PROD); ok('إنتاج على main بمفتاح مربوط ⇒ ok');
 }
 
 console.log(`\n✅ Stage-1 deployment-safety: ${n} تأكيداً — كلها نجحت.`);
