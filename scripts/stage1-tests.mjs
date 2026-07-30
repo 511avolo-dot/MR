@@ -66,17 +66,23 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
 
 console.log('▶ launchers + net-allow (G1-R3-01/02):');
 {
-  // (G1-R4-01) supabase-push dry-run: يبني حمولة مُتحقَّقة بالبصمة (لا اتّصال؛ dry-run لا يلزمه كلمة مرور)
-  let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.match(r.stdout, /db push --linked/); assert.match(r.stdout, /التاريخ الكامل/); assert.match(r.stdout, new RegExp(MIG_VERSION)); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push: يبني حمولة التاريخ الكامل (بصمات مطابقة) + 062 الرأس بإصداره الجديد (R6-01/02)');
-  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: PROD });
+  // (F1) supabase-push وضعان: bootstrap (أساس فقط) + apply-062 (أساس+062، 062 وحدها معلّقة). dry-run بلا اتّصال.
+  let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: STAGING });
+  assert.equal(r.status, 0); assert.match(r.stdout, /mode=bootstrap/); assert.match(r.stdout, /baseline_through_061/); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push --mode bootstrap: الأساس فقط، خطة link→push بالهدف');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'apply-062'], { GUARDED_REF: STAGING });
+  assert.equal(r.status, 0); assert.match(r.stdout, /mode=apply-062/); assert.match(r.stdout, /baseline_through_061/); assert.match(r.stdout, new RegExp(MIG_VERSION)); ok('supabase-push --mode apply-062: الأساس+062 و062 وحدها معلّقة');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /--mode/); ok('supabase-push بلا --mode يفشل مغلقاً (خلط الوضع)');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: PROD });
   assert.notEqual(r.status, 0); ok('supabase-push يرفض GUARDED_REF=الإنتاج');
-  // التنفيذ الحيّ مؤجَّل: بلا كلمة مرور ⇒ يفشل؛ ومع كلمة مرور بلا CLI ⇒ يفشل (لا نجاح زائف)
-  r = node(['scripts/deploy/supabase-push.mjs'], { GUARDED_REF: STAGING });
+  const bsha = createHash('sha256').update(readFileSync('db/staging-bootstrap/baseline_through_061.sql')).digest('hex');
+  const msha = createHash('sha256').update(readFileSync('db/portal-migrations/062-request-documents.sql')).digest('hex');
+  const pushSrc = readFileSync('scripts/deploy/supabase-push.mjs', 'utf8');
+  assert.match(pushSrc, new RegExp(bsha)); assert.match(pushSrc, new RegExp(msha)); ok('بصمتا الأساس و062 المثبَّتتان في المُشغّل تطابقان الملفّين (حارس انجراف)');
+  r = node(['scripts/deploy/supabase-push.mjs', '--mode', 'bootstrap'], { GUARDED_REF: STAGING });
   assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يرفض غياب SUPABASE_DB_PASSWORD');
-  // ملاحظة: في هذا الصندوق لا يوجد supabase CLI، فالتنفيذ الحيّ بكلمة مرور يفشل بوضوح عند فحص الـCLI
-  r = node(['scripts/deploy/supabase-push.mjs'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
-  assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يفشل بوضوح بلا Supabase CLI (لا نجاح زائف)');
+  r = node(['scripts/deploy/supabase-push.mjs', '--mode', 'bootstrap'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
+  assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يفشل بوضوح بلا Supabase CLI (لا نجاح زائف)')
   // (G1-R6-03) e2e-run يفوّض إلزاميّاً إلى browser-run.mjs (يفشل مغلقاً بلا Playwright/‏staging — لا نجاح زائف)
   r = node(['scripts/e2e/run.mjs'], { E2E_SUPABASE_URL: `https://${STAGING}.supabase.co` });
   assert.notEqual(r.status, 0); assert.match(r.stdout, /تفويض إلى متصفّح/); ok('e2e-run يفوّض إلى browser-run.mjs ويفشل مغلقاً (G1-R6-03)');
@@ -154,26 +160,17 @@ console.log('▶ mig-parse: فرض «062 وحدها» في dry-run (G1-R5-02):')
   assert.equal(parsePendingVersions(`${MIG_DEST_NAME}\n20259999999999_x.sql`).length, 2); ok('parsePendingVersions يجمع النسخ الفريدة');
 }
 
-console.log('▶ migration manifest: تاريخ كامل قانونيّ (G1-R6-01/02):');
+console.log('▶ staging baseline lineage (F1):');
 {
-  // البيان محدَّث (لا انجراف) + يغطّي كل ملفات الهجرة (عدا RUN-ALL)
-  let r = node(['scripts/deploy/build-migration-manifest.mjs', '--check']);
-  assert.equal(r.status, 0); ok('manifest.json محدَّث ومطابق للمولّد الحتميّ');
-  const man = JSON.parse(readFileSync('db/portal-migrations/manifest.json', 'utf8'));
-  const files = readdirSync('db/portal-migrations').filter(f => f.endsWith('.sql') && !f.startsWith('RUN-ALL'));
-  assert.equal(man.migrations.length, files.length); ok(`البيان يغطّي كل الهجرات (${files.length})`);
-  // كل بصمة تطابق ملفها (حارس انجراف لكامل التاريخ لا 062 وحدها)
-  let allSha = true;
-  for (const m of man.migrations) { const h = createHash('sha256').update(readFileSync('db/portal-migrations/' + m.file)).digest('hex'); if (h !== m.sha256) allSha = false; }
-  assert.equal(allSha, true); ok('كل بصمات البيان تطابق ملفاتها (حارس انجراف شامل)');
-  // إصدارات فريدة + تصاعد صارم
-  const vs = man.migrations.map(m => m.version);
-  assert.equal(new Set(vs).size, vs.length); let mono = true; for (let i = 1; i < vs.length; i++) if (vs[i] <= vs[i - 1]) mono = false;
-  assert.equal(mono, true); ok('إصدارات البيان فريدة ومتزايدة صارمة');
-  // (R6-02) 062 هو الرأس وإصداره بعد 061 المُتحقَّق حيّاً + يطابق MIG_VERSION
-  const v061 = man.migrations.find(m => m.seq === '061').version, m062 = man.migrations.find(m => m.seq === '062');
-  assert.equal(man.migrations[man.migrations.length - 1].seq, '062'); assert.equal(m062.version, MIG_VERSION); assert.equal(m062.version > v061, true); assert.equal(m062.version > '20260729073619', true);
-  ok('062 الرأس، إصداره بعد 061 (20260729073619) ويطابق MIG_VERSION (R6-02)');
+  // (F1) الأساس مطابق للمولَّد الحتميّ (drift guard)
+  let r = node(['scripts/deploy/build-baseline.mjs', '--check']);
+  assert.equal(r.status, 0); ok('baseline_through_061.sql مطابق للمولَّد الحتميّ');
+  // (F1) الأساس لا يحتوي 062، والهجرة 062 موجودة منفصلةً
+  const base = readFileSync('db/staging-bootstrap/baseline_through_061.sql', 'utf8');
+  assert.equal(/portal_request_documents/.test(base), false); ok('قطعة الأساس لا تحتوي كائنات 062 (through 061 فقط)');
+  assert.equal(existsSync('db/portal-migrations/062-request-documents.sql'), true); ok('الهجرة 062 موجودة كملفّ منفصل يُطبَّق فوق الأساس');
+  // (F1) لا بيان تاريخ مُخترَع بعد الآن
+  assert.equal(existsSync('db/portal-migrations/manifest.json'), false); ok('بيان التاريخ المُخترَع أُزيل (لا history مُلفَّق)');
 }
 
 console.log('▶ portal-config (هوية نشر ثابتة G1-R2-02 + ربط مفتاح G1-R2-03):');

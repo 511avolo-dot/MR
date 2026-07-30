@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * browser-run.mjs — مُشغّل E2E المتصفّح الحقيقي (G1-R4-03). يفرض حدّ الشبكة على **مستوى سياق المتصفّح**
- * (Playwright `context.route`) قبل إنشاء أيّ صفحة، فيغطّي fetch/XHR/التنقّل/‏Supabase JS داخل الصفحة —
- * لا مجرّد `globalThis.fetch` في Node. يمنع أيّ مضيف Supabase غير مرجع staging المُتحقَّق منه، والإنتاج دائماً.
+ * browser-run.mjs — المُشغّل الوحيد الموثوق لـE2E المتصفّح (F2/F3/F4). حدّ الشبكة على **مستوى سياق المتصفّح**:
+ *   • Service Workers **محظورة** (`serviceWorkers:'block'`) فلا تتجاوز عامل الخدمة اعتراضَنا.
+ *   • HTTP عبر context.route (كل الطلبات) + WebSocket عبر context.routeWebSocket — كلاهما قبل أيّ صفحة.
+ * الإنتاج (HTTP و WSS) محظور دائماً؛ ومرجع Supabase غير staging المُتحقَّق محظور؛ فقط staging مسموح.
  *
- * fail-closed: يخرج بخطأ (لا «نجاح» زائف) إن غابت حزمة playwright أو staging (`E2E_BASE_URL`/`GUARDED_REF`).
- * ⚠️ حزمة playwright غير مثبَّتة في هذا المستودع بعد + لا staging ⇒ لا يُشغَّل فعليّاً هنا (نتيجة E2E مفتوحة).
- * التثبيت المستقبلي: `npm i -D playwright` (المتصفّحات مثبَّتة في /opt/pw-browsers). الاستدعاء عبر env-guard
- * (browser-e2e) عند تجهيز staging.
+ * سيناريو smoke بمُحدِّدات النظام-3 **الحقيقية** (F2): #pa-email · #pa-pass · #pa-lg-btn · نجاح الدخول =
+ * إخفاء #pa-login وإظهار .topbar + .wrap. يفشل مغلقاً بلا حزمة playwright أو E2E_BASE_URL أو STAGING_TEST_*.
  *
- * قاعدة السماح/المنع (مطابقة scripts/e2e/net-allow.mjs، مُطبَّقة على مستوى المتصفّح):
+ * يُستدعى عبر env-guard (--command browser-e2e) وعبر scripts/e2e/run.mjs (يفوّض إليه) — مسار أمر واحد (F4).
+ * الاختبار الحتميّ بلا staging خارجيّ: scripts/e2e/browser-fixture.test.mjs.
  */
 import { supabaseRefOfHost } from './net-allow.mjs';
 
@@ -22,66 +22,91 @@ const m = /^https:\/\/([a-z0-9]{20})\.supabase\.co\/?$/.exec(url);
 const ref = m ? m[1] : (process.env.GUARDED_REF || '').toLowerCase();
 if (!/^[a-z0-9]{20}$/.test(ref)) die('لا مرجع staging صالح (يُضبط عبر env-guard).');
 if (ref === PROD_REF) die('الهدف الإنتاج — مرفوض.');
-if (!base) die('E2E_BASE_URL (نشر staging) مطلوب لتشغيل E2E المتصفّح — النتيجة مفتوحة بدونه (fail-closed).');
+if (!base) die('E2E_BASE_URL (نشر staging/fixture) مطلوب — النتيجة مفتوحة بدونه (fail-closed).');
+const email = process.env.STAGING_TEST_EMAIL || '';
+const pass = process.env.STAGING_TEST_PASSWORD || '';
+if (!email || !pass) die('سيناريو smoke يتطلّب STAGING_TEST_EMAIL + STAGING_TEST_PASSWORD — fail-closed.');
 
 let chromium;
 try { ({ chromium } = await import('playwright')); }
-catch (_) { die('حزمة playwright غير مثبَّتة — ثبّتها (npm i -D playwright؛ المتصفّحات في /opt/pw-browsers) ثم أعِد التشغيل. لا ندّعي نجاحاً بدونها.'); }
+catch (_) { die('حزمة playwright غير مثبَّتة — npm ci ثم أعِد التشغيل (لا نجاح زائف).'); }
 
-// قرار السماح على مستوى سياق المتصفّح: يُطبَّق على كلّ الطلبات قبل أيّ صفحة.
+// قرار السماح المشترك (HTTP + WS): غير-Supabase مسموح؛ الإنتاج محظور دائماً؛ Supabase آخر يجب أن يطابق staging.
 function allowed(u) {
   let host; try { host = new URL(u).hostname; } catch (_) { return false; }
   const r = supabaseRefOfHost(host);
-  if (r === null) return true;                 // غير Supabase — مسموح (الواجهة)
-  if (r === PROD_REF) return false;            // الإنتاج — محظور دائماً
-  return r === ref;                            // Supabase آخر يجب أن يطابق staging
+  if (r === null) return true;
+  if (r === PROD_REF) return false;
+  return r === ref;
 }
 
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext();
-let blocked = 0;
+// المتصفّح: يُفضَّل مسار صريح (PW_CHROMIUM_PATH) لبيئات بمتصفّح مثبَّت مسبقاً؛ وإلّا حزمة playwright المُدارة.
+const execPath = process.env.PW_CHROMIUM_PATH || undefined;
+// --no-sandbox لازم لبيئات الحاويات/CI (يعمل بجذر) وحميد في غيرها.
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], ...(execPath ? { executablePath: execPath } : {}) });
+// (F3) Service Workers محظورة على مستوى السياق.
+const context = await browser.newContext({ serviceWorkers: 'block' });
+
+const httpBlocked = new Set(), httpAllowed = new Set(), wsBlocked = new Set(), wsAllowed = new Set();
 await context.route('**/*', (route) => {
-  const u = route.request().url();
-  if (!allowed(u)) { blocked++; return route.abort(); }   // يُجهَض قبل الشبكة
-  return route.continue();
+  const u = route.request().url(); let host; try { host = new URL(u).hostname; } catch (_) { host = u; }
+  if (allowed(u)) { if (supabaseRefOfHost(host) !== null) httpAllowed.add(host); return route.continue(); }
+  httpBlocked.add(host); return route.abort();
 });
+// (F3) حدّ WebSocket — يُثبَّت قبل أيّ صفحة.
+await context.routeWebSocket(/.*/, (ws) => {
+  const u = ws.url(); let host; try { host = new URL(u).hostname; } catch (_) { host = u; }
+  if (allowed(u)) { wsAllowed.add(host); try { ws.connectToServer(); } catch (_) {} }
+  else { wsBlocked.add(host); try { ws.close(); } catch (_) {} }
+});
+
 const page = await context.newPage();
 
-// (G1-R5-03) تحقّق هويّة الإعداد قبل أيّ إجراء — يفشل مغلقاً ما لم يُرجِع staging المتوقَّع بالضبط.
+// (F2) افتح صفحة النظام-3 + تحقّق هويّة الإعداد قبل أيّ إجراء (fail-closed).
 let resp;
-try { resp = await page.goto(base.replace(/\/+$/, '') + '/api/portal-config', { waitUntil: 'domcontentloaded' }); }
-catch (e) { await browser.close(); die('تعذّر تحميل /api/portal-config: ' + e.message); }
-if (!resp || resp.status() !== 200) { await browser.close(); die(`portal-config أعاد HTTP ${resp ? resp.status() : 'null'} — متوقَّع 200 (fail-closed).`); }
-let cfg; try { cfg = await resp.json(); } catch (_) { await browser.close(); die('portal-config ليس JSON صالحاً (صفحة خطأ؟) — fail-closed.'); }
-if (cfg.ok !== true) { await browser.close(); die('portal-config ok !== true — الإعداد غير جاهز (fail-closed).'); }
-if (cfg.env === 'production' || cfg.ref === PROD_REF) { await browser.close(); die(`portal-config هويّة إنتاج (env=${cfg.env}, ref=${cfg.ref}) — إيقاف فوريّ (fail-closed).`); }
-if (cfg.ref !== ref) { await browser.close(); die(`portal-config ref (${cfg.ref}) ≠ staging المُتحقَّق (${ref}) — fail-closed.`); }
+try { resp = await page.goto(base.replace(/\/+$/, '') + '/purchase-portal.html', { waitUntil: 'domcontentloaded' }); }
+catch (e) { await browser.close(); die('تعذّر فتح صفحة النظام-3: ' + e.message); }
+const cfg = await page.evaluate(async () => { try { const r = await fetch('/api/portal-config'); return { s: r.status, b: await r.json() }; } catch (e) { return { s: 0, b: null }; } });
+if (cfg.s !== 200 || !cfg.b || cfg.b.ok !== true) { await browser.close(); die('portal-config غير جاهز/‏ok!=true (fail-closed).'); }
+if (cfg.b.env === 'production' || cfg.b.ref === PROD_REF) { await browser.close(); die(`هويّة إنتاج (env=${cfg.b.env}, ref=${cfg.b.ref}) — إيقاف فوريّ.`); }
+if (cfg.b.ref !== ref) { await browser.close(); die(`ref (${cfg.b.ref}) ≠ staging (${ref}) — fail-closed.`); }
 
-// ── (G1-R6-04) سيناريو smoke فعليّ على staging (ليس مجرّد فحص إعداد) ──
-const email = process.env.STAGING_TEST_EMAIL || '';
-const pass = process.env.STAGING_TEST_PASSWORD || '';
-if (!email || !pass) { await browser.close(); die('سيناريو smoke يتطلّب STAGING_TEST_EMAIL + STAGING_TEST_PASSWORD (مستخدم staging فقط) — fail-closed (لا نجاح زائف).'); }
+// (F3) مجسّات أمنية داخل الصفحة قبل تسجيل الدخول.
+const OTHER_REF = 'zzzzzzzzzzzzzzzzzzzz';
+await page.evaluate(async ({ prod, other, stg }) => {
+  const tryFetch = (u) => fetch(u).then(() => 0).catch(() => 0);
+  const tryWs = (u) => { try { new WebSocket(u); } catch (_) {} };
+  await tryFetch(`https://${prod}.supabase.co/rest/v1/`);      // يجب أن يُجهَض (route.abort)
+  await tryFetch(`https://${other}.supabase.co/rest/v1/`);     // مرجع آخر — يجب أن يُجهَض
+  await tryFetch(`https://${stg}.supabase.co/rest/v1/`);       // staging — يجب أن يمرّ (route.continue)
+  tryWs(`wss://${prod}.supabase.co/realtime/v1/websocket`);    // WSS إنتاج — يجب أن يُحظَر
+  tryWs(`wss://${stg}.supabase.co/realtime/v1/websocket`);     // WSS staging — يجب أن يُسمَح (route)
+  try { await navigator.serviceWorker?.register('/sw.js'); } catch (_) {}  // SW — محظور على مستوى السياق
+}, { prod: PROD_REF, other: OTHER_REF, stg: ref });
+await page.waitForTimeout(400);
 
-// 1) افتح صفحة النظام-3.
-await page.goto(base.replace(/\/+$/, '') + '/purchase-portal.html', { waitUntil: 'domcontentloaded' });
+// تأكيدات الحدّ (fail-closed على أيّ خرق).
+const swActive = await page.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller));
+const viol = [];
+if (!httpBlocked.has(`${PROD_REF}.supabase.co`)) viol.push('prod HTTP لم يُحظَر');
+if (!httpBlocked.has(`${OTHER_REF}.supabase.co`)) viol.push('مرجع آخر HTTP لم يُحظَر');
+if (!httpAllowed.has(`${ref}.supabase.co`)) viol.push('staging HTTP لم يُسمَح');
+if (!wsBlocked.has(`${PROD_REF}.supabase.co`)) viol.push('prod WSS لم يُحظَر');
+if (!wsAllowed.has(`${ref}.supabase.co`)) viol.push('staging WSS لم يُسمَح');
+if (swActive) viol.push('Service Worker نشِط (تجاوز محتمل)');
+if (viol.length) { await browser.close(); die('خرق حدّ الشبكة: ' + viol.join(' · ')); }
 
-// 2) تأكيد أمنيّ مستقلّ عن DOM: طلب إنتاج من داخل الصفحة يجب أن يُجهَض على مستوى سياق المتصفّح قبل الشبكة.
-const prodProbe = await page.evaluate(async (prodRef) => {
-  try { await fetch(`https://${prodRef}.supabase.co/rest/v1/`, { method: 'GET' }); return 'REACHED'; }
-  catch (e) { return 'BLOCKED:' + (e && e.name || 'err'); }
-}, PROD_REF);
-if (prodProbe === 'REACHED') { await browser.close(); die('طلب إنتاج من داخل الصفحة وصل الشبكة — حدّ سياق المتصفّح فشل (P0).'); }
-
-// 3) تسجيل دخول staging + بلوغ حالة محميّة (المُقدّم يرى لوحته).
-await page.fill('#loginEmail, input[type="email"]', email);
-await page.fill('#loginPass, input[type="password"]', pass);
-await page.click('#loginBtn, button[type="submit"]');
-await page.waitForSelector('#app:not(.hidden), [data-authed="1"], nav.portal-nav', { timeout: 20000 });
-
-// 4) أعِد تأكيد هويّة staging بعد الدخول (لا تسرّب إنتاج).
-const post = await page.evaluate(async () => { const r = await fetch('/api/portal-config'); return r.json(); });
-if (post.ref !== ref || post.env === 'production') { await browser.close(); die(`بعد الدخول: هويّة غير staging (env=${post.env}, ref=${post.ref}) — fail-closed.`); }
+// (F2) تسجيل دخول staging بمُحدِّدات النظام-3 الحقيقية + بلوغ الحالة المحميّة.
+await page.fill('#pa-email', email);
+await page.fill('#pa-pass', pass);
+await page.click('#pa-lg-btn');
+try {
+  await page.waitForSelector('#pa-login', { state: 'hidden', timeout: 15000 });
+  await page.waitForSelector('.topbar', { state: 'visible', timeout: 15000 });
+  await page.waitForSelector('.wrap', { state: 'visible', timeout: 15000 });
+} catch (e) { await browser.close(); die('فشل بلوغ الحالة المحميّة بعد الدخول (المُحدِّدات/الاعتماد): ' + e.message); }
 
 await browser.close();
-console.log(`✅ browser-run: سيناريو smoke نجح على staging (${ref}) — دخول + حالة محميّة؛ حظر الإنتاج داخل الصفحة مؤكَّد (${prodProbe})؛ طلبات مُجهَضة=${blocked}.`);
+console.log(`✅ browser-run: smoke نجح على staging (${ref}) — دخول (#pa-login مخفيّ · .topbar+.wrap ظاهران) + حدّ سياق المتصفّح مؤكَّد `
+  + `[HTTP blocked=${[...httpBlocked].length} allowed(staging)=${httpAllowed.has(ref + '.supabase.co')} · WS blocked=${[...wsBlocked].length} allowed(staging)=${wsAllowed.has(ref + '.supabase.co')} · SW active=${swActive}].`);
 process.exit(0);

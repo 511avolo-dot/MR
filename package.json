@@ -1,0 +1,15 @@
+{
+  "name": "aldeyabi-portal-system3",
+  "version": "0.0.0",
+  "private": true,
+  "description": "System-3 portal — Stage-1 deployment-safety tooling + browser E2E boundary (repo-only).",
+  "type": "module",
+  "scripts": {
+    "test:stage1": "node scripts/stage1-tests.mjs",
+    "test:baseline": "bash db/staging-bootstrap/verify-baseline.sh",
+    "test:browser-fixture": "node scripts/e2e/browser-fixture.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}

@@ -4,40 +4,41 @@
 **Scope discipline:** repo files only. **No** migration 062/063 apply, **no** production/Storage/Cloudflare/Supabase/Resend
 change. PR stays Draft.
 
-## Evidence types — precise (G1-R4-05)
-To avoid overstating: this branch proves **logic/config assertions locally**; it does **not** prove real external execution.
-| Evidence | State |
-|---|---|
-| Local logic/config assertions (`stage1-tests.mjs`) | **PASS — 55** (migration-manifest 5 + mig-parse 6 + env-guard 14 · launchers+net-allow 10 · pages-exclude 5 · portal-config 16 − dedup) |
-| Real Supabase CLI contract (`--help`) | **SKIPPED locally** (no CLI); **enforced in the dedicated CI job `supabase-contract`** which installs the **exact pinned version `2.110.0`** (`supabase/setup-cli`, overridable only via repo var — never `latest`), asserts installed==pin, and runs `REQUIRE_SUPABASE_CLI=1` → fails if absent/mismatch (G1-R5-01). Not counted as Gate evidence when skipped |
-| Real migration discovery/apply of 062 | **NOT RUN** — needs pinned CLI + isolated staging **provisioned from the manifest** (gated, G1-R6-06). The launcher now builds the **complete migration history** (62 files) from `db/portal-migrations/manifest.json` with **per-file SHA-256 verification**, so a staging DB at 061 shows exactly `{062}` pending (G1-R6-01); 062's canonical version is **`20260730120000` — strictly after the verified live 061 `20260729073619`** (G1-R6-02). `db push --dry-run` output is parsed deterministically to assert the pending set is EXACTLY `{062}` (G1-R5-02, unit-tested). Live `db push` still not run |
-| Real **browser** E2E | **NOT RUN** — the authorized `browser-e2e` adapter now invokes the **real Playwright runner `scripts/e2e/browser-run.mjs`** directly (and `run.mjs` delegates to it — no orphaned path, G1-R6-03). The runner installs a **BrowserContext `route` deny-rule**, parses `/api/portal-config` (fails closed unless `ok===true`, `env≠production`, `ref===GUARDED_REF`), and runs a **real smoke journey** (open System-3 page → in-page production-fetch **must be aborted at context level** → staging login → protected state → re-assert ref), failing closed without `playwright` + `E2E_BASE_URL` + staging creds (G1-R6-04). Not executed here (no package/staging) |
-| Isolated staging provisioning | **NOT PROVISIONED** — owner external action + separate authorization (G1-R6-06). Staging is bootstrapped **from `manifest.json`** so local + remote migration history align (`STAGING_SETUP_PLAN.md`) |
+## Section 1 — Repo-side Gate 1 (F5) — PASS/FAIL with commands + machine results
+> This branch proves **repo-side** logic + real local execution. External isolated-staging execution is **Section 2 (NOT RUN)**.
 
-## Deployment reality (G1-R2-05 / G1-R4-05 — exact-head, read-only)
-- GitHub Actions `pages.yml`/`deploy.yml` run **only on push to `main`** (not this branch). **Cloudflare's GitHub
-  integration independently builds a public PR Preview per commit** — so this is "no production deployment/config mutation,"
-  not "no deployment."
-- **Exact-head read-only Preview check (Claude-observed, no secrets):** the invariant to hold every head is
-  `GET …/api/portal-config` → **HTTP 503, `env:"preview"`, fails closed, never the production ref**. This check is
-  **re-run per commit** and the exact-head result (URL · timestamp · status · redacted body) is recorded in the PR
-  thread for **that** head — **no current-head Preview proof is implied from any older deploy** (G1-R6-05).
-  Prior recorded heads (historical, superseded by later ones): `2c2a552` 2026-07-30T11:58:11Z HTTP 503;
-  `0d09ccc`/`27c9666e` 2026-07-30T12:28:51Z HTTP 503. The current-head result is posted on push.
+| Item | Command | Result |
+|---|---|---|
+| F1 · staging baseline lineage (empty DB → baseline(061) → 062 → suite) | `bash db/staging-bootstrap/verify-baseline.sh` | **PASS** — local PostgreSQL 16: baseline loads on empty DB, 062 absent + 4/4 core objects, 062 applies on top, **29/29** assertion files pass |
+| F1 · baseline determinism (drift guard) | `node scripts/deploy/build-baseline.mjs --check` | **PASS** — sha256 `e690edfe…` reproducible from `portal-standalone.sql` |
+| F1 · launcher two-mode + mode-confusion + checksum drift | `node scripts/stage1-tests.mjs` | **PASS — 57 assertions** (bootstrap/apply-062 dry-run, no-`--mode` fails closed, prod-ref rejected, pinned baseline+062 sha == files) |
+| F2/F3 · real browser E2E (System-3 login contract + HTTP/WS/Service-Worker boundary) | `node scripts/e2e/browser-fixture.test.mjs` | **PASS — 5 assertions** (real Chromium): `#pa-email/#pa-pass/#pa-lg-btn` login → `#pa-login` hidden + `.topbar`/`.wrap` visible; prod HTTP+WS blocked, staging allowed, other-ref blocked, Service Worker inactive; invalid creds fail closed |
+| F4 · one authoritative command path | `node scripts/stage1-tests.mjs` (env-guard group) | **PASS** — `env-guard browser-e2e` → `scripts/e2e/browser-run.mjs`; `run.mjs` delegates to it; docs/adapter/tests name the same runner |
+| CLI contract (pinned, real) | dedicated CI job `supabase-contract` | **PASS** — installs exact `2.110.0`, asserts installed==pin, verifies `--help` |
+| portal SQL suite (full schema) | `bash db/portal-tests/run.sh` | **PASS** |
+| upload file-guard | `node db/portal-tests/file-guard.test.mjs` | **PASS — 18** |
 
-## Owner Stage-1 checklist → status
-| # | Authorized item | Status | Evidence |
-|---|---|---|---|
-| 1 | Isolated staging design | ✅ documented | `STAGING_SETUP_PLAN.md` + `deploy/system3-manifest.json` `isolation` block |
-| 2 | Fail-closed Preview/production detection (malformed URL/key/branch) | ✅ implemented + tested | `portal-config.js` — branch is a code invariant (`main`), canonical URL parse, key↔project binding; `stage1-tests.mjs` portal-config group (16) |
-| 3 | Command-coupled environment guard | ⚠️ **partial** (design+logic tested; real exec gated) | `env-guard.mjs` — named adapters → fixed launchers; `migrate`/`e2e` require `--command`. Local logic tested; **real CLI migration + browser E2E NOT run** (staging/tooling gated) |
-| 4 | System-3 deployment manifest + route/file ownership | ✅ implemented | `deploy/system3-manifest.json` (per-page `needs_functions`) |
-| 5 | Remove GitHub Pages ambiguity | ✅ implemented + tested | `pages-exclude.mjs` set-equality + query/hash-preserving stub in `pages.yml`; pages-exclude group (5) |
-| 6 | `supplier-quote.html` → env-aware config | ✅ implemented | fetches `/api/portal-config`; hardcoded prod project removed |
-| 7 | anon-key role/project + server-binding validation, no secret exposure | ✅ implemented + tested | **Structural** config validation (`keyKind`: rejects service_role/`sb_secret_`, expiry/issuer where present, project binding) — not signature/authenticity; opt-in live readiness = `scripts/deploy/probe-anon.mjs`; service key never returned |
-| 8 | Automated tests + negative controls | ✅ implemented | `scripts/stage1-tests.mjs` (**55 assertions, exit 0**) wired into `portal-tests.yml` |
+**Read-only Preview (per-head, Claude-observed).** Invariant every head: `GET …/api/portal-config` → **HTTP 503, `env:preview`, fails closed, never the production ref**. Recorded per commit in the PR thread; the current-head result is posted on push. (No current-head Preview proof is implied from an older deploy — G1-R6-05.)
 
-## Gate-1 review findings (owner recheck of `a9b7b21`, then `5bea893`) → corrections
+## Section 2 — External isolated-staging proof (F5) — NOT RUN until explicit owner authorization
+The following require an **owner-authorized, isolated Supabase staging project + bindings**; none are run or claimed closed:
+- **Live `supabase db push`** — `--mode bootstrap` (apply baseline) then `--mode apply-062` (assert exactly 062 pending, apply) against isolated staging. **NOT RUN.**
+- **Full read-only `schema_migrations` export** mapping real live versions for 001–056. **NOT RUN** (057/058/059/060/061 recorded as documentary only in `db/staging-bootstrap/verified-live-versions.md`).
+- **Real browser E2E** against the live staging URL with staging-only users (the fixture proves the runner + boundary; the live workflow is external). **NOT RUN.**
+- **Cross-environment isolation proof** (staging never reaches production Supabase/R2/email). **NOT RUN.**
+
+**Constraints (binding):** PR Draft/unmerged · no migration 062/063 apply · no `migration repair`/manual history INSERT · no Supabase/Cloudflare/R2/production/email/budget mutation · `budget_enforce=0` · `txn_notifications=0` · Systems 1/2 unchanged.
+
+
+## Appendix — remediation history (rounds R1–R6; context, not the Section-1/2 evidence taxonomy)
+
+> **R7 superseded by the FINAL Gate-1 convergence contract (F1–F6, owner 2026-07-30).** The consolidated
+> remediation is evidenced in **Section 1** (repo-side PASS/FAIL) and **Section 2** (external NOT RUN):
+> **F1** honest staging baseline lineage (invented full-history manifest removed; `verify-baseline.sh` PASS on
+> local PG16) · **F2** real System-3 login selectors + pinned Playwright · **F3** Service-Worker-blocked +
+> WebSocket boundary + 6 probes · **F4** single runner `browser-run.mjs` · **F5** two-section evidence taxonomy.
+> Earlier round tables below are historical context.
+### Gate-1 review findings (owner recheck of `a9b7b21`, then `5bea893`) → corrections
 Two review rounds. Round 1 (G1-01…G1-05); the deeper round 2 (G1-R2-01…G1-R2-06) superseded the round-1 approaches where
 they were still bypassable. Current state below. **Gate 1 remains HELD.**
 
@@ -94,6 +95,7 @@ they were still bypassable. Current state below. **Gate 1 remains HELD.**
 | **G1-R6-06** | staging/E2E/db-push still external | Unchanged — owner-gated; real `db push --dry-run`, isolated staging, and browser E2E remain not run. |
 
 ## Changed / new files
+- **new (F1–F5)** `db/staging-bootstrap/{baseline_through_061.sql, verify-baseline.sh, verified-live-versions.md, README.md}` · `scripts/deploy/build-baseline.mjs` · `scripts/e2e/browser-fixture.test.mjs` · `package.json` + `package-lock.json` (Playwright pinned). **removed** `db/portal-migrations/manifest.json` + `scripts/deploy/build-migration-manifest.mjs` (invented history, G1-R7-02).
 - **new** `deploy/system3-manifest.json` · `scripts/pages-exclude.mjs` · `scripts/stage1-tests.mjs` · `scripts/deploy/supabase-push.mjs` (full-history bundle, G1-R6-01) · **`scripts/deploy/build-migration-manifest.mjs`** + **`db/portal-migrations/manifest.json`** (canonical history, G1-R6-01/02) · **`scripts/deploy/mig-parse.mjs`** (exactly-062, G1-R5-02) · `scripts/deploy/verify-supabase-contract.mjs` (REQUIRE+pin, G1-R4-04/R5-01) · `scripts/deploy/probe-anon.mjs` · `scripts/e2e/net-allow.mjs` (Node-harness) + **`scripts/e2e/browser-run.mjs`** (real Playwright runner + smoke journey, G1-R4-03/R5-03/R6-04) · `audit-output/STAGE1_DEPLOYMENT_SAFETY.md`.
 - **edit** `scripts/env-guard.mjs` (**psql adapter removed** G1-R4-02; `browser-e2e`→`browser-run.mjs` G1-R6-03) · `scripts/e2e/run.mjs` (**delegates to browser-run** G1-R6-03) · `functions/api/portal-config.js` · `supplier-quote.html` · `.github/workflows/pages.yml` · **`.github/workflows/portal-tests.yml`** (`supabase-contract` pinned job + manifest `--check`) · `audit-output/STAGING_SETUP_PLAN.md` · `audit-output/MASTER_DELIVERY_LEDGER.md`.
 

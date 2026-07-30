@@ -51,10 +51,10 @@ jobs:
       - name: تأكيدات حارس الملفات المرفوعة (JS)
         run: node db/portal-tests/file-guard.test.mjs
 
-      - name: تحقّق بيان الهجرات القانونيّ (G1-R6-01/02)
-        run: node scripts/deploy/build-migration-manifest.mjs --check
+      - name: تحقّق قطعة الأساس staging (F1 drift guard)
+        run: node scripts/deploy/build-baseline.mjs --check
 
-      - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config/manifest)
+      - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config/baseline)
         run: node scripts/stage1-tests.mjs
 
       - name: تحقّق عقد Supabase CLI (SKIP هنا — لا يُحتسب دليلاً؛ الوظيفة المخصّصة تفرضه)
@@ -67,6 +67,30 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash db/portal-tests/run.sh
+
+      - name: F1 proof — قاعدة فارغة → أساس(061) → 062 → الحزمة (verify-baseline.sh)
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash db/staging-bootstrap/verify-baseline.sh
+
+  # (F2/F3) اختبار متصفّح حقيقيّ (Playwright/Chromium) بلا staging خارجيّ: عقد دخول النظام-3 +
+  # حدّ سياق المتصفّح (HTTP/WebSocket/Service-Worker). staging الخارجيّ يبقى owner-gated (F5).
+  browser-e2e-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: تثبيت التبعيات (playwright مثبَّت الإصدار)
+        run: npm ci
+      - name: تثبيت متصفّح Chromium المطابق للإصدار
+        run: npx playwright install --with-deps chromium
+      - name: اختبار متصفّح fixture (F2/F3)
+        run: node scripts/e2e/browser-fixture.test.mjs
 
   # (G1-R4-04) وظيفة مخصّصة: تُثبِّت Supabase CLI فعليّاً وتفرض عقد الأعلام (تفشل إن غاب/اختلف) —
   # فالتحقّق دليل بوّابة حقيقي لا «تخطّي». التنفيذ الحيّ للهجرة يبقى مؤجَّلاً على staging (G1-R4-06).

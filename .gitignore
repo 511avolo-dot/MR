@@ -1,3 +1,4 @@
 
 # مهارات مثبَّتة محلياً (النسخة المعتمدة في .agents/skills)
 .claude/skills/
+node_modules/
