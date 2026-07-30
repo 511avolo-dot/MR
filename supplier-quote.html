@@ -118,8 +118,9 @@ label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;font-w
 
 <script>
 /* ══ بوابة المورّد — بلا حساب، الرمز وحده هو الهوية ══ */
-var SB_URL='https://mwbjoysuybgbrvfrprex.supabase.co';
-var SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
+/* (البند 6 — إعداد واعٍ بالبيئة، fail-closed) لا نُضمِّن مشروع الإنتاج؛ نجلب url+anon وقت
+   التشغيل من /api/portal-config الذي يُحدَّد حسب بيئة Cloudflare ويرفض توجيه المعاينة للإنتاج. */
+var SB_URL=null, SB_ANON=null;
 var TOKEN=new URLSearchParams(location.search).get('t')||'';
 var RFQ=null, DRAFT_KEY='', DOC_KEY=null, REQ_DOC=true;
 
@@ -129,6 +130,20 @@ function money(n){return (Number(n)||0).toLocaleString('en-US',{minimumFractionD
 function $(id){return document.getElementById(id);}
 
 /* نداء RPC مباشر (anon) — الدالتان محروستان بالرمز في الخادم */
+/* (البند 6) جلب الإعداد وقت التشغيل — fail-closed: عند الفشل لا نتّصل ونُظهر خطأ إعداد ظاهر. */
+async function __bootConfig(){
+  try{
+    var r=await fetch('/api/portal-config',{cache:'no-store'});
+    var c=await r.json().catch(function(){return null;});
+    if(!r.ok||!c||c.ok!==true||!c.url||!c.anonKey) throw new Error((c&&c.error)||'تعذّر تحميل إعداد البيئة');
+    SB_URL=c.url; SB_ANON=c.anonKey; return true;
+  }catch(e){
+    $('view').innerHTML=stateBox('⚙️','خطأ إعداد البيئة',
+      (e&&e.message?String(e.message):'')+' — لم يُضبَط مشروع Supabase لهذه البيئة، أو أنّ المعاينة مُوجَّهة للإنتاج (مرفوض).','bad');
+    return false;
+  }
+}
+
 async function rpc(fn, body){
   var r=await fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',
     headers:{'Content-Type':'application/json','apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON},
@@ -325,7 +340,7 @@ async function submitQuote(){
   }
 }
 
-boot();
+(async function(){ if(await __bootConfig()) boot(); })();
 </script>
 </body>
 </html>

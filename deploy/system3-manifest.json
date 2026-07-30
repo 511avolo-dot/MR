@@ -1,0 +1,55 @@
+{
+  "$schema": "./system3-manifest.schema.md",
+  "description": "System-3 (portal) deployment manifest — explicit ownership of routes/files and their Cloudflare-Functions dependency. Consumed by scripts/pages-exclude.mjs (GitHub Pages safety) and scripts/env-guard.mjs (staging isolation). Stage 1, repo-only; changing this file changes NO live deployment until the owner merges to main.",
+  "canonical_origin": "https://aldeyabi-procurement.pages.dev",
+  "platform": {
+    "runtime": "cloudflare-pages",
+    "functions_dir": "functions/api",
+    "reason": "Every app page calls /api/* Cloudflare Pages Functions (config, docs, notify, auth). GitHub Pages serves static files only — it has no /api/* runtime, so any Function-dependent page is broken there. Such pages MUST NOT be served from GitHub Pages."
+  },
+  "systems": {
+    "1": {
+      "name": "supplier registration",
+      "pages": ["register.html"],
+      "requires_functions": ["/api/reg-doc", "/api/notify", "/api/verify", "/api/invite-supplier", "/api/admin-users"]
+    },
+    "2": {
+      "name": "procurement main",
+      "pages": ["index.html", "requests.html", "rfq.html", "invite.html", "portal-quote-suite.html", "supplier-invitation-bilingual.html", "supplier-invitation-two-boxes.html"],
+      "requires_functions": ["/api/notify", "/api/pr-action", "/api/admin-users", "/api/ai"]
+    },
+    "3": {
+      "name": "procurement + unified disbursement portal",
+      "pages": ["purchase-portal.html", "supplier-quote.html", "register-portal.html"],
+      "requires_functions": [
+        "/api/portal-config",
+        "/api/portal-doc",
+        "/api/portal-notify",
+        "/api/portal-action",
+        "/api/portal-users",
+        "/api/portal-invite",
+        "/api/portal-supplier-invite",
+        "/api/portal-supplier-doc",
+        "/api/portal-quote",
+        "/api/portal-register",
+        "/api/portal-outbox-drain"
+      ]
+    }
+  },
+  "github_pages_exclude": {
+    "reason": "These pages require Cloudflare Functions and MUST NOT be served as broken static files on GitHub Pages. scripts/pages-exclude.mjs replaces each with a redirect stub to canonical_origin before the Pages artifact is uploaded.",
+    "pages": [
+      "purchase-portal.html",
+      "supplier-quote.html",
+      "register-portal.html",
+      "register.html",
+      "index.html",
+      "requests.html",
+      "rfq.html"
+    ]
+  },
+  "isolation": {
+    "production_supabase_ref": "mwbjoysuybgbrvfrprex",
+    "note": "Production project ref is duplicated in scripts/env-guard.mjs and functions/api/portal-config.js as the deny target. Staging must be a SEPARATE Supabase project + R2 bucket, configured in Cloudflare Preview-scope variables (PORTAL_SUPABASE_URL / PORTAL_SUPABASE_ANON_KEY / PORTAL_SUPABASE_SERVICE_ROLE_KEY / QUOTES_BUCKET). See audit-output/STAGING_SETUP_PLAN.md."
+  }
+}

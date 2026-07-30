@@ -12,6 +12,10 @@ on:
       - 'functions/api/_file-guard.js'
       - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
+      - 'scripts/**'
+      - 'deploy/**'
+      - 'supplier-quote.html'
+      - '.github/workflows/pages.yml'
   push:
     branches: [main]
     paths:
@@ -22,6 +26,10 @@ on:
       - 'functions/api/_file-guard.js'
       - 'functions/api/reg-doc.js'
       - '.github/workflows/portal-tests.yml'
+      - 'scripts/**'
+      - 'deploy/**'
+      - 'supplier-quote.html'
+      - '.github/workflows/pages.yml'
 
 jobs:
   test:
@@ -42,6 +50,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: تأكيدات حارس الملفات المرفوعة (JS)
         run: node db/portal-tests/file-guard.test.mjs
+
+      - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config)
+        run: node scripts/stage1-tests.mjs
 
       - name: تشغيل حزمة اختبار البوابة
         env:

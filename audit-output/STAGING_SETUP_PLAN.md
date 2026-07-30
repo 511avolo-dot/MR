@@ -27,14 +27,34 @@ production — and only with explicit owner authorization.
    table or bucket (different project ref ⇒ different credentials ⇒ no cross-access). `/api/portal-config` on the
    preview must return `env:"preview"` with the **staging** ref (never `mwbjoysuybgbrvfrprex`), or fail closed.
 
-## Migration 062 apply (staging only) — guarded
+## Migration 062 apply (staging only) — guarded, command-coupled
+The guard now supports a **command-coupled `--exec` mode (Stage-1 item 3)**: it validates the target, then runs the
+apply/E2E command **itself** with the validated ref injected as `GUARDED_REF`/`STAGING_PROJECT_REF`, so the target that
+was validated is provably the target the command uses (no decoupled second step that could point elsewhere).
 ```bash
-# 1) Guard refuses production ref / missing confirmation, and prints the target ref:
-node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm "$STAGING_CONFIRM"   # STAGING_CONFIRM=STAGING
-# 2) Only if the guard exits 0, apply to STAGING via the Supabase CLI/MCP against the staging project:
-#    supabase db push --project-ref "$STAGING_PROJECT_REF"   (or apply db/portal-migrations/062-request-documents.sql)
+# Preferred (coupled) — validate AND run in one step; the command inherits GUARDED_REF=<validated ref>:
+node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
+  --exec -- supabase db push --project-ref "$STAGING_PROJECT_REF"
+
+# Legacy (decoupled) still works but is weaker — guard then a separate command:
+node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING
+# …then apply db/portal-migrations/062-request-documents.sql to STAGING.
 ```
-Do **not** run any apply command without the guard passing first. The guard hard-blocks `mwbjoysuybgbrvfrprex`.
+Do **not** run any apply command without the guard passing first. The guard hard-blocks `mwbjoysuybgbrvfrprex` and, in
+`--exec` mode, **never spawns the command when the target is rejected**.
+
+## GitHub Pages ambiguity removed (Stage-1 items 4–5)
+- **`deploy/system3-manifest.json`** declares every System-1/2/3 page, the Cloudflare Functions it requires, and the
+  set that must **not** be served as broken static files on GitHub Pages (`github_pages_exclude.pages`).
+- **`scripts/pages-exclude.mjs`** runs in `.github/workflows/pages.yml` **before** the Pages artifact upload; it replaces
+  each Function-dependent page with a redirect stub to `canonical_origin` (the Cloudflare deployment). A GitHub Pages
+  visitor is redirected to the working deployment instead of a broken `/api/*`-less page. `--check` fails the build if a
+  declared page is missing (manifest ↔ tree drift) or `canonical_origin` is invalid (fail-closed).
+- This changes **no live deployment now**: `pages.yml`/`deploy.yml` run only on push to `main`, and this PR is Draft.
+
+## supplier-quote.html env-config (Stage-1 item 6)
+`supplier-quote.html` no longer embeds the production project; it fetches `/api/portal-config` at runtime (fail-closed:
+on any config error it shows a visible config-error state and does not connect), matching `purchase-portal.html`.
 
 ## Rollback (staging)
 - Fail-closed: `UPDATE portal_settings SET value = value || '{"expense_docs_required":0}' WHERE key='portal_settings';`
