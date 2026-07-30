@@ -9,10 +9,10 @@ change. PR stays Draft.
 
 | Item | Command | Result |
 |---|---|---|
-| F1 · staging baseline lineage (empty DB → baseline(061) → 062 → suite) | `bash db/staging-bootstrap/verify-baseline.sh` | **PASS** — local PostgreSQL 16: baseline loads on empty DB, 062 absent + 4/4 core objects, 062 applies on top, **29/29** assertion files pass |
+| F1 · staging baseline lineage — **two-phase** (G1-FINAL-01) | `bash db/staging-bootstrap/verify-baseline.sh` | **PASS** (local PG16 + CI): **Phase A** empty DB → baseline(061) → suite on 061 = **27 pass** (+2 deferred: `37`=062 feature, `11_security`=post-062 server-surface); incremental 062 apply ✓; **Phase B** baseline+062 → **29/29** pass. Separate phases/counts; both exit 0 |
 | F1 · baseline determinism (drift guard) | `node scripts/deploy/build-baseline.mjs --check` | **PASS** — sha256 `e690edfe…` reproducible from `portal-standalone.sql` |
 | F1 · launcher two-mode + mode-confusion + checksum drift | `node scripts/stage1-tests.mjs` | **PASS — 57 assertions** (bootstrap/apply-062 dry-run, no-`--mode` fails closed, prod-ref rejected, pinned baseline+062 sha == files) |
-| F2/F3 · real browser E2E (System-3 login contract + HTTP/WS/Service-Worker boundary) | `node scripts/e2e/browser-fixture.test.mjs` | **PASS — 5 assertions** (real Chromium): `#pa-email/#pa-pass/#pa-lg-btn` login → `#pa-login` hidden + `.topbar`/`.wrap` visible; prod HTTP+WS blocked, staging allowed, other-ref blocked, Service Worker inactive; invalid creds fail closed |
+| F2/F3 · real browser E2E + **exact-host boundary** (G1-FINAL-02) | `node scripts/e2e/browser-fixture.test.mjs` | **PASS — 6 assertions** (real Chromium, CI): `#pa-*` login → `#pa-login` hidden + `.topbar`/`.wrap` visible; **prod HTTP blocked · other-ref HTTP blocked · staging HTTP allowed · prod WSS blocked · other-ref WSS blocked · staging WSS allowed · `swRegistrations=0`**; no LEAK/DENIED; invalid creds fail closed |
 | F4 · one authoritative command path | `node scripts/stage1-tests.mjs` (env-guard group) | **PASS** — `env-guard browser-e2e` → `scripts/e2e/browser-run.mjs`; `run.mjs` delegates to it; docs/adapter/tests name the same runner |
 | CLI contract (pinned, real) | dedicated CI job `supabase-contract` | **PASS** — installs exact `2.110.0`, asserts installed==pin, verifies `--help` |
 | portal SQL suite (full schema) | `bash db/portal-tests/run.sh` | **PASS** |

@@ -72,28 +72,38 @@ if (cfg.b.env === 'production' || cfg.b.ref === PROD_REF) { await browser.close(
 if (cfg.b.ref !== ref) { await browser.close(); die(`ref (${cfg.b.ref}) ≠ staging (${ref}) — fail-closed.`); }
 
 // (F3) مجسّات أمنية داخل الصفحة قبل تسجيل الدخول.
-const OTHER_REF = 'zzzzzzzzzzzzzzzzzzzz';
-await page.evaluate(async ({ prod, other, stg }) => {
+const OTHER_REF = 'zzzzzzzzzzzzzzzzzzzz';   // مرجع Supabase آخر (ليس staging وليس الإنتاج) — يجب أن يُحظَر
+// (G1-FINAL-02) نلتقط نتيجة تسجيل عامل الخدمة صراحةً (لا نكتفي بـcontroller).
+const swReg = await page.evaluate(async ({ prod, other, stg }) => {
   const tryFetch = (u) => fetch(u).then(() => 0).catch(() => 0);
-  const tryWs = (u) => { try { new WebSocket(u); } catch (_) {} };
-  await tryFetch(`https://${prod}.supabase.co/rest/v1/`);      // يجب أن يُجهَض (route.abort)
-  await tryFetch(`https://${other}.supabase.co/rest/v1/`);     // مرجع آخر — يجب أن يُجهَض
-  await tryFetch(`https://${stg}.supabase.co/rest/v1/`);       // staging — يجب أن يمرّ (route.continue)
-  tryWs(`wss://${prod}.supabase.co/realtime/v1/websocket`);    // WSS إنتاج — يجب أن يُحظَر
-  tryWs(`wss://${stg}.supabase.co/realtime/v1/websocket`);     // WSS staging — يجب أن يُسمَح (route)
-  try { await navigator.serviceWorker?.register('/sw.js'); } catch (_) {}  // SW — محظور على مستوى السياق
+  const tryWs = (u) => { try { const w = new WebSocket(u); w.onerror = () => {}; } catch (_) {} };
+  await tryFetch(`https://${prod}.supabase.co/rest/v1/`);      // إنتاج HTTP — يُجهَض
+  await tryFetch(`https://${other}.supabase.co/rest/v1/`);     // مرجع آخر HTTP — يُجهَض
+  await tryFetch(`https://${stg}.supabase.co/rest/v1/`);       // staging HTTP — يمرّ
+  tryWs(`wss://${prod}.supabase.co/realtime/v1/websocket`);    // إنتاج WSS — يُحظَر
+  tryWs(`wss://${other}.supabase.co/realtime/v1/websocket`);   // مرجع آخر WSS — يُحظَر
+  tryWs(`wss://${stg}.supabase.co/realtime/v1/websocket`);     // staging WSS — يُسمَح
+  let reg = 'none';
+  try { await navigator.serviceWorker.register('/sw.js'); reg = 'registered'; } catch (e) { reg = 'threw:' + (e && e.name); }
+  return reg;
 }, { prod: PROD_REF, other: OTHER_REF, stg: ref });
-await page.waitForTimeout(400);
+await page.waitForTimeout(500);
 
-// تأكيدات الحدّ (fail-closed على أيّ خرق).
-const swActive = await page.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller));
+// (G1-FINAL-02) دليل حاسم: عدد تسجيلات عامل الخدمة يجب أن يكون صفراً (الحظر على مستوى السياق يمنع التسجيل).
+const swCount = await page.evaluate(async () => {
+  if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) return 0;
+  try { return (await navigator.serviceWorker.getRegistrations()).length; } catch (_) { return -1; }
+});
+
+// تأكيدات الحدّ بمخرجات مضيف دقيقة (fail-closed على أيّ خرق).
 const viol = [];
 if (!httpBlocked.has(`${PROD_REF}.supabase.co`)) viol.push('prod HTTP لم يُحظَر');
-if (!httpBlocked.has(`${OTHER_REF}.supabase.co`)) viol.push('مرجع آخر HTTP لم يُحظَر');
+if (!httpBlocked.has(`${OTHER_REF}.supabase.co`)) viol.push('other-ref HTTP لم يُحظَر');
 if (!httpAllowed.has(`${ref}.supabase.co`)) viol.push('staging HTTP لم يُسمَح');
 if (!wsBlocked.has(`${PROD_REF}.supabase.co`)) viol.push('prod WSS لم يُحظَر');
+if (!wsBlocked.has(`${OTHER_REF}.supabase.co`)) viol.push('other-ref WSS لم يُحظَر');
 if (!wsAllowed.has(`${ref}.supabase.co`)) viol.push('staging WSS لم يُسمَح');
-if (swActive) viol.push('Service Worker نشِط (تجاوز محتمل)');
+if (swCount !== 0) viol.push(`Service Worker مُسجَّل (${swCount}) — الحظر فشل`);
 if (viol.length) { await browser.close(); die('خرق حدّ الشبكة: ' + viol.join(' · ')); }
 
 // (F2) تسجيل دخول staging بمُحدِّدات النظام-3 الحقيقية + بلوغ الحالة المحميّة.
@@ -107,6 +117,15 @@ try {
 } catch (e) { await browser.close(); die('فشل بلوغ الحالة المحميّة بعد الدخول (المُحدِّدات/الاعتماد): ' + e.message); }
 
 await browser.close();
-console.log(`✅ browser-run: smoke نجح على staging (${ref}) — دخول (#pa-login مخفيّ · .topbar+.wrap ظاهران) + حدّ سياق المتصفّح مؤكَّد `
-  + `[HTTP blocked=${[...httpBlocked].length} allowed(staging)=${httpAllowed.has(ref + '.supabase.co')} · WS blocked=${[...wsBlocked].length} allowed(staging)=${wsAllowed.has(ref + '.supabase.co')} · SW active=${swActive}].`);
+// مخرجات مضيف دقيقة (G1-FINAL-02) — تؤكِّدها browser-fixture.test.mjs.
+console.log('✅ browser-run: smoke نجح على staging (' + ref + ') — دخول (#pa-login مخفيّ · .topbar+.wrap ظاهران).');
+console.log('BOUNDARY'
+  + ` prodHTTP=${httpBlocked.has(PROD_REF + '.supabase.co') ? 'blocked' : 'LEAK'}`
+  + ` otherHTTP=${httpBlocked.has(OTHER_REF + '.supabase.co') ? 'blocked' : 'LEAK'}`
+  + ` stagingHTTP=${httpAllowed.has(ref + '.supabase.co') ? 'allowed' : 'DENIED'}`
+  + ` prodWSS=${wsBlocked.has(PROD_REF + '.supabase.co') ? 'blocked' : 'LEAK'}`
+  + ` otherWSS=${wsBlocked.has(OTHER_REF + '.supabase.co') ? 'blocked' : 'LEAK'}`
+  + ` stagingWSS=${wsAllowed.has(ref + '.supabase.co') ? 'allowed' : 'DENIED'}`
+  + ` swRegistrations=${swCount}`
+  + ` swRegisterResult=${swReg}`);
 process.exit(0);

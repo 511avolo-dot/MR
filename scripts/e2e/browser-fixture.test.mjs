@@ -63,9 +63,11 @@ try {
   const good = await run(PASS);
   if (good.status !== 0) { console.error(good.stdout + '\n' + good.stderr); }
   assert.equal(good.status, 0); assert.match(good.stdout, /smoke نجح/); t('اعتماد صحيح ⇒ دخول ناجح + حالة محميّة');
-  assert.match(good.stdout, /HTTP blocked=\d+ allowed\(staging\)=true/); t('حدّ HTTP: الإنتاج/مرجع آخر محظوران · staging مسموح');
-  assert.match(good.stdout, /WS blocked=\d+ allowed\(staging\)=true/); t('حدّ WebSocket: إنتاج محظور · staging مسموح');
-  assert.match(good.stdout, /SW active=false/); t('Service Worker محظور (لا تجاوز)');
+  // (G1-FINAL-02) مخرجات مضيف دقيقة — لا عدّادات عامّة
+  assert.match(good.stdout, /prodHTTP=blocked/); assert.match(good.stdout, /otherHTTP=blocked/); assert.match(good.stdout, /stagingHTTP=allowed/); t('HTTP: prod محظور · other-ref محظور · staging مسموح');
+  assert.match(good.stdout, /prodWSS=blocked/); assert.match(good.stdout, /otherWSS=blocked/); assert.match(good.stdout, /stagingWSS=allowed/); t('WebSocket: prod محظور · other-ref محظور · staging مسموح');
+  assert.match(good.stdout, /swRegistrations=0/); t('Service Worker: صفر تسجيلات (الحظر محكوم)');
+  assert.doesNotMatch(good.stdout, /LEAK|DENIED/); t('لا تسريب/منع خاطئ في أيّ مخرج مضيف');
   const bad = await run('wrong-password');
   assert.notEqual(bad.status, 0); t('اعتماد خاطئ ⇒ يفشل مغلقاً (لا حالة محميّة)');
   console.log(`✅ browser-fixture: ${ok} تأكيدات — كلها نجحت.`);
