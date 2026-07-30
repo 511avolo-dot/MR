@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/portal-config.js';
 import { isAllowedUrl, installNetworkAllowlist } from './e2e/net-allow.mjs';
+import { parsePendingVersions, assertExactly062, MIG_VERSION, MIG_DEST_NAME } from './deploy/mig-parse.mjs';
 
 const PROD = 'mwbjoysuybgbrvfrprex';
 const STAGING = 'abcdefghij0123456789';
@@ -135,6 +136,22 @@ console.log('▶ pages-exclude (تكافؤ G1-03 + حفظ query/hash فعليّ�
   writeFileSync(m3, JSON.stringify({ canonical_origin: 'https://x.pages.dev', github_pages_exclude: { pages: ['../evil.html'] } }));
   r = node(['scripts/pages-exclude.mjs', '--dir', dir, '--manifest', m3]);
   assert.notEqual(r.status, 0); ok('يرفض اسم صفحة فيه تجاوز مسار');
+}
+
+console.log('▶ mig-parse: فرض «062 وحدها» في dry-run (G1-R5-02):');
+{
+  // إيجابيّ: 062 وحدها (اسم ملف) ⇒ تمرّ
+  assert.deepEqual(assertExactly062(`Would push:\n ${MIG_DEST_NAME}\n`), [MIG_VERSION]); ok('062 وحدها ⇒ تمرّ');
+  // تكرار نفس 062 (اسم + نسخة مجرّدة) ⇒ تمرّ (dedupe)
+  assert.deepEqual(assertExactly062(`${MIG_DEST_NAME}\n${MIG_VERSION}\n`), [MIG_VERSION]); ok('تكرار 062 (اسم+مجرّدة) ⇒ يُدمَج ويمرّ');
+  // 062 + هجرة إضافية غير متوقَّعة ⇒ يفشل مغلقاً
+  assert.throws(() => assertExactly062(`${MIG_DEST_NAME}\n20260101000000_099_other.sql\n`), /إضافية غير متوقَّعة/); ok('062 + هجرة زائدة ⇒ يفشل');
+  // صفر (up to date) ⇒ يفشل مغلقاً
+  assert.throws(() => assertExactly062('Remote database is up to date.\n'), /لم يكتشف أيّ هجرة/); ok('صفر معلّق ⇒ يفشل');
+  // نسخة مغايرة وحدها ⇒ يفشل مغلقاً
+  assert.throws(() => assertExactly062('20260101000000_099_other.sql\n'), /ليست 062/); ok('غير-062 وحدها ⇒ يفشل');
+  // غموض: نسختان مختلفتان ⇒ يفشل (extra)
+  assert.equal(parsePendingVersions(`${MIG_DEST_NAME}\n20259999999999_x.sql`).length, 2); ok('parsePendingVersions يجمع النسخ الفريدة');
 }
 
 console.log('▶ portal-config (هوية نشر ثابتة G1-R2-02 + ربط مفتاح G1-R2-03):');

@@ -47,10 +47,17 @@ await context.route('**/*', (route) => {
 });
 const page = await context.newPage();
 
-// تحقّق الإعداد قبل أيّ إجراء.
-await page.goto(base.replace(/\/+$/, '') + '/api/portal-config', { waitUntil: 'domcontentloaded' });
+// (G1-R5-03) تحقّق هويّة الإعداد قبل أيّ إجراء — يفشل مغلقاً ما لم يُرجِع staging المتوقَّع بالضبط.
+let resp;
+try { resp = await page.goto(base.replace(/\/+$/, '') + '/api/portal-config', { waitUntil: 'domcontentloaded' }); }
+catch (e) { await browser.close(); die('تعذّر تحميل /api/portal-config: ' + e.message); }
+if (!resp || resp.status() !== 200) { await browser.close(); die(`portal-config أعاد HTTP ${resp ? resp.status() : 'null'} — متوقَّع 200 (fail-closed).`); }
+let cfg; try { cfg = await resp.json(); } catch (_) { await browser.close(); die('portal-config ليس JSON صالحاً (صفحة خطأ؟) — fail-closed.'); }
+if (cfg.ok !== true) { await browser.close(); die('portal-config ok !== true — الإعداد غير جاهز (fail-closed).'); }
+if (cfg.env === 'production' || cfg.ref === PROD_REF) { await browser.close(); die(`portal-config هويّة إنتاج (env=${cfg.env}, ref=${cfg.ref}) — إيقاف فوريّ (fail-closed).`); }
+if (cfg.ref !== ref) { await browser.close(); die(`portal-config ref (${cfg.ref}) ≠ staging المُتحقَّق (${ref}) — fail-closed.`); }
 // … سيناريو سير العمل الفعليّ يُضاف هنا (تسجيل دخول staging، دورة صرف، …) …
 
 await browser.close();
-console.log(`✅ browser-run: حدّ سياق المتصفّح مُطبَّق (مسموح فقط بـ${ref}؛ الإنتاج محظور). طلبات مُجهَضة=${blocked}.`);
+console.log(`✅ browser-run: هويّة staging مؤكَّدة (ok, env=${cfg.env}, ref=${cfg.ref}==${ref}) + حدّ سياق المتصفّح مُطبَّق (الإنتاج محظور). طلبات مُجهَضة=${blocked}.`);
 process.exit(0);

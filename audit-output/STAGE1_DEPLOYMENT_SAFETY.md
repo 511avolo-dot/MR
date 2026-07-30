@@ -8,10 +8,10 @@ change. PR stays Draft.
 To avoid overstating: this branch proves **logic/config assertions locally**; it does **not** prove real external execution.
 | Evidence | State |
 |---|---|
-| Local logic/config assertions (`stage1-tests.mjs`) | **PASS — 44** (env-guard 16 · launchers+net-allow 9 · pages-exclude 5 · portal-config 16 + 2 misc) |
-| Real Supabase CLI contract (`--help`) | **SKIPPED locally** (no CLI); **enforced in the dedicated CI job `supabase-contract`** (installs the CLI, `REQUIRE_SUPABASE_CLI=1` → fails if absent/mismatch). Not counted as Gate evidence when skipped |
-| Real migration discovery/apply of 062 | **NOT RUN** — needs pinned CLI + isolated staging (gated, G1-R4-06). Payload build + pinned-SHA verify is exercised; live `db push` is not |
-| Real **browser** E2E | **NOT IMPLEMENTED/RUN** — `net-allow.mjs` guards **Node fetch only**; the real Playwright context-route runner (`scripts/e2e/browser-run.mjs`) fails closed without the package + staging |
+| Local logic/config assertions (`stage1-tests.mjs`) | **PASS — 50** (mig-parse 6 + env-guard 14 · launchers+net-allow 9 · pages-exclude 5 · portal-config 16 + 2 misc) |
+| Real Supabase CLI contract (`--help`) | **SKIPPED locally** (no CLI); **enforced in the dedicated CI job `supabase-contract`** which installs the **exact pinned version `2.110.0`** (`supabase/setup-cli`, overridable only via repo var — never `latest`), asserts installed==pin, and runs `REQUIRE_SUPABASE_CLI=1` → fails if absent/mismatch (G1-R5-01). Not counted as Gate evidence when skipped |
+| Real migration discovery/apply of 062 | **NOT RUN** — needs pinned CLI + isolated staging (gated, G1-R4-06). Payload build + pinned-SHA verify exercised; **`db push --dry-run` output is now parsed deterministically to assert the pending set is EXACTLY `{20260728000000}` (062)** — fails closed on zero/extra/other (G1-R5-02, unit-tested); live `db push` still not run |
+| Real **browser** E2E | **NOT IMPLEMENTED/RUN** — `net-allow.mjs` guards **Node fetch only**; the real Playwright context-route runner (`scripts/e2e/browser-run.mjs`) fails closed without the package + staging, and now **parses `/api/portal-config` and fails closed unless `ok===true`, `env≠production`, and `ref===GUARDED_REF`** before any action (G1-R5-03). Full workflow scenarios still not implemented |
 | Isolated staging provisioning | **NOT PROVISIONED** — owner external action + separate authorization (G1-R4-06) |
 
 ## Deployment reality (G1-R2-05 / G1-R4-05 — exact-head, read-only)
@@ -33,7 +33,7 @@ To avoid overstating: this branch proves **logic/config assertions locally**; it
 | 5 | Remove GitHub Pages ambiguity | ✅ implemented + tested | `pages-exclude.mjs` set-equality + query/hash-preserving stub in `pages.yml`; pages-exclude group (5) |
 | 6 | `supplier-quote.html` → env-aware config | ✅ implemented | fetches `/api/portal-config`; hardcoded prod project removed |
 | 7 | anon-key role/project + server-binding validation, no secret exposure | ✅ implemented + tested | **Structural** config validation (`keyKind`: rejects service_role/`sb_secret_`, expiry/issuer where present, project binding) — not signature/authenticity; opt-in live readiness = `scripts/deploy/probe-anon.mjs`; service key never returned |
-| 8 | Automated tests + negative controls | ✅ implemented | `scripts/stage1-tests.mjs` (**44 assertions, exit 0**) wired into `portal-tests.yml` |
+| 8 | Automated tests + negative controls | ✅ implemented | `scripts/stage1-tests.mjs` (**50 assertions, exit 0**) wired into `portal-tests.yml` |
 
 ## Gate-1 review findings (owner recheck of `a9b7b21`, then `5bea893`) → corrections
 Two review rounds. Round 1 (G1-01…G1-05); the deeper round 2 (G1-R2-01…G1-R2-06) superseded the round-1 approaches where

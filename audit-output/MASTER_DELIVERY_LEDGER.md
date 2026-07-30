@@ -126,7 +126,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 ### Program stages (documents/implementation not yet started)
 | ID | Stage | Scope | Status |
 |---|---|---|---|
-| S0 | 0 | ledger + 5 routing docs + inventory + G0/G0-R remediation | **delivered — awaiting owner Gate-0 clearance** |
+| S0 | 0 | ledger + 5 routing docs + inventory + G0/G0-R remediation | **✅ Gate 0 PASSED (owner independent recheck at `9a62890`, 2026-07-30) — documentation gate only; Stage 1 authorized repo-only** |
 | S1 | 1 | isolated staging + deployment safety (guards, manifest, Pages fix) | open |
 | S2 | 2 | security/RLS/privacy/service-boundary review + SEC-06 | open |
 | S3 | 3 | trusted document lifecycle (upload receipt, doc capabilities) | open |
@@ -377,7 +377,7 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 | Owner "@codex review" workflow-routing (`8cd7890`) | ROUTE-* (award/PO/pay-enum/email-parity) | — | documented (R0) | Stage 7/9 |
 | Owner UX mandate v1/v2 | S10-* | — | documented (R0/ledger) | Stage 10 |
 | Owner email mandate E0–E6 | E0 (done) + E1–E6 | — | E0 implemented; rest deferred (OWN-EMAIL) | d103215 |
-| Owner MASTER PROGRAM | S0–S15 | — | S0 delivered (Gate-0 + G0-R remediation) | 0316c68…this commit |
+| Owner MASTER PROGRAM | S0–S15 | — | S0 ✅ Gate 0 PASSED (`9a62890`); Stage 1 open/HELD (Gate 1 in review) | 0316c68…this commit |
 | Owner Stage-0 review | G0-01…G0-09 | — | this commit | (SHA below) |
 
 **No thread dropped:** any Codex inline not individually rowed above is subsumed by its CDX3-*/CDX4-* canonical ID; the `verified`-vs-`implemented` labeling (G0-09) applies.

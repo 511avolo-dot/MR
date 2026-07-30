@@ -17,12 +17,12 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, copyFileSync, readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
+import { MIG_DEST_NAME, assertExactly062 } from './mig-parse.mjs';
 
 const PROD_REF = 'mwbjoysuybgbrvfrprex';
 const MIG_SRC = 'db/portal-migrations/062-request-documents.sql';
 const MIG_SHA = '7b56d64abd7b9b8b2601b5f294e8a2367f0ac7136c1689b12bde299814f35bf3';   // بصمة مثبَّتة للهجرة 062
-const MIG_DEST_NAME = '20260728000000_062_request_documents.sql';                     // تسمية migrations حتميّة
 function die(m) { console.error('❌ supabase-push: ' + m); process.exit(2); }
 function sha256(p) { return createHash('sha256').update(readFileSync(p)).digest('hex'); }
 
@@ -70,7 +70,8 @@ if (linked !== ref) die(`المرجع المربوط («${linked || 'غير مو
 
 r = sb(['db', 'push', '--dry-run', '--linked']); const disc = r.stdout || ''; process.stdout.write(disc);
 if (r.status !== 0) die('فشل db push --dry-run.');
-if (!disc.includes(MIG_DEST_NAME) && !disc.includes('062')) die('الـdry-run لم يكتشف الهجرة 062 المتوقَّعة — إيقاف قبل الدفع.');
+// (G1-R5-02) فرض حتميّ: المجموعة المعلّقة == {062} بالضبط (يفشل مغلقاً على صفر/زائدة/غير-062).
+try { assertExactly062(disc); } catch (e) { die(e.message); }
 
 r = sb(['db', 'push', '--linked']); process.stdout.write(r.stdout || '');
 process.exit(typeof r.status === 'number' ? r.status : 1);

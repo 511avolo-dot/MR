@@ -69,14 +69,19 @@ jobs:
   # فالتحقّق دليل بوّابة حقيقي لا «تخطّي». التنفيذ الحيّ للهجرة يبقى مؤجَّلاً على staging (G1-R4-06).
   supabase-contract:
     runs-on: ubuntu-latest
+    env:
+      # (G1-R5-01) إصدار مثبَّت بالضبط (لا 'latest'). قابل للتجاوز بمتغيّر مستودع، لكن لا يقع أبداً على متحرّك.
+      SB_CLI: ${{ vars.SUPABASE_CLI_VERSION || '2.110.0' }}
     steps:
       - uses: actions/checkout@v4
-      - name: تثبيت Supabase CLI (إصدار مُثبَّت)
+      - name: تثبيت Supabase CLI (إصدار مثبَّت بالضبط = ${{ env.SB_CLI }})
         uses: supabase/setup-cli@v1
         with:
-          version: ${{ vars.SUPABASE_CLI_VERSION || 'latest' }}
-      - name: فرض عقد الـCLI الحقيقي (--help)
+          version: ${{ env.SB_CLI }}
+      - name: فرض عقد الـCLI الحقيقي + تطابق الإصدار مع المثبَّت
         env:
           REQUIRE_SUPABASE_CLI: '1'
-          SUPABASE_CLI_PIN: ${{ vars.SUPABASE_CLI_VERSION || '' }}
-        run: node scripts/deploy/verify-supabase-contract.mjs
+          SUPABASE_CLI_PIN: ${{ env.SB_CLI }}
+        run: |
+          echo "installed=$(supabase --version)  pin=${SB_CLI}"
+          node scripts/deploy/verify-supabase-contract.mjs
