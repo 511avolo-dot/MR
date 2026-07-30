@@ -7,7 +7,9 @@
  *   • نسخ مجرّدة في قائمة:  سطر يحوي `20260728000000` وحده.
  * أي رمز 14-رقماً يُعامَل كنسخة هجرة. «Remote database is up to date» ⇒ صفر ⇒ يفشل مغلقاً.
  */
-export const MIG_VERSION = '20260728000000';
+// (G1-R6-02) الإصدار القانونيّ لـ062 = بعد 061 المُتحقَّق حيّاً (20260729073619) تماماً. مصدر الحقيقة
+// manifest.json (المُولَّد من build-migration-manifest.mjs)؛ اختبار البيان يؤكّد التطابق.
+export const MIG_VERSION = '20260730120000';
 export const MIG_DEST_NAME = `${MIG_VERSION}_062_request_documents.sql`;
 
 /** يستخرج مجموعة نسخ الهجرات المعلّقة (14 رقماً) من مخرجات dry-run — فريدة ومرتَّبة. */

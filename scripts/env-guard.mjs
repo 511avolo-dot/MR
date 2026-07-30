@@ -75,11 +75,11 @@ const ADAPTERS = {
     return { program: 'node', args: ['scripts/deploy/supabase-push.mjs'], env: {},
       show: `node scripts/deploy/supabase-push.mjs  (GUARDED_REF=${r} → build isolated workdir + verify 062 sha → link --project-ref ${r} → verify linked==${r} → db push --dry-run --linked → db push --linked; password via SUPABASE_DB_PASSWORD)` };
   } },
-  // (G1-R3-02/G1-R4-03) مُشغّل E2E ثابت وحيد (لا --spec). ⚠️ متصفّح فعليّ (Playwright) وحدود سياق المتصفّح
-  // مؤجَّلة حتى توفّر الحزمة + staging؛ الحالي يُثبِّت حارس شبكة على مستوى Node للمُشغّل فقط (ليس حدّ متصفّح).
+  // (G1-R3-02/G1-R4-03/G1-R6-03) مُشغّل E2E ثابت وحيد (لا --spec) = **متصفّح Playwright الفعليّ** مباشرةً
+  // (`browser-run.mjs`: حدّ سياق المتصفّح context.route + سيناريو smoke). يفشل مغلقاً بلا الحزمة/‏staging.
   'browser-e2e': { purpose: 'e2e', build(r) {
-    return { program: 'node', args: ['scripts/e2e/run.mjs'], env: { E2E_SUPABASE_URL: `https://${r}.supabase.co` },
-      show: `node scripts/e2e/run.mjs  (E2E_SUPABASE_URL=https://${r}.supabase.co؛ حارس Node-fetch مقيَّد بـ${r}؛ متصفّح فعليّ مؤجَّل)` };
+    return { program: 'node', args: ['scripts/e2e/browser-run.mjs'], env: { E2E_SUPABASE_URL: `https://${r}.supabase.co` },
+      show: `node scripts/e2e/browser-run.mjs  (E2E_SUPABASE_URL=https://${r}.supabase.co؛ حدّ سياق المتصفّح مقيَّد بـ${r}؛ يفشل مغلقاً بلا Playwright/‏staging)` };
   } },
 };
 

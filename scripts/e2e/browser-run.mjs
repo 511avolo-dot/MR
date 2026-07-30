@@ -56,8 +56,32 @@ let cfg; try { cfg = await resp.json(); } catch (_) { await browser.close(); die
 if (cfg.ok !== true) { await browser.close(); die('portal-config ok !== true — الإعداد غير جاهز (fail-closed).'); }
 if (cfg.env === 'production' || cfg.ref === PROD_REF) { await browser.close(); die(`portal-config هويّة إنتاج (env=${cfg.env}, ref=${cfg.ref}) — إيقاف فوريّ (fail-closed).`); }
 if (cfg.ref !== ref) { await browser.close(); die(`portal-config ref (${cfg.ref}) ≠ staging المُتحقَّق (${ref}) — fail-closed.`); }
-// … سيناريو سير العمل الفعليّ يُضاف هنا (تسجيل دخول staging، دورة صرف، …) …
+
+// ── (G1-R6-04) سيناريو smoke فعليّ على staging (ليس مجرّد فحص إعداد) ──
+const email = process.env.STAGING_TEST_EMAIL || '';
+const pass = process.env.STAGING_TEST_PASSWORD || '';
+if (!email || !pass) { await browser.close(); die('سيناريو smoke يتطلّب STAGING_TEST_EMAIL + STAGING_TEST_PASSWORD (مستخدم staging فقط) — fail-closed (لا نجاح زائف).'); }
+
+// 1) افتح صفحة النظام-3.
+await page.goto(base.replace(/\/+$/, '') + '/purchase-portal.html', { waitUntil: 'domcontentloaded' });
+
+// 2) تأكيد أمنيّ مستقلّ عن DOM: طلب إنتاج من داخل الصفحة يجب أن يُجهَض على مستوى سياق المتصفّح قبل الشبكة.
+const prodProbe = await page.evaluate(async (prodRef) => {
+  try { await fetch(`https://${prodRef}.supabase.co/rest/v1/`, { method: 'GET' }); return 'REACHED'; }
+  catch (e) { return 'BLOCKED:' + (e && e.name || 'err'); }
+}, PROD_REF);
+if (prodProbe === 'REACHED') { await browser.close(); die('طلب إنتاج من داخل الصفحة وصل الشبكة — حدّ سياق المتصفّح فشل (P0).'); }
+
+// 3) تسجيل دخول staging + بلوغ حالة محميّة (المُقدّم يرى لوحته).
+await page.fill('#loginEmail, input[type="email"]', email);
+await page.fill('#loginPass, input[type="password"]', pass);
+await page.click('#loginBtn, button[type="submit"]');
+await page.waitForSelector('#app:not(.hidden), [data-authed="1"], nav.portal-nav', { timeout: 20000 });
+
+// 4) أعِد تأكيد هويّة staging بعد الدخول (لا تسرّب إنتاج).
+const post = await page.evaluate(async () => { const r = await fetch('/api/portal-config'); return r.json(); });
+if (post.ref !== ref || post.env === 'production') { await browser.close(); die(`بعد الدخول: هويّة غير staging (env=${post.env}, ref=${post.ref}) — fail-closed.`); }
 
 await browser.close();
-console.log(`✅ browser-run: هويّة staging مؤكَّدة (ok, env=${cfg.env}, ref=${cfg.ref}==${ref}) + حدّ سياق المتصفّح مُطبَّق (الإنتاج محظور). طلبات مُجهَضة=${blocked}.`);
+console.log(`✅ browser-run: سيناريو smoke نجح على staging (${ref}) — دخول + حالة محميّة؛ حظر الإنتاج داخل الصفحة مؤكَّد (${prodProbe})؛ طلبات مُجهَضة=${blocked}.`);
 process.exit(0);

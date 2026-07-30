@@ -8,20 +8,22 @@ change. PR stays Draft.
 To avoid overstating: this branch proves **logic/config assertions locally**; it does **not** prove real external execution.
 | Evidence | State |
 |---|---|
-| Local logic/config assertions (`stage1-tests.mjs`) | **PASS — 50** (mig-parse 6 + env-guard 14 · launchers+net-allow 9 · pages-exclude 5 · portal-config 16 + 2 misc) |
+| Local logic/config assertions (`stage1-tests.mjs`) | **PASS — 55** (migration-manifest 5 + mig-parse 6 + env-guard 14 · launchers+net-allow 10 · pages-exclude 5 · portal-config 16 − dedup) |
 | Real Supabase CLI contract (`--help`) | **SKIPPED locally** (no CLI); **enforced in the dedicated CI job `supabase-contract`** which installs the **exact pinned version `2.110.0`** (`supabase/setup-cli`, overridable only via repo var — never `latest`), asserts installed==pin, and runs `REQUIRE_SUPABASE_CLI=1` → fails if absent/mismatch (G1-R5-01). Not counted as Gate evidence when skipped |
-| Real migration discovery/apply of 062 | **NOT RUN** — needs pinned CLI + isolated staging (gated, G1-R4-06). Payload build + pinned-SHA verify exercised; **`db push --dry-run` output is now parsed deterministically to assert the pending set is EXACTLY `{20260728000000}` (062)** — fails closed on zero/extra/other (G1-R5-02, unit-tested); live `db push` still not run |
-| Real **browser** E2E | **NOT IMPLEMENTED/RUN** — `net-allow.mjs` guards **Node fetch only**; the real Playwright context-route runner (`scripts/e2e/browser-run.mjs`) fails closed without the package + staging, and now **parses `/api/portal-config` and fails closed unless `ok===true`, `env≠production`, and `ref===GUARDED_REF`** before any action (G1-R5-03). Full workflow scenarios still not implemented |
-| Isolated staging provisioning | **NOT PROVISIONED** — owner external action + separate authorization (G1-R4-06) |
+| Real migration discovery/apply of 062 | **NOT RUN** — needs pinned CLI + isolated staging **provisioned from the manifest** (gated, G1-R6-06). The launcher now builds the **complete migration history** (62 files) from `db/portal-migrations/manifest.json` with **per-file SHA-256 verification**, so a staging DB at 061 shows exactly `{062}` pending (G1-R6-01); 062's canonical version is **`20260730120000` — strictly after the verified live 061 `20260729073619`** (G1-R6-02). `db push --dry-run` output is parsed deterministically to assert the pending set is EXACTLY `{062}` (G1-R5-02, unit-tested). Live `db push` still not run |
+| Real **browser** E2E | **NOT RUN** — the authorized `browser-e2e` adapter now invokes the **real Playwright runner `scripts/e2e/browser-run.mjs`** directly (and `run.mjs` delegates to it — no orphaned path, G1-R6-03). The runner installs a **BrowserContext `route` deny-rule**, parses `/api/portal-config` (fails closed unless `ok===true`, `env≠production`, `ref===GUARDED_REF`), and runs a **real smoke journey** (open System-3 page → in-page production-fetch **must be aborted at context level** → staging login → protected state → re-assert ref), failing closed without `playwright` + `E2E_BASE_URL` + staging creds (G1-R6-04). Not executed here (no package/staging) |
+| Isolated staging provisioning | **NOT PROVISIONED** — owner external action + separate authorization (G1-R6-06). Staging is bootstrapped **from `manifest.json`** so local + remote migration history align (`STAGING_SETUP_PLAN.md`) |
 
 ## Deployment reality (G1-R2-05 / G1-R4-05 — exact-head, read-only)
 - GitHub Actions `pages.yml`/`deploy.yml` run **only on push to `main`** (not this branch). **Cloudflare's GitHub
   integration independently builds a public PR Preview per commit** — so this is "no production deployment/config mutation,"
   not "no deployment."
-- **Exact-head read-only Preview check (Claude-observed, no secrets):** `GET https://audit-enterprise-certificati.aldeyabi-procurement.pages.dev/api/portal-config`
-  — **head `2c2a552`, 2026-07-30T11:58:11Z, HTTP 503**, body `{ ok:false, env:"preview", checks:{ url:false, anonKey:false, serviceRole:false, bucket:true } }`.
-  Preview fails closed and **never returns the production ref**. This is a **Claude-observed read-only** check (not
-  independent machine-captured); re-verify per head. The next commit's exact-head check will be recorded on push.
+- **Exact-head read-only Preview check (Claude-observed, no secrets):** the invariant to hold every head is
+  `GET …/api/portal-config` → **HTTP 503, `env:"preview"`, fails closed, never the production ref**. This check is
+  **re-run per commit** and the exact-head result (URL · timestamp · status · redacted body) is recorded in the PR
+  thread for **that** head — **no current-head Preview proof is implied from any older deploy** (G1-R6-05).
+  Prior recorded heads (historical, superseded by later ones): `2c2a552` 2026-07-30T11:58:11Z HTTP 503;
+  `0d09ccc`/`27c9666e` 2026-07-30T12:28:51Z HTTP 503. The current-head result is posted on push.
 
 ## Owner Stage-1 checklist → status
 | # | Authorized item | Status | Evidence |
@@ -33,7 +35,7 @@ To avoid overstating: this branch proves **logic/config assertions locally**; it
 | 5 | Remove GitHub Pages ambiguity | ✅ implemented + tested | `pages-exclude.mjs` set-equality + query/hash-preserving stub in `pages.yml`; pages-exclude group (5) |
 | 6 | `supplier-quote.html` → env-aware config | ✅ implemented | fetches `/api/portal-config`; hardcoded prod project removed |
 | 7 | anon-key role/project + server-binding validation, no secret exposure | ✅ implemented + tested | **Structural** config validation (`keyKind`: rejects service_role/`sb_secret_`, expiry/issuer where present, project binding) — not signature/authenticity; opt-in live readiness = `scripts/deploy/probe-anon.mjs`; service key never returned |
-| 8 | Automated tests + negative controls | ✅ implemented | `scripts/stage1-tests.mjs` (**50 assertions, exit 0**) wired into `portal-tests.yml` |
+| 8 | Automated tests + negative controls | ✅ implemented | `scripts/stage1-tests.mjs` (**55 assertions, exit 0**) wired into `portal-tests.yml` |
 
 ## Gate-1 review findings (owner recheck of `a9b7b21`, then `5bea893`) → corrections
 Two review rounds. Round 1 (G1-01…G1-05); the deeper round 2 (G1-R2-01…G1-R2-06) superseded the round-1 approaches where
@@ -73,9 +75,27 @@ they were still bypassable. Current state below. **Gate 1 remains HELD.**
 | **G1-R4-05** (P2) | Evidence/ledger overstated closure | This doc rewritten with the **evidence-types table** (pass/skip/not-run), exact-head timestamped Preview check, and the G1-R3-01/02 downgrade. |
 | **G1-R4-06** | Staging still not provisioned | Unchanged — owner external action; real CLI migration + browser E2E stay gated on it. |
 
+## Gate-1 round-5 findings (owner recheck of `2c2a552`) → corrections
+| ID | Finding | Fix |
+|---|---|---|
+| **G1-R5-01** (P1) | CLI installed a moving `latest`, not pinned | CI job pins **exact `2.110.0`** + asserts installed==pin (run 93 log: `installed=2.110.0 pin=2.110.0`). |
+| **G1-R5-02** (P0) | dry-run only checked `stdout.includes('062')` | `mig-parse.mjs` parses the pending set deterministically; asserts **exactly `{062}`**; unit-tested negatives (062+extra/empty/other). |
+| **G1-R5-03** (P1) | browser runner didn't verify config identity | `browser-run.mjs` parses `/api/portal-config`, fails closed unless `ok/env≠prod/ref==GUARDED_REF`. |
+| **G1-R5-04** (P2) | ledger Stage-0 contradiction | ledger corrected to "Gate 0 PASSED (`9a62890`)"; Stage 1 stays HELD. |
+
+## Gate-1 round-6 findings (owner recheck of `e3f50d7`) → corrections
+| ID | Finding | Fix |
+|---|---|---|
+| **G1-R6-01** (P0) | single-062 workdir is not a valid history (would mismatch `schema_migrations`) | **`db/portal-migrations/manifest.json`** — canonical full-history map (62 migrations, semantic→version + SHA-256). Launcher builds the **complete** local history bundle, verifies every checksum; staging is **bootstrapped from the manifest through 061** so local+remote align and only `{062}` is pending. Deterministic generator `build-migration-manifest.mjs` (+`--check` in CI). No `migration repair`, no SQL apply, no staging/prod mutation. |
+| **G1-R6-02** (P0) | 062 version `20260728000000` predated live 059/060/061 | 062 reassigned to **`20260730120000`**, strictly after the verified live 061 `20260729073619`; 059/060/061 pinned to real live versions; monotonic+unique asserted in the manifest test. |
+| **G1-R6-03** (P0) | `browser-e2e` adapter ran `run.mjs`, which never reached the Playwright runner | Adapter now invokes **`browser-run.mjs`** directly; `run.mjs` **delegates** to it unconditionally after validation. Test proves the adapter reaches the browser runner and it fails closed without Playwright/staging. |
+| **G1-R6-04** (P0) | browser runner was a config probe, not an E2E scenario | Added a real smoke journey: open System-3 page → **in-page production fetch must be aborted at BrowserContext level** → staging login → protected state → re-assert staging ref. Fails closed without `playwright`+`E2E_BASE_URL`+`STAGING_TEST_*`. Execution stays gated (G1-R6-06). |
+| **G1-R6-05** (P1) | exact-head Preview evidence was stale | Preview block rewritten: invariant re-verified **per head**, recorded in the PR thread for that head; no current-head proof implied from an older deploy. |
+| **G1-R6-06** | staging/E2E/db-push still external | Unchanged — owner-gated; real `db push --dry-run`, isolated staging, and browser E2E remain not run. |
+
 ## Changed / new files
-- **new** `deploy/system3-manifest.json` · `scripts/pages-exclude.mjs` · `scripts/stage1-tests.mjs` · `scripts/deploy/supabase-push.mjs` (payload+SHA, G1-R4-01) · `scripts/deploy/verify-supabase-contract.mjs` (REQUIRE mode, G1-R4-04) · `scripts/deploy/probe-anon.mjs` · `scripts/e2e/run.mjs` + `scripts/e2e/net-allow.mjs` (Node-harness) + **`scripts/e2e/browser-run.mjs`** (real Playwright runner, G1-R4-03) · `audit-output/STAGE1_DEPLOYMENT_SAFETY.md`.
-- **edit** `scripts/env-guard.mjs` (**psql adapter removed**, G1-R4-02; supabase adapter → payload launcher) · `functions/api/portal-config.js` · `supplier-quote.html` · `.github/workflows/pages.yml` · **`.github/workflows/portal-tests.yml`** (new `supabase-contract` job) · `audit-output/STAGING_SETUP_PLAN.md` · `audit-output/MASTER_DELIVERY_LEDGER.md`.
+- **new** `deploy/system3-manifest.json` · `scripts/pages-exclude.mjs` · `scripts/stage1-tests.mjs` · `scripts/deploy/supabase-push.mjs` (full-history bundle, G1-R6-01) · **`scripts/deploy/build-migration-manifest.mjs`** + **`db/portal-migrations/manifest.json`** (canonical history, G1-R6-01/02) · **`scripts/deploy/mig-parse.mjs`** (exactly-062, G1-R5-02) · `scripts/deploy/verify-supabase-contract.mjs` (REQUIRE+pin, G1-R4-04/R5-01) · `scripts/deploy/probe-anon.mjs` · `scripts/e2e/net-allow.mjs` (Node-harness) + **`scripts/e2e/browser-run.mjs`** (real Playwright runner + smoke journey, G1-R4-03/R5-03/R6-04) · `audit-output/STAGE1_DEPLOYMENT_SAFETY.md`.
+- **edit** `scripts/env-guard.mjs` (**psql adapter removed** G1-R4-02; `browser-e2e`→`browser-run.mjs` G1-R6-03) · `scripts/e2e/run.mjs` (**delegates to browser-run** G1-R6-03) · `functions/api/portal-config.js` · `supplier-quote.html` · `.github/workflows/pages.yml` · **`.github/workflows/portal-tests.yml`** (`supabase-contract` pinned job + manifest `--check`) · `audit-output/STAGING_SETUP_PLAN.md` · `audit-output/MASTER_DELIVERY_LEDGER.md`.
 
 ## Tests / negative controls (`node scripts/stage1-tests.mjs` — 44/44, exit 0)
 - **env-guard (14):** prod ref rejected · missing `STAGING` confirm rejected · `migrate`/`e2e` without `--command` rejected · `--exec` (`sh -c`) rejected · unknown command rejected · `--project-ref` smuggle rejected · `--db-url` direct (unknown flag) rejected · adapter/purpose mismatch rejected · `--purpose check` runs no command · `supabase-db-push` dry-run calls the launcher with the validated ref · `browser-e2e` runs the fixed launcher and **rejects `--spec`** · **(G1-R4-02)** `psql-migration` is now an unknown command (removed).

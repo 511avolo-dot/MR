@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * run.mjs — مُشغّل E2E الثابت الوحيد (G1-R3-02). يُستدعى حصراً عبر env-guard (--command browser-e2e)،
- * فلا سبيل لتمرير سكربت اعتباطي. يُثبِّت حارس الشبكة (net-allow) قبل أيّ إجراء، ويؤكّد أنّ الهدف
- * ليس الإنتاج. سيناريو المتصفّح الفعلي مؤجَّل حتى تجهيز staging (G1-R3-06)؛ هنا نُثبِت الربط بالهدف.
+ * run.mjs — طبقة تحقّق Node قبل E2E ثم **تفويض إلزاميّ** لمتصفّح Playwright الفعليّ (G1-R6-03).
+ * يُثبِّت حارس Node-fetch (self-test للمُشغّل، ليس حدّ متصفّح)، يؤكّد أنّ الهدف ليس الإنتاج، ثم — بلا شرط —
+ * يُفوّض إلى `scripts/e2e/browser-run.mjs` (حدّ سياق المتصفّح + سيناريو smoke) فلا يبقى الأخير معزولاً.
+ * ⚠️ env-guard يستدعي browser-run.mjs مباشرةً؛ هذا المسار مكافئ ويصل المتصفّح الفعليّ أيضاً.
  */
-import { installNetworkAllowlist, isAllowedUrl } from './net-allow.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { installNetworkAllowlist } from './net-allow.mjs';
 
 const PROD_REF = 'mwbjoysuybgbrvfrprex';
 function die(m) { console.error('❌ e2e-run: ' + m); process.exit(2); }
@@ -15,23 +19,11 @@ const ref = m ? m[1] : (process.env.GUARDED_REF || '').toLowerCase();
 if (!/^[a-z0-9]{20}$/.test(ref)) die('لا مرجع staging صالح (E2E_SUPABASE_URL/GUARDED_REF يُضبطان عبر env-guard).');
 if (ref === PROD_REF) die('الهدف هو الإنتاج — مرفوض.');
 
+// حارس Node-fetch للمُشغّل (ليس حدّ متصفّح — الحدّ الحقيقيّ في browser-run.mjs).
 installNetworkAllowlist(ref);
+console.log(`▶ e2e-run: حارس Node-fetch مُثبَّت (${ref})؛ تفويض إلى متصفّح Playwright الفعليّ (browser-run.mjs)…`);
 
-// (يُنفَّذ حيّاً عند تجهيز staging) قبل أيّ إجراء: تأكّد أنّ /api/portal-config يبلّغ المرجع المُتحقَّق منه.
-const base = process.env.E2E_BASE_URL || '';
-if (base) {
-  try {
-    const r = await fetch(base.replace(/\/+$/, '') + '/api/portal-config', { cache: 'no-store' });
-    const c = await r.json().catch(() => null);
-    if (!c || c.ok !== true || c.ref !== ref) die(`/api/portal-config لا يبلّغ المرجع المُتحقَّق منه (${ref}) — إيقاف قبل أيّ إجراء.`);
-    if (!isAllowedUrl(c.url, ref)) die('عنوان Supabase من الإعداد ليس مرجع staging — إيقاف.');
-    console.log(`✅ e2e-run: الإعداد يبلّغ staging «${ref}». (سيناريو المتصفّح يُشغَّل هنا.)`);
-  } catch (e) { die('تعذّر التحقّق من الإعداد قبل E2E: ' + (e && e.message)); }
-} else {
-  // ⚠️ (G1-R4-03) هذا حارس على مستوى **Node fetch للمُشغّل فقط** — ليس حدّ متصفّح. لا يعترض طلبات
-  // صفحة متصفّح/‏Supabase JS/XHR/WebSocket. المتصفّح الفعليّ في scripts/e2e/browser-run.mjs (Playwright)
-  // ويتطلّب الحزمة + staging؛ نتيجة E2E الفعلية تبقى **مفتوحة** حتى ذلك.
-  console.log(`✅ e2e-run: حارس Node-fetch مُثبَّت (مسموح فقط بـ«${ref}»؛ الإنتاج محظور) — **ليس حدّ متصفّح**. `
-    + 'E2E المتصفّح الفعليّ (browser-run.mjs/Playwright) غير مُنفَّذ هنا (لا حزمة/‏staging) — النتيجة مفتوحة.');
-}
-process.exit(0);
+// (G1-R6-03) تفويض إلزاميّ إلى المتصفّح الفعليّ — يفشل مغلقاً بلا Playwright/‏staging (لا نجاح زائف).
+const here = dirname(fileURLToPath(import.meta.url));
+const r = spawnSync('node', [join(here, 'browser-run.mjs')], { stdio: 'inherit', env: process.env });
+process.exit(typeof r.status === 'number' ? r.status : 1);

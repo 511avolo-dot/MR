@@ -1,0 +1,441 @@
+{
+  "note": "Canonical Supabase migration history for System-3 staging bootstrap (G1-R6-01/02). 059/060/061 = verified live versions; 062 strictly after 061; earlier = deterministic canonical (staging greenfield is provisioned from this manifest). RUN-ALL* excluded. Regenerate: node scripts/deploy/build-migration-manifest.mjs",
+  "count": 62,
+  "head_migration": "062",
+  "migrations": [
+    {
+      "seq": "001",
+      "file": "001-seeds-jobs-model.sql",
+      "version": "20260101000000",
+      "dest": "20260101000000_001_seeds_jobs_model.sql",
+      "sha256": "b9b81a9c8da259ffe041567ca7fa1932fdbae28609d7a7f58532aa164b793687"
+    },
+    {
+      "seq": "002",
+      "file": "002-request-fields.sql",
+      "version": "20260101010000",
+      "dest": "20260101010000_002_request_fields.sql",
+      "sha256": "62805d800eb4153d49eb0a1b3649a584707d7f81999cdc4fd2f83ef62ff12dac"
+    },
+    {
+      "seq": "003",
+      "file": "003-governance.sql",
+      "version": "20260101020000",
+      "dest": "20260101020000_003_governance.sql",
+      "sha256": "4eb88014eace2b992fb06e79cf09d4bd1a5faa9af58d77d42e55c7b151814c68"
+    },
+    {
+      "seq": "004",
+      "file": "004-admin-suppliers.sql",
+      "version": "20260101030000",
+      "dest": "20260101030000_004_admin_suppliers.sql",
+      "sha256": "3d2ed060ea010f4a2532c5d08fbc3bc169a894be13126e870e11e1d43aa2b85b"
+    },
+    {
+      "seq": "005",
+      "file": "005-resubmit.sql",
+      "version": "20260101040000",
+      "dest": "20260101040000_005_resubmit.sql",
+      "sha256": "386e2855ba967a9e9b0f98a36272d5b6774178d6617a68ae0a5673eca8ea6a60"
+    },
+    {
+      "seq": "006",
+      "file": "006-guard-alignment.sql",
+      "version": "20260101050000",
+      "dest": "20260101050000_006_guard_alignment.sql",
+      "sha256": "c3e410f860f252495859d6ac39eaaecdd52b5442ec8e63ee6cffcc8c1189d030"
+    },
+    {
+      "seq": "007",
+      "file": "007-doa-po-chain.sql",
+      "version": "20260101060000",
+      "dest": "20260101060000_007_doa_po_chain.sql",
+      "sha256": "5aa0580aa634fb5c8ac5938a3eb22ab1f232be81284333887122d5138a46fac9"
+    },
+    {
+      "seq": "008",
+      "file": "008-flexible-return.sql",
+      "version": "20260101070000",
+      "dest": "20260101070000_008_flexible_return.sql",
+      "sha256": "4336faab2073169dd05e2a93a1b6c286eb905088596d1e0e4884ac89ccfd43b1"
+    },
+    {
+      "seq": "009",
+      "file": "009-visibility-rls.sql",
+      "version": "20260101080000",
+      "dest": "20260101080000_009_visibility_rls.sql",
+      "sha256": "680be9edd9056fb7d9f3d9be601793874f4cde016765387fa0dc7e57b3f886f6"
+    },
+    {
+      "seq": "010",
+      "file": "010-invitations.sql",
+      "version": "20260101090000",
+      "dest": "20260101090000_010_invitations.sql",
+      "sha256": "aed2a621d45b4a8313c49d4560b2ee615fe4e2899eaa5334e0ff3b8572e4e8a9"
+    },
+    {
+      "seq": "011",
+      "file": "011-delete-user.sql",
+      "version": "20260101100000",
+      "dest": "20260101100000_011_delete_user.sql",
+      "sha256": "a670509afe37c6e03e521d9a39c5f10c379423022521404b567473dda48aeb55"
+    },
+    {
+      "seq": "012",
+      "file": "012-audit-hardening.sql",
+      "version": "20260101110000",
+      "dest": "20260101110000_012_audit_hardening.sql",
+      "sha256": "f470eb17ec655f0b70b38ee22696cdf61b80e650c2ca1a6720c343e13c5d7ec5"
+    },
+    {
+      "seq": "013",
+      "file": "013-committee-mgmt.sql",
+      "version": "20260101120000",
+      "dest": "20260101120000_013_committee_mgmt.sql",
+      "sha256": "9c9c4f056d428cb107f800a254c4d05add65bff4d9495a1203b61dc1ec35c90f"
+    },
+    {
+      "seq": "014",
+      "file": "014-sla-role-holders.sql",
+      "version": "20260101130000",
+      "dest": "20260101130000_014_sla_role_holders.sql",
+      "sha256": "8f4d73433ff12353ee6ab32a5bcf8258139c472bf0096bb7535807c5f0361a78"
+    },
+    {
+      "seq": "015",
+      "file": "015-pending-approver-visibility.sql",
+      "version": "20260101140000",
+      "dest": "20260101140000_015_pending_approver_visibility.sql",
+      "sha256": "99523ef4967b3f1b98883a31c107b1acbd973c8f01c1e54fbe8c4a0a6a7bbe1a"
+    },
+    {
+      "seq": "016",
+      "file": "016-payment-sod-3way.sql",
+      "version": "20260101150000",
+      "dest": "20260101150000_016_payment_sod_3way.sql",
+      "sha256": "6b62174b385d3c55b32be03ae839fc84abc9f5becca72ef3ef9a53568578ae86"
+    },
+    {
+      "seq": "017",
+      "file": "017-revoke-run-sla.sql",
+      "version": "20260101160000",
+      "dest": "20260101160000_017_revoke_run_sla.sql",
+      "sha256": "a12a67ed77a1e2f560cbffc58a74bfd89ed0777efd5d91b11c0f2eb26ace6761"
+    },
+    {
+      "seq": "018",
+      "file": "018-save-job-committee-key.sql",
+      "version": "20260101170000",
+      "dest": "20260101170000_018_save_job_committee_key.sql",
+      "sha256": "d58123df3547cd729ddf05470aa6bd10688f7df000534bc0b53fbaaa0ff93192"
+    },
+    {
+      "seq": "019",
+      "file": "019-security-hardening.sql",
+      "version": "20260101180000",
+      "dest": "20260101180000_019_security_hardening.sql",
+      "sha256": "17c4e7e111873ee75c69110d5515c934568b1d63e05bc91ad0d05a071931abef"
+    },
+    {
+      "seq": "020",
+      "file": "020-split-tier-aware.sql",
+      "version": "20260101190000",
+      "dest": "20260101190000_020_split_tier_aware.sql",
+      "sha256": "9460ce387cdbf9e7ec0f3097f4f6db45822c09bbb83a0b2049d3b2d07e684965"
+    },
+    {
+      "seq": "021",
+      "file": "021-offer-quote-pdf.sql",
+      "version": "20260101200000",
+      "dest": "20260101200000_021_offer_quote_pdf.sql",
+      "sha256": "ecdbbc58e846959252558b597ccd107d15ba46f9fd4a5fecd6c99c206043c265"
+    },
+    {
+      "seq": "022",
+      "file": "022-offer-item-prices.sql",
+      "version": "20260101210000",
+      "dest": "20260101210000_022_offer_item_prices.sql",
+      "sha256": "380cf824b99b31a31ec12a86d7b10c654a25637993fc83ce1d40f2265444e7a3"
+    },
+    {
+      "seq": "023",
+      "file": "023-disbursement-receipt-docs.sql",
+      "version": "20260101220000",
+      "dest": "20260101220000_023_disbursement_receipt_docs.sql",
+      "sha256": "374a672971368b5c3e295e2af87d385a0deda7b8ebeb2de59e07a92959f6a948"
+    },
+    {
+      "seq": "024",
+      "file": "024-award-lines-split.sql",
+      "version": "20260101230000",
+      "dest": "20260101230000_024_award_lines_split.sql",
+      "sha256": "ad63472492b4cf27c47bbedfde31682b0e614111abe529214ed72c225aad2d18"
+    },
+    {
+      "seq": "025",
+      "file": "025-split-per-supplier-payments.sql",
+      "version": "20260102000000",
+      "dest": "20260102000000_025_split_per_supplier_payments.sql",
+      "sha256": "05deb49af19c2a2b162b75c67a3d708d9aaeef28f22e899b0a3bfd686415bab5"
+    },
+    {
+      "seq": "026",
+      "file": "026-split-integrity-fixes.sql",
+      "version": "20260102010000",
+      "dest": "20260102010000_026_split_integrity_fixes.sql",
+      "sha256": "a5f452aa2e03f589e6cd82c8b94815b3caf78810c8c0d3bf8b004cc78dc41fb8"
+    },
+    {
+      "seq": "027",
+      "file": "027-installment-payments.sql",
+      "version": "20260102020000",
+      "dest": "20260102020000_027_installment_payments.sql",
+      "sha256": "e78f395c49a56e68580c63288e3e774cb9ec5532058b4b1380f6c642afbab1f3"
+    },
+    {
+      "seq": "028",
+      "file": "028-bounce-to-requester.sql",
+      "version": "20260102030000",
+      "dest": "20260102030000_028_bounce_to_requester.sql",
+      "sha256": "44a41035bae462c75b4751696885046ceaf92b3ab99d9c891fb55020cdaf8a2c"
+    },
+    {
+      "seq": "029",
+      "file": "029-notification-outbox.sql",
+      "version": "20260102040000",
+      "dest": "20260102040000_029_notification_outbox.sql",
+      "sha256": "7dbbb6a3d273ac83f8492ce3a92f3439da86deddfba2f5df724c720caa23021e"
+    },
+    {
+      "seq": "030",
+      "file": "030-execute-hardening.sql",
+      "version": "20260102050000",
+      "dest": "20260102050000_030_execute_hardening.sql",
+      "sha256": "2b9a71fdadb5f5e7193c1d0bc9c136b1a4da746f3d34986f52285d1f27f774b1"
+    },
+    {
+      "seq": "031",
+      "file": "031-budget-control.sql",
+      "version": "20260102060000",
+      "dest": "20260102060000_031_budget_control.sql",
+      "sha256": "359e97d773f5928e0c0db100a1329a27136ac348157fa95c2e6de5c630bafc22"
+    },
+    {
+      "seq": "032",
+      "file": "032-supplier-iban-control.sql",
+      "version": "20260102070000",
+      "dest": "20260102070000_032_supplier_iban_control.sql",
+      "sha256": "7126ba8df38aa41f27b4419f087636e5e657114dcc4ea97eef2e48ba270ed341"
+    },
+    {
+      "seq": "033",
+      "file": "033-three-way-match.sql",
+      "version": "20260102080000",
+      "dest": "20260102080000_033_three_way_match.sql",
+      "sha256": "c6689398f7e89a05f536d18c816ac7833131a2f3155b998dc7c7ea8dbfead2f1"
+    },
+    {
+      "seq": "034",
+      "file": "034-returns-debit-note.sql",
+      "version": "20260102090000",
+      "dest": "20260102090000_034_returns_debit_note.sql",
+      "sha256": "68a292805dd02fdaecea54abd2991458c497611212c3a6808b9961bdd744a04f"
+    },
+    {
+      "seq": "035",
+      "file": "035-multi-currency.sql",
+      "version": "20260102100000",
+      "dest": "20260102100000_035_multi_currency.sql",
+      "sha256": "5331ea65a283514647e0fc1b01e2b094d10ac62bbb105073b8690fe142772ad2"
+    },
+    {
+      "seq": "036",
+      "file": "036-request-currency.sql",
+      "version": "20260102110000",
+      "dest": "20260102110000_036_request_currency.sql",
+      "sha256": "c7f3962fccfddfe9bf2532ae9921f5ccf8438550cc40a2ad3166a1bedb4f90fe"
+    },
+    {
+      "seq": "037",
+      "file": "037-framework-contracts.sql",
+      "version": "20260102120000",
+      "dest": "20260102120000_037_framework_contracts.sql",
+      "sha256": "898fb3b6aae88e33f1d5fe37d16b35e630fd001b8a141ea2b1adb507248975fe"
+    },
+    {
+      "seq": "038",
+      "file": "038-split-award-nonlowest-flag.sql",
+      "version": "20260102130000",
+      "dest": "20260102130000_038_split_award_nonlowest_flag.sql",
+      "sha256": "a5dcdfd8629da665033595cb246d7c02f757a705c83af3092770f1b01d8c7b2a"
+    },
+    {
+      "seq": "039",
+      "file": "039-return-qty-invoice-supplier.sql",
+      "version": "20260102140000",
+      "dest": "20260102140000_039_return_qty_invoice_supplier.sql",
+      "sha256": "6b131784bc335bb7e0d676b103be1101953c6e3c0a32c339d217dde01e639188"
+    },
+    {
+      "seq": "040",
+      "file": "040-advisor-hardening.sql",
+      "version": "20260102150000",
+      "dest": "20260102150000_040_advisor_hardening.sql",
+      "sha256": "fdd2797ff054ebe3a6c7a1da77353fbd27045f26074088446218936eef21e238"
+    },
+    {
+      "seq": "042",
+      "file": "042-fill-empty-jobs.sql",
+      "version": "20260102160000",
+      "dest": "20260102160000_042_fill_empty_jobs.sql",
+      "sha256": "6fe6a129452ca8a3903ae318f42f28b808d74ab1d9cf9a7160f615d06ebeb3a8"
+    },
+    {
+      "seq": "043",
+      "file": "043-edit-returned-request.sql",
+      "version": "20260102170000",
+      "dest": "20260102170000_043_edit_returned_request.sql",
+      "sha256": "bdcd015c79822d58fec1ecae80789edb3f8280fcec530c3626d3a0df7ab28a3c"
+    },
+    {
+      "seq": "044",
+      "file": "044-reopen-award-from-payment.sql",
+      "version": "20260102180000",
+      "dest": "20260102180000_044_reopen_award_from_payment.sql",
+      "sha256": "643d7a20111d128d3f38e18411190e015f1312b9c2f0e4d4b5950279d918bdbc"
+    },
+    {
+      "seq": "045",
+      "file": "045-revoke-public-update-request.sql",
+      "version": "20260102190000",
+      "dest": "20260102190000_045_revoke_public_update_request.sql",
+      "sha256": "b626c5b8fbfbff33a490f4efc4a67ce15a8e17e5dd4fb343381a4de520ec17dc"
+    },
+    {
+      "seq": "046",
+      "file": "046-complete-execute-hardening.sql",
+      "version": "20260102200000",
+      "dest": "20260102200000_046_complete_execute_hardening.sql",
+      "sha256": "ac96db50b01d48550f8ea5da17e0777624f508719743b401c0af299359a4b67c"
+    },
+    {
+      "seq": "047",
+      "file": "047-supplier-self-service.sql",
+      "version": "20260102210000",
+      "dest": "20260102210000_047_supplier_self_service.sql",
+      "sha256": "06ae8ea149c23296a7fa9600c19fc23ae233650318c33b9f957b6e7f6f93633e"
+    },
+    {
+      "seq": "048",
+      "file": "048-fix-gen-token-searchpath.sql",
+      "version": "20260102220000",
+      "dest": "20260102220000_048_fix_gen_token_searchpath.sql",
+      "sha256": "454b39cf3cf31849b7f504b0725af293ae2ddb0ad611e194cbe0172f9caf327e"
+    },
+    {
+      "seq": "049",
+      "file": "049-quote-doc-required.sql",
+      "version": "20260102230000",
+      "dest": "20260102230000_049_quote_doc_required.sql",
+      "sha256": "37de1dd4ffd3fef885453d77ccc0abda868101ca6c0a2c3f2a4cb8861b598012"
+    },
+    {
+      "seq": "050",
+      "file": "050-disbursement-core.sql",
+      "version": "20260103000000",
+      "dest": "20260103000000_050_disbursement_core.sql",
+      "sha256": "4fa730ae5e377ef6bdb4599e3db477fcade7096163c311b2903c868f3c99fada"
+    },
+    {
+      "seq": "051",
+      "file": "051-idempotency-void.sql",
+      "version": "20260103010000",
+      "dest": "20260103010000_051_idempotency_void.sql",
+      "sha256": "6275c1a952a03a3c629a0bcbce0a2ce584845e46a745ff57becabd83b9cd26aa"
+    },
+    {
+      "seq": "052",
+      "file": "052-expense-budget-control.sql",
+      "version": "20260103020000",
+      "dest": "20260103020000_052_expense_budget_control.sql",
+      "sha256": "67b848cedb5f5a6e065b3262eaf7c77d882516aaf8878481be04f1f3126f4830"
+    },
+    {
+      "seq": "053",
+      "file": "053-beneficiary-master.sql",
+      "version": "20260103030000",
+      "dest": "20260103030000_053_beneficiary_master.sql",
+      "sha256": "6c1dd6201895016e17ecdb8e7e53cea92a1ecabdc1996e1e73978d562bc7954b"
+    },
+    {
+      "seq": "054",
+      "file": "054-bulk-approve.sql",
+      "version": "20260103040000",
+      "dest": "20260103040000_054_bulk_approve.sql",
+      "sha256": "ef11b362f883079a49cdd604d4fd4588a8b7c5030a0962140ac062fa5c1bf30c"
+    },
+    {
+      "seq": "055",
+      "file": "055-recurring-expenses.sql",
+      "version": "20260103050000",
+      "dest": "20260103050000_055_recurring_expenses.sql",
+      "sha256": "9ecdf36426342289555635334258fd9cc73e8500dc2bb92ac94538495dc2fbe9"
+    },
+    {
+      "seq": "055b",
+      "file": "055b-recurring-next-searchpath.sql",
+      "version": "20260103060000",
+      "dest": "20260103060000_055b_recurring_next_searchpath.sql",
+      "sha256": "3d323edaf9d20c68a846c859a0896faaab3555bd27a02430c40d5907a7ffdfe4"
+    },
+    {
+      "seq": "056",
+      "file": "056-email-approval-disbursement.sql",
+      "version": "20260103070000",
+      "dest": "20260103070000_056_email_approval_disbursement.sql",
+      "sha256": "ce0546c49ecea2600fc09d9be53df82ea190ddf2aa5b2d76982c56206275523d"
+    },
+    {
+      "seq": "057",
+      "file": "057-audit-hash-chain.sql",
+      "version": "20260103080000",
+      "dest": "20260103080000_057_audit_hash_chain.sql",
+      "sha256": "3de758a71cce8b7f41bad2f9eaf9c785e7fe40896bfb3d583fba724539432bdd"
+    },
+    {
+      "seq": "058",
+      "file": "058-transactional-notifications.sql",
+      "version": "20260103090000",
+      "dest": "20260103090000_058_transactional_notifications.sql",
+      "sha256": "7f25fabb59caf6585d6117d6b9e067dc885627d5e0677e973580eeb2421fc1b6"
+    },
+    {
+      "seq": "059",
+      "file": "059-revoke-anon-sensitive-reads.sql",
+      "version": "20260728093548",
+      "dest": "20260728093548_059_revoke_anon_sensitive_reads.sql",
+      "sha256": "055ad191f99b07b5e74d6fbafaa5f34bc76772a8d550e8b1dcfd3d82dea94a04"
+    },
+    {
+      "seq": "060",
+      "file": "060-authz-expense-dept-recurring-budget.sql",
+      "version": "20260728170320",
+      "dest": "20260728170320_060_authz_expense_dept_recurring_budget.sql",
+      "sha256": "b8923a6152da60e341a4803fadf1648bb81a2896c0d06449c8db077667372fc3"
+    },
+    {
+      "seq": "061",
+      "file": "061-codex-round2-hardening.sql",
+      "version": "20260729073619",
+      "dest": "20260729073619_061_codex_round2_hardening.sql",
+      "sha256": "8126be2897c00767f1fca5d7f98f7d1f5768caccebc6b5d4bdf537bbec36ce94"
+    },
+    {
+      "seq": "062",
+      "file": "062-request-documents.sql",
+      "version": "20260730120000",
+      "dest": "20260730120000_062_request_documents.sql",
+      "sha256": "7b56d64abd7b9b8b2601b5f294e8a2367f0ac7136c1689b12bde299814f35bf3"
+    }
+  ]
+}

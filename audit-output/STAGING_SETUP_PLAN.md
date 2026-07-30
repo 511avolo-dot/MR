@@ -36,10 +36,18 @@ parsing; skips cleanly if the CLI is absent):
 SUPABASE_CLI_PIN=2.x node scripts/deploy/verify-supabase-contract.mjs      # asserts: db push --linked (no --project-ref); link --project-ref
 ```
 ```bash
+# STAGING HISTORY BOOTSTRAP (G1-R6-01/02) — deterministic, owner-authorized:
+#   db/portal-migrations/manifest.json is the canonical semantic-number → Supabase-version + SHA-256 map for the
+#   FULL history (62 migrations). 059/060/061 = verified live versions; 062 = 20260730120000 (strictly after 061
+#   20260729073619); earlier = deterministic canonical. Staging (greenfield) is provisioned by applying the
+#   manifest bundle in order THROUGH 061, so local and remote schema_migrations align and only 062 is pending.
+#   Regenerate/verify: node scripts/deploy/build-migration-manifest.mjs [--check]. Do NOT run `migration repair`,
+#   apply SQL by hand, or mutate staging/production as part of repo work.
 # migrate — the ONLY authoritative executor = Supabase CLI, via fixed launcher scripts/deploy/supabase-push.mjs:
-#   verify pinned SHA-256 of 062 → build isolated workdir with `supabase init` + 062 under supabase/migrations/<ts>_062_*.sql
-#   → `link --project-ref <validated ref>` (password via SUPABASE_DB_PASSWORD env) → VERIFY linked ref == validated ref
-#   → `db push --dry-run --linked` (assert 062 discovered, nothing else pending) → `db push --linked`.
+#   verify every migration's SHA-256 vs manifest → build isolated workdir with `supabase init` + the FULL history
+#   under supabase/migrations/<version>_<seq>_*.sql → `link --project-ref <validated ref>` (password via
+#   SUPABASE_DB_PASSWORD env) → VERIFY linked ref == validated ref → `db push --dry-run --linked`
+#   (assert pending set is EXACTLY {062}, nothing else) → `db push --linked`.
 #   (raw-psql apply path REMOVED — G1-R4-02 — non-atomic + bypassed supabase_migrations history.)
 SUPABASE_DB_PASSWORD=… node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push
 # e2e — one fixed launcher. REAL browser boundary = scripts/e2e/browser-run.mjs (Playwright context.route) which fails

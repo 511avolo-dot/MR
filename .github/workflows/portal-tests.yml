@@ -51,7 +51,10 @@ jobs:
       - name: تأكيدات حارس الملفات المرفوعة (JS)
         run: node db/portal-tests/file-guard.test.mjs
 
-      - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config)
+      - name: تحقّق بيان الهجرات القانونيّ (G1-R6-01/02)
+        run: node scripts/deploy/build-migration-manifest.mjs --check
+
+      - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config/manifest)
         run: node scripts/stage1-tests.mjs
 
       - name: تحقّق عقد Supabase CLI (SKIP هنا — لا يُحتسب دليلاً؛ الوظيفة المخصّصة تفرضه)
