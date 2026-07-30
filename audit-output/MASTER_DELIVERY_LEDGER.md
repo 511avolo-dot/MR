@@ -64,7 +64,8 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 
 ### Implemented (this branch) — evidence type per row (G0-09)
 
-**Evidence legend:** `SRC`=static source verification · `SQL`=SQL assertion test · `EP`=endpoint/Node test · `E2E`=browser (none yet) · `CONC`=concurrency (none yet) · `LIVE`=live configuration verification. **No row is `verified` unless its evidence type actually ran; `implemented` = code merged, dynamic verification pending.** No browser/concurrency/live evidence exists yet on this branch.
+**Evidence legend:** `SRC`=static source verification · `SQL`=SQL assertion test · `EP`=endpoint/Node test · `E2E`=browser Playwright · `CONC`=concurrency (none yet) · `LIVE`=live configuration verification. **No row is `verified` unless its evidence type actually ran; `implemented` = code merged, dynamic verification pending.**
+**Browser E2E (truthfulness reconciliation, owner recheck 574f1e5):** two distinct kinds — (1) **repo-side real-Chromium fixture E2E = VERIFIED at `574f1e5`** (`scripts/e2e/browser-fixture.test.mjs`: real System-3 `#pa-*` login contract + HTTP/WebSocket/Service-Worker context boundary with exact per-host outcomes; runs in CI job `browser-e2e-fixture`); (2) **external isolated-staging browser E2E against a real staging project = NOT RUN / owner-gated** (Section 2). Concurrency (`CONC`) evidence: still none yet on this branch.
 
 | ID | Sev | Subsystem | Item | Commit | Evidence type | Status |
 |---|---|---|---|---|---|---|
@@ -95,7 +96,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | ID | Sev | Subsystem | Item | Target stage | Status |
 |---|---|---|---|---|---|
 | DOC-RECEIPT | **P0** | documents | fabricated in-namespace key: server-issued single-use upload receipt (verify R2 object/metadata, consume once, verified_at, orphan cleanup) — **release-blocking** | Stage 3 | open |
-| E2E | P0 | verification | browser E2E on isolated staging with 062 applied (owner-authorized) | Stage 1/13 | open |
+| E2E | P0 | verification | **external** browser E2E on isolated staging with 062 applied (owner-authorized) — distinct from the repo-side real-Chromium fixture E2E which is **VERIFIED at `574f1e5`** | Stage 1/13 | open (Section 2, owner-gated) |
 | SEC-06 | **P0** | System 1 | `register.html` anon Storage fallback → signed registration-bound upload + revoke anon writes | Stage 2 | open |
 | SEC-IBAN-EXPOSE | P1 | privacy | full beneficiary IBAN exposed to ordinary can_create — restricted view/RPC + masking | Stage 2 | open |
 | SEC-FINANCE-READONLY | P2 | authz | **(G0-F3C)** `can_see_finance` must remain read-only — verify it grants no write path on finance-scoped tables/RPCs | Stage 2 | open |
