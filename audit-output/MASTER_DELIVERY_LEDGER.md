@@ -158,7 +158,7 @@ Owner senior reviews → captured as OWN-* + the open rows in §4.
 
 ## 6. Release-gate checklist (Gate 0 → Gate 15)
 
-- [ ] G0 every prior comment/finding represented here (this commit)
+- [x] **G0 PASSED — owner independent recheck cleared at exact SHA `9a62890189d12d6ae685b3dcf0a1e417714f037f` (2026-07-30, CI run 85 green). Documentation gate only — does NOT certify the product, close any P0/P1 implementation item, or authorize deployment. Stage 1 authorized repo-only; all open ledger items + accepted-risk decisions preserved; no historical evidence rewritten.**
 - [ ] G1 Preview cannot reach production under malformed inputs; Pages cannot expose System-3; isolated staging exists
 - [ ] G2 no unresolved Critical/High authz/privacy/storage; dynamic negative-authz tests pass; SEC-06 closed
 - [ ] G3 zero fake evidence satisfies submission; inline evidence viewable by every approver in staging
@@ -175,7 +175,7 @@ Owner senior reviews → captured as OWN-* + the open rows in §4.
 - [ ] G14 independent verdict (not CI-only)
 - [ ] G15 merge rehearsal + owner sign-off
 
-**Gate 0 status:** items consolidated above; pending owner acceptance of Stage 0.
+**Gate 0 status: ✅ PASSED at SHA `9a62890` (owner independent recheck, 2026-07-30).** Scope of this pass: **Stage-0 documentation gate only.** It does **not** certify the product, close the open P0/P1 implementation items (DOC-RECEIPT, SEC-06, E2E, etc. remain open), or authorize deployment/DB/config change. **Stage 1 is authorized repo-only.** G1 remains unchecked until Stage-1 evidence is independently reviewed (Gate 1). Restrictions still binding: PR Draft/unmerged · no migration 062/063 apply · no production/Storage/Cloudflare/Supabase/Resend change · DoA seed 150→125 is Stage-5 · `txn_notifications=0` · `budget_enforce=0` · Stage 2 does not begin until Gate 1.
 
 ---
 
@@ -403,7 +403,7 @@ Every prior owner requirement / Codex finding / design mandate has its own stabl
 | G0-08 thread traceability | §8 above | **done** |
 | G0-09 evidence labels | heading renamed + evidence-type legend + SEC-01 downgraded to implemented | **done** |
 
-**Gate 0 remains NOT PASSED** until: (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) ~~owner confirms the authoritative DoA matrix (G0-05)~~ **✅ DONE (owner confirmed 125,000, 2026-07-29)**; and **(c) owner independently rechecks the Stage-0 commits.** Only (c) remains — owner elected to hold Stage-1/063 implementation for that recheck.
+**Gate 0 ✅ PASSED (2026-07-30, SHA `9a62890`):** (a) ~~live `list_migrations` confirms G0-01~~ **✅ DONE (059/060/061 applied, 062 absent)**; (b) ~~owner confirms the authoritative DoA matrix (G0-05)~~ **✅ DONE (owner confirmed 125,000, 2026-07-29)**; (c) ~~owner independently rechecks the Stage-0 commits~~ **✅ DONE — owner independent recheck cleared G0-R/G0-F/G0-F2A/G0-F3A-C/G0-H1…H5 at `9a62890`, CI run 85 green.** **Stage 1 authorized repo-only** (see §6 restrictions). Documentation gate only — product not certified; P0/P1 items stay open.
 
 ---
 
