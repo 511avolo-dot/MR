@@ -28,20 +28,24 @@ production — and only with explicit owner authorization.
    preview must return `env:"preview"` with the **staging** ref (never `mwbjoysuybgbrvfrprex`), or fail closed.
 
 ## Migration 062 apply (staging only) — guarded, command-coupled
-The guard now supports a **command-coupled `--exec` mode (Stage-1 item 3)**: it validates the target, then runs the
-apply/E2E command **itself** with the validated ref injected as `GUARDED_REF`/`STAGING_PROJECT_REF`, so the target that
-was validated is provably the target the command uses (no decoupled second step that could point elsewhere).
+The guard supports a **command-coupled `--exec` mode (Stage-1 item 3, G1-01)** that **binds the command's target** to the
+validated ref — not merely injecting environment variables (which a shell would have already expanded, so they cannot
+change an explicit argument). Two enforced mechanisms: (a) the **`{GUARDED_REF}` sentinel** in the command is replaced
+with the validated ref after validation; (b) any **explicit target argument** (`--project-ref`/`--url`/`--db-url`/… or a
+bare `https://<ref>.supabase.co` / 20-char ref) that does **not** equal the validated ref is **rejected before the command
+is spawned**.
 ```bash
-# Preferred (coupled) — validate AND run in one step; the command inherits GUARDED_REF=<validated ref>:
+# Correct (coupled) — use the {GUARDED_REF} sentinel; the guard substitutes the validated ref itself:
 node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
-  --exec -- supabase db push --project-ref "$STAGING_PROJECT_REF"
+  --exec -- supabase db push --project-ref '{GUARDED_REF}'
 
-# Legacy (decoupled) still works but is weaker — guard then a separate command:
-node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING
-# …then apply db/portal-migrations/062-request-documents.sql to STAGING.
+# UNSAFE (do NOT use): the shell expands "$STAGING_PROJECT_REF" before the guard runs, so passing an explicit
+# production ref here would be REJECTED — the guard refuses any explicit target that differs from the validated ref:
+#   … --exec -- supabase db push --project-ref mwbjoysuybgbrvfrprex     # ← rejected, command not spawned
 ```
 Do **not** run any apply command without the guard passing first. The guard hard-blocks `mwbjoysuybgbrvfrprex` and, in
-`--exec` mode, **never spawns the command when the target is rejected**.
+`--exec` mode, **never spawns the command when the target is rejected or a mismatched explicit target is present**
+(proven by `scripts/stage1-tests.mjs` negative controls).
 
 ## GitHub Pages ambiguity removed (Stage-1 items 4–5)
 - **`deploy/system3-manifest.json`** declares every System-1/2/3 page, the Cloudflare Functions it requires, and the

@@ -56,13 +56,51 @@ if (confirm !== 'STAGING') die('تأكيد staging مفقود — مرّر STAGI
 // (أ/ب) الهدف ليس الإنتاج + التأكيد موجود ⇒ مسموح.
 console.log(`✅ حارس البيئة: الهدف «${ref}» ليس الإنتاج، وتأكيد STAGING موجود — يُسمح بـ${purpose}.`);
 
-// (البند 3) وضع الاقتران: شغِّل الأمر بنفسك بالهدف المُتحقَّق منه محقوناً في البيئة.
+// (البند 3 + G1-01) وضع الاقتران: يربط الأمر بالهدف المُتحقَّق منه فعليّاً — لا حقن بيئة فقط.
 const execIdx = process.argv.indexOf('--exec');
 if (execIdx >= 0) {
   const sep = process.argv.indexOf('--', execIdx);
-  const cmd = sep >= 0 ? process.argv.slice(sep + 1) : [];
+  let cmd = sep >= 0 ? process.argv.slice(sep + 1) : [];
   if (cmd.length === 0) die('«--exec» بلا أمر بعد «--» — لا شيء لتشغيله (fail-closed).');
-  // احقن الهدف المُتحقَّق منه فقط؛ الأمر لا يملك سبيلاً لاستهداف مرجع آخر عبر هذه المتغيّرات.
+
+  // (1) استبدال العلامة {GUARDED_REF} بالمرجع المُتحقَّق منه — الطريقة الآمنة لتمرير الهدف.
+  cmd = cmd.map(tok => tok.split('{GUARDED_REF}').join(ref));
+
+  // (2) استخلاص أي مرجع مشروع صريح داخل الأمر ورفض ما لا يطابق الهدف المُتحقَّق منه.
+  //     يمنع: `--project-ref <prod>` و `https://<prod>.supabase.co` و مرجعاً مجرّداً مغايراً.
+  const TARGET_FLAGS = new Set(['--project-ref', '--ref', '--url', '--db-url', '--database', '--project', '-p']);
+  function refIn(token) {
+    // عنوان supabase → مرجعه؛ أو مرجع مجرّد 20 محرفاً؛ وإلّا null.
+    const t = String(token);
+    const um = /https?:\/\/([a-z0-9]{20})\.supabase\.co/i.exec(t);
+    if (um) return um[1].toLowerCase();
+    if (/^[a-z0-9]{20}$/i.test(t)) return t.toLowerCase();
+    return null;
+  }
+  const offenders = [];
+  for (let i = 0; i < cmd.length; i++) {
+    const tok = cmd[i];
+    // شكل --flag=value
+    const eq = /^(--[a-z-]+|-p)=(.+)$/i.exec(tok);
+    if (eq && TARGET_FLAGS.has(eq[1].toLowerCase())) {
+      const r = refIn(eq[2]); if (r && r !== ref) offenders.push(`${eq[1]}=${eq[2]}`);
+      continue;
+    }
+    // شكل --flag value
+    if (TARGET_FLAGS.has(tok.toLowerCase())) {
+      const val = cmd[i + 1]; const r = val != null ? refIn(val) : null;
+      if (r && r !== ref) offenders.push(`${tok} ${val}`);
+      continue;
+    }
+    // أي رمز يحمل مرجعاً صريحاً (عنوان supabase أو مرجع مجرّد) مغايراً للهدف
+    const r = refIn(tok);
+    if (r && r !== ref) offenders.push(tok);
+  }
+  if (offenders.length) {
+    die(`الأمر يستهدف مرجعاً غير المُتحقَّق منه (${ref}) — مرفوض قبل التشغيل: ${offenders.join(' | ')}. ` +
+        `استخدم العلامة {GUARDED_REF} بدل تمرير مرجع صريح.`);
+  }
+
   const childEnv = { ...process.env, GUARDED_REF: ref, STAGING_PROJECT_REF: ref };
   if (/^https?:\/\//i.test(String(arg('url') || ''))) childEnv.E2E_SUPABASE_URL = arg('url');
   console.log(`▶ env-guard --exec: ${cmd.join(' ')}  (GUARDED_REF=${ref})`);

@@ -46,34 +46,43 @@ function b64urlDecode(s) {
   } catch (_) { return null; }
 }
 
-// يتحقّق أنّ المفتاح مفتاح anon/publishable عامّ — لا service_role ولا سرّ.
-function isAnonKey(key) {
+// يصنّف المفتاح: {anon, ref, opaque}. anon=مفتاح عامّ مقبول؛ ref=مرجع مشروعه من مطالبة JWT
+// (أو null للمبهم)؛ opaque=مفتاح publishable مبهم لا يحمل مرجعاً (يلزمه ربط خارجي).
+function keyKind(key) {
   const k = String(key || '');
-  if (!k) return false;
-  if (k.startsWith('sb_secret_')) return false;              // مفتاح سرّي (صيغة جديدة) — يُرفض
-  if (k.startsWith('sb_publishable_')) return true;          // مفتاح عامّ (صيغة جديدة) — مقبول
-  // صيغة JWT الكلاسيكية: header.payload.sig — نفكّ الحمولة ونتحقّق من role=anon.
-  const parts = k.split('.');
-  if (parts.length !== 3) return false;
+  if (!k) return { anon: false, ref: null, opaque: false };
+  if (k.startsWith('sb_secret_')) return { anon: false, ref: null, opaque: false };   // سرّي — يُرفض
+  if (k.startsWith('sb_publishable_')) return { anon: true, ref: null, opaque: true }; // عامّ مبهم
+  const parts = k.split('.');                                 // JWT: header.payload.sig
+  if (parts.length !== 3) return { anon: false, ref: null, opaque: false };
   const payloadRaw = b64urlDecode(parts[1]);
-  if (!payloadRaw) return false;
+  if (!payloadRaw) return { anon: false, ref: null, opaque: false };
   let payload;
-  try { payload = JSON.parse(payloadRaw); } catch (_) { return false; }
-  return payload && payload.role === 'anon';                 // يُرفض service_role وأي دور آخر
+  try { payload = JSON.parse(payloadRaw); } catch (_) { return { anon: false, ref: null, opaque: false }; }
+  const anon = !!payload && payload.role === 'anon';          // يُرفض service_role وأي دور آخر
+  const ref = (payload && typeof payload.ref === 'string') ? payload.ref.toLowerCase() : null;
+  return { anon, ref, opaque: false };
 }
 
 export function onRequestGet({ env }) {
   const url     = env.PORTAL_SUPABASE_URL || '';
   const anonKey = env.PORTAL_SUPABASE_ANON_KEY || '';
 
-  // (1) تحديد البيئة بإيجاب — لا افتراض. CF_PAGES_BRANCH يضبطه Cloudflare في الإنتاج والمعاينة معاً.
+  // (1 · G1-02) البيئة: الفرع (CF_PAGES_BRANCH) **مرجع قاطع** إن وُجد؛ PORTAL_ENV لا يتجاوزه.
   const branch     = env.CF_PAGES_BRANCH || '';
   const prodBranch = env.PORTAL_PROD_BRANCH || 'main';
   const override   = String(env.PORTAL_ENV || '').toLowerCase();   // 'production' | 'preview' (اختياري)
+  const branchMode = branch ? (branch === prodBranch ? 'production' : 'preview') : null;
   let mode = null;
-  if (override === 'production' || override === 'preview') mode = override;
-  else if (branch) mode = (branch === prodBranch) ? 'production' : 'preview';
-  if (!mode) {
+  if (branch) {
+    mode = branchMode;                                            // الفرع قاطع
+    if (override && override !== branchMode) {                    // PORTAL_ENV يناقض الفرع ⇒ رفض
+      return json({ ok: false, env: branchMode,
+        error: `PORTAL_ENV=«${override}» يناقض الفرع «${branch}» (=${branchMode}) — مرفوض (fail-closed). الفرع هو المرجع القاطع.` }, 409);
+    }
+  } else if (override === 'production' || override === 'preview') {
+    mode = override;   // إشارة المنصّة غائبة — يُسمح بالتجاوز فقط بهوية نشر صريحة (يُتحقَّق بعد تحليل العنوان)
+  } else {
     return json({ ok: false, error: 'تعذّر تحديد البيئة (production/preview) بإيجاب — اضبط CF_PAGES_BRANCH أو PORTAL_ENV. (fail-closed)' }, 503);
   }
   const isPreview = mode === 'preview';
@@ -92,15 +101,32 @@ export function onRequestGet({ env }) {
   if (!parsed) {
     return json({ ok: false, env: mode, error: 'عنوان Supabase غير صالح — يجب أن يكون https://<ref>.supabase.co بلا userinfo/منفذ/مسار. (fail-closed)' }, 503);
   }
+  // (1b · G1-02) غياب الفرع + استخدام PORTAL_ENV ⇒ تلزم هوية نشر صريحة تُسمّي المشروع بالضبط،
+  //             وإلّا لا نثق بـ PORTAL_ENV وحده (يمنع ادّعاء production لتخطّي حارس المعاينة).
+  if (!branch) {
+    if (String(env.PORTAL_ENV_IDENTITY || '').toLowerCase() !== parsed.ref) {
+      return json({ ok: false, env: mode,
+        error: 'PORTAL_ENV بلا إشارة منصّة (CF_PAGES_BRANCH) يتطلّب PORTAL_ENV_IDENTITY=<مرجع المشروع> مطابقاً للعنوان — مرفوض (fail-closed).' }, 409);
+    }
+  }
   // (3) الحارس الحاسم: معاينة فرع لا يجوز أن تتّصل بمشروع الإنتاج.
   if (isPreview && parsed.ref === PROD_REF) {
     return json({ ok: false, env: 'preview',
       error: 'معاينة الفرع مضبوطة على مشروع الإنتاج — مرفوض (fail-closed). اضبط مشروع staging منفصلاً في متغيّرات Preview.' }, 409);
   }
-  // (4) المفتاح يجب أن يكون anon/publishable عامّاً (لا service_role/سرّ يُبثّ للعموم).
-  if (!isAnonKey(anonKey)) {
+  // (4 · G1-02) المفتاح: anon/publishable عامّ + مربوط بنفس المشروع الذي يشير إليه العنوان.
+  const ki = keyKind(anonKey);
+  if (!ki.anon) {
     return json({ ok: false, env: mode,
       error: 'المفتاح المضبوط ليس مفتاح anon/publishable عامّاً — مرفوض (fail-closed). لا تضع مفتاح service_role أو سرّاً في PORTAL_SUPABASE_ANON_KEY.' }, 500);
+  }
+  if (ki.ref && ki.ref !== parsed.ref) {                        // مطالبة ref في JWT ≠ مرجع العنوان
+    return json({ ok: false, env: mode,
+      error: `مفتاح anon يخصّ مشروعاً (${ki.ref}) مختلفاً عن مشروع العنوان (${parsed.ref}) — مرفوض (fail-closed).` }, 500);
+  }
+  if (ki.opaque && String(env.PORTAL_SUPABASE_EXPECTED_REF || '').toLowerCase() !== parsed.ref) {
+    return json({ ok: false, env: mode,                        // publishable مبهم بلا ربط مشروع مؤكَّد
+      error: 'مفتاح publishable مبهم يتطلّب PORTAL_SUPABASE_EXPECTED_REF مطابقاً لمرجع العنوان لإثبات الربط بالمشروع — مرفوض (fail-closed).' }, 500);
   }
   // (5) جاهزية الخادم.
   if (!hasService || !hasBucket) {
