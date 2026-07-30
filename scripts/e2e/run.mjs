@@ -28,6 +28,10 @@ if (base) {
     console.log(`✅ e2e-run: الإعداد يبلّغ staging «${ref}». (سيناريو المتصفّح يُشغَّل هنا.)`);
   } catch (e) { die('تعذّر التحقّق من الإعداد قبل E2E: ' + (e && e.message)); }
 } else {
-  console.log(`✅ e2e-run: حارس الشبكة مُثبَّت (مسموح فقط بـ«${ref}»؛ الإنتاج محظور). سيناريو المتصفّح مؤجَّل حتى تجهيز staging + E2E_BASE_URL (G1-R3-06).`);
+  // ⚠️ (G1-R4-03) هذا حارس على مستوى **Node fetch للمُشغّل فقط** — ليس حدّ متصفّح. لا يعترض طلبات
+  // صفحة متصفّح/‏Supabase JS/XHR/WebSocket. المتصفّح الفعليّ في scripts/e2e/browser-run.mjs (Playwright)
+  // ويتطلّب الحزمة + staging؛ نتيجة E2E الفعلية تبقى **مفتوحة** حتى ذلك.
+  console.log(`✅ e2e-run: حارس Node-fetch مُثبَّت (مسموح فقط بـ«${ref}»؛ الإنتاج محظور) — **ليس حدّ متصفّح**. `
+    + 'E2E المتصفّح الفعليّ (browser-run.mjs/Playwright) غير مُنفَّذ هنا (لا حزمة/‏staging) — النتيجة مفتوحة.');
 }
 process.exit(0);

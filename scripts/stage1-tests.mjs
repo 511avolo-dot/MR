@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/portal-config.js';
 import { isAllowedUrl, installNetworkAllowlist } from './e2e/net-allow.mjs';
@@ -40,8 +41,8 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
   assert.notEqual(r.status, 0); assert.match(r.stderr, /غير معروف/); ok('يرفض أمراً غير معروف (sh-c)');
   r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--project-ref', PROD]);
   assert.notEqual(r.status, 0); assert.match(r.stderr, /غير معروف/); ok('يرفض عَلَم --project-ref (تهريب هدف)');
-  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--db-url', `postgresql://postgres:pw@db.${PROD}.supabase.co:5432/postgres`]);
-  assert.notEqual(r.status, 0); ok('يرفض --db-url المباشر (db.<prod> / pooler)');
+  r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--db-url', `postgresql://postgres:pw@db.${PROD}.supabase.co:5432/postgres`]);
+  assert.notEqual(r.status, 0); ok('يرفض --db-url المباشر (عَلَم مجهول — لا تهريب هدف)');
   r = node([...G, '--purpose', 'e2e', '--command', 'supabase-db-push']);
   assert.notEqual(r.status, 0); assert.match(r.stderr, /الغرض|migrate/); ok('يرفض عدم تطابق المُحوّل/الغرض');
 
@@ -52,34 +53,35 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
   // dry-run يبني الهدف داخليّاً من المرجع المُتحقَّق منه (لا مرجع إنتاج)
   r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--dry-run']);
   assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.match(r.stdout, /supabase-push\.mjs/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يستدعي مُشغّل link→push --linked بالهدف');
-  // (G1-R3-03) psql: المضيف من المرجع، كلمة مرور بأحرف خاصّة عبر البيئة لا argv/stdout
-  const SPW = 'p@ss:w/#%rd word';
-  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/portal-migrations/062-request-documents.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: SPW });
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('db\\.' + STAGING + '\\.supabase\\.co')); assert.doesNotMatch(r.stdout, /p@ss/); assert.match(r.stdout, /PGPASSWORD/); ok('psql: المضيف من المرجع، كلمة المرور (أحرف خاصّة) عبر البيئة لا argv/stdout');
   // (G1-R3-02) browser-e2e يشغّل المُشغّل الثابت بلا --spec اعتباطي
   r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--dry-run']);
   assert.equal(r.status, 0); assert.match(r.stdout, /scripts\/e2e\/run\.mjs/); assert.match(r.stdout, new RegExp('E2E_SUPABASE_URL=https://' + STAGING)); ok('browser-e2e يشغّل المُشغّل الثابت بالهدف');
   r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--spec', 'scripts/x.mjs', '--dry-run']);
   assert.notEqual(r.status, 0); ok('browser-e2e يرفض --spec (لا سكربت اعتباطي)');
-  // psql-migration بلا/بمسار خبيث
-  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
-  assert.notEqual(r.status, 0); ok('psql-migration بلا --file مرفوض');
-  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/../etc/passwd.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
-  assert.notEqual(r.status, 0); ok('psql-migration يرفض مسار ملف خبيث');
+  // (G1-R4-02) psql-migration أُزيل نهائيّاً — أمر غير معروف الآن
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--dry-run']);
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /غير معروف/); ok('psql-migration أُزيل (مُنفّذ الهجرة الوحيد = Supabase CLI)');
 }
 
 console.log('▶ launchers + net-allow (G1-R3-01/02):');
 {
-  // supabase-push launcher: خطة link→verify→push، رفض الإنتاج/غياب كلمة المرور
-  let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.match(r.stdout, /db push --linked/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push: خطة معزولة link→verify==ref→push --linked');
-  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: PROD, SUPABASE_DB_PASSWORD: 'x' });
+  // (G1-R4-01) supabase-push dry-run: يبني حمولة مُتحقَّقة بالبصمة (لا اتّصال؛ dry-run لا يلزمه كلمة مرور)
+  let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.match(r.stdout, /db push --linked/); assert.match(r.stdout, /062_request_documents\.sql/); assert.match(r.stdout, /مطابقة للمثبَّتة/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push: يبني حمولة 062 مُتحقَّقة بالبصمة + خطة link→verify→push');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: PROD });
   assert.notEqual(r.status, 0); ok('supabase-push يرفض GUARDED_REF=الإنتاج');
-  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
-  assert.notEqual(r.status, 0); ok('supabase-push يرفض غياب SUPABASE_DB_PASSWORD');
+  // (G1-R4-01) حارس انجراف/تلوّث 062: البصمة المثبَّتة في المُشغّل تطابق الملف الفعليّ
+  const sha062 = createHash('sha256').update(readFileSync('db/portal-migrations/062-request-documents.sql')).digest('hex');
+  assert.match(readFileSync('scripts/deploy/supabase-push.mjs', 'utf8'), new RegExp(sha062)); ok('بصمة 062 المثبَّتة في المُشغّل تطابق الملف (حارس انجراف)');
+  // التنفيذ الحيّ مؤجَّل: بلا كلمة مرور ⇒ يفشل؛ ومع كلمة مرور بلا CLI ⇒ يفشل (لا نجاح زائف)
+  r = node(['scripts/deploy/supabase-push.mjs'], { GUARDED_REF: STAGING });
+  assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يرفض غياب SUPABASE_DB_PASSWORD');
+  // ملاحظة: في هذا الصندوق لا يوجد supabase CLI، فالتنفيذ الحيّ بكلمة مرور يفشل بوضوح عند فحص الـCLI
+  r = node(['scripts/deploy/supabase-push.mjs'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
+  assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يفشل بوضوح بلا Supabase CLI (لا نجاح زائف)');
   // e2e-run: يثبّت الحارس للهدف، يرفض الإنتاج
   r = node(['scripts/e2e/run.mjs'], { E2E_SUPABASE_URL: `https://${STAGING}.supabase.co` });
-  assert.equal(r.status, 0); assert.match(r.stdout, /حارس الشبكة/); ok('e2e-run يثبّت حارس الشبكة للهدف');
+  assert.equal(r.status, 0); assert.match(r.stdout, /حارس Node-fetch/); assert.match(r.stdout, /ليس حدّ متصفّح/); ok('e2e-run يثبّت حارس Node-fetch (يُصرّح: ليس حدّ متصفّح)');
   r = node(['scripts/e2e/run.mjs'], { GUARDED_REF: PROD });
   assert.notEqual(r.status, 0); ok('e2e-run يرفض هدف الإنتاج');
 

@@ -36,17 +36,15 @@ parsing; skips cleanly if the CLI is absent):
 SUPABASE_CLI_PIN=2.x node scripts/deploy/verify-supabase-contract.mjs      # asserts: db push --linked (no --project-ref); link --project-ref
 ```
 ```bash
-# migrate — Supabase CLI adapter → fixed launcher scripts/deploy/supabase-push.mjs:
-#   isolated workdir (no inherited repo link) → `supabase link --project-ref <validated ref>` (password via SUPABASE_DB_PASSWORD env)
-#   → VERIFY the linked ref == validated ref → `supabase db push --linked`.
+# migrate — the ONLY authoritative executor = Supabase CLI, via fixed launcher scripts/deploy/supabase-push.mjs:
+#   verify pinned SHA-256 of 062 → build isolated workdir with `supabase init` + 062 under supabase/migrations/<ts>_062_*.sql
+#   → `link --project-ref <validated ref>` (password via SUPABASE_DB_PASSWORD env) → VERIFY linked ref == validated ref
+#   → `db push --dry-run --linked` (assert 062 discovered, nothing else pending) → `db push --linked`.
+#   (raw-psql apply path REMOVED — G1-R4-02 — non-atomic + bypassed supabase_migrations history.)
 SUPABASE_DB_PASSWORD=… node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push
-# migrate — psql adapter: host built from the validated ref; password via PGPASSWORD env (NOT argv); TLS required:
-#   psql -h db.<validated ref>.supabase.co -p 5432 -U postgres -d postgres --set sslmode=require -v ON_ERROR_STOP=1 -f <file>
-SUPABASE_DB_PASSWORD=… node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
-  --command psql-migration --file db/portal-migrations/062-request-documents.sql
-# e2e — one fixed launcher scripts/e2e/run.mjs (no arbitrary --spec). It installs a network allowlist (net-allow.mjs)
-#   that blocks every Supabase host except the validated ref (and always production), and — when E2E_BASE_URL is set —
-#   asserts /api/portal-config reports the validated ref before any action:
+# e2e — one fixed launcher. REAL browser boundary = scripts/e2e/browser-run.mjs (Playwright context.route) which fails
+#   closed without the `playwright` package + E2E_BASE_URL. (scripts/e2e/run.mjs installs a Node-fetch guard for the
+#   harness only — NOT a browser boundary.)
 E2E_BASE_URL=… node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF" --confirm STAGING --command browser-e2e
 # Preview any constructed command without running it (no secrets printed):
 node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push --dry-run

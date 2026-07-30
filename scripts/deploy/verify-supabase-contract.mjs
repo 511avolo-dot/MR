@@ -11,13 +11,20 @@ import { spawnSync } from 'node:child_process';
 
 const PIN = process.env.SUPABASE_CLI_PIN || '(غير مثبَّت — ثبّت الإصدار في خط تجهيز staging)';
 function help(args) { const r = spawnSync('supabase', args, { encoding: 'utf8' }); return r; }
+function die(m) { console.error('❌ verify-supabase-contract: ' + m); process.exit(2); }
 
+const require_cli = process.env.REQUIRE_SUPABASE_CLI === '1';
 const probe = help(['--version']);
 if (probe.error) {
-  console.log('⏭️  supabase CLI غير متوفّر هنا — تخطّي تحقّق العقد (يُنفَّذ في تجهيز staging). لا ادّعاء تحقّق.');
+  if (require_cli) die('REQUIRE_SUPABASE_CLI=1 لكن supabase CLI غير مثبَّت — فشل (لا يُحتسب كدليل بوّابة).');
+  console.log('⏭️  SKIPPED: supabase CLI غير متوفّر — تخطّي تحقّق العقد (ليس دليل بوّابة؛ يُنفَّذ مثبَّتاً في CI/staging).');
   process.exit(0);
 }
-console.log(`▶ supabase CLI موجود (${(probe.stdout || '').trim()}؛ الإصدار الموصى بتثبيته: ${PIN}).`);
+const ver = (probe.stdout || '').trim();
+console.log(`▶ supabase CLI موجود (${ver}؛ الإصدار المطلوب تثبيته: ${PIN}).`);
+if (require_cli && PIN !== '(غير مثبَّت — ثبّت الإصدار في خط تجهيز staging)' && !ver.includes(PIN.replace(/^v/, ''))) {
+  die(`إصدار CLI (${ver}) لا يطابق المثبَّت المطلوب (${PIN}).`);
+}
 
 let fail = 0;
 const push = help(['db', 'push', '--help']).stdout || '';

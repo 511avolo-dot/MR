@@ -54,7 +54,7 @@ jobs:
       - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config)
         run: node scripts/stage1-tests.mjs
 
-      - name: تحقّق عقد Supabase CLI (يتخطّى إن غاب الـCLI)
+      - name: تحقّق عقد Supabase CLI (SKIP هنا — لا يُحتسب دليلاً؛ الوظيفة المخصّصة تفرضه)
         run: node scripts/deploy/verify-supabase-contract.mjs
 
       - name: تشغيل حزمة اختبار البوابة
@@ -64,3 +64,19 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash db/portal-tests/run.sh
+
+  # (G1-R4-04) وظيفة مخصّصة: تُثبِّت Supabase CLI فعليّاً وتفرض عقد الأعلام (تفشل إن غاب/اختلف) —
+  # فالتحقّق دليل بوّابة حقيقي لا «تخطّي». التنفيذ الحيّ للهجرة يبقى مؤجَّلاً على staging (G1-R4-06).
+  supabase-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: تثبيت Supabase CLI (إصدار مُثبَّت)
+        uses: supabase/setup-cli@v1
+        with:
+          version: ${{ vars.SUPABASE_CLI_VERSION || 'latest' }}
+      - name: فرض عقد الـCLI الحقيقي (--help)
+        env:
+          REQUIRE_SUPABASE_CLI: '1'
+          SUPABASE_CLI_PIN: ${{ vars.SUPABASE_CLI_VERSION || '' }}
+        run: node scripts/deploy/verify-supabase-contract.mjs
