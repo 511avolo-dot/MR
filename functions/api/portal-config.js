@@ -105,7 +105,10 @@ export function onRequestGet({ env }) {
     return json({ ok: false, env: 'preview',
       error: 'معاينة الفرع مضبوطة على مشروع الإنتاج — مرفوض (fail-closed). اضبط مشروع staging منفصلاً في متغيّرات Preview.' }, 409);
   }
-  // (4 · G1-02/G1-R2-03) المفتاح: anon عامّ + مربوط بمشروع العنوان.
+  // (4 · G1-02/G1-R2-03/G1-R3-04) **تحقّق بنيويّ من الإعداد** (shape/claims/consistency) لا تحقّق
+  // أصالة: التوقيع غير مُتحقَّق، والمفتاح المبهم يُقبَل ببساطة عند مطابقة expected-ref. هذا يمنع بثّ
+  // service_role/سرّ ويضمن ربط المشروع، لكنه لا يُثبِت أنّ المفتاح حيّ/أصيل. التحقّق الحيّ = مسبار
+  // الجاهزية `scripts/deploy/probe-anon.mjs` (اختياري، وقت النشر، لا يُطبَع المفتاح). السلوك هنا fail-closed.
   const ki = keyKind(anonKey);
   if (!ki.anon) {
     return json({ ok: false, env: mode,

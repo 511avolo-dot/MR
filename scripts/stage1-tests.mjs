@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/portal-config.js';
+import { isAllowedUrl, installNetworkAllowlist } from './e2e/net-allow.mjs';
 
 const PROD = 'mwbjoysuybgbrvfrprex';
 const STAGING = 'abcdefghij0123456789';
@@ -50,16 +51,52 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
 
   // dry-run يبني الهدف داخليّاً من المرجع المُتحقَّق منه (لا مرجع إنتاج)
   r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--dry-run']);
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يبني الهدف بالمرجع المُتحقَّق منه');
-  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/portal-migrations/062-request-documents.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: 'secret' });
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('db\\.' + STAGING + '\\.supabase\\.co')); assert.match(r.stdout, /REDACTED/); assert.doesNotMatch(r.stdout, /secret/); ok('psql-migration يبني عنوان db.<ref> ويُخفي كلمة المرور');
-  r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--spec', 'scripts/stage1-tests.mjs', '--dry-run']);
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('E2E_SUPABASE_URL=https://' + STAGING)); ok('browser-e2e يبني URL الهدف من المرجع المُتحقَّق منه');
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.match(r.stdout, /supabase-push\.mjs/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يستدعي مُشغّل link→push --linked بالهدف');
+  // (G1-R3-03) psql: المضيف من المرجع، كلمة مرور بأحرف خاصّة عبر البيئة لا argv/stdout
+  const SPW = 'p@ss:w/#%rd word';
+  r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/portal-migrations/062-request-documents.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: SPW });
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('db\\.' + STAGING + '\\.supabase\\.co')); assert.doesNotMatch(r.stdout, /p@ss/); assert.match(r.stdout, /PGPASSWORD/); ok('psql: المضيف من المرجع، كلمة المرور (أحرف خاصّة) عبر البيئة لا argv/stdout');
+  // (G1-R3-02) browser-e2e يشغّل المُشغّل الثابت بلا --spec اعتباطي
+  r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--dry-run']);
+  assert.equal(r.status, 0); assert.match(r.stdout, /scripts\/e2e\/run\.mjs/); assert.match(r.stdout, new RegExp('E2E_SUPABASE_URL=https://' + STAGING)); ok('browser-e2e يشغّل المُشغّل الثابت بالهدف');
+  r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--spec', 'scripts/x.mjs', '--dry-run']);
+  assert.notEqual(r.status, 0); ok('browser-e2e يرفض --spec (لا سكربت اعتباطي)');
   // psql-migration بلا/بمسار خبيث
   r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
   assert.notEqual(r.status, 0); ok('psql-migration بلا --file مرفوض');
   r = node([...G, '--purpose', 'migrate', '--command', 'psql-migration', '--file', 'db/../etc/passwd.sql', '--dry-run'], { SUPABASE_DB_PASSWORD: 'x' });
   assert.notEqual(r.status, 0); ok('psql-migration يرفض مسار ملف خبيث');
+}
+
+console.log('▶ launchers + net-allow (G1-R3-01/02):');
+{
+  // supabase-push launcher: خطة link→verify→push، رفض الإنتاج/غياب كلمة المرور
+  let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.match(r.stdout, /db push --linked/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push: خطة معزولة link→verify==ref→push --linked');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: PROD, SUPABASE_DB_PASSWORD: 'x' });
+  assert.notEqual(r.status, 0); ok('supabase-push يرفض GUARDED_REF=الإنتاج');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
+  assert.notEqual(r.status, 0); ok('supabase-push يرفض غياب SUPABASE_DB_PASSWORD');
+  // e2e-run: يثبّت الحارس للهدف، يرفض الإنتاج
+  r = node(['scripts/e2e/run.mjs'], { E2E_SUPABASE_URL: `https://${STAGING}.supabase.co` });
+  assert.equal(r.status, 0); assert.match(r.stdout, /حارس الشبكة/); ok('e2e-run يثبّت حارس الشبكة للهدف');
+  r = node(['scripts/e2e/run.mjs'], { GUARDED_REF: PROD });
+  assert.notEqual(r.status, 0); ok('e2e-run يرفض هدف الإنتاج');
+
+  // net-allow: قائمة سماح المضيف
+  assert.equal(isAllowedUrl(`https://${PROD}.supabase.co/rest/v1/x`, STAGING), false);
+  assert.equal(isAllowedUrl(`https://${STAGING}.supabase.co/rest/v1/x`, STAGING), true);
+  assert.equal(isAllowedUrl(`https://db.${STAGING}.supabase.co`, STAGING), true);
+  assert.equal(isAllowedUrl(`https://${STAGING}.pooler.supabase.com`, STAGING), true);
+  assert.equal(isAllowedUrl('https://zzzzzzzzzzzzzzzzzzzz.supabase.co', STAGING), false);
+  assert.equal(isAllowedUrl('https://example.com/api/portal-config', STAGING), true);
+  ok('net-allow: يمنع الإنتاج/مرجعاً آخر ويسمح بالهدف وغير-Supabase');
+  // سيناريو خبيث: نداء مباشر للإنتاج يُحظَر قبل إرساله فعليّاً
+  const calls = []; const orig = globalThis.fetch; globalThis.fetch = (u) => { calls.push(u); return Promise.resolve({}); };
+  const restore = installNetworkAllowlist(STAGING);
+  let threw = false; try { globalThis.fetch(`https://${PROD}.supabase.co/rest/v1/secret`); } catch (_) { threw = true; }
+  restore(); globalThis.fetch = orig;
+  assert.equal(threw, true); assert.equal(calls.length, 0); ok('net-allow يحظر نداء الإنتاج قبل إرساله (سيناريو خبيث)');
 }
 
 console.log('▶ pages-exclude (تكافؤ G1-03 + حفظ query/hash فعليّاً G1-R2-04):');

@@ -28,25 +28,34 @@ production — and only with explicit owner authorization.
    preview must return `env:"preview"` with the **staging** ref (never `mwbjoysuybgbrvfrprex`), or fail closed.
 
 ## Migration 062 apply (staging only) — guarded, command-coupled
-The guard uses **command-specific adapters (Stage-1 item 3; hardened per G1-R2-01)** — it does **not** accept an arbitrary
-passthrough command (token heuristics were bypassable via `sh -c '… --project-ref <prod>'`, `db.<ref>.supabase.co`, etc.).
-Each named adapter **constructs the target argument internally** from the validated ref; the caller cannot supply a target
-URL/ref. `migrate`/`e2e` **require** `--command`; `--purpose check` is validation-only and authorizes nothing. Unknown
-flags, unknown commands, and the old `--exec` are rejected (fail-closed).
+The guard uses **command-specific adapters that delegate to fixed launchers (Stage-1 item 3; hardened per G1-R2-01 + G1-R3-01/02/03)**
+— no arbitrary passthrough. Each adapter builds the target from the validated ref; `migrate`/`e2e` **require** `--command`;
+`--purpose check` is validation-only. First verify the CLI contract against the **pinned** Supabase CLI (real `--help`
+parsing; skips cleanly if the CLI is absent):
 ```bash
-# migrate — Supabase CLI adapter (builds `supabase db push --project-ref <validated ref>` internally):
-node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push
-# migrate — psql adapter (builds postgresql://postgres:<SUPABASE_DB_PASSWORD>@db.<validated ref>.supabase.co:5432/postgres):
-node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
-  --command psql-migration --file db/portal-migrations/062-request-documents.sql       # + SUPABASE_DB_PASSWORD in env
-# e2e — builds E2E_SUPABASE_URL=https://<validated ref>.supabase.co and runs the given spec under scripts/|tests/:
-node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF" --confirm STAGING --command browser-e2e --spec scripts/e2e/portal.mjs
-# Preview the constructed command without running it (no secrets printed):
+SUPABASE_CLI_PIN=2.x node scripts/deploy/verify-supabase-contract.mjs      # asserts: db push --linked (no --project-ref); link --project-ref
+```
+```bash
+# migrate — Supabase CLI adapter → fixed launcher scripts/deploy/supabase-push.mjs:
+#   isolated workdir (no inherited repo link) → `supabase link --project-ref <validated ref>` (password via SUPABASE_DB_PASSWORD env)
+#   → VERIFY the linked ref == validated ref → `supabase db push --linked`.
+SUPABASE_DB_PASSWORD=… node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push
+# migrate — psql adapter: host built from the validated ref; password via PGPASSWORD env (NOT argv); TLS required:
+#   psql -h db.<validated ref>.supabase.co -p 5432 -U postgres -d postgres --set sslmode=require -v ON_ERROR_STOP=1 -f <file>
+SUPABASE_DB_PASSWORD=… node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING \
+  --command psql-migration --file db/portal-migrations/062-request-documents.sql
+# e2e — one fixed launcher scripts/e2e/run.mjs (no arbitrary --spec). It installs a network allowlist (net-allow.mjs)
+#   that blocks every Supabase host except the validated ref (and always production), and — when E2E_BASE_URL is set —
+#   asserts /api/portal-config reports the validated ref before any action:
+E2E_BASE_URL=… node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF" --confirm STAGING --command browser-e2e
+# Preview any constructed command without running it (no secrets printed):
 node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push --dry-run
 ```
 An explicit production target can no longer be smuggled in: `--project-ref mwbjoysuybgbrvfrprex`, `--db-url postgresql://…@db.<prod>…`,
-and `sh -c` wrappers are all rejected (proven by `scripts/stage1-tests.mjs` negatives). The guard also hard-blocks
-`mwbjoysuybgbrvfrprex` as the target ref.
+`sh -c` wrappers, and `--spec` are all rejected (`scripts/stage1-tests.mjs` negatives). The DB password is passed via env
+(`SUPABASE_DB_PASSWORD`/`PGPASSWORD`), never argv. **Readiness (not authenticity) of the public anon key** is a separate
+opt-in probe: `node scripts/deploy/probe-anon.mjs --url https://<ref>.supabase.co --key "$ANON"` (calls a non-data endpoint,
+never logs the key). The `portal-config.js` check is **structural configuration validation**, not signature/authenticity.
 
 ## GitHub Pages ambiguity removed (Stage-1 items 4–5; hardened per G1-R2-04)
 - **`deploy/system3-manifest.json`** models Cloudflare-Functions dependency **per page** (`pages[].needs_functions`). The
@@ -55,7 +64,10 @@ and `sh -c` wrappers are all rejected (proven by `scripts/stage1-tests.mjs` nega
   each Function-dependent page with a redirect stub to `canonical_origin` **preserving `location.search` + `location.hash`**
   (so a supplier `?t=…` link survives). `--check` enforces **set-equality**: the build fails if any `needs_functions` page
   is not excluded, or any excluded entry is stale/missing, or `canonical_origin` is invalid (fail-closed).
-- This changes **no live deployment now**: `pages.yml`/`deploy.yml` run only on push to `main`, and this PR is Draft.
+- The GitHub Actions `pages.yml`/`deploy.yml` run only on push to `main` (not on this branch). **However, Cloudflare's
+  GitHub integration independently builds a public PR Preview per commit** — so this is not "no deployment"; it is "no
+  production deployment/config mutation." The Preview `/api/portal-config` was checked read-only (Claude-observed) and
+  fails closed (503, never the production ref) — see `STAGE1_DEPLOYMENT_SAFETY.md`.
 
 ## supplier-quote.html env-config (Stage-1 item 6)
 `supplier-quote.html` no longer embeds the production project; it fetches `/api/portal-config` at runtime (fail-closed:
@@ -71,12 +83,14 @@ on any config error it shows a visible config-error state and does not connect),
 - Delete staging test requests/documents; empty the staging R2 namespace; optionally pause/delete the staging Supabase
   project. Production is never touched.
 
-## Browser E2E gating (enforced, command-coupled)
-- E2E must run **through the guard's coupled adapter**: `node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF"
-  --confirm STAGING --command browser-e2e --spec <spec>`. The guard builds `E2E_SUPABASE_URL=https://<validated ref>.supabase.co`
-  itself and refuses `mwbjoysuybgbrvfrprex`. Running E2E as a separate command after a bare validation is no longer a
-  supported path (`migrate`/`e2e` require `--command`). E2E completion will NOT be claimed until a genuinely isolated
-  staging project exists and 062 has been applied there with explicit owner authorization.
+## Browser E2E gating (enforced — fixed launcher + network denial, G1-R3-02)
+- E2E runs **one fixed launcher** `scripts/e2e/run.mjs` via `node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF"
+  --confirm STAGING --command browser-e2e` (no arbitrary `--spec`). The launcher installs a **network allowlist**
+  (`scripts/e2e/net-allow.mjs`) that **blocks every Supabase host except the validated ref, and always production**, so a
+  scenario cannot contact production even if it tries; and when `E2E_BASE_URL` is set it asserts `/api/portal-config`
+  reports the validated ref **before any action**. A malicious-scenario negative test proves a direct production call is
+  blocked before any request is sent. E2E completion will NOT be claimed until a genuinely isolated staging project exists
+  and 062 has been applied there with explicit owner authorization.
 
 ## Proof that production is untouched by this PR
 - No migration was applied to any database in this PR (062 is repo-only). `list_migrations` on production still ends at

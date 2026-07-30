@@ -13,7 +13,7 @@
  * الاستخدام:
  *   node scripts/env-guard.mjs --purpose migrate --ref "$REF" --confirm STAGING --command supabase-db-push
  *   node scripts/env-guard.mjs --purpose migrate --ref "$REF" --confirm STAGING --command psql-migration --file db/portal-migrations/062-request-documents.sql
- *   node scripts/env-guard.mjs --purpose e2e     --ref "$REF" --confirm STAGING --command browser-e2e --spec scripts/e2e/portal.mjs
+ *   node scripts/env-guard.mjs --purpose e2e     --ref "$REF" --confirm STAGING --command browser-e2e
  *   node scripts/env-guard.mjs --purpose check   --ref "$REF" --confirm STAGING        # تحقّق فقط، لا أمر
  *   (+ --dry-run لطباعة الأمر المُنشأ دون تنفيذ — للاختبار/المعاينة، بلا أسرار.)
  */
@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 
 const PROD_REF = 'mwbjoysuybgbrvfrprex';   // مرجع الإنتاج — ممنوع منعاً باتّاً
 
-const KNOWN_FLAGS = new Set(['--purpose', '--ref', '--url', '--confirm', '--command', '--file', '--spec', '--dry-run']);
+const KNOWN_FLAGS = new Set(['--purpose', '--ref', '--url', '--confirm', '--command', '--file', '--dry-run']);
 
 function arg(name) { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1] : undefined; }
 function has(name) { return process.argv.includes('--' + name); }
@@ -69,22 +69,27 @@ if (purpose !== 'migrate' && purpose !== 'e2e') die('الغرض يجب أن يك
 
 // ── المُحوّلات المسمّاة: تبني وسيط الهدف داخليّاً من المرجع المُتحقَّق منه ──
 const ADAPTERS = {
+  // (G1-R3-01) عقد CLI صحيح عبر مُشغّل ثابت: link --project-ref → تحقّق المرجع المربوط → db push --linked.
   'supabase-db-push': { purpose: 'migrate', build(r) {
-    return { program: 'supabase', args: ['db', 'push', '--project-ref', r], env: {}, show: `supabase db push --project-ref ${r}` };
+    return { program: 'node', args: ['scripts/deploy/supabase-push.mjs'], env: {},
+      show: `node scripts/deploy/supabase-push.mjs  (GUARDED_REF=${r} → link --project-ref ${r} → verify linked==${r} → db push --linked; كلمة المرور عبر SUPABASE_DB_PASSWORD)` };
   } },
+  // (G1-R3-03) psql: المضيف من المرجع المُتحقَّق منه، كلمة المرور عبر PGPASSWORD في البيئة (لا argv)، TLS إلزامي.
   'psql-migration': { purpose: 'migrate', build(r) {
     const file = safePath(arg('file'), /^db\/portal-(migrations\/[A-Za-z0-9._-]+|standalone)\.sql$/);
     if (!file) die('psql-migration يتطلّب --file مساراً صالحاً موجوداً تحت db/portal-migrations/*.sql أو db/portal-standalone.sql.');
     const pw = process.env.SUPABASE_DB_PASSWORD || '';
-    if (!pw) die('psql-migration يتطلّب SUPABASE_DB_PASSWORD في البيئة (لا يُطبَع).');
-    const url = `postgresql://postgres:${pw}@db.${r}.supabase.co:5432/postgres`;
-    const shown = `psql postgresql://postgres:REDACTED@db.${r}.supabase.co:5432/postgres -v ON_ERROR_STOP=1 -f ${file}`;
-    return { program: 'psql', args: [url, '-v', 'ON_ERROR_STOP=1', '-f', file], env: {}, show: shown };
+    if (!pw) die('psql-migration يتطلّب SUPABASE_DB_PASSWORD في البيئة (يُمرَّر عبر PGPASSWORD، لا argv).');
+    const host = `db.${r}.supabase.co`;
+    return { program: 'psql',
+      args: ['-h', host, '-p', '5432', '-U', 'postgres', '-d', 'postgres', '--set', 'sslmode=require', '-v', 'ON_ERROR_STOP=1', '-f', file],
+      env: { PGPASSWORD: pw, PGSSLMODE: 'require' },
+      show: `psql -h ${host} -p 5432 -U postgres -d postgres --set sslmode=require -v ON_ERROR_STOP=1 -f ${file}  (PGPASSWORD عبر البيئة — ليست في argv)` };
   } },
+  // (G1-R3-02) مُشغّل E2E ثابت وحيد (لا --spec اعتباطي): يُثبِّت حارس شبكة يمنع كلّ مضيف Supabase غير الهدف.
   'browser-e2e': { purpose: 'e2e', build(r) {
-    const spec = safePath(arg('spec'), /^(scripts|tests|db\/portal-tests)\/[A-Za-z0-9._/-]+\.(mjs|js|cjs)$/);
-    if (!spec) die('browser-e2e يتطلّب --spec ملفّاً صالحاً موجوداً تحت scripts/|tests/|db/portal-tests/ بامتداد mjs/js/cjs.');
-    return { program: 'node', args: [spec], env: { E2E_SUPABASE_URL: `https://${r}.supabase.co` }, show: `node ${spec}  (E2E_SUPABASE_URL=https://${r}.supabase.co)` };
+    return { program: 'node', args: ['scripts/e2e/run.mjs'], env: { E2E_SUPABASE_URL: `https://${r}.supabase.co` },
+      show: `node scripts/e2e/run.mjs  (E2E_SUPABASE_URL=https://${r}.supabase.co؛ الشبكة مقيَّدة بـ${r} والإنتاج محظور)` };
   } },
 };
 

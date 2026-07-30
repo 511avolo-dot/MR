@@ -54,6 +54,9 @@ jobs:
       - name: اختبارات سلامة النشر (Stage 1 — env-guard/pages-exclude/portal-config)
         run: node scripts/stage1-tests.mjs
 
+      - name: تحقّق عقد Supabase CLI (يتخطّى إن غاب الـCLI)
+        run: node scripts/deploy/verify-supabase-contract.mjs
+
       - name: تشغيل حزمة اختبار البوابة
         env:
           PGHOST: localhost
