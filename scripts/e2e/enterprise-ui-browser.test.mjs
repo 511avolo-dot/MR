@@ -6,9 +6,11 @@ import { chromium } from 'playwright';
 
 const rootFiles = new Map([
   ['/assets/enterprise-ui.css', ['text/css; charset=utf-8', readFileSync('assets/enterprise-ui.css')]],
+  ['/assets/generated-document-studio.css', ['text/css; charset=utf-8', readFileSync('assets/generated-document-studio.css')]],
   ['/assets/quote-document-studio.css', ['text/css; charset=utf-8', readFileSync('assets/quote-document-studio.css')]],
   ['/assets/access-inspector.css', ['text/css; charset=utf-8', readFileSync('assets/access-inspector.css')]],
   ['/assets/document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/document-studio.js')]],
+  ['/assets/generated-document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/generated-document-studio.js')]],
   ['/assets/quote-document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/quote-document-studio.js')]],
   ['/assets/policy-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/policy-studio.js')]],
   ['/assets/access-inspector.js', ['text/javascript; charset=utf-8', readFileSync('assets/access-inspector.js')]],
@@ -19,9 +21,10 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 const html = `<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/enterprise-ui.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
+<link rel="stylesheet" href="/assets/enterprise-ui.css"><link rel="stylesheet" href="/assets/generated-document-studio.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
 <header class="topbar"><div class="ttl">بوابة المشتريات</div><nav class="nav"><button class="active">الرئيسية</button></nav></header>
-<div class="wrap"><div class="pagehead"><div><h1>مركز العمل</h1><div class="sub">اختبار متصفح معزول</div></div></div><div class="card"><div class="sec-title">طلبات تحتاج إجراء</div><table><thead><tr><th>الطلب</th><th>الحالة</th></tr></thead><tbody><tr><td>REQ-1</td><td>قيد الإجراء</td></tr></tbody></table></div></div>
+<div class="wrap"><div class="pagehead"><div><h1>مركز العمل</h1><div class="sub">اختبار متصفح معزول</div></div></div><div class="card"><div class="sec-title">طلبات تحتاج إجراء</div><table><thead><tr><th>الطلب</th><th>الحالة</th></tr></thead><tbody><tr><td>REQ-1</td><td>قيد الإجراء</td></tr></tbody></table></div>
+<div id="generated-purchase-request" class="doc-sheet" style="margin-top:20px"><div class="doc-body"><h2>طلب شراء تجريبي</h2><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody><tr><td>مادة اختبار</td><td>2</td><td>500</td><td>1000</td></tr></tbody></table><div class="doc-words">الإجمالي كتابةً: ألف ريال</div><div class="doc-actions"><button>طباعة</button></div></div></div></div>
 <script>
 window.ME='admin'; window.CURRENT='REQ-1'; window.VIEW='detail';
 window.SUPPLIERS={s1:{n:'المورد الأول'},s2:{n:'المورد الثاني'},s3:{n:'المورد الثالث'}};
@@ -33,6 +36,7 @@ window.uName=(u)=>window.USERS[u]?.n||(u==='student'?'طالب الاختبار'
 window.isAdmin=()=>true;
 window.accessOf=(username)=>username==='finance_user'?{scope:'all',can:{approveDisb:true,disburse:true},see:{finance:true}}:{scope:'all',can:{viewQuotes:true,manageUsers:true,manageCompany:true},see:{finance:true}};
 window.render=()=>{};
+window.printEl=()=>{ document.body.dataset.legacyPrint='called'; };
 window.toast=(message,kind)=>{ document.body.dataset.toast=kind+':'+message; };
 const policy={enabled:true,min_amount_exclusive:25000,max_amount_inclusive:125000,fallback_role_key:null,version:3,published_at:'2026-08-02T12:00:00Z',published_by:'admin'};
 window.SB={
@@ -45,7 +49,7 @@ window.SB={
  }
 };
 </script>
-<script src="/assets/document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/access-inspector.js"></script><script src="/assets/enterprise-ui.js"></script>
+<script src="/assets/document-studio.js"></script><script src="/assets/generated-document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/access-inspector.js"></script><script src="/assets/enterprise-ui.js"></script>
 </body></html>`;
 
 const requests = [];
@@ -85,7 +89,7 @@ try {
   await page.waitForFunction(() => document.documentElement.dataset.enterpriseUi === 'true');
   assert.equal(await page.locator('.eui-skip-link').count(), 1);
   assert.equal(await page.locator('main,[role="main"]').count() > 0, true);
-  assert.equal(await page.locator('thead th[scope="col"]').count(), 2);
+  assert.equal(await page.locator('thead th[scope="col"]').count(), 6);
   console.log('  ✓ enterprise layout and accessibility enhancement loaded');
 
   const policyLauncher = page.locator('.eps-launcher');
@@ -110,6 +114,17 @@ try {
   assert.equal(await page.locator('.eai-user').count(), 1);
   console.log('  ✓ access inspector explained effective permissions and flagged a separation-of-duties conflict');
   await page.locator('.eai-close').click();
+
+  await page.evaluate(() => window.printEl('generated-purchase-request','طلب شراء','REQ-1'));
+  await page.locator('.gds-root').waitFor({ state: 'visible' });
+  assert.match(await page.locator('.gds-title').innerText(), /طلب شراء/);
+  const frame = page.locator('.gds-frame');
+  await frame.waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.querySelector('.gds-frame')?.contentDocument?.body?.innerText.includes('طلب شراء تجريبي'));
+  assert.equal(await page.evaluate(() => document.body.dataset.legacyPrint || ''), '');
+  console.log('  ✓ legacy print action now opens a full in-portal generated-document preview');
+  await page.keyboard.press('Escape');
+  await page.locator('.gds-root').waitFor({ state: 'detached' });
 
   await page.evaluate(() => window.AldeyabiDocumentStudio.openRequestDocument('REQ-1', 1));
   await page.locator('.eds-root').waitFor({ state: 'visible' });
