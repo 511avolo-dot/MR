@@ -106,6 +106,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: اختبار متصفّح fixture (F2/F3)
         run: node scripts/e2e/browser-fixture.test.mjs
+      - name: اختبار الواجهة المؤسسية واستوديو المستندات والسياسات
+        run: node scripts/e2e/enterprise-ui-browser.test.mjs
 
   # (G1-R4-04) وظيفة مخصّصة: تُثبِّت Supabase CLI فعليّاً وتفرض عقد الأعلام (تفشل إن غاب/اختلف) —
   # فالتحقّق دليل بوّابة حقيقي لا «تخطّي». التنفيذ الحيّ للهجرة يبقى مؤجَّلاً على staging (G1-R4-06).
