@@ -6,6 +6,7 @@
 
 const ENTERPRISE_ASSETS = `
 <script src="/assets/document-studio.js?v=2" data-enterprise-asset="document-studio"></script>
+<script src="/assets/generated-document-studio.js?v=1" data-enterprise-asset="generated-document-studio"></script>
 <script src="/assets/quote-document-studio.js?v=1" data-enterprise-asset="quote-document-studio"></script>
 <script src="/assets/policy-studio.js?v=1" data-enterprise-asset="policy-studio"></script>
 <script src="/assets/access-inspector.js?v=1" data-enterprise-asset="access-inspector"></script>
@@ -112,7 +113,7 @@ export async function onRequest(context) {
   return new HTMLRewriter()
     .on('head', {
       element(element) {
-        element.append('<link rel="stylesheet" href="/assets/enterprise-ui.css?v=2" data-enterprise-asset="enterprise-ui"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-enterprise-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-enterprise-asset="access-inspector">', { html: true });
+        element.append('<link rel="stylesheet" href="/assets/enterprise-ui.css?v=2" data-enterprise-asset="enterprise-ui"><link rel="stylesheet" href="/assets/generated-document-studio.css?v=1" data-enterprise-asset="generated-document-studio"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-enterprise-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-enterprise-asset="access-inspector">', { html: true });
       }
     })
     .on('body', {
