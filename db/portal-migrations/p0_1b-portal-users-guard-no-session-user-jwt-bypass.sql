@@ -115,9 +115,10 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.prefix || '_ins', r.tbl);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.prefix || '_upd', r.tbl);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.prefix || '_del', r.tbl);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.prefix || '_read', r.tbl);
 
-    IF r.tbl <> 'portal_users' THEN
-      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.prefix || '_read', r.tbl);
+    -- portal_users keeps its self/admin SELECT policy; portal_suppliers keeps canonical supp_read.
+    IF r.tbl NOT IN ('portal_users','portal_suppliers') THEN
       EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (true)', r.prefix || '_read', r.tbl);
     END IF;
 
