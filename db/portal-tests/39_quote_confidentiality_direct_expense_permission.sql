@@ -50,7 +50,7 @@ BEGIN
   INSERT INTO portal_requests(id,title,department_id,requester,requester_name,req_type,est_total,status,phase,created_by,created_at)
   VALUES ('REQ-P0D-QUOTE','QA confidential quote test','QA-P0D','p0d_requester','P0D Requester','purchase',2750,'offers_received','procurement','p0d_requester',now());
 
-  INSERT INTO portal_request_items(request_id,item_seq,item,qty,unit,est_price)
+  INSERT INTO portal_request_items(request_id,seq,description,qty,unit,unit_price)
   VALUES ('REQ-P0D-QUOTE',1,'QA item',2,'each',1000)
   ON CONFLICT DO NOTHING;
 
