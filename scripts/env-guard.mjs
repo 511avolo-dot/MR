@@ -56,6 +56,12 @@ const dryRun = has('dry-run');
 console.log(`▶ env-guard: purpose=${purpose}  target_ref=${ref || '(غير محدَّد)'}`);
 if (!ref)                 die('لم يُحدَّد مرجع مشروع الهدف (--ref/--url) بشكل قانوني.');
 if (ref === PROD_REF)     die(`الهدف هو مشروع الإنتاج (${PROD_REF}) — مرفوض. staging مشروع منفصل.`);
+// (Gate-1 §2) قائمة سماح مرجع staging المُصرَّح به الوحيد: عند ضبط ALLOWED_STAGING_REF يُرفَض أيّ مرجع آخر.
+const ALLOWED_STAGING_REF = (process.env.ALLOWED_STAGING_REF || '').toLowerCase();
+if (ALLOWED_STAGING_REF) {
+  if (!/^[a-z0-9]{20}$/.test(ALLOWED_STAGING_REF) || ALLOWED_STAGING_REF === PROD_REF) die('ALLOWED_STAGING_REF غير صالح أو يساوي الإنتاج — مرفوض.');
+  if (ref !== ALLOWED_STAGING_REF) die(`الهدف («${ref}») ليس مرجع staging المُصرَّح به الوحيد («${ALLOWED_STAGING_REF}») — أيّ مرجع غير ذي صلة مرفوض.`);
+}
 if (confirm !== 'STAGING') die('تأكيد staging مفقود — مرّر STAGING_CONFIRM=STAGING (تأكيد صريح).');
 
 // ── وضع التحقّق فقط: لا يأذن بتشغيل أيّ أمر ──

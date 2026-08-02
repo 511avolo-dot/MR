@@ -83,6 +83,14 @@ console.log('▶ launchers + net-allow (G1-R3-01/02):');
   assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يرفض غياب SUPABASE_DB_PASSWORD');
   r = node(['scripts/deploy/supabase-push.mjs', '--mode', 'bootstrap'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });
   assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يفشل بوضوح بلا Supabase CLI (لا نجاح زائف)')
+  // (Gate-1 §2) ALLOWED_STAGING_REF: عند ضبطه يُرفَض أيّ مرجع غير المُصرَّح به (بما فيه أيّ ref آخر صالح)
+  const OTHER = 'bbbbbbbbbbbbbbbbbbbb';
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: STAGING, ALLOWED_STAGING_REF: STAGING });
+  assert.equal(r.status, 0); ok('supabase-push: يقبل مرجع staging المُصرَّح به عند ضبط ALLOWED_STAGING_REF');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: OTHER, ALLOWED_STAGING_REF: STAGING });
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /غير ذي صلة/); ok('supabase-push: يرفض أيّ مرجع غير المُصرَّح به (ALLOWED_STAGING_REF)');
+  r = node([...G.slice(0,1), '--ref', OTHER, '--confirm', 'STAGING', '--purpose', 'migrate', '--command', 'supabase-db-push', '--dry-run'], { ALLOWED_STAGING_REF: STAGING });
+  assert.notEqual(r.status, 0); ok('env-guard: يرفض أيّ مرجع غير المُصرَّح به (ALLOWED_STAGING_REF)');
   // (G1-R6-03) e2e-run يفوّض إلزاميّاً إلى browser-run.mjs (يفشل مغلقاً بلا Playwright/‏staging — لا نجاح زائف)
   r = node(['scripts/e2e/run.mjs'], { E2E_SUPABASE_URL: `https://${STAGING}.supabase.co` });
   assert.notEqual(r.status, 0); assert.match(r.stdout, /تفويض إلى متصفّح/); ok('e2e-run يفوّض إلى browser-run.mjs ويفشل مغلقاً (G1-R6-03)');

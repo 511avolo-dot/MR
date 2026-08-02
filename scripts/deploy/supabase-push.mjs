@@ -42,6 +42,12 @@ const mi = process.argv.indexOf('--mode');
 const mode = mi >= 0 ? process.argv[mi + 1] : '';
 if (!/^[a-z0-9]{20}$/.test(ref)) die('GUARDED_REF غير صالح — يُضبط عبر env-guard فقط.');
 if (ref === PROD_REF) die('GUARDED_REF هو الإنتاج — مرفوض.');
+// (Gate-1 §2) قائمة سماح مرجع staging الوحيد المُصرَّح به: عند ضبط ALLOWED_STAGING_REF يُرفَض أيّ مرجع آخر.
+const ALLOWED_STAGING_REF = (process.env.ALLOWED_STAGING_REF || '').toLowerCase();
+if (ALLOWED_STAGING_REF) {
+  if (!/^[a-z0-9]{20}$/.test(ALLOWED_STAGING_REF) || ALLOWED_STAGING_REF === PROD_REF) die('ALLOWED_STAGING_REF غير صالح أو يساوي الإنتاج — مرفوض.');
+  if (ref !== ALLOWED_STAGING_REF) die(`GUARDED_REF («${ref}») ليس مرجع staging المُصرَّح به الوحيد («${ALLOWED_STAGING_REF}») — أيّ مرجع غير ذي صلة مرفوض.`);
+}
 if (mode !== 'bootstrap' && mode !== 'apply-062') die('يجب تحديد --mode bootstrap|apply-062 صراحةً (خلط الوضع يفشل مغلقاً — F1).');
 
 // تحقّق البصمات قبل أيّ شيء (انجراف الأساس أو 062 ⇒ إيقاف).
