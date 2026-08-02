@@ -40,10 +40,11 @@ BEGIN
     permissions=excluded.permissions,
     active=true;
 
-  DELETE FROM portal_offer_items WHERE offer_id IN (SELECT id FROM portal_offers WHERE request_id='REQ-P0D-QUOTE');
-  DELETE FROM portal_offers WHERE request_id='REQ-P0D-QUOTE';
+  -- FK-safe cleanup for reruns: award lines → award → offer items → offers.
   DELETE FROM portal_award_lines WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_award WHERE request_id='REQ-P0D-QUOTE';
+  DELETE FROM portal_offer_items WHERE offer_id IN (SELECT id FROM portal_offers WHERE request_id='REQ-P0D-QUOTE');
+  DELETE FROM portal_offers WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_request_items WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_requests WHERE id='REQ-P0D-QUOTE';
 
@@ -172,10 +173,10 @@ ROLLBACK;
 DO $cleanup$
 BEGIN
   PERFORM set_config('app.portal_transition', '1', true);
-  DELETE FROM portal_offer_items WHERE offer_id IN (SELECT id FROM portal_offers WHERE request_id='REQ-P0D-QUOTE');
-  DELETE FROM portal_offers WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_award_lines WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_award WHERE request_id='REQ-P0D-QUOTE';
+  DELETE FROM portal_offer_items WHERE offer_id IN (SELECT id FROM portal_offers WHERE request_id='REQ-P0D-QUOTE');
+  DELETE FROM portal_offers WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_request_items WHERE request_id='REQ-P0D-QUOTE';
   DELETE FROM portal_requests WHERE id='REQ-P0D-QUOTE';
   DELETE FROM portal_users WHERE username IN ('p0d_requester','p0d_sector_mgr','p0d_coord','p0d_direct');
