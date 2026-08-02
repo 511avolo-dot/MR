@@ -163,20 +163,40 @@ BEGIN
   RAISE NOTICE 'PASS FC5 المعاملة تحتفظ بنسخة السياسة ولا تتغير بأثر رجعي';
 END $fc5b$;
 
--- FC6: المستخدم العادي لا يستطيع نشر سياسة اللجنة.
+-- FC6: المستخدم العادي لا يستطيع نشر سياسة اللجنة، ولا تتغيّر الحالة عند الرفض.
 BEGIN;
   SET LOCAL ROLE authenticated;
   SELECT set_config('request.jwt.claims','{"email":"p0f_user@aldeyabi.com","role":"authenticated"}',true);
   DO $fc6$
-  DECLARE v_denied boolean := false;
+  DECLARE
+    v_identity text;
+    v_is_admin boolean;
+    v_before jsonb;
+    v_after jsonb;
+    v_error text;
   BEGIN
+    SELECT portal_username(), portal_is_admin(), portal_get_committee_policy()
+      INTO v_identity, v_is_admin, v_before;
+
+    IF v_identity IS DISTINCT FROM 'p0f_user' OR coalesce(v_is_admin,false) THEN
+      RAISE EXCEPTION 'FC6 precondition fail: identity=% is_admin=%',v_identity,v_is_admin;
+    END IF;
+
     BEGIN
       PERFORM portal_set_committee_policy(jsonb_build_object('enabled',false));
     EXCEPTION WHEN OTHERS THEN
-      v_denied := SQLERRM LIKE '%الأدمن فقط%';
+      v_error := SQLERRM;
     END;
-    IF NOT v_denied THEN RAISE EXCEPTION 'FC6 fail: ordinary user changed policy'; END IF;
-    RAISE NOTICE 'PASS FC6 نشر السياسة إداري فقط';
+
+    SELECT portal_get_committee_policy() INTO v_after;
+    IF v_error IS NULL THEN
+      RAISE EXCEPTION 'FC6 fail: ordinary user call returned without denial';
+    END IF;
+    IF v_after IS DISTINCT FROM v_before THEN
+      RAISE EXCEPTION 'FC6 fail: policy mutated despite denial before=% after=% error=%',v_before,v_after,v_error;
+    END IF;
+
+    RAISE NOTICE 'PASS FC6 نشر السياسة محجوب عن المستخدم العادي؛ الحالة لم تتغير (رفض=%)',v_error;
   END $fc6$;
 ROLLBACK;
 
