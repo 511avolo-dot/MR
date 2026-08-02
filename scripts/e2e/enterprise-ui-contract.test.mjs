@@ -5,10 +5,12 @@ import { readFileSync } from 'node:fs';
 const middleware = readFileSync('functions/_middleware.js', 'utf8');
 const css = readFileSync('assets/enterprise-ui.css', 'utf8');
 const quoteCss = readFileSync('assets/quote-document-studio.css', 'utf8');
+const accessCss = readFileSync('assets/access-inspector.css', 'utf8');
 const ui = readFileSync('assets/enterprise-ui.js', 'utf8');
 const docs = readFileSync('assets/document-studio.js', 'utf8');
 const quotes = readFileSync('assets/quote-document-studio.js', 'utf8');
 const policies = readFileSync('assets/policy-studio.js', 'utf8');
+const access = readFileSync('assets/access-inspector.js', 'utf8');
 const quoteEndpoint = readFileSync('functions/api/portal-quote.js', 'utf8');
 
 let passed = 0;
@@ -19,6 +21,7 @@ assert.match(middleware, /enterprise-ui\.css/);
 assert.match(middleware, /document-studio\.js/);
 assert.match(middleware, /quote-document-studio\.js/);
 assert.match(middleware, /policy-studio\.js/);
+assert.match(middleware, /access-inspector\.js/);
 assert.match(middleware, /enterprise-ui\.js/);
 ok('Cloudflare middleware injects the enterprise assets into the portal only');
 
@@ -28,7 +31,8 @@ assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /\.eds-root/);
 assert.match(css, /\.eps-shell/);
 assert.match(quoteCss, /\.qds-pane/);
-ok('design system includes focus, reduced-motion, document, quotation and policy surfaces');
+assert.match(accessCss, /\.eai-shell/);
+ok('design system includes focus, reduced-motion, document, quotation, policy and access surfaces');
 
 assert.match(ui, /data-enterprise-ui/);
 assert.match(ui, /eui-skip-link/);
@@ -59,7 +63,16 @@ assert.match(policies, /portal_set_committee_policy/);
 assert.doesNotMatch(policies, /\.from\(['"]portal_settings/);
 ok('policy studio uses authorized RPCs and never writes settings tables directly');
 
-const combined = [middleware, css, quoteCss, ui, docs, quotes, policies].join('\n');
+assert.match(access, /window\.USERS/);
+assert.match(access, /window\.JOBS/);
+assert.match(access, /window\.accessOf/);
+assert.match(access, /فصل المهام/);
+assert.doesNotMatch(access, /window\.SB/);
+assert.doesNotMatch(access, /\.rpc\(/);
+assert.doesNotMatch(access, /\.from\(/);
+ok('access inspector is read-only and explains effective access from the existing permission model');
+
+const combined = [middleware, css, quoteCss, accessCss, ui, docs, quotes, policies, access].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /service_role/i);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
