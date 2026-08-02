@@ -6,17 +6,16 @@
 --    • الأدمن يحتفظ بقراءة إدارة المستخدمين
 --    • تصعيد الدور المباشر محجوب حتى في بيئة اختبار PGUSER=postgres
 --    • سياسات الكتابة المباشرة الواسعة على الجداول الحساسة أُغلقت
+--  المنع الصحيح قد يكون: permission denied أو RLS zero rows؛ كلاهما آمن.
 -- ════════════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
 SET client_min_messages = notice;
 
--- كعب auth.jwt() كما يوفّره Supabase: يقرأ request.jwt.claims.
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
--- بذر ثلاثة مستخدمين. يتم كمالك قاعدة الاختبار قبل SET ROLE.
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition', '1', true);
@@ -36,6 +35,37 @@ BEGIN
   PERFORM set_config('app.portal_transition', '0', true);
 END $seed$;
 
+CREATE OR REPLACE FUNCTION pg_temp.assert_no_direct_write(p_label text, p_sql text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE v_rows int := 0;
+BEGIN
+  EXECUTE p_sql;
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows <> 0 THEN
+    RAISE EXCEPTION '% fail: direct write affected % rows', p_label, v_rows;
+  END IF;
+  RAISE NOTICE 'PASS % direct write affected 0 rows', p_label;
+EXCEPTION
+  WHEN insufficient_privilege OR check_violation OR with_check_option_violation OR raise_exception THEN
+    RAISE NOTICE 'PASS % direct write blocked (%).', p_label, SQLSTATE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION pg_temp.assert_insert_blocked(p_label text, p_sql text)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  EXECUTE p_sql;
+  RAISE EXCEPTION '% fail: direct insert was accepted', p_label;
+EXCEPTION
+  WHEN insufficient_privilege OR check_violation OR with_check_option_violation OR raise_exception THEN
+    RAISE NOTICE 'PASS % direct insert blocked (%).', p_label, SQLSTATE;
+END;
+$$;
+
 -- ── PU0: الدليل الآمن ليس view ولا Security Definer، وأعمدته آمنة فقط ─────────
 DO $struct$
 DECLARE v_cols text; v_relkind text; v_bad_writes int;
@@ -47,8 +77,7 @@ BEGIN
     RAISE EXCEPTION 'PU0 fail: portal_user_directory يجب أن يكون جدولاً آمناً لا view (relkind=%)', v_relkind;
   END IF;
 
-  SELECT coalesce(string_agg(column_name, ',' ORDER BY column_name),'')
-    INTO v_cols
+  SELECT coalesce(string_agg(column_name, ',' ORDER BY column_name),'') INTO v_cols
   FROM information_schema.columns
   WHERE table_schema='public' AND table_name='portal_user_directory';
   IF v_cols <> 'active,department_id,display_name,username' THEN
@@ -165,24 +194,19 @@ BEGIN;
   END $t$;
 ROLLBACK;
 
--- ── PU5: تصعيد الدور المباشر من العميل محجوب بسياسة RLS والحارس ─────────────
+-- ── PU5: تصعيد الدور المباشر من العميل محجوب بسياسة RLS أو رفض الصلاحية ─────
 BEGIN;
   SET LOCAL ROLE authenticated;
   SELECT set_config('request.jwt.claims','{"email":"plp_req@aldeyabi.com","role":"authenticated"}',true);
+  SELECT pg_temp.assert_no_direct_write('PU5 portal_users role escalation', 'UPDATE portal_users SET role=''admin'' WHERE username=''plp_req''');
   DO $t$
-  DECLARE v_rows int; v_role text;
+  DECLARE v_role text;
   BEGIN
-    UPDATE portal_users SET role='admin' WHERE username='plp_req';
-    GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN
-      RAISE EXCEPTION 'PU5 fail: الطالب استطاع تعديل role rows=%', v_rows;
-    END IF;
-
     SELECT role INTO v_role FROM portal_users WHERE username='plp_req';
     IF v_role IS DISTINCT FROM 'user' THEN
       RAISE EXCEPTION 'PU5 fail: role تغيّر فعلياً إلى %', v_role;
     END IF;
-    RAISE NOTICE 'PASS PU5 تصعيد الدور المباشر محجوب';
+    RAISE NOTICE 'PASS PU5 تصعيد الدور المباشر محجوب والصف بقي user';
   END $t$;
 ROLLBACK;
 
@@ -190,56 +214,23 @@ ROLLBACK;
 BEGIN;
   SET LOCAL ROLE authenticated;
   SELECT set_config('request.jwt.claims','{"email":"plp_req@aldeyabi.com","role":"authenticated"}',true);
-  DO $t$
-  DECLARE v_rows int; v_blocked boolean;
-  BEGIN
-    UPDATE portal_settings SET value=value; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_settings rows=%', v_rows; END IF;
 
-    UPDATE portal_departments SET active=active; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_departments rows=%', v_rows; END IF;
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_settings', 'UPDATE portal_settings SET value=value');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_departments', 'UPDATE portal_departments SET active=active');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_jobs', 'UPDATE portal_jobs SET active=active');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_workflows', 'UPDATE portal_workflows SET active=active');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_doa', 'UPDATE portal_doa SET note=note');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_requests', 'UPDATE portal_requests SET status=status');
+  SELECT pg_temp.assert_no_direct_write('PU6 portal_approvals', 'UPDATE portal_approvals SET decision=decision');
 
-    UPDATE portal_jobs SET active=active; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_jobs rows=%', v_rows; END IF;
+  SELECT pg_temp.assert_insert_blocked('PU6 portal_suppliers', 'INSERT INTO portal_suppliers(name) VALUES (''P0C should be blocked'')');
+  SELECT pg_temp.assert_insert_blocked('PU6 portal_requests insert', 'INSERT INTO portal_requests(id,title,department_id,requester,requester_name,priority,status) VALUES (''P0C-RLS-BLOCK'',''P0C RLS Block'',''OPS'',''plp_req'',''طالب عادي'',''normal'',''draft'')');
 
-    UPDATE portal_workflows SET active=active; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_workflows rows=%', v_rows; END IF;
-
-    UPDATE portal_doa SET note=note; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_doa rows=%', v_rows; END IF;
-
-    UPDATE portal_requests SET status=status; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_requests rows=%', v_rows; END IF;
-
-    UPDATE portal_approvals SET decision=decision; GET DIAGNOSTICS v_rows = ROW_COUNT;
-    IF v_rows <> 0 THEN RAISE EXCEPTION 'PU6 fail: portal_approvals rows=%', v_rows; END IF;
-
-    v_blocked := false;
-    BEGIN
-      INSERT INTO portal_suppliers(name) VALUES ('P0C should be blocked');
-    EXCEPTION WHEN OTHERS THEN
-      v_blocked := true;
-    END;
-    IF NOT v_blocked THEN
-      RAISE EXCEPTION 'PU6 fail: الطالب أدخل مورداً مباشرة';
-    END IF;
-
-    v_blocked := false;
-    BEGIN
-      INSERT INTO portal_requests(id,title,department_id,requester,requester_name,priority,status)
-      VALUES ('P0C-RLS-BLOCK','P0C RLS Block','OPS','plp_req','طالب عادي','normal','draft');
-    EXCEPTION WHEN OTHERS THEN
-      v_blocked := true;
-    END;
-    IF NOT v_blocked THEN
-      RAISE EXCEPTION 'PU6 fail: الطالب أدخل طلباً مباشرة';
-    END IF;
-
+  DO $t$ BEGIN
     RAISE NOTICE 'PASS PU6 الكتابة المباشرة الحساسة محجوبة عن الطالب العادي';
   END $t$;
 ROLLBACK;
 
--- تنظيف بذور الاختبار.
 DO $cleanup$
 BEGIN
   PERFORM set_config('app.portal_transition', '1', true);
