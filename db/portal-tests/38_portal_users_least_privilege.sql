@@ -1,10 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  38 — أقلّ امتياز على portal_users (P0-1) — تأكيدات RLS فعلية بدور authenticated.
+--  38 — أقلّ امتياز على portal_users (P0-1/P0-1b) — تأكيدات RLS فعلية بدور authenticated.
 --  السياق: أثبتت حزمة Auth/PostgREST الحيّة أنّ مستخدماً عادياً كان يقرأ كل صفوف
---  portal_users بحقولها الإدارية (email/role/permissions). هذا الاختبار يُثبِت العلاج:
---  قراءة العميل مقصورة على «الصفّ نفسه أو الأدمن»، مع «دليل مستخدمين آمن» بأعمدة
---  التوجيه/العرض فقط. بخلاف بقية اختبارات RPC، **نُبدّل الدور فعلياً إلى authenticated**
---  (لا postgres المميّز) كي تُفرَض RLS كما في الإنتاج. كل تأكيد RAISE عند الفشل ⇒ خروج ≠ 0.
+--  portal_users بحقولها الإدارية (email/role/permissions). ثم أثبت staging أن
+--  session_user=postgres كان يفتح تجاوزاً كاذباً لحارس portal_users_guard.
+--  هذا الاختبار يُثبِت العلاجين: قراءة العميل مقصورة على «الصفّ نفسه أو الأدمن»،
+--  والدليل الآمن لا يكشف حقولاً حساسة، وتصعيد الدور المباشر يُحجب حتى في سياق
+--  اختبار محليّ يستخدم PGUSER=postgres مع JWT مستخدم عادي.
 -- ════════════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
 SET client_min_messages = notice;
@@ -15,18 +16,25 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
--- بذر ثلاثة مستخدمين (كـpostgres المميّز فيسمح الحارس): أدمن + طالب عادي + مستخدم آخر بقسم مختلف.
+-- بذر ثلاثة مستخدمين. بعد P0-1b لم يعد session_user=postgres يفتح bypass؛
+-- لذلك نستخدم app.portal_transition=1 كباب صريح للتهيئة الاختبارية فقط.
 DO $seed$
 BEGIN
+  PERFORM set_config('app.portal_transition', '1', true);
+
   INSERT INTO portal_users (username,email,display_name,role,permissions,department_id,active)
   VALUES ('plp_admin','plp_admin@aldeyabi.com','بيلاء أدمن','admin','{}'::jsonb,'GA',true)
-  ON CONFLICT (username) DO UPDATE SET role='admin', active=true;
+  ON CONFLICT (username) DO UPDATE SET role='admin', permissions='{}'::jsonb, active=true;
+
   INSERT INTO portal_users (username,email,display_name,role,permissions,department_id,active)
   VALUES ('plp_req','plp_req@aldeyabi.com','طالب عادي','user','{"can_create":true}'::jsonb,'OPS',true)
-  ON CONFLICT (username) DO UPDATE SET role='user', active=true;
+  ON CONFLICT (username) DO UPDATE SET role='user', permissions='{"can_create":true}'::jsonb, active=true;
+
   INSERT INTO portal_users (username,email,display_name,role,permissions,department_id,active)
   VALUES ('plp_other','plp_other@aldeyabi.com','مستخدم آخر','user','{"can_disburse":true}'::jsonb,'CON',true)
-  ON CONFLICT (username) DO UPDATE SET role='user', active=true;
+  ON CONFLICT (username) DO UPDATE SET role='user', permissions='{"can_disburse":true}'::jsonb, active=true;
+
+  PERFORM set_config('app.portal_transition', '0', true);
 END $seed$;
 
 -- ── PU1: الطالب العادي يقرأ صفّه الكامل (البروفايل الذاتي يعمل) ──────────────
@@ -78,10 +86,8 @@ BEGIN;
   DO $t$
   DECLARE v_cnt int; v_has boolean;
   BEGIN
-    -- الدليل يعرض كل المستخدمين (توجيه/عرض) حتى لطالب عادي
     SELECT count(*) INTO v_cnt FROM portal_user_directory WHERE username IN ('plp_admin','plp_req','plp_other');
     IF v_cnt <> 3 THEN RAISE EXCEPTION 'PU3 fail: الدليل لا يعرض كل المستخدمين للطالب (% من 3)', v_cnt; END IF;
-    -- لا عمود email في الدليل (محاولة قراءته تفشل)
     BEGIN
       EXECUTE 'SELECT email FROM portal_user_directory LIMIT 1';
       v_has := true;
@@ -119,14 +125,19 @@ BEGIN;
       UPDATE portal_users SET role='admin' WHERE username='plp_req';
     EXCEPTION WHEN OTHERS THEN v_blocked := true;
     END;
-    IF NOT v_blocked THEN RAISE EXCEPTION 'PU5 fail: الطالب صعّد دوره إلى admin (حارس مكسور)'; END IF;
-    RAISE NOTICE 'PASS PU5 تصعيد الدور المباشر محجوب بالحارس';
+    IF NOT v_blocked THEN RAISE EXCEPTION 'PU5 fail: الطالب صعّد دوره إلى admin (حارس مكسور / session_user bypass)'; END IF;
+    RAISE NOTICE 'PASS PU5 تصعيد الدور المباشر محجوب بالحارس حتى مع session_user=postgres';
   END $t$;
 ROLLBACK;
 
 -- تنظيف بذور الاختبار (لا تلوّث بقيّة الحزمة)
-DELETE FROM portal_users WHERE username IN ('plp_admin','plp_req','plp_other');
+DO $cleanup$
+BEGIN
+  PERFORM set_config('app.portal_transition', '1', true);
+  DELETE FROM portal_users WHERE username IN ('plp_admin','plp_req','plp_other');
+  PERFORM set_config('app.portal_transition', '0', true);
+END $cleanup$;
 
 DO $done$ BEGIN
-  RAISE NOTICE '════ PORTAL_USERS LEAST-PRIVILEGE (P0-1): PU1–PU5 = 5/5 PASS ════';
+  RAISE NOTICE '════ PORTAL_USERS LEAST-PRIVILEGE (P0-1/P0-1b): PU1–PU5 = 5/5 PASS ════';
 END $done$;
