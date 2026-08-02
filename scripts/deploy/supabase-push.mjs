@@ -27,11 +27,11 @@ import { MIG_VERSION, assertExactly062 } from './mig-parse.mjs';
 const PROD_REF = 'mwbjoysuybgbrvfrprex';
 // قطعة الأساس: مُثبَّتة البصمة. تُولَّد بـ scripts/deploy/build-baseline.mjs من portal-standalone.sql (قبل قسم 062).
 const BASELINE_SQL = 'db/staging-bootstrap/baseline_through_061.sql';
-const BASELINE_SHA = 'e690edfeea32ca8d3ef9f1b97c190573e7aa1ced0a2bdab992ed8c855158c137';
+const BASELINE_SHA = 'db0aa6dcfa93fb52227b1664fe7094893472aacc4de7abaddfb3597790230664';
 const BASELINE_VERSION = '20260729120000';                                  // بعد 061 (…073619)، قبل 062 (…120000)
 const BASELINE_DEST = `${BASELINE_VERSION}_baseline_through_061.sql`;
 const MIG_062 = 'db/portal-migrations/062-request-documents.sql';
-const MIG_062_SHA = '7b56d64abd7b9b8b2601b5f294e8a2367f0ac7136c1689b12bde299814f35bf3';
+const MIG_062_SHA = '9ebecd908c63cb4f239728d3d349ae4afaa2d6cb54ce04fc13fb2ab3e2354f9e';
 const MIG_062_DEST = `${MIG_VERSION}_062_request_documents.sql`;
 function die(m) { console.error('❌ supabase-push: ' + m); process.exit(2); }
 function sha256(p) { return createHash('sha256').update(readFileSync(p)).digest('hex'); }

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS portal_request_documents (
 CREATE INDEX IF NOT EXISTS ix_reqdoc_request ON portal_request_documents(request_id);
 CREATE INDEX IF NOT EXISTS ix_reqdoc_payment ON portal_request_documents(payment_id);
 CREATE INDEX IF NOT EXISTS ix_reqdoc_active  ON portal_request_documents(request_id, active);
+CREATE INDEX IF NOT EXISTS idx_portal_reqdoc_supersedes ON portal_request_documents(supersedes_id);
 
 ALTER TABLE portal_request_documents ENABLE ROW LEVEL SECURITY;
 -- قراءة مُنطاقة برؤية الطلب الأب (لا كتابة مباشرة — كلّها عبر RPC ذرّية).

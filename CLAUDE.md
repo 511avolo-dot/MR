@@ -639,6 +639,32 @@ JWT (كعب `auth.jwt()` مطابق لدلالات Supabase + مطابقة `port
   الكبرى (U0–U7: shell/tabs/decision workspace/dashboards/search…) كوثائق ثم تنفيذ متدرّج. **الحزمة: 192 SQL + 18 حارس
   + 7 نقطة، خروج 0. الكوميتات: `8cd7890` (تصليب backend/config) + `b3d949f` (واجهة). PR #74 مسودّة، لا دمج، لا main.**
 
+### 🔐 P0-1 — أقلّ امتياز على `portal_users` + repo-parity (2026-08-02، الفرع `audit/enterprise-certification-2026-07-27`، PR #74)
+**السياق:** أثبتت حزمة Auth/PostgREST الحيّة على staging `vpfnycxzqziltsnzxbpb` (تنفيذ المالك) أنّ مستخدماً عادياً
+كان يقرأ **كل** صفوف `portal_users` بحقولها الإدارية (email/role/permissions). **إصلاح repo فقط — لا تطبيق حيّ
+هنا (بانتظار قناة الأسرار + مراجعة Gate-1 المستقلّة). لا هجرة 063** (بأمر المالك): كل شيء مدمج في
+`portal-standalone.sql` (المنطقة ما قبل 062) فينساب إلى `baseline_through_061` المُعاد توليدها.
+- **RLS (قرار المالك 2026-08-02 عبر AskUserQuestion = «الأدمن يحتفظ بقراءة العميل»):** أُخرج `portal_users` من حلقة
+  `auth_all` العامة؛ سياسة SELECT الجديدة `portal_users_self_or_admin_sel USING(username=portal_username() OR
+  portal_is_admin())` (لا privileged — السوبر-يوزر/service_role يتجاوزان RLS أصلاً، وكل RPC يقرأ الجدول SECURITY
+  DEFINER). الكتابة تبقى محكومة بمُشغِّل `portal_users_guard` (رفض افتراضي، لا تصعيد) — بلا تغيير.
+- **دليل آمن:** عرض `portal_user_directory (username,display_name,department_id,active)` بامتياز المالك
+  (`security_invoker=false`) لكل authenticated — أعمدة توجيه/عرض فقط، **بلا email/permissions/role/job/delegation/
+  created_***. (definer-view مقصود — يُصنَّف في مدقّق Supabase كحارس مُختبَر لا ثغرة.)
+- **الواجهة (المُحوِّل فقط، `loadAll`):** يجلب `portal_user_directory` (متسامح — يسقط إلى `uR.data` قبل التطبيق بلا
+  انحدار) فيبني USERS الأساس (اسم/قسم/نشط لكل مستخدم)، ثم يُراكِب الصفوف الكاملة التي تسمح بها RLS (ذات المستخدم،
+  أو الكل للأدمن) بحقولها الحسّاسة. إدارة الأدمن للمستخدمين تبقى تعمل (قراءة+كتابة عبر RLS+الحارس).
+- **repo-parity (من مدقّق Supabase الحيّ):** سحب EXECUTE من PUBLIC/anon/authenticated عن 20 دالة مُشغِّل/حارس
+  (تُستدعى عبر المُشغِّل فقط) → S7 في `11_security.sql` صار **36 دالة خادمية** (مُتحقَّق تجريبيّاً) · 4 فهارس تغطية FK
+  (`portal_recurring_expenses(beneficiary_id/department_id)` · `portal_requests(beneficiary_id)` · `portal_request_documents(supersedes_id)` — الأخير في قسم/هجرة 062).
+- **الاختبار الجديد `38_portal_users_least_privilege.sql` (PU1–PU5، RLS فعلية بدور `authenticated`):** البروفايل
+  الذاتي يعمل · لا قراءة بريد/صلاحيات الغير · الدليل أعمدة آمنة فقط + يعرض الكل · الأدمن يقرأ الكل · تصعيد الدور
+  المباشر محجوب. **بصمتا الأساس/062 المثبَّتتان في `supabase-push.mjs` حُدِّثتا** (baseline `e690edfe→db0aa6dc`).
+- **التحقّق المحلّي (PostgreSQL 16، كـpostgres): كل الأخضر** — الحزمة **202 تأكيد SQL** (197+5) + 18 حارس + 7 نقطة ·
+  `stage1-tests`=60 · drift-guard=مطابق · F1 `verify-baseline`=Phase A 28/Phase B 30 · `node --check` للكتلتين نظيف.
+- **⚠️ مؤجَّل (execution، بانتظار قناة الأسرار + إذن + مراجعة Gate-1):** تطبيق التصليب على staging المعزول ثم إعادة
+  حزمة Auth/PostgREST الديناميكية + advisors + Playwright E2E. **لا إنتاج، لا 063، PR مسودّة/غير مدموج.**
+
 ### 🔖 نقطة الاستئناف (2026-07-26، آخر جلسة) — اقرأها أولاً لأي جلسة جديدة
 **الفرع النشط:** `claude/supabase-connection-check-t01so9` (PR #73، مسودّة). آخر كوميت `20d1cbe` (052). الشجرة
 نظيفة، الدفع مكتمل، **CI أخضر** (portal-tests run #46 = success)، ومعاينة Cloudflare منشورة بنجاح.

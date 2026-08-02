@@ -51,9 +51,12 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
   WHERE n.nspname='public' AND p.proname LIKE 'portal\_%'
     AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE');
-  IF v_bad <> 'portal_audit_write, portal_award_total, portal_budget_committed, portal_build_chain, portal_contract_consumed, portal_create_token, portal_invoiced_total, portal_open_direct_payment, portal_outbox_claim, portal_outbox_mark, portal_outbox_purge, portal_pr_transition_email, portal_recurring_run, portal_reqdoc_guard, portal_returns_total, portal_run_sla, portal_supplier_token_request'
+  -- P0-parity (2026-08-02): سُحب EXECUTE عن authenticated من دوال المُشغِّلات (تُستدعى عبر
+  -- المُشغِّل فقط) فانضمّت للمجموعة الخادمية. المجموعة الآن = الدوال الخادمية المقصودة + كل حُرّاس/
+  -- مُشغِّلات البوابة (لا استدعاء مباشر عبر PostgREST). أي انحراف يُفشِل هذا التأكيد.
+  IF v_bad <> 'portal_approvals_guard, portal_audit_chain, portal_audit_immutable, portal_audit_write, portal_award_approvals_guard, portal_award_guard, portal_award_total, portal_beneficiary_iban_guard, portal_budget_committed, portal_budget_enforce, portal_build_chain, portal_config_guard, portal_contract_consumed, portal_contract_enforce, portal_create_token, portal_invoiced_total, portal_locked_guard, portal_open_direct_payment, portal_outbox_claim, portal_outbox_enqueue, portal_outbox_mark, portal_outbox_purge, portal_payments_guard, portal_po_approvals_guard, portal_pr_transition_email, portal_recurring_run, portal_reqdoc_guard, portal_request_status_guard, portal_requests_notify, portal_returns_total, portal_run_sla, portal_set_due, portal_supplier_iban_guard, portal_supplier_token_request, portal_three_way_guard, portal_users_guard'
     THEN RAISE EXCEPTION 'S7 fail: المجموعة الخادمية غير متوقّعة (%): %', v_cnt, v_bad; END IF;
-  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 17 دالة مقصودة (+portal_reqdoc_guard حارس المستندات)، الباقي للمستخدم';
+  RAISE NOTICE 'PASS S7 المجموعة الخادمية = 36 دالة (خادمية مقصودة + كل حُرّاس/مُشغِّلات البوابة server-only)، الباقي للمستخدم';
 
   -- S8: لا دالة كتابة في البوابة قابلة للتنفيذ من anon.
   --     خلفية: Supabase تمنح anon صلاحية صريحة على كل دالة جديدة (pg_default_acl)،

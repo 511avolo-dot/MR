@@ -2685,7 +2685,7 @@ async function loadAll(){
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR,recR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR,recR,dirR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2712,7 +2712,8 @@ async function loadAll(){
     SB.from('portal_currencies').select('*').order('code'),           /* العملات (هجرة 035) — يُتحمَّل غيابه */
     SB.from('portal_contracts').select('*').order('id'),              /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
     SB.from('portal_beneficiaries').select('*').order('name'),        /* سجلّ المستفيدين (هجرة 053) — يُتحمَّل غيابه قبل التطبيق */
-    SB.from('portal_recurring_expenses').select('*').order('next_run') /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_recurring_expenses').select('*').order('next_run'), /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_user_directory').select('*')  /* دليل المستخدمين الآمن (P0-1) — أعمدة توجيه/عرض فقط؛ يُتحمَّل غيابه قبل تطبيق تصليب أقلّ الامتياز */
   ]);
   /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
   window.__paBenOK=!!(benR && !benR.error);
@@ -2763,11 +2764,20 @@ async function loadAll(){
   /* الوظائف */
   JOBS={}; (jR.data||[]).forEach(j=>{ JOBS[j.key]={title:j.title,cat:j.category,scope:j.scope,desc:j.description||'',acc:pa_acc(j.permissions,j.scope,false)}; });
   /* المستخدمون */
-  USERS={}; (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin';
-    USERS[u.username]={ n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
+  /* P0-1 أقلّ امتياز: الأساس من «دليل المستخدمين الآمن» (أعمدة توجيه/عرض فقط لكل المستخدمين)،
+     ثم نُراكِب الصفوف الكاملة التي تسمح بها RLS (صفّ المستخدم نفسه، أو كل الصفوف للأدمن) بحقولها
+     الحسّاسة (email/perms/role/job/delegation). قبل تطبيق التصليب حيّاً: portal_user_directory غائب
+     فنسقط بأمان إلى uR.data (التي كانت تعيد الكل عبر auth_all القديمة) — بلا انحدار. */
+  const PA_DIR=(dirR && !dirR.error && Array.isArray(dirR.data)) ? dirR.data : (uR.data||[]);
+  USERS={};
+  PA_DIR.forEach(u=>{ USERS[u.username]={ n:u.display_name, r:'مستخدم',
+    deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
+    suspended:u.active===false, active:u.active!==false }; });
+  (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin';
+    USERS[u.username]=Object.assign(USERS[u.username]||{}, { n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
       job:u.job_key, admin:isAdm, deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
       away:!!u.is_away, delegate:u.delegate_to||null, suspended:u.active===false, active:u.active!==false,
-      email:u.email, perms:u.permissions||{}, acc:pa_acc(u.permissions,(JOBS[u.job_key]||{}).scope,isAdm) }; });
+      email:u.email, perms:u.permissions||{}, acc:pa_acc(u.permissions,(JOBS[u.job_key]||{}).scope,isAdm) }); });
   /* الموردون */
   SUPPLIERS={}; pa_supByName={}; (supR.data||[]).forEach(s=>{ const k=String(s.id);
     SUPPLIERS[k]={n:s.name,cr:s.cr||'',vat:s.vat||'',iban:s.iban||'',contact:s.contact||'',active:s.active!==false,_sid:s.id};

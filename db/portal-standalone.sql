@@ -7805,6 +7805,65 @@ GRANT EXECUTE ON FUNCTION portal_recurring_run() TO service_role;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
+--  P0-1 — أقلّ امتياز على portal_users (تصليب staging مُثبَت حيّاً) — مطابقة repo
+--  السياق: أثبتت حزمة Auth/PostgREST الديناميكية أنّ مستخدماً عادياً كان يقرأ كل
+--  صفوف portal_users بحقولها الإدارية (email/role/permissions). العلاج: قصر قراءة
+--  العميل على «صفّه + الأدمن» عبر RLS، وتقديم «دليل مستخدمين آمن» (عرض بأعمدة
+--  التوجيه/العرض فقط، بلا email/permissions/role/job/delegation/created_*).
+--  الكتابة تبقى محكومة بمُشغِّل portal_users_guard (رفض افتراضي) كما هي.
+--  قرار المالك (2026-08-02): الأدمن يحتفظ بقراءة العميل عبر RLS (self OR admin).
+-- ───────────────────────────────────────────────────────────────────────────
+DROP POLICY IF EXISTS "auth_all"                     ON portal_users;
+DROP POLICY IF EXISTS portal_users_self_or_admin_sel ON portal_users;
+DROP POLICY IF EXISTS portal_users_wr_ins            ON portal_users;
+DROP POLICY IF EXISTS portal_users_wr_upd            ON portal_users;
+DROP POLICY IF EXISTS portal_users_wr_del            ON portal_users;
+-- قراءة: صاحب الصفّ فقط، أو أدمن نشط — لا قراءة عامة. (الخادم service_role بـBYPASSRLS
+-- والمالك postgres سوبر-يوزر يتجاوزان RLS أصلاً، وكل RPC يقرأ portal_users هو SECURITY
+-- DEFINER يعمل بامتياز المالك — فلا حاجة لاستثناء privileged هنا، وإدراجه يفتح قراءة
+-- عامة محليّاً حيث session_user=postgres.)
+CREATE POLICY portal_users_self_or_admin_sel ON portal_users FOR SELECT TO authenticated
+  USING (username = portal_username() OR portal_is_admin());
+-- كتابة: تبقى مسموحة على مستوى RLS، والحارس trg_portal_users_guard هو المدافع الفعليّ
+-- (رفض افتراضي: لا تصعيد صلاحية/دور إلا عبر أدمن/خادم/علم انتقال — دون تغيير).
+CREATE POLICY portal_users_wr_ins ON portal_users FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY portal_users_wr_upd ON portal_users FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY portal_users_wr_del ON portal_users FOR DELETE TO authenticated USING (true);
+
+-- دليل المستخدمين الآمن: أعمدة التوجيه/العرض فقط لكل المصادَق عليهم (بلا حقول حسّاسة).
+-- عرض بامتياز المالك (security_invoker=false) كي يعرض كل الصفوف بالأعمدة الآمنة رغم
+-- RLS المُقيَّد على portal_users. مقصود وموثَّق (يُصنَّف في مدقّق Supabase كحارس مُختبَر).
+DROP VIEW IF EXISTS portal_user_directory;
+CREATE VIEW portal_user_directory WITH (security_invoker = false) AS
+  SELECT username, display_name, department_id, active FROM portal_users;
+REVOKE ALL ON portal_user_directory FROM PUBLIC, anon;
+GRANT SELECT ON portal_user_directory TO authenticated;
+
+-- P0-parity — فهارس تغطية مفاتيح أجنبية (أداء؛ من مدقّق Supabase الحيّ) — ما قبل 062.
+CREATE INDEX IF NOT EXISTS idx_portal_recurring_beneficiary ON portal_recurring_expenses(beneficiary_id);
+CREATE INDEX IF NOT EXISTS idx_portal_recurring_dept        ON portal_recurring_expenses(department_id);
+CREATE INDEX IF NOT EXISTS idx_portal_requests_beneficiary  ON portal_requests(beneficiary_id);
+
+-- P0-parity — سحب EXECUTE المباشر من PUBLIC/anon/authenticated عن دوال المُشغِّلات
+-- والمُشغِّلات الحدثية (تُستدعى عبر المُشغِّل فقط، لا مباشرةً). لا يكسر إطلاق المُشغِّل
+-- (Postgres لا يفحص EXECUTE عند إطلاق مُشغِّل)، ويمنع الاستدعاء المباشر عبر PostgREST.
+DO $p0$
+DECLARE fn text;
+BEGIN
+  FOREACH fn IN ARRAY ARRAY[
+    'portal_set_due','portal_config_guard','portal_locked_guard','portal_outbox_enqueue',
+    'portal_budget_enforce','portal_supplier_iban_guard','portal_three_way_guard',
+    'portal_approvals_guard','portal_contract_enforce','portal_request_status_guard',
+    'portal_award_approvals_guard','portal_award_guard','portal_payments_guard',
+    'portal_users_guard','portal_audit_immutable','portal_beneficiary_iban_guard',
+    'portal_audit_chain','portal_requests_notify','portal_po_approvals_guard'
+  ] LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %I() FROM PUBLIC, anon, authenticated', fn);
+  END LOOP;
+END $p0$;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
 --  دمج الهجرة 062 (المستندات الداعمة للصرف المباشر: نموذج مُطبَّع + مسودّة→رفع→تقديم)
 -- ═══════════════════════════════════════════════════════════════════════════
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -7880,7 +7939,9 @@ END $g$;
 DROP TRIGGER IF EXISTS trg_portal_reqdoc_guard ON portal_request_documents;
 CREATE TRIGGER trg_portal_reqdoc_guard BEFORE UPDATE OR DELETE ON portal_request_documents
   FOR EACH ROW EXECUTE FUNCTION portal_reqdoc_guard();
-REVOKE ALL ON FUNCTION portal_reqdoc_guard() FROM anon, PUBLIC;
+REVOKE ALL ON FUNCTION portal_reqdoc_guard() FROM anon, PUBLIC, authenticated;
+-- P0-parity — فهرس تغطية مفتاح أجنبي على portal_request_documents(supersedes_id) (جدول 062).
+CREATE INDEX IF NOT EXISTS idx_portal_reqdoc_supersedes ON portal_request_documents(supersedes_id);
 
 -- ── (3) إعدادات: إلزام مستند الصرف المباشر (افتراضي 1 = مُفعَّل بطلب المالك) ──
 --   وحدّ حجم الملف (بايت) = 10MiB مطابقةً لحدّ _file-guard.js (نقطة الرفع الوحيدة). أُسقِط
