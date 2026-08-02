@@ -1,9 +1,14 @@
-// Enterprise UI permission guard for Cloudflare Pages.
+// Enterprise UI permission guard + presentation injection for Cloudflare Pages.
 //
 // Server/RLS remains the authoritative security boundary (P0-1d/P0-1e). This
-// middleware prevents confusing or confidential UI affordances from rendering
-// for users that are not entitled to them, especially in the large legacy
-// purchase-portal.html bundle.
+// middleware adds the branch-scoped design system and prevents confusing or
+// confidential UI affordances from rendering for users not entitled to them.
+
+const ENTERPRISE_ASSETS = `
+<script src="/assets/document-studio.js?v=1" data-enterprise-asset="document-studio"></script>
+<script src="/assets/policy-studio.js?v=1" data-enterprise-asset="policy-studio"></script>
+<script src="/assets/enterprise-ui.js?v=1" data-enterprise-asset="enterprise-ui"></script>
+`;
 
 const ENTERPRISE_UI_GUARD = `
 (function(){
@@ -15,7 +20,7 @@ const ENTERPRISE_UI_GUARD = `
   function hasDirectExpense(){ var c = currentCan(); return admin() || !!c.directExpense || !!c.canCreateDirectExpense; }
   function canUseExpenseTab(){ var c = currentCan(); var s = currentSee(); return hasDirectExpense() || !!c.approveDisb || !!c.disburse || !!s.finance; }
   function canViewQuotes(){ var c = currentCan(); return admin() || !!c.viewQuotes || !!c.manageRfq || !!c.approveAward || !!c.issuePO; }
-  function txt(el){ return ((el && el.textContent) || '').replace(/\s+/g,' ').trim(); }
+  function txt(el){ return ((el && el.textContent) || '').replace(/\\s+/g,' ').trim(); }
   function closestBlock(el){ return el && el.closest && el.closest('.card,.modal,.doc-card,.print-sheet,section,article'); }
 
   var originalPaCan = safeCall(function(){ return pa_can; }, null);
@@ -103,9 +108,14 @@ export async function onRequest(context) {
   if (!contentType.includes('text/html')) return response;
 
   return new HTMLRewriter()
+    .on('head', {
+      element(element) {
+        element.append('<link rel="stylesheet" href="/assets/enterprise-ui.css?v=1" data-enterprise-asset="enterprise-ui">', { html: true });
+      }
+    })
     .on('body', {
       element(element) {
-        element.append(`<script>${ENTERPRISE_UI_GUARD}</script>`, { html: true });
+        element.append(ENTERPRISE_ASSETS + `<script>${ENTERPRISE_UI_GUARD}</script>`, { html: true });
       }
     })
     .transform(response);
