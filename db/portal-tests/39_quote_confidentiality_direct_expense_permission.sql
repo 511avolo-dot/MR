@@ -16,11 +16,14 @@ $$;
 
 DO $seed$
 BEGIN
+  -- portal_departments / portal_users / workflow fixtures are guarded config tables.
+  -- The test seeds them through the same sanctioned transition flag used by migrations,
+  -- then exercises the actual RLS/RPC behaviour as authenticated users below.
+  PERFORM set_config('app.portal_transition', '1', true);
+
   INSERT INTO portal_departments(id,name_ar,sector,active)
   VALUES ('QA-P0D','QA P0-1d Dept','QA',true)
   ON CONFLICT (id) DO UPDATE SET name_ar=excluded.name_ar, sector=excluded.sector, active=true;
-
-  PERFORM set_config('app.portal_transition', '1', true);
 
   INSERT INTO portal_users(username,email,display_name,department_id,role,job_key,permissions,active)
   VALUES
