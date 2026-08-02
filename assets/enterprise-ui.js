@@ -2,7 +2,7 @@
 (function enterpriseUiBootstrap(){
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.0.1';
   var observer = null;
   var scheduled = false;
 
@@ -11,6 +11,11 @@
   }
 
   function text(value){ return String(value == null ? '' : value); }
+
+  function selectorEscape(value){
+    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+    return String(value).replace(/([ #;?%&,.+*~\\':"!^$[\]()=>|/@])/g, '\\$1');
+  }
 
   function createSkipLink(){
     if (document.querySelector('.eui-skip-link')) return;
@@ -68,14 +73,12 @@
   function enhanceForms(){
     document.querySelectorAll('input,select,textarea').forEach(function(field){
       if (!field.id) return;
-      var label = document.querySelector('label[for="' + CSS.escape(field.id) + '"]');
+      var label = document.querySelector('label[for="' + selectorEscape(field.id) + '"]');
       if (label) return;
       var parentLabel = field.closest('label');
       if (parentLabel) return;
       var previous = field.previousElementSibling;
-      if (previous && previous.tagName === 'LABEL') {
-        previous.setAttribute('for', field.id);
-      }
+      if (previous && previous.tagName === 'LABEL') previous.setAttribute('for', field.id);
     });
   }
 
@@ -124,13 +127,16 @@
     var title = request.title || request.purpose || 'معاملة';
     var meta = [request.id, request.dept || request.department || '', request.requester ? 'مقدم الطلب: ' + safe(function(){ return window.uName(request.requester); }, request.requester) : '']
       .filter(Boolean).join(' · ');
+    var signature = [title, meta, stateLabel].join('|');
     if (!existing) {
       existing = document.createElement('section');
       existing.className = 'eui-context-strip';
       existing.setAttribute('aria-label', 'سياق المعاملة الحالية');
+      existing.innerHTML = '<div><div class="eui-context-strip__title"></div><div class="eui-context-strip__meta"></div></div><div class="eui-context-strip__state"></div>';
       main.insertBefore(existing, main.firstChild);
     }
-    existing.innerHTML = '<div><div class="eui-context-strip__title"></div><div class="eui-context-strip__meta"></div></div><div class="eui-context-strip__state"></div>';
+    if (existing.getAttribute('data-eui-signature') === signature) return;
+    existing.setAttribute('data-eui-signature', signature);
     existing.querySelector('.eui-context-strip__title').textContent = title;
     existing.querySelector('.eui-context-strip__meta').textContent = meta;
     existing.querySelector('.eui-context-strip__state').textContent = stateLabel;
@@ -165,9 +171,7 @@
     enhanceDetailContext();
     enhanceModal();
     safe(function(){
-      if (window.AldeyabiPolicyStudio && typeof window.AldeyabiPolicyStudio.refreshVisibility === 'function') {
-        window.AldeyabiPolicyStudio.refreshVisibility();
-      }
+      if (window.AldeyabiPolicyStudio && typeof window.AldeyabiPolicyStudio.refreshVisibility === 'function') window.AldeyabiPolicyStudio.refreshVisibility();
     });
   }
 
@@ -198,11 +202,7 @@
     setTimeout(installRenderBridge, 600);
   }
 
-  window.AldeyabiEnterpriseUI = {
-    version: VERSION,
-    enhance: enhance,
-    announce: announce
-  };
+  window.AldeyabiEnterpriseUI = { version: VERSION, enhance: enhance, announce: announce };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
