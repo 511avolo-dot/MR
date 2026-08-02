@@ -149,7 +149,6 @@
   }
 
   function mount(){
-    close(false);
     state.previousFocus = document.activeElement;
     state.root = document.createElement('div');
     state.root.className = 'eds-root qds-root';
@@ -211,6 +210,7 @@
       toast('لا توجد ملفات عروض متاحة لهذا الطلب', 'err');
       return;
     }
+    close(false);
     state.request = built.request;
     state.docs = built.docs;
     state.selected = state.docs.length > 1 ? [0, 1] : [0];
@@ -242,7 +242,7 @@
     state.previousFocus = null;
   }
 
-  window.AldeyabiQuoteStudio = { open: open, close: close, version: '1.0.0' };
+  window.AldeyabiQuoteStudio = { open: open, close: close, version: '1.0.1' };
   window.openQuoteViewer = open;
   window.pa_qvClose = close;
 })();
