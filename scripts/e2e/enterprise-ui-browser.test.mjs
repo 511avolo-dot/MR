@@ -7,9 +7,11 @@ import { chromium } from 'playwright';
 const rootFiles = new Map([
   ['/assets/enterprise-ui.css', ['text/css; charset=utf-8', readFileSync('assets/enterprise-ui.css')]],
   ['/assets/quote-document-studio.css', ['text/css; charset=utf-8', readFileSync('assets/quote-document-studio.css')]],
+  ['/assets/access-inspector.css', ['text/css; charset=utf-8', readFileSync('assets/access-inspector.css')]],
   ['/assets/document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/document-studio.js')]],
   ['/assets/quote-document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/quote-document-studio.js')]],
   ['/assets/policy-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/policy-studio.js')]],
+  ['/assets/access-inspector.js', ['text/javascript; charset=utf-8', readFileSync('assets/access-inspector.js')]],
   ['/assets/enterprise-ui.js', ['text/javascript; charset=utf-8', readFileSync('assets/enterprise-ui.js')]]
 ]);
 
@@ -17,16 +19,19 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 const html = `<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/enterprise-ui.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"></head><body>
+<link rel="stylesheet" href="/assets/enterprise-ui.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
 <header class="topbar"><div class="ttl">بوابة المشتريات</div><nav class="nav"><button class="active">الرئيسية</button></nav></header>
 <div class="wrap"><div class="pagehead"><div><h1>مركز العمل</h1><div class="sub">اختبار متصفح معزول</div></div></div><div class="card"><div class="sec-title">طلبات تحتاج إجراء</div><table><thead><tr><th>الطلب</th><th>الحالة</th></tr></thead><tbody><tr><td>REQ-1</td><td>قيد الإجراء</td></tr></tbody></table></div></div>
 <script>
 window.ME='admin'; window.CURRENT='REQ-1'; window.VIEW='detail';
 window.SUPPLIERS={s1:{n:'المورد الأول'},s2:{n:'المورد الثاني'},s3:{n:'المورد الثالث'}};
+window.DEPTS={ops:{n:'التشغيل',sector:'العمليات'},fin:{n:'المالية',sector:'الإدارة'}};
+window.JOBS={admin_job:{title:'مدير البوابة',scope:'all',acc:{can:{manageUsers:true,manageCompany:true},see:{finance:true}}},fin_job:{title:'محاسب',scope:'all',acc:{can:{approveDisb:true,disburse:true},see:{finance:true}}}};
+window.USERS={admin:{n:'مدير البوابة',r:'مدير البوابة',job:'admin_job',admin:true,deptId:'ops',sector:'العمليات',active:true,perms:{can_manage_users:true,can_manage_company:true}},finance_user:{n:'محاسب الاختبار',r:'محاسب',job:'fin_job',deptId:'fin',sector:'الإدارة',active:true,perms:{can_disburse:true}}};
 window.REQS=[{id:'REQ-1',title:'توريد مواد اختبار',dept:'التشغيل',requester:'student',phase:'pricing',docs:[{id:1,key:'docs/reqdoc/REQ-1/testdoc.png',title:'مستند داعم تجريبي',type:'memo',active:true,size:68}],proc:{supplierList:['s1','s2','s3'],offers:{s1:{quotePdfKey:'quotes/REQ-1/quote-one.png',total:12000,deliveryDays:4},s2:{quotePdfKey:'quotes/REQ-1/quote-two.png',total:11500,deliveryDays:8},s3:{quotePdfKey:'quotes/REQ-1/quote-three.png',total:13000,deliveryDays:2}}}}];
-window.uName=(u)=>u==='student'?'طالب الاختبار':'مدير البوابة';
+window.uName=(u)=>window.USERS[u]?.n||(u==='student'?'طالب الاختبار':u);
 window.isAdmin=()=>true;
-window.accessOf=()=>({can:{viewQuotes:true},see:{}});
+window.accessOf=(username)=>username==='finance_user'?{scope:'all',can:{approveDisb:true,disburse:true},see:{finance:true}}:{scope:'all',can:{viewQuotes:true,manageUsers:true,manageCompany:true},see:{finance:true}};
 window.render=()=>{};
 window.toast=(message,kind)=>{ document.body.dataset.toast=kind+':'+message; };
 const policy={enabled:true,min_amount_exclusive:25000,max_amount_inclusive:125000,fallback_role_key:null,version:3,published_at:'2026-08-02T12:00:00Z',published_by:'admin'};
@@ -40,7 +45,7 @@ window.SB={
  }
 };
 </script>
-<script src="/assets/document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/enterprise-ui.js"></script>
+<script src="/assets/document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/access-inspector.js"></script><script src="/assets/enterprise-ui.js"></script>
 </body></html>`;
 
 const requests = [];
@@ -83,9 +88,9 @@ try {
   assert.equal(await page.locator('thead th[scope="col"]').count(), 2);
   console.log('  ✓ enterprise layout and accessibility enhancement loaded');
 
-  const launcher = page.locator('.eps-launcher');
-  await launcher.waitFor({ state: 'visible' });
-  await launcher.click();
+  const policyLauncher = page.locator('.eps-launcher');
+  await policyLauncher.waitFor({ state: 'visible' });
+  await policyLauncher.click();
   await page.locator('.eps-shell').waitFor({ state: 'visible' });
   assert.match(await page.locator('.eps-panel').innerText(), /الإصدار الحالي:\s*3/);
   await page.locator('#eps-sim-amount').fill('87500');
@@ -93,6 +98,18 @@ try {
   await page.waitForFunction(() => document.querySelector('#eps-simulation')?.textContent.includes('ستُضاف مرحلة اللجنة'));
   console.log('  ✓ policy studio loaded an authorized policy and simulated routing');
   await page.locator('.eps-close').click();
+
+  const accessLauncher = page.locator('.eai-launcher');
+  await accessLauncher.waitFor({ state: 'visible' });
+  await accessLauncher.click();
+  await page.locator('.eai-shell').waitFor({ state: 'visible' });
+  await page.locator('[data-eai-user="finance_user"]').click();
+  assert.match(await page.locator('[data-eai-detail]').innerText(), /محاسب الاختبار/);
+  assert.match(await page.locator('[data-eai-detail]').innerText(), /يجمع بين اعتماد الصرف وتنفيذه/);
+  await page.locator('[data-eai-search]').fill('محاسب');
+  assert.equal(await page.locator('.eai-user').count(), 1);
+  console.log('  ✓ access inspector explained effective permissions and flagged a separation-of-duties conflict');
+  await page.locator('.eai-close').click();
 
   await page.evaluate(() => window.AldeyabiDocumentStudio.openRequestDocument('REQ-1', 1));
   await page.locator('.eds-root').waitFor({ state: 'visible' });
