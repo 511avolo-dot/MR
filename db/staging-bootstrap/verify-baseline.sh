@@ -3,7 +3,7 @@
 #  F1 proof (G1-FINAL-01) — لينيَج staging صادق:
 #    المرحلة أ: قاعدة فارغة → baseline_through_061 → حزمة 061 تنجح.
 #    المرحلة ب: baseline_through_061 → 062 → الحزمة الكاملة تنجح.
-#  P0-1b/P0-1c/P0-1d/P0-1e/P0-1f تُطبّق قبل اختبارات أقلّ الامتياز
+#  P0-1b/P0-1c/P0-1d/P0-1e/P0-1f/P0-1g تُطبّق قبل اختبارات أقلّ الامتياز
 #  وسرية العروض وسياسات سير العمل المرنة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
@@ -17,6 +17,7 @@ P0B="$ROOT/db/portal-migrations/p0_1b-portal-users-guard-no-session-user-jwt-byp
 P0D="$ROOT/db/portal-migrations/p0_1d-quote-confidentiality-direct-expense-permission.sql"
 P0E="$ROOT/db/portal-migrations/p0_1e-quote-confidentiality-rls-grants.sql"
 P0F="$ROOT/db/portal-migrations/p0_1f-flexible-committee-policy.sql"
+P0G="$ROOT/db/portal-migrations/p0_1g-po-chain-transition-window.sql"
 DEP062_RE='(11_security|37_request_documents)\.sql$'
 
 echo "▶ [1] drift guard: baseline مطابق للمولَّد الحتميّ"
@@ -36,7 +37,7 @@ CORE=$("${PSQL[@]}" -d "$DBA" -tAc "select count(*) from information_schema.tabl
 [ "$CORE" = "4" ] || { echo "❌ كائنات 061 الأساسية ناقصة (=$CORE/4)"; exit 1; }
 
 echo "▶ [4] المرحلة أ — الحزمة على 061 (باستثناء ملفات 062 الطبيعية)"
-a_pass=0; a_skip=0; a_p0b=0; a_p0d=0; a_p0e=0; a_p0f=0
+a_pass=0; a_skip=0; a_p0b=0; a_p0d=0; a_p0e=0; a_p0f=0; a_p0g=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
   if [[ "$b" =~ $DEP062_RE ]]; then a_skip=$((a_skip+1)); echo "   ⏭️  (062-phase) $b"; continue; fi
@@ -54,14 +55,20 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
       a_p0e=1
     fi
   fi
-  if [[ "$b" == "40_flexible_committee_policy.sql" && "$a_p0f" = "0" ]]; then
-    "${PSQL[@]}" -d "$DBA" -f "$P0F" >/tmp/p0f_a.log 2>&1 || { echo "❌ فشل تطبيق P0-1f في المرحلة أ"; cat /tmp/p0f_a.log; exit 1; }
-    a_p0f=1
+  if [[ "$b" == "40_flexible_committee_policy.sql" ]]; then
+    if [[ "$a_p0f" = "0" ]]; then
+      "${PSQL[@]}" -d "$DBA" -f "$P0F" >/tmp/p0f_a.log 2>&1 || { echo "❌ فشل تطبيق P0-1f في المرحلة أ"; cat /tmp/p0f_a.log; exit 1; }
+      a_p0f=1
+    fi
+    if [[ "$a_p0g" = "0" ]]; then
+      "${PSQL[@]}" -d "$DBA" -f "$P0G" >/tmp/p0g_a.log 2>&1 || { echo "❌ فشل تطبيق P0-1g في المرحلة أ"; cat /tmp/p0g_a.log; exit 1; }
+      a_p0g=1
+    fi
   fi
   "${PSQL[@]}" -d "$DBA" -f "$f" >/tmp/phaseA.log 2>&1 || { echo "❌ المرحلة أ فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseA.log | head -5; exit 1; }
   a_pass=$((a_pass+1))
 done
-echo "   ✓ المرحلة أ: $a_pass نجح · $a_skip مؤجَّل لِما-بعد-062 · P0-1b/P0-1d/P0-1e/P0-1f طبّقت"
+echo "   ✓ المرحلة أ: $a_pass نجح · $a_skip مؤجَّل لِما-بعد-062 · P0-1b/P0-1d/P0-1e/P0-1f/P0-1g طبّقت"
 
 echo "▶ [5] إثبات التطبيق التدريجيّ — أساس نظيف ($DBB) → 062"
 if ! "${PSQL[@]}" -d "$DBB" -f "$BASE" > /tmp/base_b.log 2>&1; then echo "❌ فشل تحميل الأساس ($DBB)"; grep -iE "ERROR|FATAL" /tmp/base_b.log|head; exit 1; fi
@@ -71,7 +78,7 @@ PRE=$("${PSQL[@]}" -d "$DBB" -tAc "select count(*) from information_schema.table
 [ "$PRE" = "1" ] || { echo "❌ 062 يجب أن تظهر بعد التطبيق (=$PRE)"; exit 1; }
 
 echo "▶ [6] المرحلة ب — الحزمة الكاملة على (أساس+062)"
-b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0
+b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
   if [[ "$b" == "38_portal_users_least_privilege.sql" && "$b_p0b" = "0" ]]; then
@@ -88,13 +95,19 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
       b_p0e=1
     fi
   fi
-  if [[ "$b" == "40_flexible_committee_policy.sql" && "$b_p0f" = "0" ]]; then
-    "${PSQL[@]}" -d "$DBB" -f "$P0F" >/tmp/p0f_b.log 2>&1 || { echo "❌ فشل تطبيق P0-1f في المرحلة ب"; cat /tmp/p0f_b.log; exit 1; }
-    b_p0f=1
+  if [[ "$b" == "40_flexible_committee_policy.sql" ]]; then
+    if [[ "$b_p0f" = "0" ]]; then
+      "${PSQL[@]}" -d "$DBB" -f "$P0F" >/tmp/p0f_b.log 2>&1 || { echo "❌ فشل تطبيق P0-1f في المرحلة ب"; cat /tmp/p0f_b.log; exit 1; }
+      b_p0f=1
+    fi
+    if [[ "$b_p0g" = "0" ]]; then
+      "${PSQL[@]}" -d "$DBB" -f "$P0G" >/tmp/p0g_b.log 2>&1 || { echo "❌ فشل تطبيق P0-1g في المرحلة ب"; cat /tmp/p0g_b.log; exit 1; }
+      b_p0g=1
+    fi
   fi
   "${PSQL[@]}" -d "$DBB" -f "$f" >/tmp/phaseB.log 2>&1 || { echo "❌ المرحلة ب فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseB.log | head -5; exit 1; }
   b_pass=$((b_pass+1))
 done
-echo "   ✓ المرحلة ب: $b_pass ملفّ نجح على (أساس+062+P0-1b/P0-1d/P0-1e/P0-1f)"
+echo "   ✓ المرحلة ب: $b_pass ملفّ نجح على (أساس+062+P0-1b/P0-1d/P0-1e/P0-1f/P0-1g)"
 
-echo "▶ [7] ✅ F1 proof PASS — Phase A(061)=$a_pass نجح/$a_skip مؤجَّل · 062 ✓ · P0-1b/P0-1d/P0-1e/P0-1f ✓ · Phase B=$b_pass نجح — خروج 0"
+echo "▶ [7] ✅ F1 proof PASS — Phase A(061)=$a_pass نجح/$a_skip مؤجَّل · 062 ✓ · P0-1b/P0-1d/P0-1e/P0-1f/P0-1g ✓ · Phase B=$b_pass نجح — خروج 0"
