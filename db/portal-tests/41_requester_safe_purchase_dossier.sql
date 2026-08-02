@@ -64,16 +64,16 @@ BEGIN
      'p0h_other','purchase',null,null,null)
   ON CONFLICT (id) DO NOTHING;
 
-  INSERT INTO portal_request_items(request_id,seq,description,unit,qty,unit_price,line_total,received_qty,category,notes)
-  VALUES ('REQ-P0H-CLOSED',1,'مضخة صناعية','حبة',2,49382.5,98765,2,'معدات','مواصفة فنية')
+  INSERT INTO portal_request_items(request_id,seq,description,unit,qty,unit_price,received_qty,category,notes)
+  VALUES ('REQ-P0H-CLOSED',1,'مضخة صناعية','حبة',2,49382.5,2,'معدات','مواصفة فنية')
   RETURNING id INTO v_item_id;
 
-  INSERT INTO portal_request_items(request_id,seq,description,unit,qty,unit_price,line_total,received_qty)
+  INSERT INTO portal_request_items(request_id,seq,description,unit,qty,unit_price,received_qty)
   VALUES
-    ('REQ-P0H-PO',1,'صنف قيد الاعتماد','حبة',5,11111,55555,0),
-    ('REQ-P0H-RETURN',1,'صنف يحتاج توضيح','حبة',4,11111,44444,0),
-    ('REQ-P0H-EXP',1,'بند صرف','حبة',1,33333,33333,0),
-    ('REQ-P0H-OTHER',1,'صنف مستخدم آخر','حبة',2,11111,22222,0);
+    ('REQ-P0H-PO',1,'صنف قيد الاعتماد','حبة',5,11111,0),
+    ('REQ-P0H-RETURN',1,'صنف يحتاج توضيح','حبة',4,11111,0),
+    ('REQ-P0H-EXP',1,'بند صرف','حبة',1,33333,0),
+    ('REQ-P0H-OTHER',1,'صنف مستخدم آخر','حبة',2,11111,0);
 
   INSERT INTO portal_approvals(request_id,seq,stage_label,resolver,approver,decision,comment,acted_at,cycle)
   VALUES
@@ -109,7 +109,6 @@ BEGIN
   PERFORM set_config('app.portal_transition', '0', true);
 END $seed$;
 
--- RD1–RD8: هوية الطالب الأولى والعقد الآمن.
 BEGIN;
   SET LOCAL ROLE authenticated;
   SELECT set_config('request.jwt.claims','{"email":"p0h_requester@aldeyabi.com","role":"authenticated"}',true);
@@ -209,7 +208,6 @@ BEGIN;
   END $requester_tests$;
 ROLLBACK;
 
--- RD9: مستخدم آخر يرى طلبه فقط؛ لا توجد parameter لاختيار صاحب آخر.
 BEGIN;
   SET LOCAL ROLE authenticated;
   SELECT set_config('request.jwt.claims','{"email":"p0h_other@aldeyabi.com","role":"authenticated"}',true);
@@ -229,7 +227,6 @@ BEGIN;
   END $other_user$;
 ROLLBACK;
 
--- RD10: anon لا يملك EXECUTE.
 DO $anon_test$
 BEGIN
   IF has_function_privilege('anon','public.portal_my_purchase_dossiers()','EXECUTE') THEN
