@@ -2,7 +2,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  حزمة اختبار البوابة (النظام 3)
 #  تُحمّل portal-standalone.sql على قاعدة نظيفة، ثم تشغّل الحزمة كاملة.
-#  P0-1b/P0-1c/P0-1d تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
+#  P0-1b/P0-1c/P0-1d/P0-1e تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -71,7 +71,8 @@ run_sql "المستندات الداعمة للصرف المباشر (062)" "$HE
 run_sql "P0-1b/P0-1c: إغلاق تجاوز session_user + أقلّ امتياز launch hardening" "$ROOT/db/portal-migrations/p0_1b-portal-users-guard-no-session-user-jwt-bypass.sql"
 run_sql "أقلّ امتياز على portal_users: RLS + دليل آمن + منع التصعيد" "$HERE/38_portal_users_least_privilege.sql"
 run_sql "P0-1d: سرية عروض الأسعار + صلاحية الصرف المباشر المستقلة" "$ROOT/db/portal-migrations/p0_1d-quote-confidentiality-direct-expense-permission.sql"
-run_sql "اختبار P0-1d: الطالب لا يرى العروض والصرف المباشر بصلاحية مستقلة" "$HERE/39_quote_confidentiality_direct_expense_permission.sql"
+run_sql "P0-1e: منح قراءة RLS اللازمة لسرية العروض" "$ROOT/db/portal-migrations/p0_1e-quote-confidentiality-rls-grants.sql"
+run_sql "اختبار P0-1d/P0-1e: الطالب لا يرى العروض والصرف المباشر بصلاحية مستقلة" "$HERE/39_quote_confidentiality_direct_expense_permission.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (207 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (212 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
