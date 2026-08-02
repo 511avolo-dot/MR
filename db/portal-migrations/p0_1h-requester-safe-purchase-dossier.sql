@@ -243,6 +243,7 @@ BEGIN
           WHERE doc.request_id = r.id
             AND doc.active = true
             AND doc.payment_id IS NULL
+            AND doc.document_type IN ('memo','other','receipt')
         ), '[]'::jsonb)
       ) AS dossier
     FROM public.portal_requests r
