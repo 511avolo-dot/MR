@@ -66,6 +66,9 @@ jobs:
       - name: عقد الواجهة المؤسسية ومعاينة المستندات
         run: node scripts/e2e/enterprise-ui-contract.test.mjs
 
+      - name: عقد صلاحية ملفات عروض الأسعار السرية
+        run: node scripts/e2e/portal-quote-authz.test.mjs
+
       - name: تحقّق قطعة الأساس staging (F1 drift guard)
         run: node scripts/deploy/build-baseline.mjs --check
 
