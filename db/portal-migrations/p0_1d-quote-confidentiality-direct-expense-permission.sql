@@ -62,10 +62,19 @@ GRANT EXECUTE ON FUNCTION public.portal_can_view_quotes(text) TO authenticated, 
 
 -- Seed confidential-quote visibility for sector managers/coordinators.
 -- Procurement retains visibility through can_manage_procurement/can_issue_po/can_approve_award.
-UPDATE public.portal_jobs
-SET permissions = coalesce(permissions, '{}'::jsonb) || jsonb_build_object('can_view_quotes', true)
-WHERE key LIKE 'sector_mgr_%'
-   OR key IN ('ops_coord', 'proj_coord');
+-- portal_jobs is protected by portal_config_guard; use the same guarded transition flag
+-- used by sanctioned migrations/seeds, then reset it immediately.
+DO $seed_quote_visibility$
+BEGIN
+  PERFORM set_config('app.portal_transition', '1', true);
+
+  UPDATE public.portal_jobs
+  SET permissions = coalesce(permissions, '{}'::jsonb) || jsonb_build_object('can_view_quotes', true)
+  WHERE key LIKE 'sector_mgr_%'
+     OR key IN ('ops_coord', 'proj_coord');
+
+  PERFORM set_config('app.portal_transition', '0', true);
+END $seed_quote_visibility$;
 
 -- Confidential offer/award policies. portal_can_see_request was too broad because
 -- it includes the original requester.
