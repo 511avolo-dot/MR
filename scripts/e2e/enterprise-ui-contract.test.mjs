@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 
 const middleware = readFileSync('functions/_middleware.js', 'utf8');
 const css = readFileSync('assets/enterprise-ui.css', 'utf8');
+const generatedCss = readFileSync('assets/generated-document-studio.css', 'utf8');
 const quoteCss = readFileSync('assets/quote-document-studio.css', 'utf8');
 const accessCss = readFileSync('assets/access-inspector.css', 'utf8');
 const ui = readFileSync('assets/enterprise-ui.js', 'utf8');
 const docs = readFileSync('assets/document-studio.js', 'utf8');
+const generated = readFileSync('assets/generated-document-studio.js', 'utf8');
 const quotes = readFileSync('assets/quote-document-studio.js', 'utf8');
 const policies = readFileSync('assets/policy-studio.js', 'utf8');
 const access = readFileSync('assets/access-inspector.js', 'utf8');
@@ -19,6 +21,7 @@ function ok(message){ passed += 1; console.log('  ✓ ' + message); }
 console.log('▶ Enterprise UI contract');
 assert.match(middleware, /enterprise-ui\.css/);
 assert.match(middleware, /document-studio\.js/);
+assert.match(middleware, /generated-document-studio\.js/);
 assert.match(middleware, /quote-document-studio\.js/);
 assert.match(middleware, /policy-studio\.js/);
 assert.match(middleware, /access-inspector\.js/);
@@ -30,9 +33,10 @@ assert.match(css, /:focus-visible/);
 assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /\.eds-root/);
 assert.match(css, /\.eps-shell/);
+assert.match(generatedCss, /\.gds-root/);
 assert.match(quoteCss, /\.qds-pane/);
 assert.match(accessCss, /\.eai-shell/);
-ok('design system includes focus, reduced-motion, document, quotation, policy and access surfaces');
+ok('design system includes focus, reduced-motion, uploaded, generated, quotation, policy and access surfaces');
 
 assert.match(ui, /data-enterprise-ui/);
 assert.match(ui, /eui-skip-link/);
@@ -47,6 +51,13 @@ assert.match(docs, /URL\.revokeObjectURL/);
 assert.match(docs, /aria-modal/);
 assert.doesNotMatch(docs, /target=["']_blank/);
 ok('document studio fetches authenticated blobs, stays in portal and revokes object URLs');
+
+assert.match(generated, /window\.printEl = function/);
+assert.match(generated, /privacySanitize/);
+assert.match(generated, /طباعة \/ حفظ PDF/);
+assert.match(generated, /iframe\.srcdoc/);
+assert.doesNotMatch(generated, /window\.open\(/);
+ok('generated document studio upgrades print-only documents and strips financial fields for unauthorized views');
 
 assert.match(quotes, /\/api\/portal-quote\?key=/);
 assert.match(quotes, /window\.openQuoteViewer = open/);
@@ -72,7 +83,7 @@ assert.doesNotMatch(access, /\.rpc\(/);
 assert.doesNotMatch(access, /\.from\(/);
 ok('access inspector is read-only and explains effective access from the existing permission model');
 
-const combined = [middleware, css, quoteCss, accessCss, ui, docs, quotes, policies, access].join('\n');
+const combined = [middleware, css, generatedCss, quoteCss, accessCss, ui, docs, generated, quotes, policies, access].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /service_role/i);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
