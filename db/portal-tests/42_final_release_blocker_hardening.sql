@@ -171,12 +171,14 @@ VALUES ('docs/inst/REQ-P0I-PAY/12345678.pdf','REQ-P0I-PAY','inst','application/p
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0i_proc@aldeyabi.com","role":"authenticated"}',true);
+SELECT portal_payment_request('REQ-P0I-PAY','bank',1150,null,
+  jsonb_build_object('iban','SA1234567890123456789012','account_name','P0I','proof_key','docs/inst/REQ-P0I-PAY/12345678.pdf'),null);
+RESET ROLE;
 DO $payment_with_doc$
-DECLARE v_result jsonb; v_pid bigint; v_count int;
+DECLARE v_pid bigint; v_count int;
 BEGIN
-  v_result:=portal_payment_request('REQ-P0I-PAY','bank',1150,null,
-    jsonb_build_object('iban','SA1234567890123456789012','account_name','P0I','proof_key','docs/inst/REQ-P0I-PAY/12345678.pdf'),null);
-  v_pid:=(v_result->>'id')::bigint;
+  SELECT id INTO v_pid FROM portal_payments WHERE request_id='REQ-P0I-PAY';
+  IF v_pid IS NULL THEN RAISE EXCEPTION 'P0I-10 fail: payment was not created'; END IF;
   SELECT count(*) INTO v_count FROM portal_request_documents
    WHERE payment_id=v_pid AND storage_key='docs/inst/REQ-P0I-PAY/12345678.pdf'
      AND document_type='advance_payment';
@@ -187,7 +189,6 @@ BEGIN
   RAISE NOTICE 'PASS P0I-10 payment evidence receipt consumed and linked to payment';
 END;
 $payment_with_doc$;
-RESET ROLE;
 
 -- Finance approver approves. Different finance executor must provide a fresh execution proof.
 SET LOCAL ROLE authenticated;
@@ -215,20 +216,25 @@ VALUES ('docs/pay/REQ-P0I-PAY/87654321.pdf','REQ-P0I-PAY','pay','application/pdf
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0i_fin2@aldeyabi.com","role":"authenticated"}',true);
+SELECT portal_payment_transition((SELECT id FROM portal_payments WHERE request_id='REQ-P0I-PAY'),'disburse',null,null,
+  jsonb_build_object('proof_key','docs/pay/REQ-P0I-PAY/87654321.pdf'),'p0i-with-proof');
+RESET ROLE;
 DO $disburse_with_proof$
-DECLARE v_result jsonb; v_pid bigint; v_count int;
+DECLARE v_pid bigint; v_count int;
 BEGIN
   SELECT id INTO v_pid FROM portal_payments WHERE request_id='REQ-P0I-PAY';
-  v_result:=portal_payment_transition(v_pid,'disburse',null,null,
-    jsonb_build_object('proof_key','docs/pay/REQ-P0I-PAY/87654321.pdf'),'p0i-with-proof');
-  IF v_result->>'status'<>'disbursed' THEN RAISE EXCEPTION 'P0I-12 fail: valid proof did not disburse'; END IF;
+  IF (SELECT status FROM portal_payments WHERE id=v_pid) <> 'disbursed' THEN
+    RAISE EXCEPTION 'P0I-12 fail: valid proof did not disburse';
+  END IF;
   SELECT count(*) INTO v_count FROM portal_request_documents
    WHERE payment_id=v_pid AND storage_key='docs/pay/REQ-P0I-PAY/87654321.pdf' AND source_stage='payment_execution';
   IF v_count<>1 THEN RAISE EXCEPTION 'P0I-12 fail: execution proof not linked'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM portal_upload_receipts WHERE storage_key='docs/pay/REQ-P0I-PAY/87654321.pdf' AND consumed_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'P0I-12 fail: execution receipt not consumed';
+  END IF;
   RAISE NOTICE 'PASS P0I-12 fresh execution proof required, consumed and linked';
 END;
 $disburse_with_proof$;
-RESET ROLE;
 
 -- D. Owner-approved committee boundary.
 DO $doa_boundary$
