@@ -28,6 +28,7 @@ const KIND_PERM = {
 };
 const PAYMENT_READ_PERMS = ['can_see_finance', 'can_manage_procurement', 'can_disburse'];
 const STOCK_READ_PERMS = ['can_verify_stock', 'can_manage_procurement'];
+const RETURN_READ_PERMS = ['can_verify_stock', 'can_manage_procurement', 'can_see_finance'];
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -168,7 +169,7 @@ async function loadDocumentReference(env, base, key, kind, reqId) {
       base,
       `portal_returns?doc_key=eq.${encodedKey}&request_id=eq.${encodedReq}&select=id&limit=1`,
     );
-    if (rows.length) return { access: 'stock', row: rows[0] };
+    if (rows.length) return { access: 'return', row: rows[0] };
   }
 
   return null;
@@ -306,6 +307,10 @@ export async function onRequestGet({ request, env }) {
   }
   if (reference.access === 'stock'
       && !(await hasAnyPerm(env, base, jwt, STOCK_READ_PERMS))) {
+    return new Response('forbidden', { status: 403 });
+  }
+  if (reference.access === 'return'
+      && !(await hasAnyPerm(env, base, jwt, RETURN_READ_PERMS))) {
     return new Response('forbidden', { status: 403 });
   }
 

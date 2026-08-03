@@ -2656,7 +2656,9 @@ const PA_EVREMAP={ stage_rejected:'rejected', stage_returned:'returned', payment
 function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pending_pay')?'pending':pay.status;
   const m={ _id:pay.id, no:'PV-DG26-'+String(pay.request_id||'').slice(-4), amount:Number(pay.amount)||0,
     createdAt:pa_ms(pay.created_at), type:pay.kind, status:st, reqBy:pay.requested_by,
-    approvedBy:pay.approved_by, approvedAt:pa_ms(pay.approved_at), disbursedBy:pay.disbursed_by, disbursedAt:pa_ms(pay.disbursed_at) };
+    approvedBy:pay.approved_by, approvedAt:pa_ms(pay.approved_at), disbursedBy:pay.disbursed_by, disbursedAt:pa_ms(pay.disbursed_at),
+    legacyEvidenceQuarantined:pay.legacy_evidence_quarantined===true,
+    legacyEvidenceReason:pay.legacy_evidence_reason||'' };
   if(pay.kind==='bank'){ m.kindLabel='تحويل بنكي'; m.bank={accName:d.account_name||'',iban:d.iban||'',bankName:d.bank_name||''}; }
   else if(pay.kind==='custody'){ m.kindLabel='عهدة نقدية — '+uName(pay.custody_to); m.custody={to:pay.custody_to}; }
   else { m.kindLabel='آجل'; m.credit={dueDate:d.due_date||'',terms:d.terms||''}; }
@@ -4764,7 +4766,8 @@ async function pa_docAttach(reqId){
     var sum=await pa_sha256(file);
     await pa_rpc('portal_attach_document',{ p_request_id:reqId, p_document_type:PA_DOCUP.type, p_storage_key:key,
       p_mime_type:file.type, p_title:(PA_DOCUP.title||'').trim()||null, p_description:(PA_DOCUP.desc||'').trim()||null,
-      p_original_file_name:file.name||null, p_size_bytes:file.size||null, p_checksum:sum, p_payment_id:null, p_source_stage:null });
+      p_original_file_name:file.name||null, p_size_bytes:file.size||null, p_checksum:sum, p_payment_id:null,
+      p_source_stage:(((REQS||[]).find(function(x){return x.id===reqId;})||{}).reqType==='direct_expense'?'payment_request':null) });
     PA_DOCUP={ type:'quotation', title:'', desc:'' };
     toast('أُرفِق المستند','ok'); await loadAll(); render();
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر الإرفاق'),'err'); }
@@ -6042,6 +6045,16 @@ function pa_expenseExecPanel(r){
       +(canVoid?(' <button class="btn btn-danger btn-sm" onclick="pa_voidDisb(\''+r.id+'\','+pay._id+')">'+ic('undo',13)+' إبطال</button>'):'')
       +'</div></div>';
   }
+  if(pay.legacyEvidenceQuarantined){
+    return '<div class="card" style="border-color:var(--danger-line)"><div class="sec-title"><span class="ico">'+ic('alert',16)+'</span>دليل طلب الدفع القديم محجور</div>'
+      +'<div class="muted" style="font-size:12.5px;margin-bottom:10px">لا يمكن نقل حالة الدفعة حتى إرفاق دليل موثّق جديد.</div>'
+      +(canDisb?('<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
+        +'<label class="btn btn-ghost btn-sm" for="legacy-pay-proof" style="cursor:pointer"><span id="legacy-pay-proofn">📎 اختر دليل الدفع (PDF/صورة)</span></label>'
+        +'<input id="legacy-pay-proof" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_legacyProofPick()">'
+        +'<button class="btn btn-gold btn-sm" id="legacy-pay-recover" onclick="pa_recoverLegacyEvidence(\''+r.id+'\','+pay._id+')">'+ic('check',14)+' توثيق وإلغاء الحجر</button></div>')
+        :'<div class="muted" style="font-size:12px">يتطلّب الإجراء مسؤول صرف أو مديراً.</div>')
+      +'</div>';
+  }
   if(r.phase!=='pay' || !canDisb){
     return '<div class="card muted" style="font-size:12.5px">'+ic('info',13)+' التنفيذ متاح لمسؤول البنك بعد اكتمال سلسلة الاعتماد.</div>';
   }
@@ -6056,6 +6069,18 @@ function pa_expenseExecPanel(r){
         +'<button class="btn btn-gold btn-sm" id="disb-exec" onclick="pa_execDisb(\''+r.id+'\','+pay._id+')">'+ic('check',14)+' تأكيد تنفيذ الصرف</button>'
       +'</div>'))
   +'</div>';
+}
+function pa_legacyProofPick(){ var i=$('legacy-pay-proof'),n=$('legacy-pay-proofn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>24?f.name.slice(0,22)+'…':f.name)):'📎 اختر دليل الدفع (PDF/صورة)'; } }
+async function pa_recoverLegacyEvidence(reqId,payId){
+  var input=$('legacy-pay-proof'); var file=(input&&input.files&&input.files[0])||null;
+  if(!file){ toast('اختر دليل الدفع أولاً','err'); return; }
+  if(!/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type) || file.size>10*1024*1024){ toast('الملف يجب أن يكون PDF أو صورة وبحجم لا يتجاوز 10 ميجابايت','err'); return; }
+  var btn=$('legacy-pay-recover'); if(btn) btn.disabled=true;
+  try{
+    var key=await pa_docUpload('pay',reqId,file);
+    await pa_rpc('portal_recover_legacy_payment_evidence',{p_payment_id:payId,p_storage_key:key});
+    toast('وُثّق دليل الدفع وأُلغي الحجر','ok'); await pa_after(reqId);
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر توثيق الدليل'),'err'); }
 }
 function pa_disbProofPick(){ var i=$('disb-proof'),n=$('disb-proofn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>18?f.name.slice(0,16)+'…':f.name)):'📎 اختر ملفاً'; } }
 async function pa_execDisb(reqId,payId){

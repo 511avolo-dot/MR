@@ -6,6 +6,7 @@ const BASE = 'https://vpfnycxzqziltsnzxbpb.supabase.co';
 const REQ = 'REQ-DOC-AUTH';
 const PAYMENT_KEY = `docs/pay/${REQ}/payment001.pdf`;
 const REQUEST_KEY = `docs/reqdoc/${REQ}/request001.pdf`;
+const RETURN_KEY = `docs/ret/${REQ}/return001.pdf`;
 
 function env(bucket) {
   return {
@@ -34,6 +35,9 @@ async function withFetch(config, fn) {
       if (config.reference === 'payment') return response([{ id: 1, payment_id: 9, active: true, verification_status: 'verified' }]);
       if (config.reference === 'request') return response([{ id: 1, payment_id: null, active: true, verification_status: 'verified' }]);
       return response([]);
+    }
+    if (text.includes('/portal_returns?doc_key=')) {
+      return response(config.reference === 'return' ? [{ id: 7 }] : []);
     }
     return response([]);
   };
@@ -83,6 +87,22 @@ console.log('▶ portal document authorization');
 }
 
 {
+  let reads = 0;
+  const bucket = { get: async () => { reads += 1; return { body: 'return-proof', httpMetadata: { contentType: 'application/pdf' } }; } };
+  const result = await withFetch({ reference: 'return', perms: ['can_see_finance'] }, () => onRequestGet({ request: getRequest(RETURN_KEY), env: env(bucket) }));
+  assert.equal(result.status, 200); assert.equal(reads, 1);
+  ok('an in-scope finance reader can download return evidence exposed by return RLS');
+}
+
+{
+  let reads = 0;
+  const bucket = { get: async () => { reads += 1; return { body: 'return-proof', httpMetadata: { contentType: 'application/pdf' } }; } };
+  const result = await withFetch({ reference: 'return', perms: [] }, () => onRequestGet({ request: getRequest(RETURN_KEY), env: env(bucket) }));
+  assert.equal(result.status, 403); assert.equal(reads, 0);
+  ok('request scope alone cannot download return evidence');
+}
+
+{
   let writes = 0;
   const bucket = { put: async () => { writes += 1; } };
   const req = new Request(`https://preview.example/api/portal-doc?request_id=${REQ}&kind=pay`, {
@@ -96,4 +116,3 @@ console.log('▶ portal document authorization');
 }
 
 console.log(`\nPortal document authorization: ${passed} checks passed.`);
-

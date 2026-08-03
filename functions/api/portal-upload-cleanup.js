@@ -12,6 +12,7 @@ const MAX_EXPIRED_RECEIPTS = 50;
 const MAX_LIST_PAGES = 2;
 const LIST_PAGE_SIZE = 100;
 const ORPHAN_GRACE_MS = 60 * 60 * 1000;
+const MAX_CURSOR_LENGTH = 2048;
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -128,8 +129,19 @@ async function cleanupExpiredReceipts(env) {
   return { scanned: keys.length, objectsDeleted, receiptsDeleted, failures };
 }
 
-async function cleanupOrphanObjects(env) {
-  let cursor;
+function normalizeCursor(value) {
+  if (value == null || value === '') return undefined;
+  if (typeof value !== 'string'
+      || value.length > MAX_CURSOR_LENGTH
+      || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new TypeError('invalid cleanup cursor');
+  }
+  return value;
+}
+
+async function cleanupOrphanObjects(env, startCursor) {
+  let cursor = startCursor;
+  let nextCursor = null;
   let pages = 0;
   let scanned = 0;
   let deleted = 0;
@@ -160,10 +172,14 @@ async function cleanupOrphanObjects(env) {
       }
     }
 
-    if (!page.truncated || !page.cursor) break;
+    if (!page.truncated || !page.cursor) {
+      nextCursor = null;
+      break;
+    }
     cursor = page.cursor;
+    nextCursor = cursor;
   }
-  return { pages, scanned, deleted, failures };
+  return { pages, scanned, deleted, failures, nextCursor };
 }
 
 export async function onRequestPost({ request, env }) {
@@ -178,9 +194,17 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'unauthorized' }, 401);
   }
 
+  let cursor;
+  try {
+    const body = await request.json().catch(() => ({}));
+    cursor = normalizeCursor(body && body.cursor);
+  } catch (_) {
+    return json({ error: 'invalid cleanup cursor' }, 400);
+  }
+
   try {
     const expiredReceipts = await cleanupExpiredReceipts(env);
-    const orphanObjects = await cleanupOrphanObjects(env);
+    const orphanObjects = await cleanupOrphanObjects(env, cursor);
     return json({
       ok: true,
       bounded: {
@@ -195,4 +219,3 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'cleanup failed closed' }, 502);
   }
 }
-

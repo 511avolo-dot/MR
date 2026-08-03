@@ -16,9 +16,11 @@ function env(bucket, over = {}) {
   };
 }
 
-function request(secret = 'test-cron-secret') {
+function request(secret = 'test-cron-secret', body) {
   return new Request('https://preview.example/api/portal-upload-cleanup', {
-    method: 'POST', headers: { Authorization: `Bearer ${secret}` },
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
@@ -96,5 +98,45 @@ async function runCleanup({ referenced }) {
   ok('preserves an object referenced by normalized document history');
 }
 
-console.log(`\nPortal upload cleanup: ${passed} checks passed.`);
+{
+  const seen = [];
+  const deleted = [];
+  const lateKey = 'docs/reqdoc/REQ-CLEAN/orphan999.pdf';
+  const bucket = {
+    list: async ({ cursor }) => {
+      seen.push(cursor || null);
+      if (!cursor) return { objects: [], truncated: true, cursor: 'page-2' };
+      if (cursor === 'page-2') return { objects: [], truncated: true, cursor: 'page-3' };
+      return {
+        objects: [{ key: lateKey, uploaded: new Date(Date.now() - 2 * 60 * 60 * 1000) }],
+        truncated: false,
+      };
+    },
+    delete: async (keys) => { deleted.push(...(Array.isArray(keys) ? keys : [keys])); },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  try {
+    const first = await onRequestPost({ request: request(), env: env(bucket) });
+    const firstBody = await first.json();
+    assert.equal(firstBody.orphanObjects.nextCursor, 'page-3');
+    const second = await onRequestPost({ request: request('test-cron-secret', { cursor: firstBody.orphanObjects.nextCursor }), env: env(bucket) });
+    const secondBody = await second.json();
+    assert.equal(second.status, 200);
+    assert.equal(secondBody.orphanObjects.nextCursor, null);
+    assert.deepEqual(seen, [null, 'page-2', 'page-3']);
+    assert.deepEqual(deleted, [lateKey]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  ok('returns and accepts a continuation cursor so later pages are eventually scanned');
+}
 
+{
+  const bucket = { list: async () => ({ objects: [], truncated: false }), delete: async () => {} };
+  const response = await onRequestPost({ request: request('test-cron-secret', { cursor: '\u0000bad' }), env: env(bucket) });
+  assert.equal(response.status, 400);
+  ok('rejects malformed continuation cursors before touching storage');
+}
+
+console.log(`\nPortal upload cleanup: ${passed} checks passed.`);

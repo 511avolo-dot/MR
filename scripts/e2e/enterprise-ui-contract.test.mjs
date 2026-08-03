@@ -17,6 +17,7 @@ const portalDoc = readFileSync('functions/api/portal-doc.js', 'utf8');
 const quoteEndpoint = readFileSync('functions/api/portal-quote.js', 'utf8');
 const hardening = readFileSync('db/portal-migrations/p0_1i-final-release-blocker-hardening.sql', 'utf8');
 const remediation = readFileSync('db/portal-migrations/p0_1j-exact-head-review-remediation.sql', 'utf8');
+const independentRemediation = readFileSync('db/portal-migrations/p0_1k-independent-review-remediation.sql', 'utf8');
 const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
 const portal = readFileSync('purchase-portal.html', 'utf8');
 
@@ -97,6 +98,7 @@ assert.match(portalDoc, /expires_at/);
 assert.match(portalDoc, /portal_effective_perm/);
 assert.match(portalDoc, /loadDocumentReference/);
 assert.match(portalDoc, /PAYMENT_READ_PERMS/);
+assert.match(portalDoc, /RETURN_READ_PERMS/);
 ok('Cloudflare upload/download requires effective permission, request scope and a normalized document reference');
 
 assert.match(hardening, /portal_validate_upload_receipt/);
@@ -116,12 +118,21 @@ assert.match(remediation, /legacy_evidence_quarantined/);
 assert.doesNotMatch(remediation, /\b063[_-]/);
 ok('P0-1j combines scope and capability, redacts requester feeds, and quarantines untrusted legacy evidence');
 
+assert.match(independentRemediation, /portal_direct_payment_evidence_before/);
+assert.match(independentRemediation, /source_stage = 'payment_request'/);
+assert.match(independentRemediation, /portal_recover_legacy_payment_evidence/);
+assert.doesNotMatch(independentRemediation, /'amount', p\.amount/);
+assert.doesNotMatch(independentRemediation, /\b063[_-]/);
+ok('P0-1k enforces distinct verified direct-payment evidence, status-only feeds and controlled legacy recovery');
+
 assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
 assert.match(cleanup, /aldeyabi-quotes-staging/);
 assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
 assert.match(cleanup, /MAX_LIST_PAGES = 2/);
 assert.match(cleanup, /page\.truncated/);
 assert.match(cleanup, /page\.cursor/);
+assert.match(cleanup, /nextCursor/);
+assert.match(cleanup, /normalizeCursor/);
 assert.doesNotMatch(cleanup, /mwbjoysuybgbrvfrprex/);
 ok('cleanup is bounded, paginated and hard-locked to the approved staging resources');
 
@@ -130,9 +141,10 @@ assert.match(portal, /pa_mergePerms/);
 assert.match(portal, /portal_safe_visible_direct_expenses/);
 assert.match(portal, /portal_safe_visible_payments/);
 assert.match(portal, /d\.verification==='verified'/);
+assert.match(portal, /pa_recoverLegacyEvidence/);
 ok('portal consumes job-aware direct permission, safe requester feeds and verified-document state');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, cleanup].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');
