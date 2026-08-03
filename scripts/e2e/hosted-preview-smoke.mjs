@@ -61,6 +61,7 @@ async function probeOnce() {
   assertNoProductionReference(portalHtml, 'purchase portal HTML');
 
   const requiredMarkers = [
+    '/assets/portal-functional-studios.css?v=1',
     '/assets/generated-document-studio.css?v=1',
     '/assets/quote-document-studio.css?v=1',
     '/assets/access-inspector.css?v=1',
@@ -79,6 +80,7 @@ async function probeOnce() {
   assert.equal(portalHtml.includes('src="/assets/enterprise-ui.js'), false, 'Rejected enterprise interaction layer is still injected.');
 
   for (const asset of [
+    '/assets/portal-functional-studios.css?v=1',
     '/assets/document-studio.js?v=2',
     '/assets/generated-document-studio.js?v=1',
     '/assets/quote-document-studio.js?v=1',
@@ -117,7 +119,7 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (result.ready) {
       console.log('  ✓ portal-config resolves only to isolated staging');
       console.log('  ✓ staging anon/publishable key passed the live Auth probe');
-      console.log('  ✓ owner-approved legacy design is restored; functional/security assets are deployed');
+      console.log('  ✓ owner-approved legacy design is restored; scoped functional/security assets are deployed');
       console.log('  ✓ payment evidence guard is present in the hosted Preview');
       console.log('  ✓ unauthenticated quotation and supporting-document reads are denied');
       console.log(`\nHosted Preview smoke gate: PASS (attempt ${attempt}/${attempts}).`);
