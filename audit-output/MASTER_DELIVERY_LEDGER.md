@@ -7,17 +7,20 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 - **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Source snapshot used for generation:** `1e44e33` (the head the owner independently rechecked; the G0-F fixes in this commit are applied on top of it — this line names the snapshot, it is not auto-updated each commit)
 - **Binding constraints:** no production/DB/storage/config change; `budget_enforce=0`; `txn_notifications=0`; Systems 1/2 unchanged; manual IBAN allowed (reason+badge+audit); admin superuser accepted (labeled+audited).
 
-> **2026-08-03 P0-1l controlling update:** exact head under construction from
-> `1b334dc81a`; the independent review raised seven additional current findings.
+> **2026-08-03 P0-1n controlling update:** the fresh review of exact head
+> `f8254fb134` raised two additional current findings after the prior seven.
 > P0-1l is implemented and transaction-tested, and Staging migrations
 > `20260803121401_p0_1l_final_independent_review_remediation` and
 > `20260803123153_p0_1m_clean_install_raw_read_grants` are applied only on
-> `vpfnycxzqziltsnzxbpb`. It adds actual-binding R2 sentinel attestation,
+> `vpfnycxzqziltsnzxbpb`; P0-1n migration
+> `20260803125546_p0_1n_direct_expense_raw_read_boundary` is also applied only
+> there after a rollback transaction passed. The remediation adds actual-binding R2 sentinel attestation,
 > requester-safe purchase routing/RLS, unconditional direct-expense evidence,
 > pre-P0-1i duplicate-key quarantine, receipt lifecycle cleanup, exact-SHA hosted
 > smoke, shared-helper workflow coverage, and explicit clean-install RLS read
-> grants. The first exact-head CI run exposed the missing baseline grants;
-> Preview/smoke passed while the corrected exact-head CI and another
+> grants. P0-1n restores the finance-only raw direct-expense boundary and the
+> guarded launcher now carries the complete versioned, SHA-pinned P0 chain.
+> Corrected exact-head CI/Preview and another
 > independent review are still pending. Security Advisor remains open (96
 > entries: 7 INFO / 89 WARN), as do authenticated hosted multi-role E2E,
 > credential rotation, leaked-password protection, legacy QA/missing-object
@@ -137,7 +140,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | RECUR-BLOCKED | P1 | recurring | over-budget/no-doc recurring → durable blocked work item (not `request_id=NULL` audit) | Stage 8/9 | open |
 | HISTORY-PRESERVE | P1 | workflow | resubmit clears approver/comment/timestamps — target: new revision/cycle, retain prior | Stage 5/9 | open |
 | FISCAL-POLICY | P2 | budget | document + freeze `budget_period` at submit (not inferred from created_at forever) | Stage 8 (doc) | open |
-| S1-GUARD-COUPLE | P1 | deploy | command-coupled environment guard — validated target must be the target the command uses | Stage 1 | ⚠️ **REPO-SIDE PASS; external staging NOT RUN (F1–F5 convergence).** F1 honest baseline lineage (`db/staging-bootstrap/baseline_through_061.sql` + 062; two-mode launcher bootstrap/apply-062; **`verify-baseline.sh` PASS** — empty DB→061→062→29-suite on local PG16; invented manifest REMOVED). F2/F3 **real browser E2E PASS** (`browser-fixture.test.mjs`, Chromium: real `#pa-*` login + HTTP/WebSocket/Service-Worker boundary). F4 one runner (`browser-run.mjs`). CLI pinned `2.110.0`. Live `db push` + real staging browser E2E = **Section 2 NOT RUN (owner-gated)**. See STAGE1 doc §Section 1/2 · <s>~~G1-R6~~</s> |
+| S1-GUARD-COUPLE | P1 | deploy | command-coupled environment guard — validated target must be the target the command uses | Stage 1 | ⚠️ **REPO-SIDE PASS; clean external rebuild NOT RUN.** F1 honest lineage: baseline(061) → 062 → SHA-pinned ordered P0-1b…P0-1n through three explicit launcher modes; `verify-baseline.sh` covers the same chain on clean PG16. F2/F3 browser fixture PASS. F4 one runner. CLI pinned `2.110.0`. Live clean rebuild + authenticated hosted E2E remain owner-gated. |
 | SUPPLIER-ENV | P1 | deploy | `supplier-quote.html` embedded prod project — route via `/api/portal-config` | Stage 1 | **implemented (Stage 1, repo-only) — runtime `/api/portal-config` fail-closed; pending Gate 1** |
 | PAGES-DEPLOY | P1 | deploy | GitHub Pages published Function-dependent pages (404 on `/api/*`) | Stage 1 | **implemented + G1-03/G1-R2-04-hardened (Stage 1, repo-only) — per-page `needs_functions` manifest + set-equality `--check` + query+hash-preserving stub (script at end of body, actual-DOM test); `invite.html`/`register-portal.html` added; pending Gate 1** |
 | CFG-ENV-G1-02 | P1 | deploy | env identity self-asserted (`PORTAL_PROD_BRANCH`/`PORTAL_ENV`); no-ref JWT unbound; preview→prod bypass | Stage 1 | **implemented + G1-R2-02/03-hardened (Stage 1, repo-only) — production branch is a code invariant (`main`), branch-absent ⇒ 503, production requires main+PROD_REF, preview requires ≠main+≠PROD_REF; no-ref JWT treated as unbound (needs expected-ref); exp/iss checks; pending Gate 1** |

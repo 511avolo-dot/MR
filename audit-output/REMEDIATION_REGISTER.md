@@ -1,6 +1,18 @@
 # REMEDIATION REGISTER
 
 ## P0-1l — Final independent exact-head review remediation (2026-08-03)
+- **Fresh-review follow-up (P0-1n):** exact-head review of `f8254fb134` found
+  that the generic raw-request helper widened direct-expense rows to ordinary
+  stage approvers and that the guarded deploy payload stopped at 062. P0-1n
+  retains the broad operational predicate only for purchase requests and keeps
+  direct-expense raw rows finance/procurement/disbursement-only; a non-finance
+  approver regression receives the redacted RPC feed but zero raw rows.
+  `scripts/deploy/supabase-push.mjs` now adds an explicit
+  `apply-remediations` phase containing the ordered, versioned, SHA-pinned
+  P0-1b…P0-1n chain and fails closed if the pending set differs.
+- **P0-1n Staging:** rollback transaction passed, then migration
+  `20260803125546_p0_1n_direct_expense_raw_read_boundary` was applied only on
+  `vpfnycxzqziltsnzxbpb`. Production and migration 063 remain untouched.
 - **Clean-install follow-up (P0-1m):** the first exact-head CI run exposed that
   the deterministic baseline lacked `authenticated` table-level `SELECT` on
   the raw child tables. P0-1m grants read only; P0-1l RLS remains the

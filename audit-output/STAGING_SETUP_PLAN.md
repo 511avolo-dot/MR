@@ -44,18 +44,21 @@ SUPABASE_CLI_PIN=2.x node scripts/deploy/verify-supabase-contract.mjs      # ass
 #   Repo/CI proof (empty DB → baseline → 062 → suite): `bash db/staging-bootstrap/verify-baseline.sh`.
 #   Verified live versions (057=20260727072143 … 061=20260729073619) kept as DOCUMENTARY only in
 #   db/staging-bootstrap/verified-live-versions.md. Do NOT run `migration repair`, hand-apply SQL, or mutate prod.
-# migrate — authoritative executor = Supabase CLI via scripts/deploy/supabase-push.mjs, TWO explicit modes (F1):
+# migrate — authoritative executor = Supabase CLI via scripts/deploy/supabase-push.mjs, THREE explicit modes (F1):
 #   --mode bootstrap : build workdir with baseline only → link --project-ref <ref> → verify → db push (empty staging).
 #   --mode apply-062 : workdir baseline+062, baseline already applied → assert EXACTLY {062} pending → db push.
+#   --mode apply-remediations : workdir baseline+062+the pinned P0-1b…P0-1n chain; baseline+062 must already be
+#       applied → assert EXACTLY the 12 ordered P0 versions pending → db push.
 #   Mode is required (omission fails closed). Password via SUPABASE_DB_PASSWORD env. raw-psql path REMOVED (G1-R4-02).
 GUARDED_REF=… SUPABASE_DB_PASSWORD=… node scripts/deploy/supabase-push.mjs --mode bootstrap   # (owner-gated live)
 GUARDED_REF=… SUPABASE_DB_PASSWORD=… node scripts/deploy/supabase-push.mjs --mode apply-062   # (owner-gated live)
+GUARDED_REF=… SUPABASE_DB_PASSWORD=… node scripts/deploy/supabase-push.mjs --mode apply-remediations # (owner-gated live)
 # e2e — one fixed launcher. REAL browser boundary = scripts/e2e/browser-run.mjs (Playwright context.route) which fails
 #   closed without the `playwright` package + E2E_BASE_URL. (scripts/e2e/run.mjs installs a Node-fetch guard for the
 #   harness only — NOT a browser boundary.)
 E2E_BASE_URL=… node scripts/env-guard.mjs --purpose e2e --ref "$STAGING_PROJECT_REF" --confirm STAGING --command browser-e2e
 # Preview any constructed command without running it (no secrets printed):
-node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push --dry-run
+node scripts/env-guard.mjs --purpose migrate --ref "$STAGING_PROJECT_REF" --confirm STAGING --command supabase-db-push --dry-run # constructs apply-remediations
 ```
 An explicit production target can no longer be smuggled in: `--project-ref mwbjoysuybgbrvfrprex`, `--db-url postgresql://…@db.<prod>…`,
 `sh -c` wrappers, and `--spec` are all rejected (`scripts/stage1-tests.mjs` negatives). The DB password is passed via env

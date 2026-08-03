@@ -19,6 +19,8 @@ const hardening = readFileSync('db/portal-migrations/p0_1i-final-release-blocker
 const remediation = readFileSync('db/portal-migrations/p0_1j-exact-head-review-remediation.sql', 'utf8');
 const independentRemediation = readFileSync('db/portal-migrations/p0_1k-independent-review-remediation.sql', 'utf8');
 const finalRemediation = readFileSync('db/portal-migrations/p0_1l-final-independent-review-remediation.sql', 'utf8');
+const directExpenseBoundary = readFileSync('db/portal-migrations/p0_1n-direct-expense-raw-read-boundary.sql', 'utf8');
+const supabasePush = readFileSync('scripts/deploy/supabase-push.mjs', 'utf8');
 const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
 const portal = readFileSync('purchase-portal.html', 'utf8');
 const portalWorkflow = readFileSync('.github/workflows/portal-tests.yml', 'utf8');
@@ -137,6 +139,15 @@ assert.doesNotMatch(finalRemediation, /portal_setting_num\('expense_docs_require
 assert.doesNotMatch(finalRemediation, /\b063[_-]/);
 ok('P0-1l routes requester purchases through the safe contract and makes evidence fail closed');
 
+assert.match(directExpenseBoundary, /v_req_type = 'direct_expense'/);
+assert.match(directExpenseBoundary, /can_see_finance/);
+assert.match(directExpenseBoundary, /can_approve_disbursement/);
+assert.match(supabasePush, /apply-remediations/);
+assert.match(supabasePush, /p0_1b-portal-users-guard/);
+assert.match(supabasePush, /p0_1n-direct-expense-raw-read-boundary/);
+assert.match(supabasePush, /parsePendingVersions/);
+ok('P0-1n preserves finance-only direct-expense rows and the guarded deploy payload includes the complete ordered remediation chain');
+
 assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
 assert.match(cleanup, /aldeyabi-quotes-staging/);
 assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
@@ -167,7 +178,7 @@ assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
 assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
 ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, cleanup].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

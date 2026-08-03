@@ -53,7 +53,7 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
 
   // dry-run يبني الهدف داخليّاً من المرجع المُتحقَّق منه (لا مرجع إنتاج)
   r = node([...G, '--purpose', 'migrate', '--command', 'supabase-db-push', '--dry-run']);
-  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.match(r.stdout, /supabase-push\.mjs/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يستدعي مُشغّل link→push --linked بالهدف');
+  assert.equal(r.status, 0); assert.match(r.stdout, new RegExp('--project-ref ' + STAGING)); assert.match(r.stdout, /supabase-push\.mjs --mode apply-remediations/); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-db-push يستدعي حمولة المعالجات الكاملة ثم link→push --linked بالهدف');
   // (G1-R3-02) browser-e2e يشغّل المُشغّل الثابت بلا --spec اعتباطي
   r = node([...G, '--purpose', 'e2e', '--command', 'browser-e2e', '--dry-run']);
   assert.equal(r.status, 0); assert.match(r.stdout, /scripts\/e2e\/browser-run\.mjs/); assert.match(r.stdout, new RegExp('E2E_SUPABASE_URL=https://' + STAGING)); ok('browser-e2e يستدعي متصفّح Playwright الفعليّ (browser-run.mjs) بالهدف (G1-R6-03)');
@@ -66,11 +66,14 @@ console.log('▶ env-guard (مُحوّلات G1-R2-01):');
 
 console.log('▶ launchers + net-allow (G1-R3-01/02):');
 {
-  // (F1) supabase-push وضعان: bootstrap (أساس فقط) + apply-062 (أساس+062، 062 وحدها معلّقة). dry-run بلا اتّصال.
+  // (F1) supabase-push: أساس ثم 062 ثم سلسلة P0 المثبّتة كاملة. dry-run بلا اتّصال.
   let r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: STAGING });
   assert.equal(r.status, 0); assert.match(r.stdout, /mode=bootstrap/); assert.match(r.stdout, /baseline_through_061/); assert.match(r.stdout, new RegExp('link --project-ref ' + STAGING)); assert.doesNotMatch(r.stdout, new RegExp(PROD)); ok('supabase-push --mode bootstrap: الأساس فقط، خطة link→push بالهدف');
   r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'apply-062'], { GUARDED_REF: STAGING });
   assert.equal(r.status, 0); assert.match(r.stdout, /mode=apply-062/); assert.match(r.stdout, /baseline_through_061/); assert.match(r.stdout, new RegExp(MIG_VERSION)); ok('supabase-push --mode apply-062: الأساس+062 و062 وحدها معلّقة');
+  r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'apply-remediations'], { GUARDED_REF: STAGING });
+  assert.equal(r.status, 0); assert.match(r.stdout, /mode=apply-remediations/); assert.match(r.stdout, /P0 chain 12\/12 sha/);
+  assert.match(r.stdout, /p0_1b_portal_users_guard/); assert.match(r.stdout, /p0_1n_direct_expense_raw_read_boundary/); ok('supabase-push --mode apply-remediations: الحمولة المرتبة الكاملة P0-1b…P0-1n');
   r = node(['scripts/deploy/supabase-push.mjs', '--dry-run'], { GUARDED_REF: STAGING });
   assert.notEqual(r.status, 0); assert.match(r.stderr, /--mode/); ok('supabase-push بلا --mode يفشل مغلقاً (خلط الوضع)');
   r = node(['scripts/deploy/supabase-push.mjs', '--dry-run', '--mode', 'bootstrap'], { GUARDED_REF: PROD });
@@ -78,7 +81,22 @@ console.log('▶ launchers + net-allow (G1-R3-01/02):');
   const bsha = createHash('sha256').update(readFileSync('db/staging-bootstrap/baseline_through_061.sql','utf8').replace(/\r\n/g,'\n')).digest('hex');
   const msha = createHash('sha256').update(readFileSync('db/portal-migrations/062-request-documents.sql','utf8').replace(/\r\n/g,'\n')).digest('hex');
   const pushSrc = readFileSync('scripts/deploy/supabase-push.mjs', 'utf8');
-  assert.match(pushSrc, new RegExp(bsha)); assert.match(pushSrc, new RegExp(msha)); ok('بصمتا الأساس و062 المثبَّتتان في المُشغّل تطابقان الملفّين (حارس انجراف)');
+  assert.match(pushSrc, new RegExp(bsha)); assert.match(pushSrc, new RegExp(msha));
+  const remediationFiles = [
+    'p0_1b-portal-users-guard-no-session-user-jwt-bypass.sql',
+    'p0_1d-quote-confidentiality-direct-expense-permission.sql',
+    'p0_1e-quote-confidentiality-rls-grants.sql',
+    'p0_1f-flexible-committee-policy.sql', 'p0_1g-po-chain-transition-window.sql',
+    'p0_1h-requester-safe-purchase-dossier.sql', 'p0_1i-final-release-blocker-hardening.sql',
+    'p0_1j-exact-head-review-remediation.sql', 'p0_1k-independent-review-remediation.sql',
+    'p0_1l-final-independent-review-remediation.sql', 'p0_1m-clean-install-raw-read-grants.sql',
+    'p0_1n-direct-expense-raw-read-boundary.sql',
+  ];
+  for (const file of remediationFiles) {
+    const sha = createHash('sha256').update(readFileSync('db/portal-migrations/' + file,'utf8').replace(/\r\n/g,'\n')).digest('hex');
+    assert.match(pushSrc, new RegExp(sha), `launcher hash missing for ${file}`);
+  }
+  ok('بصمات الأساس و062 وكل سلسلة P0 المثبَّتة تطابق ملفات الحمولة (حارس انجراف)');
   r = node(['scripts/deploy/supabase-push.mjs', '--mode', 'bootstrap'], { GUARDED_REF: STAGING });
   assert.notEqual(r.status, 0); ok('supabase-push (حيّ) يرفض غياب SUPABASE_DB_PASSWORD');
   r = node(['scripts/deploy/supabase-push.mjs', '--mode', 'bootstrap'], { GUARDED_REF: STAGING, SUPABASE_DB_PASSWORD: 'x' });

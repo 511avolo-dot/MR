@@ -78,8 +78,8 @@ if (purpose !== 'migrate' && purpose !== 'e2e') die('الغرض يجب أن يك
 const ADAPTERS = {
   // (G1-R3-01/G1-R4-01) المُشغّل يبني حمولة هجرة معزولة مُتحقَّقة بالبصمة ثم link→verify→dry-run→push --linked.
   'supabase-db-push': { purpose: 'migrate', build(r) {
-    return { program: 'node', args: ['scripts/deploy/supabase-push.mjs'], env: {},
-      show: `node scripts/deploy/supabase-push.mjs  (GUARDED_REF=${r} → build isolated workdir + verify 062 sha → link --project-ref ${r} → verify linked==${r} → db push --dry-run --linked → db push --linked; password via SUPABASE_DB_PASSWORD)` };
+    return { program: 'node', args: ['scripts/deploy/supabase-push.mjs', '--mode', 'apply-remediations'], env: {},
+      show: `node scripts/deploy/supabase-push.mjs --mode apply-remediations  (GUARDED_REF=${r} → build isolated baseline+062+P0-1b…P0-1n payload + verify every sha → link --project-ref ${r} → verify linked==${r} → assert exact pending P0 chain → db push --linked; password via SUPABASE_DB_PASSWORD)` };
   } },
   // (G1-R3-02/G1-R4-03/G1-R6-03) مُشغّل E2E ثابت وحيد (لا --spec) = **متصفّح Playwright الفعليّ** مباشرةً
   // (`browser-run.mjs`: حدّ سياق المتصفّح context.route + سيناريو smoke). يفشل مغلقاً بلا الحزمة/‏staging.

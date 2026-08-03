@@ -43,6 +43,11 @@ VALUES ('p0l_finance','p0l_finance@aldeyabi.com','P0L Finance','QA-P0L','user','
 ON CONFLICT (username) DO UPDATE SET
   email=excluded.email, department_id=excluded.department_id,
   permissions=excluded.permissions, active=true;
+INSERT INTO portal_users(username,email,display_name,department_id,role,permissions,active)
+VALUES ('p0l_stage','p0l_stage@aldeyabi.com','P0L Stage Approver','QA-P0L','user','{"can_approve_stage":true}'::jsonb,true)
+ON CONFLICT (username) DO UPDATE SET
+  email=excluded.email, department_id=excluded.department_id,
+  permissions=excluded.permissions, active=true;
 
 INSERT INTO portal_requests(
   id,title,department_id,requester,requester_name,est_total,status,phase,
@@ -57,6 +62,19 @@ INSERT INTO portal_approvals(request_id,cycle,seq,stage_label,resolver,approver,
 VALUES ('REQ-P0L-PRIVATE','need',1,'P0L approval','user','p0l_finance','pending','SECRET APPROVAL COMMENT 76543');
 INSERT INTO portal_audit(request_id,event,actor,channel,detail)
 VALUES ('REQ-P0L-PRIVATE','p0l_secret_event','p0l_finance','portal','{"winner_total":76543,"iban":"SA0000000000000000000000"}'::jsonb);
+
+INSERT INTO portal_requests(
+  id,title,department_id,requester,requester_name,est_total,status,phase,
+  created_by,req_type,beneficiary,expense_method,expense_details
+) VALUES (
+  'REQ-P0L-DIRECT','P0L private direct expense','QA-P0L','p0l_owner','P0L Owner',
+  900,'draft','need','p0l_owner','direct_expense','P0L Beneficiary','bank',
+  '{"iban":"SA1234567890123456789012","account_name":"P0L Private Account","iban_source":"manual"}'::jsonb
+);
+INSERT INTO portal_approvals(request_id,cycle,seq,stage_label,resolver,approver,decision)
+VALUES
+  ('REQ-P0L-DIRECT','need',1,'P0L stage approval','user','p0l_stage','pending'),
+  ('REQ-P0L-DIRECT','need',2,'P0L finance approval','user','p0l_finance','pending');
 
 UPDATE portal_settings
    SET value=jsonb_set(coalesce(value,'{}'::jsonb),'{expense_docs_required}','0'::jsonb,true)
@@ -133,13 +151,39 @@ $fail_closed_setting$;
 
 RESET ROLE;
 SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims','{"email":"p0l_stage@aldeyabi.com","role":"authenticated"}',true);
+
+DO $direct_expense_raw_boundary$
+DECLARE
+  v_raw int;
+  v_safe jsonb;
+BEGIN
+  SELECT count(*) INTO v_raw FROM portal_requests WHERE id='REQ-P0L-DIRECT';
+  SELECT to_jsonb(x) INTO v_safe
+  FROM portal_safe_visible_direct_expenses() x
+  WHERE x.id='REQ-P0L-DIRECT';
+  IF v_raw <> 0 THEN
+    RAISE EXCEPTION 'P0L-07 fail: non-finance stage approver can read raw direct expense';
+  END IF;
+  IF v_safe IS NULL
+     OR v_safe#>>'{expense_details,iban}' IS NOT NULL
+     OR v_safe::text LIKE '%P0L Private Account%'
+     OR v_safe::text LIKE '%SA1234567890123456789012%' THEN
+    RAISE EXCEPTION 'P0L-07 fail: safe direct-expense feed missing or leaked bank data: %',v_safe;
+  END IF;
+  RAISE NOTICE 'PASS P0L-07 non-finance stage approver receives only the redacted direct-expense feed';
+END;
+$direct_expense_raw_boundary$;
+
+RESET ROLE;
+SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0l_finance@aldeyabi.com","role":"authenticated"}',true);
 
 DO $privileged_raw_read$
 DECLARE v_count int;
 BEGIN
-  SELECT count(*) INTO v_count FROM portal_requests WHERE id='REQ-P0L-PRIVATE';
-  IF v_count <> 1 THEN RAISE EXCEPTION 'P0L-05 fail: in-scope finance raw read count=%',v_count; END IF;
+  SELECT count(*) INTO v_count FROM portal_requests WHERE id IN ('REQ-P0L-PRIVATE','REQ-P0L-DIRECT');
+  IF v_count <> 2 THEN RAISE EXCEPTION 'P0L-05 fail: in-scope finance raw read count=%',v_count; END IF;
   RAISE NOTICE 'PASS P0L-05 in-scope effective finance capability retains the raw operational contract';
 END;
 $privileged_raw_read$;
@@ -176,6 +220,6 @@ END;
 $fixture_cleanup$;
 
 DO $done$ BEGIN
-  RAISE NOTICE '==== FINAL INDEPENDENT REVIEW REMEDIATION: P0L-01..06 = 6/6 PASS ====';
+  RAISE NOTICE '==== FINAL INDEPENDENT REVIEW REMEDIATION: P0L-01..07 = 7/7 PASS ====';
 END;
 $done$;
