@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ════════════════════════════════════════════════════════════════════════════
 # F1 proof — staging lineage صادق:
-#   A: baseline through 061؛ تُستثنى اختبارات 062 الطبيعية وعقد الطالب المعتمد على مستنداته.
-#   B: baseline through 061 + 062؛ تُطبق P0-1b…P0-1h وتنجح الحزمة الكاملة.
+#   A: baseline through 061؛ تُستثنى اختبارات 062 وما يعتمد عليها.
+#   B: baseline through 061 + 062؛ تُطبق P0-1b…P0-1i وتنجح الحزمة الكاملة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -17,7 +17,8 @@ P0E="$ROOT/db/portal-migrations/p0_1e-quote-confidentiality-rls-grants.sql"
 P0F="$ROOT/db/portal-migrations/p0_1f-flexible-committee-policy.sql"
 P0G="$ROOT/db/portal-migrations/p0_1g-po-chain-transition-window.sql"
 P0H="$ROOT/db/portal-migrations/p0_1h-requester-safe-purchase-dossier.sql"
-DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier)\.sql$'
+P0I="$ROOT/db/portal-migrations/p0_1i-final-release-blocker-hardening.sql"
+DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening)\.sql$'
 
 echo "▶ [1] drift guard: baseline مطابق للمولَّد الحتميّ"
 node "$ROOT/scripts/deploy/build-baseline.mjs" --check
@@ -39,7 +40,7 @@ echo "▶ [4] المرحلة أ — حزمة 061 مع الاستثناءات ا�
 a_pass=0; a_skip=0; a_p0b=0; a_p0d=0; a_p0e=0; a_p0f=0; a_p0g=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
-  if [[ "$b" =~ $DEP062_RE ]]; then a_skip=$((a_skip+1)); echo "   ⏭️  (062-phase) $b"; continue; fi
+  if [[ "$b" =~ $DEP062_RE ]]; then a_skip=$((a_skip+1)); echo "   ⏭️  (062/P0-1i phase) $b"; continue; fi
   if [[ "$b" == "38_portal_users_least_privilege.sql" && "$a_p0b" = "0" ]]; then
     "${PSQL[@]}" -d "$DBA" -f "$P0B" >/tmp/p0b_a.log 2>&1 || { echo "❌ P0-1b/P0-1c A"; cat /tmp/p0b_a.log; exit 1; }
     a_p0b=1
@@ -55,7 +56,7 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   "${PSQL[@]}" -d "$DBA" -f "$f" >/tmp/phaseA.log 2>&1 || { echo "❌ المرحلة أ فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseA.log | head -5; exit 1; }
   a_pass=$((a_pass+1))
 done
-echo "   ✓ المرحلة أ: $a_pass نجح · $a_skip مؤجل لِما بعد 062"
+echo "   ✓ المرحلة أ: $a_pass نجح · $a_skip مؤجل لِما بعد 062/P0-1i"
 
 echo "▶ [5] المرحلة ب — أساس نظيف ($DBB) ثم 062"
 if ! "${PSQL[@]}" -d "$DBB" -f "$BASE" >/tmp/base_b.log 2>&1; then echo "❌ فشل تحميل الأساس B"; grep -iE "ERROR|FATAL" /tmp/base_b.log|head; exit 1; fi
@@ -64,7 +65,7 @@ PRE=$("${PSQL[@]}" -d "$DBB" -tAc "select count(*) from information_schema.table
 [ "$PRE" = "1" ] || { echo "❌ 062 يجب أن تظهر بعد التطبيق (=$PRE)"; exit 1; }
 
 echo "▶ [6] المرحلة ب — الحزمة الكاملة على أساس+062"
-b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0
+b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0; b_p0i=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
   if [[ "$b" == "38_portal_users_least_privilege.sql" && "$b_p0b" = "0" ]]; then
@@ -81,9 +82,12 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   if [[ "$b" == "41_requester_safe_purchase_dossier.sql" && "$b_p0h" = "0" ]]; then
     "${PSQL[@]}" -d "$DBB" -f "$P0H" >/tmp/p0h_b.log 2>&1 || { echo "❌ P0-1h B"; cat /tmp/p0h_b.log; exit 1; }; b_p0h=1
   fi
+  if [[ "$b" == "42_final_release_blocker_hardening.sql" && "$b_p0i" = "0" ]]; then
+    "${PSQL[@]}" -d "$DBB" -f "$P0I" >/tmp/p0i_b.log 2>&1 || { echo "❌ P0-1i B"; cat /tmp/p0i_b.log; exit 1; }; b_p0i=1
+  fi
   "${PSQL[@]}" -d "$DBB" -f "$f" >/tmp/phaseB.log 2>&1 || { echo "❌ المرحلة ب فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseB.log | head -5; exit 1; }
   b_pass=$((b_pass+1))
 done
-echo "   ✓ المرحلة ب: $b_pass ملفاً نجح على أساس+062+P0-1b…P0-1h"
+echo "   ✓ المرحلة ب: $b_pass ملفاً نجح على أساس+062+P0-1b…P0-1i"
 
-echo "▶ [7] ✅ F1 proof PASS — A=$a_pass/$a_skip مؤجل · 062 ✓ · P0-1b…P0-1h ✓ · B=$b_pass"
+echo "▶ [7] ✅ F1 proof PASS — A=$a_pass/$a_skip مؤجل · 062 ✓ · P0-1b…P0-1i ✓ · B=$b_pass"
