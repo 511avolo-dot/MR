@@ -171,14 +171,19 @@ VALUES ('docs/inst/REQ-P0I-PAY/12345678.pdf','REQ-P0I-PAY','inst','application/p
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0i_proc@aldeyabi.com","role":"authenticated"}',true);
-SELECT portal_payment_request('REQ-P0I-PAY','bank',1150,null,
-  jsonb_build_object('iban','SA1234567890123456789012','account_name','P0I','proof_key','docs/inst/REQ-P0I-PAY/12345678.pdf'),null);
+SELECT set_config(
+  'app.p0i_payment_id',
+  portal_payment_request('REQ-P0I-PAY','bank',1150,null,
+    jsonb_build_object('iban','SA1234567890123456789012','account_name','P0I','proof_key','docs/inst/REQ-P0I-PAY/12345678.pdf'),null)->>'id',
+  true
+);
 RESET ROLE;
 DO $payment_with_doc$
-DECLARE v_pid bigint; v_count int;
+DECLARE v_pid bigint := current_setting('app.p0i_payment_id')::bigint; v_count int;
 BEGIN
-  SELECT id INTO v_pid FROM portal_payments WHERE request_id='REQ-P0I-PAY';
-  IF v_pid IS NULL THEN RAISE EXCEPTION 'P0I-10 fail: payment was not created'; END IF;
+  IF v_pid IS NULL OR NOT EXISTS(SELECT 1 FROM portal_payments WHERE id=v_pid) THEN
+    RAISE EXCEPTION 'P0I-10 fail: payment was not created';
+  END IF;
   SELECT count(*) INTO v_count FROM portal_request_documents
    WHERE payment_id=v_pid AND storage_key='docs/inst/REQ-P0I-PAY/12345678.pdf'
      AND document_type='advance_payment';
@@ -193,7 +198,7 @@ $payment_with_doc$;
 -- Finance approver approves. Different finance executor must provide a fresh execution proof.
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0i_fin1@aldeyabi.com","role":"authenticated"}',true);
-SELECT portal_payment_transition((SELECT id FROM portal_payments WHERE request_id='REQ-P0I-PAY'),'approve',null,null,null,null);
+SELECT portal_payment_transition(current_setting('app.p0i_payment_id')::bigint,'approve',null,null,null,null);
 RESET ROLE;
 
 SET LOCAL ROLE authenticated;
@@ -201,7 +206,7 @@ SELECT set_config('request.jwt.claims','{"email":"p0i_fin2@aldeyabi.com","role":
 DO $disburse_missing_proof$
 BEGIN
   BEGIN
-    PERFORM portal_payment_transition((SELECT id FROM portal_payments WHERE request_id='REQ-P0I-PAY'),'disburse',null,null,null,'p0i-no-proof');
+    PERFORM portal_payment_transition(current_setting('app.p0i_payment_id')::bigint,'disburse',null,null,null,'p0i-no-proof');
     RAISE EXCEPTION 'P0I-11 fail: disbursement executed without proof';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM LIKE 'P0I-11 fail:%' THEN RAISE; END IF;
@@ -216,13 +221,12 @@ VALUES ('docs/pay/REQ-P0I-PAY/87654321.pdf','REQ-P0I-PAY','pay','application/pdf
 
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"email":"p0i_fin2@aldeyabi.com","role":"authenticated"}',true);
-SELECT portal_payment_transition((SELECT id FROM portal_payments WHERE request_id='REQ-P0I-PAY'),'disburse',null,null,
+SELECT portal_payment_transition(current_setting('app.p0i_payment_id')::bigint,'disburse',null,null,
   jsonb_build_object('proof_key','docs/pay/REQ-P0I-PAY/87654321.pdf'),'p0i-with-proof');
 RESET ROLE;
 DO $disburse_with_proof$
-DECLARE v_pid bigint; v_count int;
+DECLARE v_pid bigint := current_setting('app.p0i_payment_id')::bigint; v_count int;
 BEGIN
-  SELECT id INTO v_pid FROM portal_payments WHERE request_id='REQ-P0I-PAY';
   IF (SELECT status FROM portal_payments WHERE id=v_pid) <> 'disbursed' THEN
     RAISE EXCEPTION 'P0I-12 fail: valid proof did not disburse';
   END IF;
