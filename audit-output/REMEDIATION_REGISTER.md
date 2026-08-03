@@ -1,5 +1,48 @@
 # REMEDIATION REGISTER
 
+## P0-1k — Independent exact-head review remediation (2026-08-03)
+- **Scope:** six findings raised by the independent review of PR #74 at
+  `c2859f0805b90b79dddce4fe76aa35588c59a39f`; implementation commit
+  `87eb93e2d82b1b8c607be92783432243cc7a04d2`. Migration 063 remains absent.
+- **Direct-payment evidence:** new direct-payment inserts lock and require an
+  active, receipt-verified, unlinked `payment_request` document, copy only its
+  trusted proof metadata, and atomically link the document to the new payment.
+- **In-flight reconciliation:** verified historical direct-expense documents
+  are classified as `payment_request`; an `in_review` chain without that
+  evidence is returned and audited instead of remaining runnable. Staging
+  reconciled 2 requests; the post-check found 0 runnable invalid chains.
+- **Requester privacy:** `portal_safe_visible_payments()` now returns only
+  payment ID, request ID and status (all amounts, kinds, custody, actors,
+  timestamps, comments and quarantine fields are `NULL`).
+- **Recovery:** finance/admin can attach a fresh receipt-backed normalized
+  payment-request document through `portal_recover_legacy_payment_evidence`;
+  `anon` execution is revoked and the portal exposes the same controlled path.
+- **Cloudflare:** bounded R2 cleanup returns/accepts an opaque continuation
+  cursor across invocations. Return documents use a separate read class so
+  in-scope finance readers are authorized without widening GRN access.
+- **Staging application:**
+  `20260803112523_p0_1k_independent_review_remediation`, only on
+  `vpfnycxzqziltsnzxbpb`.
+- **Verification:** transactional Staging migration + 10 regression assertions
+  passed with rollback before application; Stage-1 60/60; cleanup 7/7;
+  document authorization 7/7; functional contract 15/15. Exact implementation
+  CI `portal-tests` run `30809867192` (#194) and hosted smoke `30809867118`
+  (#25) passed. Cloudflare Preview deployment
+  `9d5d1fa6-3ac3-418e-84b4-ef4d822e5f73` succeeded at the implementation
+  commit. All six independent-review threads were answered with evidence and
+  resolved.
+- **Advisor state:** 94 security entries (7 INFO / 87 WARN) and 31 performance
+  INFO. The new recovery RPC is intentionally `SECURITY DEFINER` but performs
+  effective-role, request-scope, payment-state and fresh-receipt checks; the
+  broader signature-by-signature advisor review remains a binding release gate.
+- **Rollback:** do not remove or relabel linked evidence. If a forward defect is
+  discovered, revoke the recovery RPC and payment-transition RPCs, keep affected
+  payments/requests returned or quarantined, and deploy a reviewed forward fix.
+- **Remaining:** authenticated hosted multi-role E2E, legacy missing-object/QA
+  reconciliation, credential-rotation evidence, leaked-password protection,
+  full advisor disposition, fresh review of the final exact head, and explicit
+  owner release authorization. Verdict remains **NOT READY FOR PRODUCTION**.
+
 ## P0-1j — Fresh exact-head review remediation (2026-08-03)
 - **Scope:** eight current findings on PR #74 starting at `a7d770a`; no migration 063.
 - **Files:** `p0_1j-exact-head-review-remediation.sql`, `portal-doc.js`,
