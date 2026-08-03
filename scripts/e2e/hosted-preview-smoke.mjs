@@ -22,13 +22,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchNoStore(path, init = {}) {
   return fetch(base + path, {
-    redirect: 'follow',
-    cache: 'no-store',
-    ...init,
-    headers: {
-      'cache-control': 'no-store',
-      ...(init.headers || {}),
-    },
+    redirect: 'follow', cache: 'no-store', ...init,
+    headers: { 'cache-control': 'no-store', ...(init.headers || {}) },
   });
 }
 
@@ -38,20 +33,13 @@ function assertNoProductionReference(text, label) {
 
 async function probeOnce() {
   const configResponse = await fetchNoStore('/api/portal-config');
-  if (configResponse.status !== 200) {
-    return { ready: false, reason: `portal-config HTTP ${configResponse.status}` };
-  }
+  if (configResponse.status !== 200) return { ready: false, reason: `portal-config HTTP ${configResponse.status}` };
 
   let config;
-  try {
-    config = await configResponse.json();
-  } catch {
-    return { ready: false, reason: 'portal-config did not return JSON' };
-  }
-
+  try { config = await configResponse.json(); }
+  catch { return { ready: false, reason: 'portal-config did not return JSON' }; }
   if (config?.ok !== true) return { ready: false, reason: 'portal-config is not ready' };
 
-  // Never log config or anonKey. Assertions intentionally mention field names only.
   assert.equal(config.env, 'preview', 'portal-config env must be preview.');
   assert.equal(config.branch, expectedBranch, 'portal-config branch does not match the PR branch.');
   assert.equal(config.ref, expectedRef, 'portal-config ref does not match isolated staging.');
@@ -63,20 +51,16 @@ async function probeOnce() {
   assertNoProductionReference(config.ref, 'portal-config ref');
 
   const authSettings = await fetch(`${config.url}/auth/v1/settings`, {
-    headers: { apikey: config.anonKey, 'cache-control': 'no-store' },
-    cache: 'no-store',
+    headers: { apikey: config.anonKey, 'cache-control': 'no-store' }, cache: 'no-store',
   });
   assert.equal(authSettings.status, 200, 'The staging anon/publishable key failed the live Supabase Auth probe.');
 
   const portalResponse = await fetchNoStore('/purchase-portal.html');
-  if (portalResponse.status !== 200) {
-    return { ready: false, reason: `purchase-portal HTTP ${portalResponse.status}` };
-  }
+  if (portalResponse.status !== 200) return { ready: false, reason: `purchase-portal HTTP ${portalResponse.status}` };
   const portalHtml = await portalResponse.text();
   assertNoProductionReference(portalHtml, 'purchase portal HTML');
 
   const requiredMarkers = [
-    '/assets/enterprise-ui.css?v=2',
     '/assets/generated-document-studio.css?v=1',
     '/assets/quote-document-studio.css?v=1',
     '/assets/access-inspector.css?v=1',
@@ -85,35 +69,38 @@ async function probeOnce() {
     '/assets/quote-document-studio.js?v=1',
     '/assets/policy-studio.js?v=1',
     '/assets/access-inspector.js?v=1',
-    '/assets/enterprise-ui.js?v=2',
+    '/assets/payment-evidence-guard.js?v=1',
   ];
   const missing = requiredMarkers.filter((marker) => !portalHtml.includes(marker));
-  if (missing.length) {
-    return { ready: false, reason: `latest enterprise assets not propagated (${missing.length} missing)` };
-  }
+  if (missing.length) return { ready: false, reason: `latest functional/security assets not propagated (${missing.length} missing)` };
+
+  // Owner rejected the enterprise visual override. It must not be injected.
+  assert.equal(portalHtml.includes('href="/assets/enterprise-ui.css'), false, 'Rejected enterprise CSS is still injected.');
+  assert.equal(portalHtml.includes('src="/assets/enterprise-ui.js'), false, 'Rejected enterprise interaction layer is still injected.');
 
   for (const asset of [
-    '/assets/enterprise-ui.css?v=2',
     '/assets/document-studio.js?v=2',
     '/assets/generated-document-studio.js?v=1',
     '/assets/quote-document-studio.js?v=1',
     '/assets/policy-studio.js?v=1',
     '/assets/access-inspector.js?v=1',
-    '/assets/enterprise-ui.js?v=2',
+    '/assets/payment-evidence-guard.js?v=1',
   ]) {
     const response = await fetchNoStore(asset);
     assert.equal(response.status, 200, `Required preview asset failed: ${asset.split('?')[0]}`);
   }
 
+  const paymentGuardResponse = await fetchNoStore('/assets/payment-evidence-guard.js?v=1');
+  const paymentGuard = await paymentGuardResponse.text();
+  assert.match(paymentGuard, /portal_payment_request/);
+  assert.match(paymentGuard, /proof_key/);
+  assert.match(paymentGuard, /pa_docUpload/);
+
   const origin = new URL(base).origin;
-  const quoteResponse = await fetchNoStore('/api/portal-quote?key=quotes/REQ-TEST-1/abcdef123456.pdf', {
-    headers: { Origin: origin },
-  });
+  const quoteResponse = await fetchNoStore('/api/portal-quote?key=quotes/REQ-TEST-1/abcdef123456.pdf', { headers: { Origin: origin } });
   assert.equal(quoteResponse.status, 401, 'Unauthenticated quotation retrieval must return HTTP 401.');
 
-  const documentResponse = await fetchNoStore('/api/portal-doc?key=docs/reqdoc/REQ-TEST-1/abcdef123456.pdf', {
-    headers: { Origin: origin },
-  });
+  const documentResponse = await fetchNoStore('/api/portal-doc?key=docs/reqdoc/REQ-TEST-1/abcdef123456.pdf', { headers: { Origin: origin } });
   assert.equal(documentResponse.status, 401, 'Unauthenticated supporting-document retrieval must return HTTP 401.');
 
   return { ready: true };
@@ -128,25 +115,20 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
   try {
     const result = await probeOnce();
     if (result.ready) {
-      console.log('  ✓ portal-config is fail-closed aware and resolves only to isolated staging');
-      console.log('  ✓ staging anon/publishable key passed a live Supabase Auth probe');
-      console.log('  ✓ enterprise UI, document, quotation, policy and access assets are deployed');
+      console.log('  ✓ portal-config resolves only to isolated staging');
+      console.log('  ✓ staging anon/publishable key passed the live Auth probe');
+      console.log('  ✓ owner-approved legacy design is restored; functional/security assets are deployed');
+      console.log('  ✓ payment evidence guard is present in the hosted Preview');
       console.log('  ✓ unauthenticated quotation and supporting-document reads are denied');
       console.log(`\nHosted Preview smoke gate: PASS (attempt ${attempt}/${attempts}).`);
       process.exit(0);
     }
     lastReason = result.reason;
   } catch (error) {
-    // Retry only propagation/network symptoms. Assertion failures after the latest
-    // assets are visible are deterministic and must fail the gate immediately.
     const message = error instanceof Error ? error.message : String(error);
-    if (/fetch failed|ECONN|ENOTFOUND|HTTP 404|HTTP 503|not propagated/i.test(message)) {
-      lastReason = message;
-    } else {
-      throw error;
-    }
+    if (/fetch failed|ECONN|ENOTFOUND|HTTP 404|HTTP 503|not propagated/i.test(message)) lastReason = message;
+    else throw error;
   }
-
   if (attempt < attempts) {
     console.log(`  … waiting for Preview propagation (${attempt}/${attempts}): ${lastReason}`);
     await sleep(delayMs);
