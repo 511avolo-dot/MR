@@ -2727,11 +2727,48 @@ async function loadAll(){
      privileged base rows win so finance workflows retain their full contract. */
   var safeReqR=await SB.rpc('portal_safe_visible_direct_expenses');
   var safePayR=await SB.rpc('portal_safe_visible_payments');
+  var safePurchaseR=await SB.rpc('portal_my_purchase_dossiers');
   function pa_mergeSafeRows(baseRows,safeRows){ var seen={},out=[];
     (baseRows||[]).forEach(function(row){ seen[String(row.id)]=true; out.push(row); });
     (safeRows||[]).forEach(function(row){ if(!seen[String(row.id)]){ seen[String(row.id)]=true; out.push(row); } });
     return out; }
+  var PA_SAFE_PURCHASE_DOCS=[];
+  var PA_ITEM_ROWS=(itR.data||[]).slice(), PA_APPR_ROWS=(apR.data||[]).slice();
+  var PA_AWARD_APPR_ROWS=(aaR.data||[]).slice(), PA_RECEIPT_ROWS=(rcR.data||[]).slice(), PA_PO_ROWS=(poR.data||[]).slice();
+  var rawReqIds={}; (reqR.data||[]).forEach(function(r){ rawReqIds[String(r.id)]=true; });
+  var safePurchasePayload=(safePurchaseR&&!safePurchaseR.error&&safePurchaseR.data)||{};
+  var safePurchaseRequester=safePurchasePayload.requester||'';
+  var safePurchaseRows=[];
+  function pa_safePurchasePhase(d){ var g=((d.current_stage||{}).group)||'';
+    if(d.public_phase==='closed_delivered') return 'closed';
+    if(d.public_phase==='receipt') return 'receipt';
+    if(g==='po') return 'po_review'; if(g==='award') return 'award';
+    if(d.public_phase==='procurement') return 'pricing';
+    if(d.public_phase==='supply_preparation') return 'payment';
+    return 'need'; }
+  ((safePurchasePayload&&safePurchasePayload.requests)||[]).forEach(function(d){
+    if(rawReqIds[String(d.id)]) return;
+    safePurchaseRows.push({ id:d.id,title:d.title,department_id:d.department_id,requester:safePurchaseRequester,
+      requester_name:d.requester_name,priority:d.priority,status:d.status,phase:pa_safePurchasePhase(d),
+      project:d.project,need_by:d.need_by,proc_type:d.proc_type,justification:d.justification,note:d.note,
+      created_at:d.created_at,updated_at:d.updated_at,cancel_reason:d.cancel_reason,revision:d.revision,
+      req_type:'purchase',est_total:null,currency:null });
+    (d.items||[]).forEach(function(x){ PA_ITEM_ROWS.push({ id:x.id,request_id:d.id,seq:x.seq,description:x.description,
+      unit:x.unit,qty:x.qty,received_qty:x.received_qty,category:x.category,notes:x.notes,unit_price:null }); });
+    (d.need_approvals||[]).forEach(function(x){ PA_APPR_ROWS.push({ request_id:d.id,cycle:'need',seq:x.seq,
+      stage_label:x.stage_label,resolver:'user',approver:x.approver_name,decision:x.decision,
+      acted_at:x.acted_at,comment:x.requester_comment||null }); });
+    (d.award_approvals||[]).forEach(function(x){ PA_AWARD_APPR_ROWS.push({ request_id:d.id,seq:x.seq,
+      stage_label:x.stage_label,approver:x.approver_name,decision:x.decision,acted_at:x.acted_at,comment:null }); });
+    (d.po_approvals||[]).forEach(function(x){ PA_PO_ROWS.push({ request_id:d.id,seq:x.seq,
+      stage_label:x.stage_label,approver:x.approver_name,decision:x.decision,acted_at:x.acted_at,comment:null }); });
+    (d.receipts||[]).forEach(function(x){ PA_RECEIPT_ROWS.push({ id:x.id,request_id:d.id,
+      received_by:x.received_by_name,received_at:x.received_at,note:x.note,lines:x.lines||[],doc_key:null }); });
+    (d.documents||[]).forEach(function(x){ PA_SAFE_PURCHASE_DOCS.push(Object.assign({request_id:d.id,
+      storage_key:null,checksum:null,payment_id:null,active:true,uploaded_by:x.uploaded_by_name||''},x)); });
+  });
   var PA_REQ_ROWS=pa_mergeSafeRows(reqR.data,(safeReqR&&!safeReqR.error)?safeReqR.data:[]);
+  PA_REQ_ROWS=pa_mergeSafeRows(PA_REQ_ROWS,safePurchaseRows);
   var PA_PAY_ROWS=pa_mergeSafeRows(payR.data,(safePayR&&!safePayR.error)?safePayR.data:[]);
   /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
   window.__paBenOK=!!(benR && !benR.error);
@@ -2746,6 +2783,7 @@ async function loadAll(){
   try{ var docsR=await SB.from('portal_request_documents').select('*').order('id');
     window.__paDocsOK=!!(docsR && !docsR.error);
     if(docsR && !docsR.error){ (docsR.data||[]).forEach(function(x){ (DOCS_BY_REQ[x.request_id]=DOCS_BY_REQ[x.request_id]||[]).push(pa_mapDoc(x)); }); }
+    PA_SAFE_PURCHASE_DOCS.forEach(function(x){ (DOCS_BY_REQ[x.request_id]=DOCS_BY_REQ[x.request_id]||[]).push(pa_mapDoc(x)); });
   }catch(_e){ window.__paDocsOK=false; }
   /* العقود الإطارية (هجرة 037). window.__paCtrOK للتفعيل. */
   window.__paCtrOK=!!(ctrR && !ctrR.error);
@@ -2823,9 +2861,9 @@ async function loadAll(){
 
   /* فهرسة صفوف التفاصيل حسب الطلب */
   const by=(rows,key)=>{ const m={}; (rows||[]).forEach(x=>{ (m[x[key]]=m[x[key]]||[]).push(x); }); return m; };
-  const itemsBy=by(itR.data,'request_id'), apprBy=by(apR.data,'request_id'), offBy=by(ofR.data,'request_id'),
-        awApBy=by(aaR.data,'request_id'), payBy=by(PA_PAY_ROWS,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id'),
-        poBy=by(poR.data,'request_id');
+  const itemsBy=by(PA_ITEM_ROWS,'request_id'), apprBy=by(PA_APPR_ROWS,'request_id'), offBy=by(ofR.data,'request_id'),
+        awApBy=by(PA_AWARD_APPR_ROWS,'request_id'), payBy=by(PA_PAY_ROWS,'request_id'), rcBy=by(PA_RECEIPT_ROWS,'request_id'), auBy=by(auR.data,'request_id'),
+        poBy=by(PA_PO_ROWS,'request_id');
   const awardBy={}; (awR.data||[]).forEach(a=>{ awardBy[a.request_id]=a; });
   const slaH=(PSET.sla_days?PSET.sla_days*24:48);
 
@@ -4801,7 +4839,7 @@ async function pa_docReplaceDo(){
   }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر الاستبدال'),'err'); }
 }
 /* تقديم مسودّة الصرف بعد استيفاء المستندات — لا إشعار إلا بعد نجاح التقديم الفعلي */
-function pa_expDocsRequired(){ try{ return !(typeof PSET!=='undefined'&&PSET&&Number(PSET.expense_docs_required)===0); }catch(e){ return true; } }
+function pa_expDocsRequired(){ return true; }
 async function pa_submitExpenseDraft(id){
   var r=(REQS||[]).find(function(x){return x.id===id;});
   var nActive=r?((r.docs||[]).filter(function(d){return d.active&&!d.paymentId;}).length):0;

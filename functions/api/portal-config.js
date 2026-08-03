@@ -71,6 +71,7 @@ function keyKind(key) {
 export function onRequestGet({ env }) {
   const url     = env.PORTAL_SUPABASE_URL || '';
   const anonKey = env.PORTAL_SUPABASE_ANON_KEY || '';
+  const commit  = String(env.CF_PAGES_COMMIT_SHA || '').toLowerCase();
 
   // (1 · G1-R2-02) هوية النشر ثابتة في الكود: الفرع الموثوق للإنتاج = 'main' (لا يُتجاوَز بمتغيّر بيئة
   // مثل PORTAL_PROD_BRANCH/PORTAL_ENV على النقطة العامّة). غياب CF_PAGES_BRANCH ⇒ فشل مغلق.
@@ -132,5 +133,5 @@ export function onRequestGet({ env }) {
       checks: { url: true, anonKey: true, serviceRole: hasService, bucket: hasBucket } }, 503);
   }
 
-  return json({ ok: true, url, anonKey, ref: parsed.ref, env: mode, branch });
+  return json({ ok: true, url, anonKey, ref: parsed.ref, env: mode, branch, commit });
 }

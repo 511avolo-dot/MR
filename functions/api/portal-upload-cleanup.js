@@ -13,6 +13,8 @@ const MAX_LIST_PAGES = 2;
 const LIST_PAGE_SIZE = 100;
 const ORPHAN_GRACE_MS = 60 * 60 * 1000;
 const MAX_CURSOR_LENGTH = 2048;
+const STAGING_SENTINEL_KEY = '_system/staging-cleanup-attestation-v1.txt';
+const STAGING_SENTINEL_VALUE = 'aldeyabi-quotes-staging|portal-upload-cleanup|v1';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -38,6 +40,16 @@ function stagingEnvironmentOk(env) {
     const ref = new URL(portalUrl(env)).hostname.split('.')[0];
     return ref === STAGING_PROJECT_REF
       && String(env.PORTAL_R2_BUCKET_NAME || '') === STAGING_BUCKET;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function stagingBindingAttested(env) {
+  try {
+    const object = await env.QUOTES_BUCKET.get(STAGING_SENTINEL_KEY);
+    if (!object || typeof object.text !== 'function') return false;
+    return constantTimeEqual(await object.text(), STAGING_SENTINEL_VALUE);
   } catch (_) {
     return false;
   }
@@ -75,7 +87,11 @@ async function referencedKeys(env, keys, includeReceipts = true) {
     [`portal_payments?details-%3E%3Eproof_key=${filter}&select=details`, 'payment'],
   ];
   if (includeReceipts) {
-    lookups.push([`portal_upload_receipts?storage_key=${filter}&select=storage_key`, 'storage_key']);
+    const now = encodeURIComponent(new Date().toISOString());
+    lookups.push([
+      `portal_upload_receipts?storage_key=${filter}&consumed_at=is.null&expires_at=gt.${now}&select=storage_key`,
+      'storage_key',
+    ]);
   }
 
   const results = await Promise.all(lookups.map(async ([path, field]) => {
@@ -192,6 +208,9 @@ export async function onRequestPost({ request, env }) {
   const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!constantTimeEqual(token, env.CRON_SECRET)) {
     return json({ error: 'unauthorized' }, 401);
+  }
+  if (!(await stagingBindingAttested(env))) {
+    return json({ error: 'cleanup R2 binding attestation failed' }, 403);
   }
 
   let cursor;

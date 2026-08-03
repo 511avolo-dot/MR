@@ -4,6 +4,7 @@ import { onRequestPost } from '../../functions/api/portal-upload-cleanup.js';
 
 const REF = 'vpfnycxzqziltsnzxbpb';
 const KEY = 'docs/reqdoc/REQ-CLEAN/orphan001.pdf';
+const SENTINEL = 'aldeyabi-quotes-staging|portal-upload-cleanup|v1';
 
 function env(bucket, over = {}) {
   return {
@@ -11,7 +12,10 @@ function env(bucket, over = {}) {
     PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
     PORTAL_R2_BUCKET_NAME: 'aldeyabi-quotes-staging',
     CRON_SECRET: 'test-cron-secret',
-    QUOTES_BUCKET: bucket,
+    QUOTES_BUCKET: {
+      get: async () => ({ text: async () => SENTINEL }),
+      ...bucket,
+    },
     ...over,
   };
 }
@@ -44,6 +48,19 @@ console.log('▶ bounded staging upload cleanup');
   const response = await onRequestPost({ request: request(), env: env(bucket, { PORTAL_R2_BUCKET_NAME: 'wrong-bucket' }) });
   assert.equal(response.status, 403);
   ok('refuses an unapproved R2 bucket identity');
+}
+
+{
+  let storageTouched = false;
+  const bucket = {
+    get: async () => ({ text: async () => 'not-the-staging-sentinel' }),
+    list: async () => { storageTouched = true; return { objects: [], truncated: false }; },
+    delete: async () => { storageTouched = true; },
+  };
+  const response = await onRequestPost({ request: request(), env: env(bucket) });
+  assert.equal(response.status, 403);
+  assert.equal(storageTouched, false);
+  ok('refuses cleanup when the bound R2 bucket lacks the staging-only sentinel');
 }
 
 {
@@ -96,6 +113,43 @@ async function runCleanup({ referenced }) {
   assert.deepEqual(result.deleted, []);
   assert.equal(result.body.orphanObjects.deleted, 0);
   ok('preserves an object referenced by normalized document history');
+}
+
+{
+  const deleted = [];
+  let receiptLookup = '';
+  const bucket = {
+    list: async () => ({
+      objects: [{ key: KEY, uploaded: new Date(Date.now() - 2 * 60 * 60 * 1000) }],
+      truncated: false,
+    }),
+    delete: async (keys) => { deleted.push(...(Array.isArray(keys) ? keys : [keys])); },
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const text = String(url);
+    if (text.includes('portal_upload_receipts?consumed_at=is.null&expires_at=')) {
+      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (text.includes('portal_upload_receipts?storage_key=')) {
+      receiptLookup = text;
+      const incorrectlyPreserved = !text.includes('consumed_at=is.null') || !text.includes('expires_at=gt.');
+      return new Response(JSON.stringify(incorrectlyPreserved ? [{ storage_key: KEY }] : []), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const response = await onRequestPost({ request: request(), env: env(bucket) });
+    assert.equal(response.status, 200);
+    assert.match(receiptLookup, /consumed_at=is\.null/);
+    assert.match(receiptLookup, /expires_at=gt\./);
+    assert.deepEqual(deleted, [KEY]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  ok('consumed or expired receipts do not preserve an otherwise orphaned object');
 }
 
 {

@@ -18,8 +18,13 @@ const quoteEndpoint = readFileSync('functions/api/portal-quote.js', 'utf8');
 const hardening = readFileSync('db/portal-migrations/p0_1i-final-release-blocker-hardening.sql', 'utf8');
 const remediation = readFileSync('db/portal-migrations/p0_1j-exact-head-review-remediation.sql', 'utf8');
 const independentRemediation = readFileSync('db/portal-migrations/p0_1k-independent-review-remediation.sql', 'utf8');
+const finalRemediation = readFileSync('db/portal-migrations/p0_1l-final-independent-review-remediation.sql', 'utf8');
 const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
 const portal = readFileSync('purchase-portal.html', 'utf8');
+const portalWorkflow = readFileSync('.github/workflows/portal-tests.yml', 'utf8');
+const hostedWorkflow = readFileSync('.github/workflows/hosted-preview-smoke.yml', 'utf8');
+const hostedSmoke = readFileSync('scripts/e2e/hosted-preview-smoke.mjs', 'utf8');
+const portalConfig = readFileSync('functions/api/portal-config.js', 'utf8');
 
 let passed = 0;
 function ok(message){ passed += 1; console.log('  ✓ ' + message); }
@@ -105,6 +110,7 @@ assert.match(hardening, /portal_validate_upload_receipt/);
 assert.match(hardening, /portal_request_document_receipt_guard/);
 assert.match(hardening, /portal_payment_evidence_before/);
 assert.match(hardening, /portal_payment_evidence_after/);
+assert.match(hardening, /legacy-quarantine\/duplicate/);
 assert.match(hardening, /REVOKE EXECUTE ON FUNCTION public\.portal_build_po_chain/);
 assert.match(hardening, /max_amount_inclusive',125000/);
 assert.doesNotMatch(hardening, /mwbjoysuybgbrvfrprex/);
@@ -125,6 +131,12 @@ assert.doesNotMatch(independentRemediation, /'amount', p\.amount/);
 assert.doesNotMatch(independentRemediation, /\b063[_-]/);
 ok('P0-1k enforces distinct verified direct-payment evidence, status-only feeds and controlled legacy recovery');
 
+assert.match(finalRemediation, /portal_can_read_raw_request/);
+assert.match(finalRemediation, /portal_my_purchase_dossiers|portal_create_expense/);
+assert.doesNotMatch(finalRemediation, /portal_setting_num\('expense_docs_required'/);
+assert.doesNotMatch(finalRemediation, /\b063[_-]/);
+ok('P0-1l routes requester purchases through the safe contract and makes evidence fail closed');
+
 assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
 assert.match(cleanup, /aldeyabi-quotes-staging/);
 assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
@@ -133,6 +145,9 @@ assert.match(cleanup, /page\.truncated/);
 assert.match(cleanup, /page\.cursor/);
 assert.match(cleanup, /nextCursor/);
 assert.match(cleanup, /normalizeCursor/);
+assert.match(cleanup, /STAGING_SENTINEL_KEY/);
+assert.match(cleanup, /stagingBindingAttested/);
+assert.match(cleanup, /consumed_at=is\.null&expires_at=gt\./);
 assert.doesNotMatch(cleanup, /mwbjoysuybgbrvfrprex/);
 ok('cleanup is bounded, paginated and hard-locked to the approved staging resources');
 
@@ -140,11 +155,19 @@ assert.match(portal, /createDirect:!!p\.can_create_direct_expense/);
 assert.match(portal, /pa_mergePerms/);
 assert.match(portal, /portal_safe_visible_direct_expenses/);
 assert.match(portal, /portal_safe_visible_payments/);
+assert.match(portal, /portal_my_purchase_dossiers/);
 assert.match(portal, /d\.verification==='verified'/);
 assert.match(portal, /pa_recoverLegacyEvidence/);
 ok('portal consumes job-aware direct permission, safe requester feeds and verified-document state');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, cleanup].join('\n');
+assert.match(portalWorkflow, /functions\/api\/_portal-shared\.js/);
+assert.match(hostedWorkflow, /functions\/api\/_portal-shared\.js/);
+assert.match(hostedWorkflow, /EXPECTED_COMMIT_SHA/);
+assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
+assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
+ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
+
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

@@ -1,5 +1,44 @@
 # REMEDIATION REGISTER
 
+## P0-1l — Final independent exact-head review remediation (2026-08-03)
+- **Scope:** seven findings raised by the independent review of exact head
+  `1b334dc81a7b55048176954de3adeb74a0a9c38a`; migration 063 remains absent.
+- **R2 destructive-operation identity:** cleanup requires a fixed, non-secret
+  staging-only sentinel through the actual `QUOTES_BUCKET` binding before any
+  list/delete. The sentinel was created only in `aldeyabi-quotes-staging`.
+- **Requester purchase privacy:** raw request, item, approval, receipt, PO/award
+  approval, audit and purchase-document metadata are restricted to effective
+  operational roles. Requester UI now consumes `portal_my_purchase_dossiers()`
+  and reconstructs only the explicitly nonfinancial client projection.
+- **Evidence rollback:** `expense_docs_required=0` is no longer supported; the
+  server setting is forced to 1, submission is unconditionally evidence-gated,
+  the legacy create RPC always returns a document-required draft, and the UI no
+  longer advertises an off state.
+- **Legacy duplicate keys:** P0-1i now detects every repeated pre-receipt 062
+  storage key, preserves all rows as inactive audit history with deterministic
+  quarantine keys, and only then creates the unique index. A pre-P0-1i fixture
+  proves the full clean-install path.
+- **Cleanup lifecycle:** only unconsumed and unexpired upload receipts preserve
+  an object; consumed/expired receipts no longer leak deleted document objects.
+- **Exact deployment evidence:** `portal-config` exposes the Cloudflare build
+  commit and hosted smoke must match it to the exact PR-head SHA. Both workflows now
+  include `_portal-shared.js` in path filters.
+- **Staging:** transactional P0-1l + six SQL regressions passed with rollback and
+  zero QA residue; permanent migration
+  `20260803121401_p0_1l_final_independent_review_remediation` was applied only to
+  `vpfnycxzqziltsnzxbpb`. Post-check: evidence setting 1, anon helper execution
+  false, five restricted raw-child policies present.
+- **Local verification:** cleanup 9/9, functional security contract 17/17,
+  Stage-1 60/60, document authorization 7/7, syntax and diff checks passed.
+  Local Playwright was not counted because its Chromium binary is absent; the
+  exact-head CI browser job remains required.
+- **Advisor state:** 96 security entries (7 INFO / 89 WARN) and 30 performance
+  INFO. The two new authenticated `SECURITY DEFINER` boolean helpers are used by
+  RLS and remain part of the binding signature-by-signature review gate.
+- **Pending exact-head evidence:** final CI, Preview deployment, responses and
+  resolution for the seven review threads, then a fresh independent review.
+  Verdict remains **NOT READY FOR PRODUCTION**.
+
 ## P0-1k — Independent exact-head review remediation (2026-08-03)
 - **Scope:** six findings raised by the independent review of PR #74 at
   `c2859f0805b90b79dddce4fe76aa35588c59a39f`; implementation commit

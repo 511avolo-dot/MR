@@ -192,7 +192,8 @@ async function cfg(env) { const res = await onRequestGet({ env }); return { stat
   const stagingUrl = `https://${STAGING}.supabase.co`, prodUrl = `https://${PROD}.supabase.co`;
   const svcRole = 'x', bkt = {};
   const prev = (over) => Object.assign({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anonStg,
-    PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'feature' }, over || {});
+    PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'feature',
+    CF_PAGES_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678' }, over || {});
 
   // (G1-R2-02) غياب الفرع ⇒ 503 (فشل مغلق على النقطة العامّة)
   let r = await cfg({ PORTAL_SUPABASE_URL: stagingUrl, PORTAL_SUPABASE_ANON_KEY: anonStg, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt });
@@ -232,7 +233,8 @@ async function cfg(env) { const res = await onRequestGet({ env }); return { stat
 
   // المسار السعيد: معاينة على staging بمفتاح مربوط (ref=staging) ⇒ ok
   r = await cfg(prev({}));
-  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, STAGING); ok('معاينة على staging بمفتاح مربوط ⇒ ok');
+  assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, STAGING);
+  assert.equal(r.body.commit, '1234567890abcdef1234567890abcdef12345678'); ok('معاينة على staging بمفتاح مربوط ⇒ ok + commit identity');
   // main + مرجع الإنتاج + مفتاح مربوط للإنتاج ⇒ ok
   r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'main' });
   assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, PROD); ok('إنتاج على main بمفتاح مربوط ⇒ ok');

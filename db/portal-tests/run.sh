@@ -2,7 +2,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  حزمة اختبار البوابة (النظام 3)
 #  تُحمّل portal-standalone.sql على قاعدة نظيفة، ثم تشغّل الحزمة كاملة.
-#  P0-1b…P0-1k تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
+#  P0-1b…P0-1l تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -78,6 +78,7 @@ run_sql "P0-1g: نافذة انتقال داخلية لباني سلسلة أم�
 run_sql "اختبار P0-1f/P0-1g: تشغيل/تعطيل/حدود/مسار بديل/snapshot" "$HERE/40_flexible_committee_policy.sql"
 run_sql "P0-1h: عقد بيانات طالب الاحتياج الآمن" "$ROOT/db/portal-migrations/p0_1h-requester-safe-purchase-dossier.sql"
 run_sql "اختبار P0-1h: لا عروض/أسعار/دفع/بنك/مفاتيح تخزين في Payload الطالب" "$HERE/41_requester_safe_purchase_dossier.sql"
+run_sql "P0-1l pre-P0-1i fixture: duplicate caller-trusted document keys" "$HERE/p0_1l-pre-p0i-duplicate-fixture.sql"
 run_sql "P0-1i: إغلاق حواجز RPC/الوثائق/الدفع/IBAN/الخصوصية/125k" "$ROOT/db/portal-migrations/p0_1i-final-release-blocker-hardening.sql"
 run_sql "اختبار P0-1i: إيصالات R2 + مستندات الدفع + الخصوصية المالية" "$HERE/42_final_release_blocker_hardening.sql"
 run_sql "P0-1j: معالجة نتائج المراجعة الحديثة على الرأس الدقيق" "$ROOT/db/portal-migrations/p0_1j-exact-head-review-remediation.sql"
@@ -85,6 +86,8 @@ run_sql "اختبار P0-1j: النطاق/التعتيم/الحجر/الأدلة
 run_sql "P0-1k fixture: سلسلة صرف مباشر جارية بلا دليل صالح" "$HERE/p0_1k-pre-migration-fixture.sql"
 run_sql "P0-1k: معالجة نتائج المراجعة المستقلة" "$ROOT/db/portal-migrations/p0_1k-independent-review-remediation.sql"
 run_sql "اختبار P0-1k: دليل دفع مستقل/إرجاع آمن/استرداد/عرض حالة فقط" "$HERE/44_independent_review_remediation.sql"
+run_sql "P0-1l: معالجة نتائج المراجعة المستقلة النهائية" "$ROOT/db/portal-migrations/p0_1l-final-independent-review-remediation.sql"
+run_sql "اختبار P0-1l: العزل الخام/العقد الآمن/rollback مغلق/duplicate keys" "$HERE/45_final_independent_review_remediation.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (266 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (272 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

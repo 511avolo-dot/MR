@@ -49,6 +49,31 @@ CREATE POLICY portal_upload_receipts_service
 REVOKE ALL ON public.portal_upload_receipts FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.portal_upload_receipts TO service_role;
 
+-- 062 accepted caller-provided keys and did not enforce uniqueness.  A repeated
+-- legacy key is ambiguous evidence, so preserve every row for audit but make all
+-- members inactive and give each a deterministic non-canonical quarantine key
+-- before building the unique index.  No duplicate is silently trusted.
+SELECT set_config('app.portal_transition', '1', true);
+WITH repeated AS (
+  SELECT storage_key
+  FROM public.portal_request_documents
+  GROUP BY storage_key
+  HAVING count(*) > 1
+), quarantined AS (
+  SELECT d.id, d.storage_key
+  FROM public.portal_request_documents d
+  JOIN repeated r USING (storage_key)
+)
+UPDATE public.portal_request_documents d
+   SET storage_key = 'legacy-quarantine/duplicate/' || d.id::text || '/' || md5(q.storage_key),
+       active = false,
+       voided_by = 'system:p0_1i',
+       voided_at = coalesce(d.voided_at, now()),
+       void_reason = coalesce(d.void_reason, 'P0-1i duplicate storage key quarantined')
+  FROM quarantined q
+ WHERE d.id = q.id;
+SELECT set_config('app.portal_transition', '0', true);
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_portal_request_documents_storage_key
   ON public.portal_request_documents(storage_key);
 

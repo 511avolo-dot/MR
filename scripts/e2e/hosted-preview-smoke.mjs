@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const base = String(process.env.PREVIEW_BASE_URL || '').replace(/\/$/, '');
 const expectedRef = String(process.env.EXPECTED_STAGING_REF || '');
 const expectedBranch = String(process.env.EXPECTED_PREVIEW_BRANCH || '');
+const expectedCommit = String(process.env.EXPECTED_COMMIT_SHA || '').toLowerCase();
 const prodRef = 'mwbjoysuybgbrvfrprex';
 const attempts = Number(process.env.MAX_ATTEMPTS || 90);
 const delayMs = Number(process.env.DELAY_MS || 5000);
@@ -16,6 +17,9 @@ if (!/^[a-z0-9]{20}$/.test(expectedRef) || expectedRef === prodRef) {
 }
 if (!expectedBranch || expectedBranch === 'main') {
   throw new Error('EXPECTED_PREVIEW_BRANCH must be the non-main PR branch.');
+}
+if (!/^[a-f0-9]{40}$/.test(expectedCommit)) {
+  throw new Error('EXPECTED_COMMIT_SHA must be the exact 40-character PR head SHA.');
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +46,9 @@ async function probeOnce() {
 
   assert.equal(config.env, 'preview', 'portal-config env must be preview.');
   assert.equal(config.branch, expectedBranch, 'portal-config branch does not match the PR branch.');
+  if (config.commit !== expectedCommit) {
+    return { ready: false, reason: `Preview commit ${String(config.commit || 'missing').slice(0, 12)} does not match current head` };
+  }
   assert.equal(config.ref, expectedRef, 'portal-config ref does not match isolated staging.');
   assert.equal(config.url, `https://${expectedRef}.supabase.co`, 'portal-config URL does not match isolated staging.');
   assert.equal(typeof config.anonKey, 'string', 'portal-config anonKey is missing.');

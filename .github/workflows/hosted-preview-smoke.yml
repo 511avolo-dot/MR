@@ -11,6 +11,8 @@ on:
       - 'functions/api/portal-config.js'
       - 'functions/api/portal-doc.js'
       - 'functions/api/portal-quote.js'
+      - 'functions/api/portal-upload-cleanup.js'
+      - 'functions/api/_portal-shared.js'
       - 'scripts/e2e/hosted-preview-smoke.mjs'
       - '.github/workflows/hosted-preview-smoke.yml'
   workflow_dispatch:
@@ -37,6 +39,7 @@ jobs:
           PREVIEW_BASE_URL: https://audit-enterprise-certificati.aldeyabi-procurement.pages.dev
           EXPECTED_STAGING_REF: vpfnycxzqziltsnzxbpb
           EXPECTED_PREVIEW_BRANCH: audit/enterprise-certification-2026-07-27
+          EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MAX_ATTEMPTS: '90'
           DELAY_MS: '5000'
         run: node scripts/e2e/hosted-preview-smoke.mjs
