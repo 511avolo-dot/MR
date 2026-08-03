@@ -29,8 +29,8 @@ BEGIN
     email=excluded.email,display_name=excluded.display_name,department_id=excluded.department_id,
     role=excluded.role,permissions=excluded.permissions,active=true;
 
-  INSERT INTO portal_beneficiaries(id,name,type,iban,account_name,active,created_by)
-  VALUES (99004201,'P0I Secret Beneficiary','supplier','SA1234567890123456789012','P0I Secret Account',true,'p0i_proc')
+  INSERT INTO portal_beneficiaries(id,name,btype,iban,account_name,active,created_by)
+  VALUES (99004201,'P0I Secret Beneficiary','company','SA1234567890123456789012','P0I Secret Account',true,'p0i_proc')
   ON CONFLICT (id) DO UPDATE SET iban=excluded.iban,account_name=excluded.account_name,active=true;
 
   DELETE FROM portal_request_documents WHERE request_id IN ('REQ-P0I-PAY','REQ-P0I-DOC');
