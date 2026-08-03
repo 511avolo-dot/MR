@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const rootFiles = new Map([
-  ['/assets/enterprise-ui.css', ['text/css; charset=utf-8', readFileSync('assets/enterprise-ui.css')]],
+  ['/assets/portal-functional-studios.css', ['text/css; charset=utf-8', readFileSync('assets/portal-functional-studios.css')]],
   ['/assets/generated-document-studio.css', ['text/css; charset=utf-8', readFileSync('assets/generated-document-studio.css')]],
   ['/assets/quote-document-studio.css', ['text/css; charset=utf-8', readFileSync('assets/quote-document-studio.css')]],
   ['/assets/access-inspector.css', ['text/css; charset=utf-8', readFileSync('assets/access-inspector.css')]],
@@ -14,15 +14,15 @@ const rootFiles = new Map([
   ['/assets/quote-document-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/quote-document-studio.js')]],
   ['/assets/policy-studio.js', ['text/javascript; charset=utf-8', readFileSync('assets/policy-studio.js')]],
   ['/assets/access-inspector.js', ['text/javascript; charset=utf-8', readFileSync('assets/access-inspector.js')]],
-  ['/assets/enterprise-ui.js', ['text/javascript; charset=utf-8', readFileSync('assets/enterprise-ui.js')]]
+  ['/assets/payment-evidence-guard.js', ['text/javascript; charset=utf-8', readFileSync('assets/payment-evidence-guard.js')]],
 ]);
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n0sAAAAASUVORK5CYII=', 'base64');
 
 const html = `<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/enterprise-ui.css"><link rel="stylesheet" href="/assets/generated-document-studio.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
-<header class="topbar"><div class="ttl">بوابة المشتريات</div><nav class="nav"><button class="active">الرئيسية</button></nav></header>
+<link rel="stylesheet" href="/assets/portal-functional-studios.css"><link rel="stylesheet" href="/assets/generated-document-studio.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
+<header class="topbar" data-legacy-shell="true"><div class="ttl">بوابة المشتريات</div><nav class="nav"><button class="active">الرئيسية</button></nav></header>
 <div class="wrap"><div class="pagehead"><div><h1>مركز العمل</h1><div class="sub">اختبار متصفح معزول</div></div></div><div class="card"><div class="sec-title">طلبات تحتاج إجراء</div><table><thead><tr><th>الطلب</th><th>الحالة</th></tr></thead><tbody><tr><td>REQ-1</td><td>قيد الإجراء</td></tr></tbody></table></div>
 <div id="generated-purchase-request" class="doc-sheet" style="margin-top:20px"><div class="doc-body"><h2>طلب شراء تجريبي</h2><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody><tr><td>مادة اختبار</td><td>2</td><td>500</td><td>1000</td></tr></tbody></table><div class="doc-words">الإجمالي كتابةً: ألف ريال</div><div class="doc-actions"><button>طباعة</button></div></div></div></div>
 <script>
@@ -38,6 +38,9 @@ window.accessOf=(username)=>username==='finance_user'?{scope:'all',can:{approveD
 window.render=()=>{};
 window.printEl=()=>{ document.body.dataset.legacyPrint='called'; };
 window.toast=(message,kind)=>{ document.body.dataset.toast=kind+':'+message; };
+window.pa_docValidate=()=>true;
+window.pa_docUpload=async(kind,reqId,file)=>{ window.__upload={kind,reqId,name:file.name}; return 'docs/inst/'+reqId+'/fixture-evidence.pdf'; };
+window.pa_rpc=async(name,args)=>{ window.__lastRpc={name,args}; return {ok:true}; };
 const policy={enabled:true,min_amount_exclusive:25000,max_amount_inclusive:125000,fallback_role_key:null,version:3,published_at:'2026-08-02T12:00:00Z',published_by:'admin'};
 window.SB={
  auth:{getSession:async()=>({data:{session:{access_token:'fixture-token'}}})},
@@ -49,7 +52,7 @@ window.SB={
  }
 };
 </script>
-<script src="/assets/document-studio.js"></script><script src="/assets/generated-document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/access-inspector.js"></script><script src="/assets/enterprise-ui.js"></script>
+<script src="/assets/document-studio.js"></script><script src="/assets/generated-document-studio.js"></script><script src="/assets/quote-document-studio.js"></script><script src="/assets/policy-studio.js"></script><script src="/assets/access-inspector.js"></script><script src="/assets/payment-evidence-guard.js"></script>
 </body></html>`;
 
 const requests = [];
@@ -86,11 +89,10 @@ try {
   const page = await context.newPage();
   await page.goto(base, { waitUntil: 'networkidle' });
 
-  await page.waitForFunction(() => document.documentElement.dataset.enterpriseUi === 'true');
-  assert.equal(await page.locator('.eui-skip-link').count(), 1);
-  assert.equal(await page.locator('main,[role="main"]').count() > 0, true);
-  assert.equal(await page.locator('thead th[scope="col"]').count(), 6);
-  console.log('  ✓ enterprise layout and accessibility enhancement loaded');
+  assert.equal(await page.locator('[data-legacy-shell="true"]').count(), 1);
+  assert.equal(await page.locator('.eui-skip-link').count(), 0);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.enterpriseUi || ''), '');
+  console.log('  ✓ owner-approved legacy portal shell remains active without the rejected redesign');
 
   const policyLauncher = page.locator('.eps-launcher');
   await policyLauncher.waitFor({ state: 'visible' });
@@ -122,7 +124,7 @@ try {
   await frame.waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('.gds-frame')?.contentDocument?.body?.innerText.includes('طلب شراء تجريبي'));
   assert.equal(await page.evaluate(() => document.body.dataset.legacyPrint || ''), '');
-  console.log('  ✓ legacy print action now opens a full in-portal generated-document preview');
+  console.log('  ✓ legacy print action opens the in-portal generated-document preview');
   await page.keyboard.press('Escape');
   await page.locator('.gds-root').waitFor({ state: 'detached' });
 
@@ -148,6 +150,20 @@ try {
   console.log('  ✓ quotation studio compared two suppliers and switched to a selected single offer');
   await page.keyboard.press('Escape');
   await page.locator('.qds-root').waitFor({ state: 'detached' });
+
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  const rpcPromise = page.evaluate(() => window.pa_rpc('portal_payment_request', {
+    p_request_id: 'REQ-1', p_kind: 'bank', p_amount: 1000,
+    p_details: { iban: 'SA1234567890123456789012', account_name: 'Fixture' },
+  }));
+  const chooser = await fileChooserPromise;
+  await chooser.setFiles({ name: 'payment-evidence.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
+  await rpcPromise;
+  const evidenceState = await page.evaluate(() => ({ upload: window.__upload, rpc: window.__lastRpc }));
+  assert.deepEqual(evidenceState.upload, { kind: 'inst', reqId: 'REQ-1', name: 'payment-evidence.pdf' });
+  assert.equal(evidenceState.rpc.name, 'portal_payment_request');
+  assert.equal(evidenceState.rpc.args.p_details.proof_key, 'docs/inst/REQ-1/fixture-evidence.pdf');
+  console.log('  ✓ payment request could not reach its RPC until verified evidence was uploaded');
 
   assert.equal(requests.filter((url) => url.startsWith('/api/portal-quote')).length, 3);
   assert.equal(requests.some((url) => url.includes('mwbjoysuybgbrvfrprex')), false);
