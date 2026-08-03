@@ -1,5 +1,20 @@
 # REMEDIATION REGISTER
 
+## P0-1j — Fresh exact-head review remediation (2026-08-03)
+- **Scope:** eight current findings on PR #74 starting at `a7d770a`; no migration 063.
+- **Files:** `p0_1j-exact-head-review-remediation.sql`, `portal-doc.js`,
+  `portal-upload-cleanup.js`, `purchase-portal.html`, SQL/JS tests and audit evidence.
+- **Staging application:** `20260803093553_p0_1j_exact_head_review_remediation`
+  plus index follow-up `20260803093756_p0_1j_upload_receipt_fk_index`, only on
+  `vpfnycxzqziltsnzxbpb`.
+- **Verification:** 13 rollback-safe SQL assertions on staging; 14 functional
+  contract checks; 5 document-authorization checks; 5 cleanup checks; Stage-1 60/60; browser fixture 6/6;
+  file guard 18/18 and registration endpoint 7/7.
+- **Rollback:** restore the pre-P0-1j staging snapshot. Do not drop evidence,
+  verification, or quarantine columns in place; that would destroy audit state.
+- **Remaining:** full SQL suite/CI, Preview deploy and authenticated E2E, cron
+  secret/schedule, advisor triage, fresh independent exact-head review.
+
 ## SEC-01 — Revoke residual anon SELECT on PII/financial/identity tables
 - **Finding ID:** SEC-01 (MEDIUM, defense-in-depth)
 - **Root cause:** Supabase grants table-level SELECT to `anon` by default on new tables; RLS was the only control removing rows. The grant itself was unnecessary (no anon read path).

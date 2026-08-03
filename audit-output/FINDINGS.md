@@ -1,5 +1,14 @@
 # FINDINGS — Enterprise Certification Audit (2026-07-27, rev. 2026-07-28 post-Codex)
 
+> **Current addendum — 2026-08-03:** verdict is **NOT READY**. The eight fresh
+> findings reviewed against starting head `a7d770a` are implemented by P0-1j:
+> request-scoped quote permission, job-aware direct-expense permission,
+> requester-safe direct-expense/payment feeds, invoice/return RLS, payment-doc
+> authorization, receipt/orphan cleanup, legacy-document quarantine, and
+> legacy-payment quarantine. Staging SQL assertions passed, but Preview E2E,
+> full CI, cleanup scheduling, advisor disposition, and independent exact-head
+> review remain open. This addendum supersedes older roll-up counts below.
+
 Sorted by severity. Confidence: VERIFIED / HIGHLY LIKELY / POSSIBLE / NOT VERIFIABLE.
 
 > **Revision note (2026-07-28).** An independent Codex review of PR #74 surfaced defects this audit had understated or

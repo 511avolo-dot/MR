@@ -16,6 +16,9 @@ const paymentEvidence = readFileSync('assets/payment-evidence-guard.js', 'utf8')
 const portalDoc = readFileSync('functions/api/portal-doc.js', 'utf8');
 const quoteEndpoint = readFileSync('functions/api/portal-quote.js', 'utf8');
 const hardening = readFileSync('db/portal-migrations/p0_1i-final-release-blocker-hardening.sql', 'utf8');
+const remediation = readFileSync('db/portal-migrations/p0_1j-exact-head-review-remediation.sql', 'utf8');
+const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
+const portal = readFileSync('purchase-portal.html', 'utf8');
 
 let passed = 0;
 function ok(message){ passed += 1; console.log('  ✓ ' + message); }
@@ -91,7 +94,10 @@ assert.match(portalDoc, /SHA-256/);
 assert.match(portalDoc, /QUOTES_BUCKET\.delete\(key\)/);
 assert.match(portalDoc, /verified_magic_bytes/);
 assert.match(portalDoc, /expires_at/);
-ok('Cloudflare registers a short-lived trusted receipt only after an R2 write and cleans up on DB failure');
+assert.match(portalDoc, /portal_effective_perm/);
+assert.match(portalDoc, /loadDocumentReference/);
+assert.match(portalDoc, /PAYMENT_READ_PERMS/);
+ok('Cloudflare upload/download requires effective permission, request scope and a normalized document reference');
 
 assert.match(hardening, /portal_validate_upload_receipt/);
 assert.match(hardening, /portal_request_document_receipt_guard/);
@@ -102,7 +108,31 @@ assert.match(hardening, /max_amount_inclusive',125000/);
 assert.doesNotMatch(hardening, /mwbjoysuybgbrvfrprex/);
 ok('P0-1i closes RPC, document, payment, privacy and 125k boundary blockers without production references');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening].join('\n');
+assert.match(remediation, /portal_can_see_request\(p_request_id\)/);
+assert.match(remediation, /portal_safe_visible_direct_expenses/);
+assert.match(remediation, /portal_safe_visible_payments/);
+assert.match(remediation, /verification_status = 'quarantined'/);
+assert.match(remediation, /legacy_evidence_quarantined/);
+assert.doesNotMatch(remediation, /\b063[_-]/);
+ok('P0-1j combines scope and capability, redacts requester feeds, and quarantines untrusted legacy evidence');
+
+assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
+assert.match(cleanup, /aldeyabi-quotes-staging/);
+assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
+assert.match(cleanup, /MAX_LIST_PAGES = 2/);
+assert.match(cleanup, /page\.truncated/);
+assert.match(cleanup, /page\.cursor/);
+assert.doesNotMatch(cleanup, /mwbjoysuybgbrvfrprex/);
+ok('cleanup is bounded, paginated and hard-locked to the approved staging resources');
+
+assert.match(portal, /createDirect:!!p\.can_create_direct_expense/);
+assert.match(portal, /pa_mergePerms/);
+assert.match(portal, /portal_safe_visible_direct_expenses/);
+assert.match(portal, /portal_safe_visible_payments/);
+assert.match(portal, /d\.verification==='verified'/);
+ok('portal consumes job-aware direct permission, safe requester feeds and verified-document state');
+
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

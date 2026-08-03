@@ -7,6 +7,13 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 - **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Source snapshot used for generation:** `1e44e33` (the head the owner independently rechecked; the G0-F fixes in this commit are applied on top of it — this line names the snapshot, it is not auto-updated each commit)
 - **Binding constraints:** no production/DB/storage/config change; `budget_enforce=0`; `txn_notifications=0`; Systems 1/2 unchanged; manual IBAN allowed (reason+badge+audit); admin superuser accepted (labeled+audited).
 
+> **2026-08-03 controlling update:** starting exact head `a7d770a`; verdict
+> **NOT READY**. P0-1j (not 063) is implemented and staging-verified on
+> `vpfnycxzqziltsnzxbpb`. Production remains untouched. Open gates: full
+> SQL/CI, final Preview deploy/E2E, cleanup scheduling, advisor disposition,
+> and fresh independent review. The old migration/live-state narrative below
+> is historical and does not override this update.
+
 Status vocabulary: `open` · `implemented` (code merged, not yet independently test-verified) · `verified` (test type run) · `accepted-risk` (owner-approved) · `deferred-with-approval`.
 
 ---

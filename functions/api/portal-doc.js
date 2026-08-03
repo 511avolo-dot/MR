@@ -24,8 +24,10 @@ const KIND_PERM = {
   inv: ['can_manage_procurement', 'can_see_finance'],
   ret: ['can_verify_stock', 'can_manage_procurement'],
   disb: ['can_disburse'],
-  reqdoc: ['can_create_direct_expense', 'can_create', 'can_edit'],
+  reqdoc: ['can_create_direct_expense', 'can_edit'],
 };
+const PAYMENT_READ_PERMS = ['can_see_finance', 'can_manage_procurement', 'can_disburse'];
+const STOCK_READ_PERMS = ['can_verify_stock', 'can_manage_procurement'];
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -67,7 +69,7 @@ async function verifyStaff(env, base, jwt) {
 
 async function hasPerm(env, base, jwt, perm) {
   try {
-    const r = await fetch(`${base}/rest/v1/rpc/portal_has_perm`, {
+    const r = await fetch(`${base}/rest/v1/rpc/portal_effective_perm`, {
       method: 'POST',
       headers: {
         apikey: portalKey(env),
@@ -118,18 +120,65 @@ async function reqdocTargetOk(env, base, jwt, reqId, username) {
   }
 }
 
-async function reqdocRowExists(env, base, jwt, key) {
+async function serviceRows(env, base, path) {
   try {
-    const r = await fetch(
-      `${base}/rest/v1/portal_request_documents?storage_key=eq.${encodeURIComponent(key)}&select=id&limit=1`,
-      { headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}` } },
-    );
-    if (!r.ok) return false;
+    const r = await fetch(`${base}/rest/v1/${path}`, { headers: svcHeaders(env) });
+    if (!r.ok) return [];
     const rows = await r.json();
-    return Array.isArray(rows) && rows.length > 0;
+    return Array.isArray(rows) ? rows : [];
   } catch (_) {
-    return false;
+    return [];
   }
+}
+
+async function loadDocumentReference(env, base, key, kind, reqId) {
+  const encodedKey = encodeURIComponent(key);
+  const encodedReq = encodeURIComponent(reqId);
+
+  if (['reqdoc', 'pay', 'inst', 'disb', 'inv'].includes(kind)) {
+    const docs = await serviceRows(
+      env,
+      base,
+      `portal_request_documents?storage_key=eq.${encodedKey}&request_id=eq.${encodedReq}&select=id,payment_id,active,verification_status&limit=1`,
+    );
+    if (docs.length) {
+      return { access: docs[0].payment_id == null ? 'request' : 'payment', row: docs[0] };
+    }
+  }
+
+  if (kind === 'inv') {
+    const rows = await serviceRows(
+      env,
+      base,
+      `portal_supplier_invoices?doc_key=eq.${encodedKey}&request_id=eq.${encodedReq}&select=id&limit=1`,
+    );
+    if (rows.length) return { access: 'payment', row: rows[0] };
+  }
+  if (kind === 'grn') {
+    const rows = await serviceRows(
+      env,
+      base,
+      `portal_receipts?doc_key=eq.${encodedKey}&request_id=eq.${encodedReq}&select=id&limit=1`,
+    );
+    if (rows.length) return { access: 'stock', row: rows[0] };
+  }
+  if (kind === 'ret') {
+    const rows = await serviceRows(
+      env,
+      base,
+      `portal_returns?doc_key=eq.${encodedKey}&request_id=eq.${encodedReq}&select=id&limit=1`,
+    );
+    if (rows.length) return { access: 'stock', row: rows[0] };
+  }
+
+  return null;
+}
+
+async function hasAnyPerm(env, base, jwt, perms) {
+  for (const perm of perms) {
+    if (await hasPerm(env, base, jwt, perm)) return true;
+  }
+  return false;
 }
 
 async function sha256Hex(buf) {
@@ -180,6 +229,9 @@ export async function onRequestPost({ request, env }) {
 
   const reqId = String(url.searchParams.get('request_id') || '').trim();
   if (!REQID_RE.test(reqId)) return json({ error: 'معرّف طلب غير صالح' }, 400);
+  if (!(await canSeeRequest(env, base, jwt, reqId))) {
+    return json({ error: 'الطلب خارج نطاق وصولك' }, 403);
+  }
   if (kind === 'reqdoc' && !(await reqdocTargetOk(env, base, jwt, reqId, staff.username))) {
     return json({ error: 'طلب غير صالح لإرفاق مستند' }, 403);
   }
@@ -237,13 +289,24 @@ export async function onRequestGet({ request, env }) {
   const key = String(new URL(request.url).searchParams.get('key') || '').trim();
   if (!KEY_RE.test(key)) return new Response('bad key', { status: 400 });
 
-  const reqId = key.split('/')[2];
+  const parts = key.split('/');
+  const kind = parts[1];
+  const reqId = parts[2];
   if (!(await canSeeRequest(env, base, jwt, reqId))) {
     return new Response('forbidden', { status: 403 });
   }
 
-  if (key.startsWith('docs/reqdoc/') && !(await reqdocRowExists(env, base, jwt, key))) {
+  const reference = await loadDocumentReference(env, base, key, kind, reqId);
+  if (!reference) {
     return new Response('not found', { status: 404 });
+  }
+  if (reference.access === 'payment'
+      && !(await hasAnyPerm(env, base, jwt, PAYMENT_READ_PERMS))) {
+    return new Response('forbidden', { status: 403 });
+  }
+  if (reference.access === 'stock'
+      && !(await hasAnyPerm(env, base, jwt, STOCK_READ_PERMS))) {
+    return new Response('forbidden', { status: 403 });
   }
 
   const obj = await env.QUOTES_BUCKET.get(key);

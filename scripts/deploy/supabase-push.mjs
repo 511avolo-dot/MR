@@ -34,7 +34,9 @@ const MIG_062 = 'db/portal-migrations/062-request-documents.sql';
 const MIG_062_SHA = '9ebecd908c63cb4f239728d3d349ae4afaa2d6cb54ce04fc13fb2ab3e2354f9e';
 const MIG_062_DEST = `${MIG_VERSION}_062_request_documents.sql`;
 function die(m) { console.error('❌ supabase-push: ' + m); process.exit(2); }
-function sha256(p) { return createHash('sha256').update(readFileSync(p)).digest('hex'); }
+function sha256(p) {
+  return createHash('sha256').update(readFileSync(p, 'utf8').replace(/\r\n/g, '\n')).digest('hex');
+}
 
 const ref = (process.env.GUARDED_REF || '').toLowerCase();
 const dry = process.argv.includes('--dry-run');

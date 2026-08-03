@@ -2,7 +2,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 # F1 proof — staging lineage صادق:
 #   A: baseline through 061؛ تُستثنى اختبارات 062 وما يعتمد عليها.
-#   B: baseline through 061 + 062؛ تُطبق P0-1b…P0-1i وتنجح الحزمة الكاملة.
+#   B: baseline through 061 + 062؛ تُطبق P0-1b…P0-1j وتنجح الحزمة الكاملة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -18,7 +18,8 @@ P0F="$ROOT/db/portal-migrations/p0_1f-flexible-committee-policy.sql"
 P0G="$ROOT/db/portal-migrations/p0_1g-po-chain-transition-window.sql"
 P0H="$ROOT/db/portal-migrations/p0_1h-requester-safe-purchase-dossier.sql"
 P0I="$ROOT/db/portal-migrations/p0_1i-final-release-blocker-hardening.sql"
-DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening)\.sql$'
+P0J="$ROOT/db/portal-migrations/p0_1j-exact-head-review-remediation.sql"
+DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening|43_exact_head_review_remediation)\.sql$'
 
 echo "▶ [1] drift guard: baseline مطابق للمولَّد الحتميّ"
 node "$ROOT/scripts/deploy/build-baseline.mjs" --check
@@ -65,7 +66,7 @@ PRE=$("${PSQL[@]}" -d "$DBB" -tAc "select count(*) from information_schema.table
 [ "$PRE" = "1" ] || { echo "❌ 062 يجب أن تظهر بعد التطبيق (=$PRE)"; exit 1; }
 
 echo "▶ [6] المرحلة ب — الحزمة الكاملة على أساس+062"
-b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0; b_p0i=0
+b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0; b_p0i=0; b_p0j=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
   if [[ "$b" == "38_portal_users_least_privilege.sql" && "$b_p0b" = "0" ]]; then
@@ -85,9 +86,12 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   if [[ "$b" == "42_final_release_blocker_hardening.sql" && "$b_p0i" = "0" ]]; then
     "${PSQL[@]}" -d "$DBB" -f "$P0I" >/tmp/p0i_b.log 2>&1 || { echo "❌ P0-1i B"; cat /tmp/p0i_b.log; exit 1; }; b_p0i=1
   fi
+  if [[ "$b" == "43_exact_head_review_remediation.sql" && "$b_p0j" = "0" ]]; then
+    "${PSQL[@]}" -d "$DBB" -f "$P0J" >/tmp/p0j_b.log 2>&1 || { echo "❌ P0-1j B"; cat /tmp/p0j_b.log; exit 1; }; b_p0j=1
+  fi
   "${PSQL[@]}" -d "$DBB" -f "$f" >/tmp/phaseB.log 2>&1 || { echo "❌ المرحلة ب فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseB.log | head -5; exit 1; }
   b_pass=$((b_pass+1))
 done
-echo "   ✓ المرحلة ب: $b_pass ملفاً نجح على أساس+062+P0-1b…P0-1i"
+echo "   ✓ المرحلة ب: $b_pass ملفاً نجح على أساس+062+P0-1b…P0-1j"
 
-echo "▶ [7] ✅ F1 proof PASS — A=$a_pass/$a_skip مؤجل · 062 ✓ · P0-1b…P0-1i ✓ · B=$b_pass"
+echo "▶ [7] ✅ F1 proof PASS — A=$a_pass/$a_skip مؤجل · 062 ✓ · P0-1b…P0-1j ✓ · B=$b_pass"

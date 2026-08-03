@@ -1,6 +1,13 @@
 # PRODUCTION BLOCKERS
 
-**Status (rev 2, 2026-07-28): the two HIGH defects are remediated. No open HIGH code blocker.**
+**Status (rev 3, 2026-08-03): `NOT READY`; do not promote or merge.**
+
+P0-1j closes the eight fresh exact-head review findings in code and passed 13
+transaction-rolled-back assertions on isolated staging. The release remains
+blocked by exact-head Cloudflare Preview deployment/E2E, full SQL/CI execution,
+preview cleanup scheduling/secret configuration, fresh independent review, and
+the unresolved owner/operational gates below. No Production Supabase resource
+was touched. See `P0_1J_EXACT_HEAD_REMEDIATION.md` for evidence and rollback.
 
 Rev 1 (after Codex) identified 2 HIGH code defects. Rev 2 (owner-directed) remediated them; the assertion suite now
 covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, not open blockers:

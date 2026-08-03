@@ -1,6 +1,15 @@
 # FINAL CERTIFICATION — Al-Deyabi Procurement & Disbursement Portal (System 3)
 
-**Certification status: `READY WITH CONDITIONS` (rev 2 — 2026-07-28, after Codex review + owner-directed remediation)**
+**Certification status: `NOT READY` (rev 3 — 2026-08-03, exact-head P0-1j review)**
+
+> **Rev 3 controls the verdict.** The older Rev 1/2 narrative below is retained
+> as history and must not be read as current certification. P0-1j was applied
+> and its 13 rollback-safe assertions passed only on isolated staging
+> `vpfnycxzqziltsnzxbpb`. Production was not accessed or changed. Release stays
+> blocked until the final branch head is deployed to Cloudflare Preview, the
+> full SQL/CI suite and authenticated browser matrix pass on that exact head,
+> the preview cleanup secret/schedule is configured, Supabase advisor warnings
+> are dispositioned, and a fresh independent review is clean.
 
 Audited artifact: branch `audit/enterprise-certification-2026-07-27` (base `main` @ `b9d9d6d`, portal migrations `022→059`).
 Auditor: Claude, combined Principal Engineer / Architect / AppSec / DevSecOps / DB / Procurement / QA / SRE / Production-Readiness roles.

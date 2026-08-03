@@ -15,7 +15,7 @@ const STANDALONE = 'db/portal-standalone.sql';
 const OUT = 'db/staging-bootstrap/baseline_through_061.sql';
 const MARKER = 'دمج الهجرة 062';   // عنوان قسم 062 المدمج (القسم الأخير في standalone)
 
-const text = readFileSync(STANDALONE, 'utf8');
+const text = readFileSync(STANDALONE, 'utf8').replace(/\r\n/g, '\n');
 const mi = text.indexOf(MARKER);
 if (mi < 0) { console.error('❌ build-baseline: تعذّر إيجاد قسم «دمج الهجرة 062» في standalone.'); process.exit(2); }
 // قصّ عند سطر الفاصل «-- ═…» الذي يسبق العنوان مباشرةً.
@@ -32,7 +32,7 @@ const baseline = body
 
 const sha = createHash('sha256').update(baseline).digest('hex');
 if (process.argv.includes('--check')) {
-  let cur; try { cur = readFileSync(OUT, 'utf8'); } catch (_) { console.error(`❌ ${OUT} غير موجود — ولّده.`); process.exit(1); }
+  let cur; try { cur = readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n'); } catch (_) { console.error(`❌ ${OUT} غير موجود — ولّده.`); process.exit(1); }
   if (cur !== baseline) { console.error(`❌ ${OUT} غير محدَّث — أعِد التوليد: node scripts/deploy/build-baseline.mjs`); process.exit(1); }
   console.log(`✅ baseline_through_061.sql مطابق للمولَّد الحتميّ. sha256=${sha}`);
 } else {

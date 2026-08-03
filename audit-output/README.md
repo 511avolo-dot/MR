@@ -1,7 +1,9 @@
 # Enterprise Certification Audit — System 3 (Procurement & Disbursement Portal)
 
 Branch `audit/enterprise-certification-2026-07-27` (base `main` @ `b9d9d6d`). Evidence-based audit; no `main` changes,
-no PR merge. One code remediation this audit: migration `059` (SEC-01, applied live + test 35).
+no PR merge. **Current verdict (2026-08-03): NOT READY.** P0-1j was applied and
+tested only on isolated staging `vpfnycxzqziltsnzxbpb`; Production was not touched.
+Read `P0_1J_EXACT_HEAD_REMEDIATION.md` before the historical Rev 1/2 reports.
 
 ## Read in this order
 1. **FINAL_CERTIFICATION.md** — verdict (`NOT READY`, revised 2026-07-28 after Codex), category scores, must-fix list, sign-off.

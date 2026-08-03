@@ -2608,19 +2608,24 @@ function pa_quotesRule(v){ return (+v||0)<500?1:3; }
 function pa_can(p){ p=p||{}; return {
   approveReq:!!p.can_approve_stage, approveAward:!!p.can_approve_award, issuePO:!!p.can_issue_po,
   manageRfq:!!p.can_manage_procurement, disburse:!!p.can_disburse, create:!!p.can_create,
+  createDirect:!!p.can_create_direct_expense,
   edit:!!p.can_edit, manageUsers:!!p.can_manage_users, approveDisb:!!p.can_approve_disbursement }; }
 function pa_see(p){ p=p||{}; const proc=!!(p.can_manage_procurement||p.can_approve_award||p.can_issue_po);
   return {requests:1, award:proc?1:0, comparison:proc?1:0, finance:(p.can_see_finance||p.can_disburse)?1:0}; }
 function pa_scope(p,jobScope,isAdm){ if(isAdm)return 'all'; if(jobScope)return jobScope; p=p||{};
   return (p.can_manage_procurement||p.can_disburse||p.can_verify_stock||p.can_see_finance)?'all':'own'; }
 function pa_acc(perms,jobScope,isAdm){ if(isAdm) return {scope:'all',see:{requests:1,award:1,comparison:1,finance:1},
-    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,edit:1,manageUsers:1,approveDisb:1}};
+    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,createDirect:1,edit:1,manageUsers:1,approveDisb:1}};
   return {scope:pa_scope(perms,jobScope,isAdm), see:pa_see(perms), can:pa_can(perms)}; }
+function pa_mergePerms(jobPerms,userPerms){ var out={};
+  [jobPerms||{},userPerms||{}].forEach(function(src){ Object.keys(src).forEach(function(k){ if(src[k]===true) out[k]=true; }); });
+  return out; }
 /* العكس: صلاحيات المرجع(camel) → مفاتيح Supabase(snake) لحفظ الوظائف */
 function pa_permsFromCan(can){ can=can||{}; const p={};
   if(can.approveReq)p.can_approve_stage=true; if(can.approveAward)p.can_approve_award=true;
   if(can.issuePO)p.can_issue_po=true; if(can.manageRfq)p.can_manage_procurement=true;
   if(can.disburse)p.can_disburse=true; if(can.create)p.can_create=true;
+  if(can.createDirect)p.can_create_direct_expense=true;
   if(can.edit)p.can_edit=true; if(can.manageUsers)p.can_manage_users=true;
   if(can.approveDisb)p.can_approve_disbursement=true; return p; }
 
@@ -2715,6 +2720,17 @@ async function loadAll(){
     SB.from('portal_recurring_expenses').select('*').order('next_run'), /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
     SB.from('portal_user_directory').select('*')  /* دليل المستخدمين الآمن (P0-1) — أعمدة توجيه/عرض فقط؛ يُتحمَّل غيابه قبل تطبيق تصليب أقلّ الامتياز */
   ]);
+  /* P0-1j: base RLS deliberately hides raw direct-expense/payment rows from
+     requesters.  Merge only missing rows from the two server-redacted feeds;
+     privileged base rows win so finance workflows retain their full contract. */
+  var safeReqR=await SB.rpc('portal_safe_visible_direct_expenses');
+  var safePayR=await SB.rpc('portal_safe_visible_payments');
+  function pa_mergeSafeRows(baseRows,safeRows){ var seen={},out=[];
+    (baseRows||[]).forEach(function(row){ seen[String(row.id)]=true; out.push(row); });
+    (safeRows||[]).forEach(function(row){ if(!seen[String(row.id)]){ seen[String(row.id)]=true; out.push(row); } });
+    return out; }
+  var PA_REQ_ROWS=pa_mergeSafeRows(reqR.data,(safeReqR&&!safeReqR.error)?safeReqR.data:[]);
+  var PA_PAY_ROWS=pa_mergeSafeRows(payR.data,(safePayR&&!safePayR.error)?safePayR.data:[]);
   /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
   window.__paBenOK=!!(benR && !benR.error);
   PA_BENEFS=(benR && !benR.error)?(benR.data||[]).map(x=>({id:x.id, name:x.name||'', btype:x.btype||'company', iban:x.iban||'', accountName:x.account_name||'', taxNo:x.tax_no||'', contact:x.contact||'', active:x.active!==false})):[];
@@ -2762,7 +2778,7 @@ async function loadAll(){
   /* الأقسام */
   DEPTS={}; (dR.data||[]).forEach(d=>{ DEPTS[d.id]={n:d.name_ar,sector:d.sector,mgr:d.manager_user,active:d.active!==false}; });
   /* الوظائف */
-  JOBS={}; (jR.data||[]).forEach(j=>{ JOBS[j.key]={title:j.title,cat:j.category,scope:j.scope,desc:j.description||'',acc:pa_acc(j.permissions,j.scope,false)}; });
+  JOBS={}; (jR.data||[]).forEach(j=>{ JOBS[j.key]={title:j.title,cat:j.category,scope:j.scope,desc:j.description||'',perms:j.permissions||{},acc:pa_acc(j.permissions,j.scope,false)}; });
   /* المستخدمون */
   /* P0-1 أقلّ امتياز: الأساس من «دليل المستخدمين الآمن» (أعمدة توجيه/عرض فقط لكل المستخدمين)،
      ثم نُراكِب الصفوف الكاملة التي تسمح بها RLS (صفّ المستخدم نفسه، أو كل الصفوف للأدمن) بحقولها
@@ -2773,11 +2789,11 @@ async function loadAll(){
   PA_DIR.forEach(u=>{ USERS[u.username]={ n:u.display_name, r:'مستخدم',
     deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
     suspended:u.active===false, active:u.active!==false }; });
-  (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin';
+  (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin'; const effectivePerms=pa_mergePerms((JOBS[u.job_key]||{}).perms,u.permissions);
     USERS[u.username]=Object.assign(USERS[u.username]||{}, { n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
       job:u.job_key, admin:isAdm, deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
       away:!!u.is_away, delegate:u.delegate_to||null, suspended:u.active===false, active:u.active!==false,
-      email:u.email, perms:u.permissions||{}, acc:pa_acc(u.permissions,(JOBS[u.job_key]||{}).scope,isAdm) }); });
+      email:u.email, perms:effectivePerms, acc:pa_acc(effectivePerms,(JOBS[u.job_key]||{}).scope,isAdm) }); });
   /* الموردون */
   SUPPLIERS={}; pa_supByName={}; (supR.data||[]).forEach(s=>{ const k=String(s.id);
     SUPPLIERS[k]={n:s.name,cr:s.cr||'',vat:s.vat||'',iban:s.iban||'',contact:s.contact||'',active:s.active!==false,_sid:s.id};
@@ -2806,12 +2822,12 @@ async function loadAll(){
   /* فهرسة صفوف التفاصيل حسب الطلب */
   const by=(rows,key)=>{ const m={}; (rows||[]).forEach(x=>{ (m[x[key]]=m[x[key]]||[]).push(x); }); return m; };
   const itemsBy=by(itR.data,'request_id'), apprBy=by(apR.data,'request_id'), offBy=by(ofR.data,'request_id'),
-        awApBy=by(aaR.data,'request_id'), payBy=by(payR.data,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id'),
+        awApBy=by(aaR.data,'request_id'), payBy=by(PA_PAY_ROWS,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id'),
         poBy=by(poR.data,'request_id');
   const awardBy={}; (awR.data||[]).forEach(a=>{ awardBy[a.request_id]=a; });
   const slaH=(PSET.sla_days?PSET.sla_days*24:48);
 
-  REQS=(reqR.data||[]).map(r=>{
+  REQS=(PA_REQ_ROWS||[]).map(r=>{
     const items=(itemsBy[r.id]||[]).slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(it=>({
       seq:it.seq, desc:it.description, unit:it.unit||'حبة', qty:Number(it.qty)||0,
       price:Number(it.unit_price)||0, received:Number(it.received_qty)||0, _id:it.id }));
@@ -4659,7 +4675,8 @@ function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e
 function pa_mapDoc(x){ return { id:x.id, reqId:x.request_id, paymentId:x.payment_id||null, type:x.document_type,
   title:x.title||'', desc:x.description||'', key:x.storage_key, fileName:x.original_file_name||'', mime:x.mime_type,
   size:Number(x.size_bytes)||0, uploadedBy:x.uploaded_by||'', uploadedAt:pa_ms(x.uploaded_at), sourceStage:x.source_stage||'',
-  version:Number(x.version)||1, supersedesId:x.supersedes_id||null, active:x.active!==false }; }
+  version:Number(x.version)||1, supersedesId:x.supersedes_id||null, active:x.active!==false,
+  verification:x.verification_status||'unverified', verifiedAt:pa_ms(x.verified_at) }; }
 var PA_DOC_TYPES={ quotation:'عرض سعر', supplier_invoice:'فاتورة مورد', progress_claim:'مستخلص',
   purchase_order:'أمر شراء', contract:'عقد', advance_payment:'دفعة مقدّمة', receipt:'إيصال/سند',
   beneficiary_bank:'تفاصيل بنكية للمستفيد', memo:'مذكّرة', other:'أخرى' };
@@ -4687,12 +4704,16 @@ function pa_docCenter(r, editable){
   var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
   var docs=(r.docs||[]).filter(function(d){return !d.paymentId;});
   var active=docs.filter(function(d){return d.active;});
+  var verified=active.filter(function(d){return d.verification==='verified';});
   var older =docs.filter(function(d){return !d.active;});
   var canReplace = editable && (r._raw&&r._raw.status==='returned');
   function rowFor(d, isOld){
     return '<tr'+(isOld?' style="opacity:.6"':'')+'><td>'+esc(pa_docTypeLabel(d.type))
       +(d.version>1?(' <span class="badge" style="font-size:9px">إصدار '+d.version+'</span>'):'')
-      +(isOld?' <span class="badge" style="font-size:9px">مُستبدَل</span>':'')+'</td>'
+      +(isOld?' <span class="badge" style="font-size:9px">مُستبدَل</span>':'')
+      +(d.verification==='verified'
+        ?' <span class="badge ok" style="font-size:9px">موثّق</span>'
+        :' <span class="badge" style="font-size:9px;background:var(--danger-bg);color:var(--danger)">محجور — لا يُحتسب</span>')+'</td>'
       +'<td>'+esc(d.title||d.fileName||'—')+(d.type==='other'&&d.desc?('<div class="muted" style="font-size:10px">'+esc(d.desc)+'</div>'):'')+'</td>'
       +'<td>'+esc(uName(d.uploadedBy))+'</td>'
       +'<td dir="ltr" class="mono" style="font-size:10.5px">'+pa_docDate(d.uploadedAt)+'</td>'
@@ -4729,7 +4750,7 @@ function pa_docCenter(r, editable){
     +'</div>';
   }
   return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('file',16)+'</span>المستندات الداعمة'
-    +(active.length?(' <span class="badge ok" style="font-size:10px">'+active.length+'</span>'):(editable?' <span class="badge" style="font-size:10px;background:var(--danger-bg);color:var(--danger)">مطلوب</span>':''))+'</div>'
+    +(verified.length?(' <span class="badge ok" style="font-size:10px">'+verified.length+' موثّق</span>'):(editable?' <span class="badge" style="font-size:10px;background:var(--danger-bg);color:var(--danger)">مستند موثّق مطلوب</span>':''))+'</div>'
     + activeTbl + olderTbl + uploader + '</div>';
 }
 async function pa_docAttach(reqId){
@@ -5560,7 +5581,7 @@ try{
 try{
   if(typeof TABS!=='undefined' && !TABS.some(function(t){return t[0]==='expense';})) TABS.push(['expense','صرف مباشر','money']);
   var _pa_expCanUse=function(){ var a=accessOf(ME)||{}; var c=a.can||{};
-    return isAdmin() || !!c.create || !!c.approveDisb || !!c.disburse || !!(a.see&&a.see.finance); };
+    return isAdmin() || !!c.createDirect || !!c.approveDisb || !!c.disburse || !!(a.see&&a.see.finance); };
   if(typeof navAllowed==='function'){ var _pa_refNavAllowed3=navAllowed;
     navAllowed=function(k){ if(k==='expense') return _pa_expCanUse(); return _pa_refNavAllowed3(k); }; }
   if(typeof render==='function'){ var _pa_refRender3=render;
@@ -5585,7 +5606,7 @@ function pa_expPickBenef(id){
 function pa_expenseRender(){ var v=$('view'); if(v && VIEW==='expense') v.innerHTML=pa_expenseHome(); }
 function pa_expenseHome(){
   var a=accessOf(ME)||{}, c=a.can||{};
-  var canCreate = isAdmin() || !!c.create;
+  var canCreate = isAdmin() || !!c.createDirect;
   var mine=(REQS||[]).filter(function(r){return r && r.kind==='expense';});
   var list = mine.length ? '<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>طلبات الصرف ('+mine.length+')</div>'
       + '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>رقم</th><th>الجهة/المستفيد</th><th>القيمة</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>'
@@ -5876,7 +5897,7 @@ function pa_expenseDetail(r){
   var body;
   var canSubmit=(isDraft||isReturned) && (r.requester===ME || isAdmin() || !!((accessOf(ME)||{}).can||{}).edit);
   if(isDraft||isReturned){
-    var nActive=(r.docs||[]).filter(function(d){return d.active&&!d.paymentId;}).length;
+    var nActive=(r.docs||[]).filter(function(d){return d.active&&!d.paymentId&&d.verification==='verified';}).length;
     var docsReq=(typeof pa_expDocsRequired==='function')?pa_expDocsRequired():true;   /* (Codex round-4) احترام إعداد الإلزام */
     var blockSubmit=(docsReq && nActive<1);
     var bannerTxt=isReturned
