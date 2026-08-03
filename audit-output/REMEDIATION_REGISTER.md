@@ -9,11 +9,16 @@
   `vpfnycxzqziltsnzxbpb`.
 - **Verification:** 13 rollback-safe SQL assertions on staging; 14 functional
   contract checks; 5 document-authorization checks; 5 cleanup checks; Stage-1 60/60; browser fixture 6/6;
-  file guard 18/18 and registration endpoint 7/7.
+  file guard 18/18 and registration endpoint 7/7. Exact-head CI run
+  `30806576478` passed 256 SQL + 18 + 7, with full baseline proof; hosted smoke
+  run `30806576369` passed.
 - **Rollback:** restore the pre-P0-1j staging snapshot. Do not drop evidence,
   verification, or quarantine columns in place; that would destroy audit state.
-- **Remaining:** full SQL suite/CI, Preview deploy and authenticated E2E, cron
-  secret/schedule, advisor triage, fresh independent exact-head review.
+- **Cloudflare/R2:** exact-head Preview deployed; explicit cleanup configuration
+  is present. Five proven orphan objects deleted, seven referenced objects
+  preserved. One missing legacy quote object and pre-existing QA residue remain.
+- **Remaining:** authenticated hosted E2E, legacy data reconciliation, advisor
+  triage/password and credential-rotation evidence, fresh independent review.
 
 ## SEC-01 — Revoke residual anon SELECT on PII/financial/identity tables
 - **Finding ID:** SEC-01 (MEDIUM, defense-in-depth)

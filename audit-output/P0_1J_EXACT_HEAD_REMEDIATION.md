@@ -45,8 +45,19 @@ users. Local evidence:
 - Upload cleanup: 5/5.
 - File guard: 18/18; registration endpoint guard: 7/7.
 
-The full 256-assertion SQL suite has not been executed locally because this
-workspace has no local PostgreSQL runtime. It remains a CI/exact-head gate.
+Exact-head GitHub Actions evidence on code head `b478cc25a5130904e2f73c8e8a7028449e2e5cda`:
+
+- `portal-tests` run `30806576478`: all three jobs passed.
+- 256 SQL assertions + 18 file-guard + 7 registration-endpoint assertions passed.
+- Baseline proof passed: phase A 30 files with 5 correctly deferred; phase B
+  35 files on 061 + 062 + P0-1b…P0-1j.
+- `hosted-preview-smoke` run `30806576369` passed.
+
+The first exact-head CI attempt exposed a real legacy-row migration defect: the
+backfill was blocked by `portal_payments_guard`. The final migration confines
+`app.portal_transition=1` to a single transactional `DO` block. A staging
+transaction proved a pre-existing pending payment is quarantined and then
+rolled back; residue count was zero.
 
 ## Advisor and operational residuals
 
@@ -57,10 +68,19 @@ signature-by-signature disposition. Leaked-password protection remains disabled.
 New indexes appear unused immediately after creation, which is expected on the
 fresh staging database. The missing upload-receipt foreign-key index was fixed.
 
-Cloudflare Preview currently has `QUOTES_BUCKET` bound to
-`aldeyabi-quotes-staging`, but the cleanup endpoint additionally requires
-`PORTAL_R2_BUCKET_NAME=aldeyabi-quotes-staging`, a Preview `CRON_SECRET`, a
-bounded scheduler, and a redeploy of the final branch head. These remain open.
+Cloudflare deployment `1e7d27e2-9dc5-4124-9fe7-632de145dc0e` succeeded from
+`b478cc25…` and owns the branch alias. Preview now has the exact staging bucket
+marker, an encrypted cleanup secret, and `QUOTES_BUCKET` bound to
+`aldeyabi-quotes-staging`. The endpoint is an explicit, bounded cleanup path;
+no production configuration changed.
+
+R2 reconciliation listed all 12 staging objects without exposing their keys.
+Five canonical `reqdoc` objects were older than the grace window and had no
+database reference; they were deleted by exact SHA-256 match. Seven referenced
+objects were preserved. One active, test-like legacy offer references a missing
+R2 object, and staging still contains pre-existing QA-shaped rows (13 users,
+20 requests, 4 payments, 1 offer). Those records predate this transaction-safe
+test run and were not deleted; they remain an evidence/reconciliation blocker.
 
 ## Rollback / fail-closed guidance
 

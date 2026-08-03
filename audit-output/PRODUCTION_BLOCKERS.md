@@ -2,12 +2,14 @@
 
 **Status (rev 3, 2026-08-03): `NOT READY`; do not promote or merge.**
 
-P0-1j closes the eight fresh exact-head review findings in code and passed 13
-transaction-rolled-back assertions on isolated staging. The release remains
-blocked by exact-head Cloudflare Preview deployment/E2E, full SQL/CI execution,
-preview cleanup scheduling/secret configuration, fresh independent review, and
-the unresolved owner/operational gates below. No Production Supabase resource
-was touched. See `P0_1J_EXACT_HEAD_REMEDIATION.md` for evidence and rollback.
+P0-1j closes the eight fresh exact-head review findings in code. Exact-head CI
+passed (256 SQL + 18 file-guard + 7 endpoint assertions), the Preview deployed,
+and the explicit cleanup path is configured; five proven staging R2 orphans
+were removed. The release remains blocked by authenticated hosted-browser E2E,
+one missing legacy quote object and pre-existing QA residue, advisor/password/
+credential-rotation gates, fresh independent review, and the unresolved owner/
+operational gates below. No Production Supabase resource was touched. See
+`P0_1J_EXACT_HEAD_REMEDIATION.md` for evidence and rollback.
 
 Rev 1 (after Codex) identified 2 HIGH code defects. Rev 2 (owner-directed) remediated them; the assertion suite now
 covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, not open blockers:

@@ -6,10 +6,13 @@
 > as history and must not be read as current certification. P0-1j was applied
 > and its 13 rollback-safe assertions passed only on isolated staging
 > `vpfnycxzqziltsnzxbpb`. Production was not accessed or changed. Release stays
-> blocked until the final branch head is deployed to Cloudflare Preview, the
-> full SQL/CI suite and authenticated browser matrix pass on that exact head,
-> the preview cleanup secret/schedule is configured, Supabase advisor warnings
-> are dispositioned, and a fresh independent review is clean.
+> Exact-head CI (256 SQL + 18 file-guard + 7 endpoint assertions) and the
+> Cloudflare Preview deployment passed on code head `b478cc25…`. The explicit
+> cleanup endpoint is configured in Preview and five proven R2 orphans were
+> removed. Release remains blocked by the authenticated hosted-browser matrix,
+> one missing legacy quote object plus pre-existing QA residue, Supabase advisor
+> disposition/leaked-password protection, credential-rotation evidence, and a
+> fresh independent review.
 
 Audited artifact: branch `audit/enterprise-certification-2026-07-27` (base `main` @ `b9d9d6d`, portal migrations `022→059`).
 Auditor: Claude, combined Principal Engineer / Architect / AppSec / DevSecOps / DB / Procurement / QA / SRE / Production-Readiness roles.

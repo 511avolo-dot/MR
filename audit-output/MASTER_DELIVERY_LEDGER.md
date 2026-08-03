@@ -9,10 +9,12 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 
 > **2026-08-03 controlling update:** starting exact head `a7d770a`; verdict
 > **NOT READY**. P0-1j (not 063) is implemented and staging-verified on
-> `vpfnycxzqziltsnzxbpb`. Production remains untouched. Open gates: full
-> SQL/CI, final Preview deploy/E2E, cleanup scheduling, advisor disposition,
-> and fresh independent review. The old migration/live-state narrative below
-> is historical and does not override this update.
+> `vpfnycxzqziltsnzxbpb`. Exact-head CI and the final Preview deployment passed;
+> the explicit cleanup path is configured and five proven R2 orphans were
+> removed. Production remains untouched. Open gates: authenticated hosted E2E,
+> missing legacy quote evidence/pre-existing QA residue, advisor/password and
+> credential evidence, and fresh independent review. The old migration/live-
+> state narrative below is historical and does not override this update.
 
 Status vocabulary: `open` · `implemented` (code merged, not yet independently test-verified) · `verified` (test type run) · `accepted-risk` (owner-approved) · `deferred-with-approval`.
 

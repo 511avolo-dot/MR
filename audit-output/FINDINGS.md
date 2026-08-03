@@ -5,8 +5,10 @@
 > request-scoped quote permission, job-aware direct-expense permission,
 > requester-safe direct-expense/payment feeds, invoice/return RLS, payment-doc
 > authorization, receipt/orphan cleanup, legacy-document quarantine, and
-> legacy-payment quarantine. Staging SQL assertions passed, but Preview E2E,
-> full CI, cleanup scheduling, advisor disposition, and independent exact-head
+> legacy-payment quarantine. Exact-head CI and Preview deployment passed; the
+> explicit cleanup path is configured and removed five proven staging orphans.
+> Hosted authenticated E2E, a missing test-like legacy quote object, pre-existing
+> QA residue, advisor disposition, credential gates, and independent exact-head
 > review remain open. This addendum supersedes older roll-up counts below.
 
 Sorted by severity. Confidence: VERIFIED / HIGHLY LIKELY / POSSIBLE / NOT VERIFIABLE.
