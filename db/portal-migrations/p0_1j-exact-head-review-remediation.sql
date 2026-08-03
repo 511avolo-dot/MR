@@ -336,20 +336,28 @@ ALTER TABLE public.portal_payments
   ADD COLUMN IF NOT EXISTS legacy_evidence_reason text,
   ADD COLUMN IF NOT EXISTS legacy_evidence_quarantined_at timestamptz;
 
-UPDATE public.portal_payments p
-   SET legacy_evidence_quarantined = true,
-       legacy_evidence_reason = 'P0-1j: no verified normalized payment_request document',
-       legacy_evidence_quarantined_at = now()
- WHERE p.status IN ('pending_pay', 'approved_pay')
-   AND NOT EXISTS (
-     SELECT 1
-       FROM public.portal_request_documents d
-      WHERE d.payment_id = p.id
-        AND d.request_id = p.request_id
-        AND d.active
-        AND d.source_stage = 'payment_request'
-        AND d.verification_status = 'verified'
-   );
+-- The existing payment guard correctly rejects direct writes.  Limit the
+-- migration-only bypass to this DO statement's transaction; it cannot leak to
+-- subsequent application statements even if the UPDATE raises.
+DO $legacy_payment_backfill$
+BEGIN
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE public.portal_payments p
+     SET legacy_evidence_quarantined = true,
+         legacy_evidence_reason = 'P0-1j: no verified normalized payment_request document',
+         legacy_evidence_quarantined_at = now()
+   WHERE p.status IN ('pending_pay', 'approved_pay')
+     AND NOT EXISTS (
+       SELECT 1
+         FROM public.portal_request_documents d
+        WHERE d.payment_id = p.id
+          AND d.request_id = p.request_id
+          AND d.active
+          AND d.source_stage = 'payment_request'
+          AND d.verification_status = 'verified'
+     );
+END;
+$legacy_payment_backfill$;
 
 CREATE OR REPLACE FUNCTION public.portal_payment_legacy_quarantine_guard()
 RETURNS trigger
