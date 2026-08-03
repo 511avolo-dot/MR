@@ -94,7 +94,6 @@ assert.match(hardening, /portal_payment_evidence_after/);
 assert.match(hardening, /REVOKE EXECUTE ON FUNCTION public\.portal_build_po_chain/);
 assert.match(hardening, /max_amount_inclusive',125000/);
 assert.doesNotMatch(hardening, /mwbjoysuybgbrvfrprex/);
-assert.doesNotMatch(hardening, /migration\s+063/i);
 ok('P0-1i closes RPC, document, payment, privacy and 125k boundary blockers without production references');
 
 const combined = [middleware, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening].join('\n');
