@@ -1,19 +1,19 @@
-// Enterprise UI permission guard + presentation injection for Cloudflare Pages.
+// Portal permission/security guard + functional studio injection for Cloudflare Pages.
 //
-// Server/RLS remains the authoritative security boundary (P0-1d/P0-1e). This
-// middleware adds the branch-scoped design system and prevents confusing or
-// confidential UI affordances from rendering for users not entitled to them.
+// Server/RLS remains the authoritative security boundary. The owner-approved
+// legacy visual design is preserved: enterprise-ui.css/js are intentionally no
+// longer injected. Functional document/quote/policy/access tools remain.
 
-const ENTERPRISE_ASSETS = `
-<script src="/assets/document-studio.js?v=2" data-enterprise-asset="document-studio"></script>
-<script src="/assets/generated-document-studio.js?v=1" data-enterprise-asset="generated-document-studio"></script>
-<script src="/assets/quote-document-studio.js?v=1" data-enterprise-asset="quote-document-studio"></script>
-<script src="/assets/policy-studio.js?v=1" data-enterprise-asset="policy-studio"></script>
-<script src="/assets/access-inspector.js?v=1" data-enterprise-asset="access-inspector"></script>
-<script src="/assets/enterprise-ui.js?v=2" data-enterprise-asset="enterprise-ui"></script>
+const PORTAL_ASSETS = `
+<script src="/assets/document-studio.js?v=2" data-portal-asset="document-studio"></script>
+<script src="/assets/generated-document-studio.js?v=1" data-portal-asset="generated-document-studio"></script>
+<script src="/assets/quote-document-studio.js?v=1" data-portal-asset="quote-document-studio"></script>
+<script src="/assets/policy-studio.js?v=1" data-portal-asset="policy-studio"></script>
+<script src="/assets/access-inspector.js?v=1" data-portal-asset="access-inspector"></script>
+<script src="/assets/payment-evidence-guard.js?v=1" data-portal-asset="payment-evidence-guard"></script>
 `;
 
-const ENTERPRISE_UI_GUARD = `
+const PORTAL_UI_GUARD = `
 (function(){
   function safeCall(fn, fallback){ try { return fn(); } catch(_e) { return fallback; } }
   function currentAccess(){ return safeCall(function(){ return accessOf(ME) || {}; }, {}); }
@@ -49,9 +49,7 @@ const ENTERPRISE_UI_GUARD = `
     };
   }
 
-  safeCall(function(){
-    _pa_expCanUse = function(){ return canUseExpenseTab(); };
-  }, null);
+  safeCall(function(){ _pa_expCanUse = function(){ return canUseExpenseTab(); }; }, null);
 
   function scrubUnauthorizedUi(){
     var allowDirectCreate = hasDirectExpense();
@@ -95,7 +93,9 @@ const ENTERPRISE_UI_GUARD = `
 
   document.addEventListener('DOMContentLoaded', function(){
     scrubUnauthorizedUi();
-    safeCall(function(){ new MutationObserver(scrubUnauthorizedUi).observe(document.documentElement, { childList: true, subtree: true }); }, null);
+    safeCall(function(){
+      new MutationObserver(scrubUnauthorizedUi).observe(document.documentElement, { childList: true, subtree: true });
+    }, null);
   });
   setTimeout(scrubUnauthorizedUi, 250);
 })();
@@ -113,13 +113,16 @@ export async function onRequest(context) {
   return new HTMLRewriter()
     .on('head', {
       element(element) {
-        element.append('<link rel="stylesheet" href="/assets/enterprise-ui.css?v=2" data-enterprise-asset="enterprise-ui"><link rel="stylesheet" href="/assets/generated-document-studio.css?v=1" data-enterprise-asset="generated-document-studio"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-enterprise-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-enterprise-asset="access-inspector">', { html: true });
-      }
+        element.append(
+          '<link rel="stylesheet" href="/assets/generated-document-studio.css?v=1" data-portal-asset="generated-document-studio"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-portal-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-portal-asset="access-inspector">',
+          { html: true },
+        );
+      },
     })
     .on('body', {
       element(element) {
-        element.append(ENTERPRISE_ASSETS + `<script>${ENTERPRISE_UI_GUARD}</script>`, { html: true });
-      }
+        element.append(PORTAL_ASSETS + `<script>${PORTAL_UI_GUARD}</script>`, { html: true });
+      },
     })
     .transform(response);
 }
