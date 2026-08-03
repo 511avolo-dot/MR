@@ -1,6 +1,15 @@
 # REMEDIATION REGISTER
 
 ## P0-1l — Final independent exact-head review remediation (2026-08-03)
+- **Clean-install follow-up (P0-1m):** the first exact-head CI run exposed that
+  the deterministic baseline lacked `authenticated` table-level `SELECT` on
+  the raw child tables. P0-1m grants read only; P0-1l RLS remains the
+  authoritative row boundary. This preserves privileged workflows and lets a
+  fresh install exercise requester denial through RLS rather than failing at
+  the table privilege layer. Staging already had all seven grants; the
+  idempotent lineage migration
+  `20260803123153_p0_1m_clean_install_raw_read_grants` was applied only on
+  `vpfnycxzqziltsnzxbpb`. Migration 063 remains absent.
 - **Scope:** seven findings raised by the independent review of exact head
   `1b334dc81a7b55048176954de3adeb74a0a9c38a`; migration 063 remains absent.
 - **R2 destructive-operation identity:** cleanup requires a fixed, non-secret

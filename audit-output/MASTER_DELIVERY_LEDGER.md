@@ -9,12 +9,15 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 
 > **2026-08-03 P0-1l controlling update:** exact head under construction from
 > `1b334dc81a`; the independent review raised seven additional current findings.
-> P0-1l is implemented and transaction-tested, and Staging migration
-> `20260803121401_p0_1l_final_independent_review_remediation` is applied only on
+> P0-1l is implemented and transaction-tested, and Staging migrations
+> `20260803121401_p0_1l_final_independent_review_remediation` and
+> `20260803123153_p0_1m_clean_install_raw_read_grants` are applied only on
 > `vpfnycxzqziltsnzxbpb`. It adds actual-binding R2 sentinel attestation,
 > requester-safe purchase routing/RLS, unconditional direct-expense evidence,
 > pre-P0-1i duplicate-key quarantine, receipt lifecycle cleanup, exact-SHA hosted
-> smoke, and shared-helper workflow coverage. Exact-head CI/Preview and another
+> smoke, shared-helper workflow coverage, and explicit clean-install RLS read
+> grants. The first exact-head CI run exposed the missing baseline grants;
+> Preview/smoke passed while the corrected exact-head CI and another
 > independent review are still pending. Security Advisor remains open (96
 > entries: 7 INFO / 89 WARN), as do authenticated hosted multi-role E2E,
 > credential rotation, leaked-password protection, legacy QA/missing-object

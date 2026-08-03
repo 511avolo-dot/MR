@@ -2,7 +2,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 #  حزمة اختبار البوابة (النظام 3)
 #  تُحمّل portal-standalone.sql على قاعدة نظيفة، ثم تشغّل الحزمة كاملة.
-#  P0-1b…P0-1l تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
+#  P0-1b…P0-1m تُطبّق قبل اختبارات أقلّ الامتياز والصلاحيات الحرجة.
 # ════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -87,6 +87,7 @@ run_sql "P0-1k fixture: سلسلة صرف مباشر جارية بلا دليل 
 run_sql "P0-1k: معالجة نتائج المراجعة المستقلة" "$ROOT/db/portal-migrations/p0_1k-independent-review-remediation.sql"
 run_sql "اختبار P0-1k: دليل دفع مستقل/إرجاع آمن/استرداد/عرض حالة فقط" "$HERE/44_independent_review_remediation.sql"
 run_sql "P0-1l: معالجة نتائج المراجعة المستقلة النهائية" "$ROOT/db/portal-migrations/p0_1l-final-independent-review-remediation.sql"
+run_sql "P0-1m: منح القراءة التي تحكمها RLS على التثبيت النظيف" "$ROOT/db/portal-migrations/p0_1m-clean-install-raw-read-grants.sql"
 run_sql "اختبار P0-1l: العزل الخام/العقد الآمن/rollback مغلق/duplicate keys" "$HERE/45_final_independent_review_remediation.sql"
 
 echo ""
