@@ -2,7 +2,7 @@
 //
 // Server/RLS remains the authoritative security boundary. The owner-approved
 // legacy visual design is preserved: enterprise-ui.css/js are intentionally no
-// longer injected. Functional document/quote/policy/access tools remain.
+// longer injected. Functional overlays use isolated, scoped styles only.
 
 const PORTAL_ASSETS = `
 <script src="/assets/document-studio.js?v=2" data-portal-asset="document-studio"></script>
@@ -114,7 +114,7 @@ export async function onRequest(context) {
     .on('head', {
       element(element) {
         element.append(
-          '<link rel="stylesheet" href="/assets/generated-document-studio.css?v=1" data-portal-asset="generated-document-studio"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-portal-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-portal-asset="access-inspector">',
+          '<link rel="stylesheet" href="/assets/portal-functional-studios.css?v=1" data-portal-asset="functional-studios"><link rel="stylesheet" href="/assets/generated-document-studio.css?v=1" data-portal-asset="generated-document-studio"><link rel="stylesheet" href="/assets/quote-document-studio.css?v=1" data-portal-asset="quote-document-studio"><link rel="stylesheet" href="/assets/access-inspector.css?v=1" data-portal-asset="access-inspector">',
           { html: true },
         );
       },
