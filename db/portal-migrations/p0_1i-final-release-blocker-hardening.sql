@@ -52,12 +52,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.portal_upload_receipts TO service
 CREATE UNIQUE INDEX IF NOT EXISTS ux_portal_request_documents_storage_key
   ON public.portal_request_documents(storage_key);
 
+-- portal_settings is protected by the config guard; migrations must opt in to
+-- the same internal transition window used by the authorised RPCs.
+SELECT set_config('app.portal_transition', '1', true);
 UPDATE public.portal_settings
 SET value = value || jsonb_build_object(
   'payment_docs_required',
   coalesce((value->>'payment_docs_required')::int, 1)
 )
 WHERE key = 'portal_settings';
+SELECT set_config('app.portal_transition', '0', true);
 
 CREATE OR REPLACE FUNCTION public.portal_validate_upload_receipt(
   p_storage_key text,
