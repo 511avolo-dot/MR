@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const middleware = readFileSync('functions/_middleware.js', 'utf8');
+const functionalCss = readFileSync('assets/portal-functional-studios.css', 'utf8');
 const generatedCss = readFileSync('assets/generated-document-studio.css', 'utf8');
 const quoteCss = readFileSync('assets/quote-document-studio.css', 'utf8');
 const accessCss = readFileSync('assets/access-inspector.css', 'utf8');
@@ -20,6 +21,7 @@ let passed = 0;
 function ok(message){ passed += 1; console.log('  ✓ ' + message); }
 
 console.log('▶ Portal functional security contract');
+assert.match(middleware, /portal-functional-studios\.css/);
 assert.match(middleware, /document-studio\.js/);
 assert.match(middleware, /generated-document-studio\.js/);
 assert.match(middleware, /quote-document-studio\.js/);
@@ -28,7 +30,9 @@ assert.match(middleware, /access-inspector\.js/);
 assert.match(middleware, /payment-evidence-guard\.js/);
 assert.doesNotMatch(middleware, /href="\/assets\/enterprise-ui\.css/);
 assert.doesNotMatch(middleware, /src="\/assets\/enterprise-ui\.js/);
-ok('middleware preserves the owner-approved legacy design and injects functional/security tools only');
+assert.match(functionalCss, /\.eps-launcher/);
+assert.match(functionalCss, /\.eds-root/);
+ok('middleware preserves the owner-approved legacy design and injects scoped functional/security tools only');
 
 assert.match(generatedCss, /\.gds-root/);
 assert.match(quoteCss, /\.qds-pane/);
@@ -75,10 +79,12 @@ assert.doesNotMatch(access, /\.from\(/);
 ok('access inspector remains read-only');
 
 assert.match(paymentEvidence, /portal_payment_request/);
+assert.match(paymentEvidence, /portal_payment_transition/);
+assert.match(paymentEvidence, /p_action==='disburse'/);
 assert.match(paymentEvidence, /proof_key/);
-assert.match(paymentEvidence, /pa_docUpload/);
+assert.match(paymentEvidence, /pa_docUpload\('pay'/);
 assert.match(paymentEvidence, /application\/pdf,image\/jpeg,image\/png/);
-ok('every legacy UI payment request is intercepted until evidence is uploaded');
+ok('payment request and execution RPCs are intercepted until fresh evidence is uploaded');
 
 assert.match(portalDoc, /portal_upload_receipts/);
 assert.match(portalDoc, /SHA-256/);
@@ -96,7 +102,7 @@ assert.match(hardening, /max_amount_inclusive',125000/);
 assert.doesNotMatch(hardening, /mwbjoysuybgbrvfrprex/);
 ok('P0-1i closes RPC, document, payment, privacy and 125k boundary blockers without production references');
 
-const combined = [middleware, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');
