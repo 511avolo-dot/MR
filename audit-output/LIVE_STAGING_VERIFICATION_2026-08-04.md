@@ -71,6 +71,26 @@ A ≤25K OPS purchase, driven by the real seeded org:
 - `portal_audit_verify()` → `ok = true` (hash-chain intact) for an admin identity;
   correctly **denied** for a caller without finance/admin permission.
 
+## 7b. Per-role authorization probe matrix (2026-08-04, real `authenticated` role, rolled back)
+The exact probe set the browser scaffold runs (P-RLS / P-DIR / P-PERM / P-AUDIT), executed
+server-side for **four real role identities** under `SET LOCAL ROLE authenticated` + JWT
+impersonation. All PASS with error-specific outcomes:
+
+| Role (identity) | other `portal_users` visible (RLS) | `can_manage_users` | `portal_audit_verify` |
+|---|---|---|---|
+| requester (`stg.requester`) | **0** (blocked) | false | **denied — SQLSTATE `P0001`** |
+| finance (`stg.finance`) | 0 | false | ok |
+| procurement (`stg.procurement`) | 0 | false | ok |
+| admin (`stg.admin`) | **22** (all) | true | ok |
+
+`portal_user_directory` exposed exactly `active, department_id, display_name, username`.
+The negative `audit_verify` case is a **specific permission denial (`P0001`)**, not an
+arbitrary error — satisfying the evidence-quality bar. **Browser-transport note:** the
+hosted **browser** run of this same matrix could not be executed from the agent sandbox —
+Node egress works but Chromium's tunnel is reset by the egress proxy — so the browser layer
+must run in **CI** (`authenticated-e2e` workflow + the owner's `STAGING_E2E_USERS` secret);
+the authorization evidence above is the DB-level equivalent.
+
 ## 8. Production-cleanliness after the run (all tests rolled back)
 `requests=20` (unchanged) · `LIVE %` test requests = **0** · `b3_%` test users = **0**
 · `payment_docs_required` back to **1** (the in-tx relax reverted) · OPS manager
