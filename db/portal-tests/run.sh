@@ -90,6 +90,7 @@ run_sql "P0-1l: معالجة نتائج المراجعة المستقلة الن
 run_sql "P0-1m: منح القراءة التي تحكمها RLS على التثبيت النظيف" "$ROOT/db/portal-migrations/p0_1m-clean-install-raw-read-grants.sql"
 run_sql "P0-1n: إبقاء القراءة الخام للصرف المباشر ضمن الأدوار المالية" "$ROOT/db/portal-migrations/p0_1n-direct-expense-raw-read-boundary.sql"
 run_sql "اختبار P0-1l: العزل الخام/العقد الآمن/rollback مغلق/duplicate keys" "$HERE/45_final_independent_review_remediation.sql"
+run_sql "سلبيات تفويض لكل توقيع DEFINER كتابة (advisor closure)" "$HERE/46_definer_authz_negatives.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (273 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (283 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
