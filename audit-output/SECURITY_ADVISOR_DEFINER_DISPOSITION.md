@@ -192,8 +192,14 @@ The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor 
 
 ## 3. Residual / owner-gated
 
-- **Live advisor re-scan.** The last recorded staging Security Advisor result was **96 entries (7 INFO / 89 WARN)**. This document dispositions the WARN `SECURITY DEFINER` / `search_path` / `definer_view` family from code. Re-running `get_advisors` against staging `vpfnycxzqziltsnzxbpb` to confirm the live counts now match this disposition **requires Supabase access and remains an owner action.**
+- **Live advisor re-scan — DONE (2026-08-04).** `get_advisors(security)` against staging `vpfnycxzqziltsnzxbpb` returned **96 entries (7 INFO / 89 WARN)** and matches this disposition **exactly**: 86 `authenticated_security_definer_function_executable`, 2 `anon_security_definer_function_executable`, 7 `rls_enabled_no_policy` (INFO), 1 `auth_leaked_password_protection`, 0 `function_search_path_mutable`, 0 `security_definer_view`. Evidence: `audit-output/LIVE_STAGING_VERIFICATION_2026-08-04.md`.
 - **INFO items and `leaked-password protection`.** Separate owner decisions (Auth configuration), not part of the DEFINER disposition.
-- **Not a substitute** for the fresh independent adversarial review, which remains externally blocked (Codex usage limit) and owner-gated.
+
+## 4. Closure bar — this table does NOT close the blocker by itself
+
+Per the owner Gate review, the Security Advisor blocker is **not** closed from the disposition table alone. What is done vs. what remains:
+
+- **Done:** every signature is enumerated against the **current** live SQL catalog (134 fns), each with a pinned `search_path` (0 offenders) and its exact caller boundary (48 server-only / 84 authenticated / 2 anon); the live re-scan matches; and **build-failing negative controls exist** — `11_security.sql` **S7** pins the exact server-only set and **S8** pins the exact anon-executable set (any drift fails CI), plus the live RLS/RPC negatives in `LIVE_STAGING_VERIFICATION_2026-08-04.md` (cross-department read denied, raw-vs-safe boundary, self/unauthorized approve denied, SoD triple).
+- **Remaining for closure:** per-signature owner/grant attestation table + an individual negative-execution test for each authenticated RPC (beyond the category-level S7/S8 + lifecycle negatives), and the **fresh independent adversarial review** (externally blocked — Codex usage limit). Until both land, this blocker stays **OPEN**.
 
 **Gate 1 remains HELD; verdict NOT READY. No code/DB/production change was made to produce this document.**
