@@ -97,10 +97,13 @@ the authorization evidence above is the DB-level equivalent.
 unchanged (`qa_dept_manager`). **The staging dataset is exactly as before.**
 
 ## Observations (not governance defects)
-1. **Receipt auto-close:** a full-quantity `portal_record_receipt` left the request at
-   `receipt_pending` rather than `closed` in a single call — likely needs a receipt
-   document/confirm step. Worth confirming the intended close condition. (Money had
-   already moved with full SoD; goods receipt recorded.)
+1. **Receipt auto-close — RESOLVED, not a defect.** An earlier ad-hoc test left the
+   request at `receipt_pending`; root cause was a **test-harness error** — the test passed
+   `{"seq":…}` while `portal_record_receipt` matches items by **`item_id`**
+   (`portal-standalone.sql:3038`), and the frontend correctly passes `{item_id: it._id, qty}`
+   (`purchase-portal.html:3324`). Re-run with the correct `item_id`: the **full cycle reaches
+   `closed`** live (create → 3 approvals → pricing → offers → award → award-approval → PO →
+   payment → disburse SoD triple → receipt → **closed**), rolled back. No code change needed.
 2. **Leaked-password protection** is off (owner Auth toggle) — the one live-actionable
    advisor item.
 3. **`payment_docs_required` enforcement lives in `p0_1i`** (applied on staging and in
