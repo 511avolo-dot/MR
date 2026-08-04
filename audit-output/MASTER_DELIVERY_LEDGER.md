@@ -7,6 +7,31 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 - **Branch:** `audit/enterprise-certification-2026-07-27` · **PR #74 (Draft, do not merge)** · **Source snapshot used for generation:** `1e44e33` (the head the owner independently rechecked; the G0-F fixes in this commit are applied on top of it — this line names the snapshot, it is not auto-updated each commit)
 - **Binding constraints:** no production/DB/storage/config change; `budget_enforce=0`; `txn_notifications=0`; Systems 1/2 unchanged; manual IBAN allowed (reason+badge+audit); admin superuser accepted (labeled+audited).
 
+> **2026-08-04 exact-head reconciliation (docs-only; no code/DB/production change):**
+> current exact head is **`33fbc33d73edfc0cc1467ce54a9cd84465cb1e97`** (the two
+> P0-1n-block findings on `f8254fb134` were remediated and shipped in the complete
+> P0 chain at this head). Exact-head repo/CI evidence: **`portal-tests` run
+> `30816735558` (#198) SUCCESS** — clean baseline lineage with **273 SQL
+> assertions** (+ 18 file-guard + 7 registration-endpoint), Stage-1 61/61, upload
+> cleanup 9/9, document authorization 7/7, functional security 18/18; **`hosted-
+> preview-smoke` run `30816735482` (#29) SUCCESS** bound to this head SHA;
+> **Cloudflare Preview `dae0016e` SUCCESS** at this commit reporting Preview +
+> Staging ref `vpfnycxzqziltsnzxbpb`. **Staging-applied migrations (only on
+> `vpfnycxzqziltsnzxbpb`):** baseline(061) → 062 → the SHA-pinned ordered
+> P0-1b…P0-1n chain, latest `20260803125546_p0_1n_direct_expense_raw_read_boundary`
+> (rollback-tested before apply). **Trusted-document status:** the §1 reconciliation
+> table and §10–14 closure tables below are **historical snapshots** (source snapshot
+> `1e44e33`, and the read-only production `list_migrations` fact dated 2026-07-29);
+> they are not rewritten and do **not** override this update. **Remaining gaps (all
+> still open — Gate 1 HELD):** authenticated multi-role hosted Playwright E2E;
+> disposition of the one missing R2 quote object and pre-existing QA-shaped staging
+> rows; staging `service_role` key rotation/disablement evidence; leaked-password
+> protection (or recorded risk acceptance); signature-by-signature Security Advisor
+> `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**); and fresh
+> independent review — **Codex returned "code-review usage limit reached" for this
+> head, so independent review remains externally blocked.** **NOT READY**; Draft,
+> unmerged, `main`/Production untouched, migration `063` absent.
+
 > **2026-08-03 P0-1n controlling update:** the fresh review of exact head
 > `f8254fb134` raised two additional current findings after the prior seven.
 > P0-1l is implemented and transaction-tested, and Staging migrations
@@ -145,7 +170,7 @@ Severity: P0 (release-blocking) · P1 (high) · P2 (medium) · P3 (low). Source:
 | PAGES-DEPLOY | P1 | deploy | GitHub Pages published Function-dependent pages (404 on `/api/*`) | Stage 1 | **implemented + G1-03/G1-R2-04-hardened (Stage 1, repo-only) — per-page `needs_functions` manifest + set-equality `--check` + query+hash-preserving stub (script at end of body, actual-DOM test); `invite.html`/`register-portal.html` added; pending Gate 1** |
 | CFG-ENV-G1-02 | P1 | deploy | env identity self-asserted (`PORTAL_PROD_BRANCH`/`PORTAL_ENV`); no-ref JWT unbound; preview→prod bypass | Stage 1 | **implemented + G1-R2-02/03-hardened (Stage 1, repo-only) — production branch is a code invariant (`main`), branch-absent ⇒ 503, production requires main+PROD_REF, preview requires ≠main+≠PROD_REF; no-ref JWT treated as unbound (needs expected-ref); exp/iss checks; pending Gate 1** |
 | CFG-KEY-STRUCTURAL | P2 | deploy | **(G1-R3-04)** anon-key check is structural (no signature/authenticity) | Stage 1 | **relabeled honestly (Stage 1, repo-only) — `portal-config.js`/docs say "structural configuration validation"; opt-in live readiness = `scripts/deploy/probe-anon.mjs` (non-data endpoint, key never logged); runtime fail-closed; pending Gate 1** |
-| STAGING-PROVISION | — | ops | **(G1-05)** isolated staging Supabase project + R2 + users/data + Preview bindings + cross-env isolation proof | Stage 1 (owner external) | **owner-authorized external provisioning still required — NOT provisioned/verified; Gate 1 cannot fully pass until done** |
+| STAGING-PROVISION | — | ops | **(G1-05)** isolated staging Supabase project + R2 + users/data + Preview bindings + cross-env isolation proof | Stage 1 (owner external) | **partially provisioned — Gate 1 still HELD.** Supabase staging project `vpfnycxzqziltsnzxbpb` is provisioned and carries the applied migration chain baseline(061)→062→P0-1b…P0-1n (latest `20260803125546_p0_1n…`, rollback-tested); exact-head Cloudflare Preview `dae0016e` reports Staging ref bound. **Still outstanding for full G1-05:** R2 seed + representative users/data, Preview-binding proof, cross-env isolation proof, and authenticated multi-role hosted E2E — all owner-external and unverified. Gate 1 cannot fully pass until these are done. |
 | PREVIEW-DEPLOY-FACT | — | deploy | **(G1-R2-05)** a public Cloudflare Preview deploys per commit (independent of `main`-only workflows) | Stage 1 | **recorded honestly — Preview `/api/portal-config` verified read-only = 503 fail-closed, never returns production ref; no production/config change** |
 | BOOT-STATES | P2 | UI | accessible bootstrap states (aria-busy/timeout/retry/offline/fatal focus) | Stage 10 | open |
 | PAY-DOCS-COMPLETE | P1 | payments | configurable payment-document completeness (H) enforcing migration | Stage 8 | open |
