@@ -32,7 +32,11 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > disposition of the one missing R2 quote object and pre-existing QA-shaped staging
 > rows; staging `service_role` key rotation/disablement evidence; leaked-password
 > protection (or recorded risk acceptance); signature-by-signature Security Advisor
-> `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**); and fresh
+> `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**) — **repo-side
+> code disposition now produced in `audit-output/SECURITY_ADVISOR_DEFINER_DISPOSITION.md`
+> (134 DEFINER functions dispositioned: 48 server-only / 84 authenticated-RPC /
+> 2 anon-token; 0 mutable search_path; 0 definer views); the live re-scan against
+> staging to confirm counts remains owner-gated**; and fresh
 > independent review — **Codex returned "code-review usage limit reached" for this
 > head, so independent review remains externally blocked.** **NOT READY**; Draft,
 > unmerged, `main`/Production untouched, migration `063` absent.
