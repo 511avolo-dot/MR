@@ -1,0 +1,35 @@
+name: authenticated-multirole-e2e
+
+# Owner-triggered only. NEVER runs on push/PR — it requires isolated-staging test
+# credentials supplied as a repository secret. With no STAGING_E2E_USERS secret the
+# script SKIPs (exit 0), so a dispatch without configured credentials is harmless.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authenticated-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authenticated-journey:
+    if: github.ref_name == 'audit/enterprise-certification-2026-07-27'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Chromium (pinned Playwright)
+        run: npx playwright install --with-deps chromium
+      - name: Authenticated multi-role hosted journey (isolated staging)
+        env:
+          PREVIEW_BASE_URL: https://audit-enterprise-certificati.aldeyabi-procurement.pages.dev
+          EXPECTED_STAGING_REF: vpfnycxzqziltsnzxbpb
+          # Owner supplies this as an Actions secret: JSON map of role -> test user.
+          # Absent ⇒ the script SKIPs (exit 0). Never echoed.
+          STAGING_E2E_USERS: ${{ secrets.STAGING_E2E_USERS }}
+        run: node scripts/e2e/authenticated-multirole-journey.mjs
