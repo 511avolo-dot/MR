@@ -35,11 +35,23 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**) — **repo-side
 > code disposition now produced in `audit-output/SECURITY_ADVISOR_DEFINER_DISPOSITION.md`
 > (134 DEFINER functions dispositioned: 48 server-only / 84 authenticated-RPC /
-> 2 anon-token; 0 mutable search_path; 0 definer views); the live re-scan against
-> staging to confirm counts remains owner-gated**; and fresh
-> independent review — **Codex returned "code-review usage limit reached" for this
+> 2 anon-token; 0 mutable search_path; 0 definer views); **the live re-scan is now
+> DONE (2026-08-04) and matches exactly — see `audit-output/LIVE_STAGING_VERIFICATION_2026-08-04.md`**;
+> and fresh independent review — **Codex returned "code-review usage limit reached" for this
 > head, so independent review remains externally blocked.** **NOT READY**; Draft,
 > unmerged, `main`/Production untouched, migration `063` absent.
+>
+> **2026-08-04 live-staging DB verification (zero-persistence, rolled back):** executed
+> directly against isolated staging `vpfnycxzqziltsnzxbpb` via the owner-authorized
+> connector (production ref not reachable). Verified live: schema/DEFINER parity (134/0);
+> Security Advisor 96 = disposition exactly; full multi-role approval chain (need+award+PO);
+> SoD negatives (self-approve/unauthorized/requester-disburse/approver-disburse all denied)
+> + disburse SoD triple; payment evidence gate (p0_1i, upload-receipt) enforced; RLS/privacy
+> R1–R5 (p0_1n boundary, portal_users least-privilege, safe directory) under real
+> `authenticated` role; audit hash-chain `ok=true`. **All rolled back — staging dataset
+> unchanged (0 test rows persisted).** Remaining owner-gated: **hosted** authenticated
+> browser E2E (scaffold ready), leaked-password toggle, `service_role` rotation, R2/QA
+> residue, independent adversarial review.
 
 > **2026-08-03 P0-1n controlling update:** the fresh review of exact head
 > `f8254fb134` raised two additional current findings after the prior seven.
