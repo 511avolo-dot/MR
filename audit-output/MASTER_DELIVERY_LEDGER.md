@@ -96,9 +96,14 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 ---
 
-## 0. Current-head gate table (docs/test head `5e9e2e8`, 2026-08-04)
+## 0. Gate table — last verified head `705cc45` (runs #210/#41)
 
-Concise current-state view (history preserved in §1 + §10–14; those are **superseded
+> **This is refreshed to the last head verified by CI / owner review, NOT auto-updated
+> per commit — it is not "exact-head" evidence for a newer tip.** The branch tip may be
+> ahead of `705cc45`; the PR's **Exact head** field and its live checks are authoritative
+> for the current SHA. (A later docs-only commit does not change any verification below.)
+
+Concise state view (history preserved in §1 + §10–14; those are **superseded
 historical snapshots**, not current). Columns: **Code/DB** = implemented in code/DB ·
 **Staging** = applied on isolated staging `vpfnycxzqziltsnzxbpb` · **Dyn-verified** =
 dynamically verified live · **Owner-open** = owner-external / still open.
@@ -115,7 +120,7 @@ dynamically verified live · **Owner-open** = owner-external / still open.
 | `service_role` rotation · leaked-password protection | n/a | n/a | n/a | **yes — owner Auth/ops** |
 | Independent adversarial review | n/a | n/a | n/a | **yes — Codex usage-limit blocked** |
 
-**Exact-head CI (docs/test head `5e9e2e8`):** `portal-tests` #209 · `hosted-preview-smoke` #40 · Cloudflare Preview `5e9e2e8` — all SUCCESS. **Authenticated hosted E2E: no non-skipped run exists.** Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`.
+**CI at last verified head `705cc45`:** `portal-tests` #210 · `hosted-preview-smoke` #41 · Cloudflare Preview — all SUCCESS. **Authenticated hosted BROWSER E2E: no non-skipped run exists** (DB-equivalent probes do NOT substitute for it). Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`.
 
 ---
 
