@@ -11,9 +11,17 @@ name: authenticated-multirole-e2e
 on:
   push:
     branches: [audit/enterprise-certification-2026-07-27]
+    # Trigger on ALL journey-affecting product / authorization / security paths, not
+    # only the journey script — so a UI, function, or RLS/permission change re-runs the
+    # authenticated E2E on its head (gated on STAGING_E2E_USERS; no-op when absent).
     paths:
       - 'scripts/e2e/authenticated-multirole-journey.mjs'
       - '.github/workflows/authenticated-e2e.yml'
+      - 'purchase-portal.html'
+      - 'assets/**'
+      - 'functions/**'
+      - 'db/portal-standalone.sql'
+      - 'db/portal-migrations/**'
   workflow_dispatch:
 
 permissions:

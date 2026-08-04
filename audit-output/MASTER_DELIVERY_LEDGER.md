@@ -96,6 +96,29 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 ---
 
+## 0. Current-head gate table (docs/test head `5e9e2e8`, 2026-08-04)
+
+Concise current-state view (history preserved in §1 + §10–14; those are **superseded
+historical snapshots**, not current). Columns: **Code/DB** = implemented in code/DB ·
+**Staging** = applied on isolated staging `vpfnycxzqziltsnzxbpb` · **Dyn-verified** =
+dynamically verified live · **Owner-open** = owner-external / still open.
+
+| Area | Code/DB | Staging | Dyn-verified | Owner-open |
+|---|---|---|---|---|
+| P0-1b…p0_1n chain (least-priv, quote confidentiality, requester-safe dossier, raw-read boundary, evidence gates) | ✅ (head `33fbc33`, stable) | ✅ `list_migrations` | ✅ live rollback (`LIVE_STAGING_VERIFICATION`) | — |
+| Approval workflow (need+award+PO) + SoD + financial (disburse triple, payment evidence gate) | ✅ | ✅ | ✅ live rollback | — |
+| RLS / privacy (cross-dept, p0_1n boundary, `portal_users` least-priv, safe directory) | ✅ | ✅ | ✅ live, incl. 4-role probe matrix (§7b), `P0001` denial | — |
+| Security Advisor `SECURITY DEFINER` disposition (96 = 86/2/7/1; 0 mutable path; 0 definer view) | ✅ doc | ✅ | ✅ live `get_advisors` match + per-sig owner/grants attestation | per-sig negative tests + independent review |
+| Audit hash-chain (057) | ✅ | ✅ | ✅ `portal_audit_verify()=ok` | — |
+| **Authenticated hosted BROWSER E2E** | scaffold ✅ (error-specific probes) | n/a | **DB-equivalent probe matrix ✅; BROWSER run ❌ NOT RUN** | **yes — no non-skipped run; needs CI workflow + `STAGING_E2E_USERS` secret (bot cannot set secret / dispatch; sandbox browser egress blocked)** |
+| QA/R2 staging residue | n/a | fixtures present | characterized only | **yes — classification UNVERIFIED (owner attestation) + purge not done** |
+| `service_role` rotation · leaked-password protection | n/a | n/a | n/a | **yes — owner Auth/ops** |
+| Independent adversarial review | n/a | n/a | n/a | **yes — Codex usage-limit blocked** |
+
+**Exact-head CI (docs/test head `5e9e2e8`):** `portal-tests` #209 · `hosted-preview-smoke` #40 · Cloudflare Preview `5e9e2e8` — all SUCCESS. **Authenticated hosted E2E: no non-skipped run exists.** Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`.
+
+---
+
 ## 1. Reconciliation (supersedes stale certification language)
 
 | Item | Stale claim (old PR body) | **Current truth (source snapshot `1e44e33`)** |
