@@ -28,9 +28,16 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > table and §10–14 closure tables below are **historical snapshots** (source snapshot
 > `1e44e33`, and the read-only production `list_migrations` fact dated 2026-07-29);
 > they are not rewritten and do **not** override this update. **Remaining gaps (all
-> still open — Gate 1 HELD):** authenticated multi-role hosted Playwright E2E;
-> disposition of the one missing R2 quote object and pre-existing QA-shaped staging
-> rows; staging `service_role` key rotation/disablement evidence; leaked-password
+> still open — Gate 1 HELD):** authenticated multi-role hosted Playwright E2E
+> (scaffold now runs real server-side authz/RLS probes via the authenticated session,
+> not just client nav — `scripts/e2e/authenticated-multirole-journey.mjs`; still
+> owner-gated on credentials);
+> the missing R2 quote object + pre-existing QA-shaped staging rows are now
+> **characterized and dispositioned** (`audit-output/STAGING_QA_RESIDUE_DISPOSITION_2026-08-04.md`
+> — all 20 requests/5 offers/4 payments are 2026-08-02 QA fixtures, zero real data;
+> offer 99000001 `qa/test.pdf` is a synthetic out-of-namespace key; owner data-purge
+> before go-live, no leak risk as doc downloads fail-closed); staging `service_role`
+> key rotation/disablement evidence; leaked-password
 > protection (or recorded risk acceptance); signature-by-signature Security Advisor
 > `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**) — **repo-side
 > code disposition now produced in `audit-output/SECURITY_ADVISOR_DEFINER_DISPOSITION.md`

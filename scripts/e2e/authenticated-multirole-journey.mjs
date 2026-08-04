@@ -8,13 +8,18 @@
  * owner-supplied role identity, then asserts per-role authorization visibility
  * (positive tabs present, forbidden tabs absent) and cross-environment isolation.
  *
+ * For each role it also runs **server-side** authorization/RLS probes through the
+ * real authenticated Supabase session (not just client nav): other-user readability
+ * on portal_users (RLS self/admin), portal_user_directory safe-column surface,
+ * server-evaluated portal_has_perm, and the finance/admin-only portal_audit_verify.
+ *
  * SAFETY / SCOPE:
  *  - Credential-gated. With no STAGING_E2E_USERS it SKIPS (exit 0), so CI stays
  *    green and this file is inert until the owner provides staging test users.
- *  - Read-only in the app: it logs in and inspects role-scoped navigation/identity.
- *    It does NOT create/approve/disburse — state-mutating lifecycle stays in the
- *    SQL suite (exhaustive) until a dedicated seed+teardown is authorized. Hooks
- *    for that are marked TODO and are not claimed as executed.
+ *  - Read-only in the app: it logs in and runs read-only authz/RLS probes. It does
+ *    NOT create/approve/disburse — the state-mutating cross-role lifecycle stays in
+ *    the SQL suite + the DB-level live verification until a dedicated seed+teardown
+ *    is authorized. Those hooks are marked TODO and are not claimed as executed.
  *  - Isolation-guarded: refuses to run unless /api/portal-config resolves to the
  *    expected isolated staging ref, and never to the production project.
  *  - Never prints passwords or tokens.
@@ -23,7 +28,11 @@
  *  - PREVIEW_BASE_URL        hosted Cloudflare Pages preview host (…pages.dev)
  *  - EXPECTED_STAGING_REF    isolated staging Supabase ref (20 lowercase alnum)
  *  - STAGING_E2E_USERS       JSON: { "<role>": { "email","password",
- *                              "expectTabs":[…], "denyTabs":[…], "admin":bool } }
+ *                              "expectTabs":[…], "denyTabs":[…], "admin":bool,
+ *                              "finance":bool, "expectManageUsers":bool,
+ *                              "expectAuditVerify":bool } }
+ *                              (expectManageUsers defaults to admin; expectAuditVerify
+ *                               defaults to admin||finance.)
  *
  * RUN: PREVIEW_BASE_URL=… EXPECTED_STAGING_REF=… STAGING_E2E_USERS='{…}' \
  *      node scripts/e2e/authenticated-multirole-journey.mjs
@@ -79,6 +88,7 @@ let failures = 0;
 
 for (const role of roleNames) {
   const u = users[role] || {};
+  const u_admin = !!u.admin;
   if (!u.email || !u.password) { console.log(`  ✗ ${role}: missing email/password`); failures++; continue; }
   const expectTabs = Array.isArray(u.expectTabs) ? u.expectTabs : [];
   const denyTabs = Array.isArray(u.denyTabs) ? u.denyTabs : [];
@@ -115,9 +125,45 @@ for (const role of roleNames) {
     assert.equal(missing.length, 0, `${role}: expected tab(s) not visible: ${missing.join(', ')}`);
     assert.equal(leaked.length, 0, `${role}: forbidden tab(s) leaked into nav: ${leaked.join(', ')}`);
 
-    console.log(`  ✓ ${role} (${view.me}) — tabs ${JSON.stringify(view.allowed)}; positive/negative gates hold`);
-    // TODO(owner-authorized seed): drive the cross-role lifecycle + negative authz
-    //   RPC probes here once a disposable staging seed + teardown is provided.
+    // ── Server-side authorization / RLS probes via the real authenticated session ──
+    // (client-side nav visibility is NOT an authorization boundary; these hit the DB.)
+    const probes = await page.evaluate(async () => {
+      const out = {};
+      try {
+        const me = window.ME;
+        const u = await window.SB.from('portal_users').select('username,email').neq('username', me).limit(5);
+        out.otherUserRows = (u.data || []).length;
+        const d = await window.SB.from('portal_user_directory').select('*').limit(1);
+        out.dirKeys = (d.data && d.data[0]) ? Object.keys(d.data[0]).sort() : [];
+        const h = await window.SB.rpc('portal_has_perm', { p_key: 'can_manage_users' });
+        out.manageUsers = h.data === true;
+        const a = await window.SB.rpc('portal_audit_verify');
+        out.auditOk = !a.error;
+      } catch (e) { out.fatal = String(e); }
+      return out;
+    });
+    if (probes.fatal) throw new Error(`${role}: probe fatal — ${probes.fatal}`);
+
+    // P-DIR: the safe directory must never expose email/permissions/role
+    for (const forbidden of ['email', 'permissions', 'role', 'job_key', 'delegate_to']) {
+      assert.equal(probes.dirKeys.includes(forbidden), false,
+        `${role}: portal_user_directory leaked column "${forbidden}"`);
+    }
+    // P-RLS: only an admin may read other users' rows; everyone else sees zero
+    if (u_admin) assert.ok(probes.otherUserRows > 0, `${role}: admin should read other portal_users rows`);
+    else assert.equal(probes.otherUserRows, 0, `${role}: non-admin read ${probes.otherUserRows} other portal_users rows (RLS breach)`);
+    // P-PERM: server-evaluated capability matches the declared expectation
+    const expManage = (u.expectManageUsers !== undefined) ? !!u.expectManageUsers : u_admin;
+    assert.equal(probes.manageUsers, expManage, `${role}: can_manage_users server-eval=${probes.manageUsers}, expected ${expManage}`);
+    // P-AUDIT: portal_audit_verify is finance/admin-only
+    const expAudit = (u.expectAuditVerify !== undefined) ? !!u.expectAuditVerify : (u_admin || !!u.finance);
+    assert.equal(probes.auditOk, expAudit, `${role}: audit_verify allowed=${probes.auditOk}, expected ${expAudit}`);
+
+    console.log(`  ✓ ${role} (${view.me}) — nav ${JSON.stringify(view.allowed)}; server probes: otherUsers=${probes.otherUserRows} manageUsers=${probes.manageUsers} auditVerify=${probes.auditOk}; dir cols safe`);
+    // TODO(owner-authorized seed): state-mutating cross-role lifecycle (create→approve→
+    //   PO→disburse→receipt) + browser-driven forbidden-transition probes require a
+    //   disposable seed + teardown; not executed here. Server-side authz/RLS/SoD/financial
+    //   negatives are already proven at DB level in LIVE_STAGING_VERIFICATION_2026-08-04.md.
   } catch (e) {
     console.log(`  ✗ ${role}: ${(e && e.message) || e}`);
     failures++;

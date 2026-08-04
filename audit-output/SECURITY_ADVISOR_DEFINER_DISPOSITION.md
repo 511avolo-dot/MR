@@ -200,6 +200,10 @@ The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor 
 Per the owner Gate review, the Security Advisor blocker is **not** closed from the disposition table alone. What is done vs. what remains:
 
 - **Done:** every signature is enumerated against the **current** live SQL catalog (134 fns), each with a pinned `search_path` (0 offenders) and its exact caller boundary (48 server-only / 84 authenticated / 2 anon); the live re-scan matches; and **build-failing negative controls exist** — `11_security.sql` **S7** pins the exact server-only set and **S8** pins the exact anon-executable set (any drift fails CI), plus the live RLS/RPC negatives in `LIVE_STAGING_VERIFICATION_2026-08-04.md` (cross-department read denied, raw-vs-safe boundary, self/unauthorized approve denied, SoD triple).
+- **Live per-signature attestation (2026-08-04, catalog-queried):**
+  - **Owner:** all 134 owned uniformly by **`postgres`** (no lower-privilege or unexpected owner).
+  - **`search_path`:** all fixed / non-mutable — **133 = `search_path=public`**, **1 = `search_path=public, extensions`** (the lone extension-using function); advisor `function_search_path_mutable = 0`.
+  - **Grants:** **48** `service_role`-only · **84** `authenticated`+`service_role` · **2** `anon`+`authenticated`+`service_role` (the token-gated supplier pair); `service_role` can execute all; `PUBLIC` executes none.
 - **Remaining for closure:** per-signature owner/grant attestation table + an individual negative-execution test for each authenticated RPC (beyond the category-level S7/S8 + lifecycle negatives), and the **fresh independent adversarial review** (externally blocked — Codex usage limit). Until both land, this blocker stays **OPEN**.
 
 **Gate 1 remains HELD; verdict NOT READY. No code/DB/production change was made to produce this document.**
