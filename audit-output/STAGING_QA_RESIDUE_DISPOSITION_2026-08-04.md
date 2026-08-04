@@ -1,13 +1,14 @@
 # Staging QA residue + R2 object disposition — `vpfnycxzqziltsnzxbpb` (2026-08-04)
 
-> Investigated live via the owner-authorized connector (read-only). Addresses the
-> binding blocker "one missing R2 quote object + pre-existing QA-shaped staging rows
-> still need disposition." **No rows were modified.**
+> Investigated live via the owner-authorized connector (read-only). **Characterization
+> only — this item stays OPEN / owner-action-required.** No purge/reset was authorized
+> or executed, and no rows were modified.
 
 ## What is on staging
-All content is **QA / E2E test fixtures created on 2026-08-02** (the staging
-bootstrap + QA day) — **zero real business data** (owner-confirmed: all users are
-demo/test, pre-launch).
+All content **appears to be QA / E2E test fixtures created on 2026-08-02** (the staging
+bootstrap + QA day). The naming patterns and single-day creation are strong *indicators*
+of test data, **not proof** — the real-vs-test classification is **UNVERIFIED pending
+explicit owner attestation** for this staging dataset (naming alone does not classify data).
 
 - **20 `portal_requests`** — every title is a test marker, e.g. `QA-Q-DOA-25000-PR74`,
   `QA-Q-DOA-25001-PR74`, `QA-Q-DOA-125000/125001-PR74`, `QA-V-FULL-E2E-75000-PR74`,
@@ -38,5 +39,7 @@ demo/test, pre-launch).
    **data-cleanup task on isolated staging**, not a code defect, and carries **no production
    risk** (production `mwbjoysuybgbrvfrprex` is untouched and unreachable from this connector).
 
-**Recommended owner action:** delete the `PR74` / `QA-*` / `qa_*`-owned test requests +
-their offers/payments (or reset staging) prior to Gate 1 sign-off. No repo change required.
+**Status: OPEN — owner action required.** Gate 1 keeps this item open until the owner
+(1) attests the real-vs-test classification, and (2) purges the `PR74` / `QA-*` / `qa_*`
+fixtures (or resets staging) prior to sign-off. No repo change required; no leak/production
+risk in the meantime.

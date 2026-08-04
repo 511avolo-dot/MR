@@ -10,12 +10,14 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > **2026-08-04 exact-head reconciliation (docs-only; no code/DB/production change):**
 > **code-under-test head = `33fbc33d73edfc0cc1467ce54a9cd84465cb1e97`** (last
 > commit that changed code/DB objects; the two P0-1n-block findings on `f8254fb134`
-> were remediated and shipped in the complete P0 chain there). **Current exact PR
-> head = `2d7ab0c4eef180709d6cdecc9ddc4af4e16a8739`** — this docs-only reconciliation
-> commit; it changes no code/DB, so `33fbc33`'s functional evidence still applies.
-> Exact-head CI/CD evidence: on `2d7ab0c`, **`portal-tests` run #199 SUCCESS** and
-> **`hosted-preview-smoke` run #30 SUCCESS** (re-run over the docs commit, proving
-> no regression). Code-under-test evidence at `33fbc33`: **`portal-tests` run
+> were remediated and shipped in the complete P0 chain there). No product code/DB
+> object has changed since `33fbc33`; every commit after it is **docs / test-scaffold
+> only**. **Current docs/test-scaffold head = the branch tip** (see the PR "Exact head"
+> field — do not pin a number here, it advances each docs commit). Exact-head repo CI
+> (`portal-tests`) + `hosted-preview-smoke` are **green on every pushed head** (e.g.
+> #206 / #37 at `ce17e1b`). **Authenticated multi-role hosted Playwright E2E = NOT RUN
+> / no gate evidence** (scaffold ready + credential-gated; a sandbox local attempt
+> failed on transport, so it is not cited). Code-under-test evidence at `33fbc33`: **`portal-tests` run
 > `30816735558` (#198) SUCCESS** — clean baseline lineage with **273 SQL
 > assertions** (+ 18 file-guard + 7 registration-endpoint), Stage-1 61/61, upload
 > cleanup 9/9, document authorization 7/7, functional security 18/18; **`hosted-
@@ -33,10 +35,11 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > not just client nav — `scripts/e2e/authenticated-multirole-journey.mjs`; still
 > owner-gated on credentials);
 > the missing R2 quote object + pre-existing QA-shaped staging rows are now
-> **characterized and dispositioned** (`audit-output/STAGING_QA_RESIDUE_DISPOSITION_2026-08-04.md`
-> — all 20 requests/5 offers/4 payments are 2026-08-02 QA fixtures, zero real data;
-> offer 99000001 `qa/test.pdf` is a synthetic out-of-namespace key; owner data-purge
-> before go-live, no leak risk as doc downloads fail-closed); staging `service_role`
+> **characterized (OPEN — owner attestation + purge required, not closed)**
+> (`audit-output/STAGING_QA_RESIDUE_DISPOSITION_2026-08-04.md` — 20 requests/5 offers/
+> 4 payments appear to be 2026-08-02 QA fixtures but the real-vs-test classification is
+> UNVERIFIED pending owner attestation; offer 99000001 `qa/test.pdf` is a synthetic
+> out-of-namespace key; no leak risk as doc downloads fail-closed); staging `service_role`
 > key rotation/disablement evidence; leaked-password
 > protection (or recorded risk acceptance); signature-by-signature Security Advisor
 > `SECURITY DEFINER` disposition (**96 entries: 7 INFO / 89 WARN**) — **repo-side

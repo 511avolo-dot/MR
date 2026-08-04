@@ -83,7 +83,13 @@ assert.equal(String(cfg.url).includes(PROD_REF), false, 'portal-config URL must 
 console.log('▶ Authenticated multi-role hosted journey');
 console.log(`  Target: ${new URL(base).host}  · isolated staging ${expectedRef}`);
 
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
+// Optional proxy for constrained runners (e.g. an agent sandbox). CI needs neither.
+const pwProxy = process.env.PW_PROXY ? { server: process.env.PW_PROXY } : undefined;
+const insecureTLS = process.env.PW_INSECURE === '1';
+const browser = await chromium.launch({
+  args: ['--no-sandbox'], proxy: pwProxy,
+  executablePath: process.env.PW_EXECUTABLE || undefined, // pinned browser on constrained runners
+});
 let failures = 0;
 
 for (const role of roleNames) {
@@ -92,7 +98,7 @@ for (const role of roleNames) {
   if (!u.email || !u.password) { console.log(`  ✗ ${role}: missing email/password`); failures++; continue; }
   const expectTabs = Array.isArray(u.expectTabs) ? u.expectTabs : [];
   const denyTabs = Array.isArray(u.denyTabs) ? u.denyTabs : [];
-  const ctx = await browser.newContext();       // fresh session per role — no bleed
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: insecureTLS }); // fresh session per role — no bleed
   const page = await ctx.newPage();
   try {
     await page.goto(`${base}/purchase-portal.html`, { waitUntil: 'domcontentloaded', timeout: navTimeout });
@@ -127,39 +133,60 @@ for (const role of roleNames) {
 
     // ── Server-side authorization / RLS probes via the real authenticated session ──
     // (client-side nav visibility is NOT an authorization boundary; these hit the DB.)
+    // Each probe returns BOTH data and the raw Supabase error so we never treat a
+    // transport/schema/RPC failure as a passing negative result.
     const probes = await page.evaluate(async () => {
+      const pack = (r) => ({ rows: Array.isArray(r.data) ? r.data.length : null, data: r.data,
+        err: r.error ? { code: r.error.code || null, msg: String(r.error.message || '') } : null });
       const out = {};
       try {
         const me = window.ME;
-        const u = await window.SB.from('portal_users').select('username,email').neq('username', me).limit(5);
-        out.otherUserRows = (u.data || []).length;
-        const d = await window.SB.from('portal_user_directory').select('*').limit(1);
-        out.dirKeys = (d.data && d.data[0]) ? Object.keys(d.data[0]).sort() : [];
-        const h = await window.SB.rpc('portal_has_perm', { p_key: 'can_manage_users' });
-        out.manageUsers = h.data === true;
-        const a = await window.SB.rpc('portal_audit_verify');
-        out.auditOk = !a.error;
+        out.users = pack(await window.SB.from('portal_users').select('username,email').neq('username', me).limit(5));
+        out.dir = pack(await window.SB.from('portal_user_directory').select('*').limit(1));
+        out.dirKeys = (out.dir.data && out.dir.data[0]) ? Object.keys(out.dir.data[0]).sort() : [];
+        out.perm = pack(await window.SB.rpc('portal_has_perm', { p_key: 'can_manage_users' }));
+        out.audit = pack(await window.SB.rpc('portal_audit_verify'));
       } catch (e) { out.fatal = String(e); }
       return out;
     });
     if (probes.fatal) throw new Error(`${role}: probe fatal — ${probes.fatal}`);
 
-    // P-DIR: the safe directory must never expose email/permissions/role
-    for (const forbidden of ['email', 'permissions', 'role', 'job_key', 'delegate_to']) {
-      assert.equal(probes.dirKeys.includes(forbidden), false,
-        `${role}: portal_user_directory leaked column "${forbidden}"`);
-    }
-    // P-RLS: only an admin may read other users' rows; everyone else sees zero
-    if (u_admin) assert.ok(probes.otherUserRows > 0, `${role}: admin should read other portal_users rows`);
-    else assert.equal(probes.otherUserRows, 0, `${role}: non-admin read ${probes.otherUserRows} other portal_users rows (RLS breach)`);
-    // P-PERM: server-evaluated capability matches the declared expectation
     const expManage = (u.expectManageUsers !== undefined) ? !!u.expectManageUsers : u_admin;
-    assert.equal(probes.manageUsers, expManage, `${role}: can_manage_users server-eval=${probes.manageUsers}, expected ${expManage}`);
-    // P-AUDIT: portal_audit_verify is finance/admin-only
     const expAudit = (u.expectAuditVerify !== undefined) ? !!u.expectAuditVerify : (u_admin || !!u.finance);
-    assert.equal(probes.auditOk, expAudit, `${role}: audit_verify allowed=${probes.auditOk}, expected ${expAudit}`);
+    const DENY = /permission|denied|not.*allow|صلاحية|غير مخوّل|غير مصرّح/i; // permission-denied signature
+    const isDenied = (e) => !!e && (e.code === 'P0001' || e.code === '42501' || DENY.test(e.msg));
+    let pos = 0, neg = 0;
 
-    console.log(`  ✓ ${role} (${view.me}) — nav ${JSON.stringify(view.allowed)}; server probes: otherUsers=${probes.otherUserRows} manageUsers=${probes.manageUsers} auditVerify=${probes.auditOk}; dir cols safe`);
+    // P-RLS (portal_users): the query must SUCCEED (error === null); RLS then filters rows.
+    assert.equal(probes.users.err, null, `${role}: portal_users query errored (${probes.users.err && probes.users.err.msg}) — cannot infer RLS from a failed query`);
+    if (u_admin) { assert.ok(probes.users.rows > 0, `${role}: admin should read other portal_users rows`); pos++; }
+    else { assert.equal(probes.users.rows, 0, `${role}: non-admin read ${probes.users.rows} other portal_users rows (RLS breach)`); neg++; }
+
+    // P-DIR: the safe view must be readable (error === null), return its allowed columns,
+    //        and never expose sensitive ones. An errored/empty shape does NOT pass.
+    assert.equal(probes.dir.err, null, `${role}: portal_user_directory query errored (${probes.dir.err && probes.dir.err.msg})`);
+    assert.ok(probes.dir.rows >= 1, `${role}: portal_user_directory returned no rows — cannot prove safe surface`);
+    for (const need of ['username', 'display_name']) assert.ok(probes.dirKeys.includes(need), `${role}: safe directory missing expected column "${need}"`);
+    for (const forbidden of ['email', 'permissions', 'role', 'job_key', 'delegate_to']) assert.equal(probes.dirKeys.includes(forbidden), false, `${role}: portal_user_directory leaked column "${forbidden}"`);
+    pos++;
+
+    // P-PERM: server-evaluated capability. The RPC must succeed; its value must match.
+    assert.equal(probes.perm.err, null, `${role}: portal_has_perm errored (${probes.perm.err && probes.perm.err.msg})`);
+    assert.equal(probes.perm.data === true, expManage, `${role}: can_manage_users server-eval=${probes.perm.data}, expected ${expManage}`);
+    expManage ? pos++ : neg++;
+
+    // P-AUDIT: finance/admin-only. Positive ⇒ error null + ok:true. Negative ⇒ a SPECIFIC
+    //          permission denial (not any error — a network/missing-fn error must NOT pass).
+    if (expAudit) {
+      assert.equal(probes.audit.err, null, `${role}: audit_verify should be allowed but errored (${probes.audit.err && probes.audit.err.msg})`);
+      assert.ok(probes.audit.data && (probes.audit.data.ok === true || probes.audit.data.ok === undefined), `${role}: audit_verify returned unexpected payload`);
+      pos++;
+    } else {
+      assert.ok(isDenied(probes.audit.err), `${role}: audit_verify should be DENIED with a permission signature, got ${JSON.stringify(probes.audit.err)}`);
+      neg++;
+    }
+
+    console.log(`  ✓ ${role} (${view.me}) — nav ${JSON.stringify(view.allowed)}; server probes ${pos} positive / ${neg} negative PASS (users.err=null rows=${probes.users.rows}; dir cols=${JSON.stringify(probes.dirKeys)}; manageUsers=${probes.perm.data}; auditVerify=${expAudit ? 'ok' : 'denied:'+(probes.audit.err&&probes.audit.err.code)})`);
     // TODO(owner-authorized seed): state-mutating cross-role lifecycle (create→approve→
     //   PO→disburse→receipt) + browser-driven forbidden-transition probes require a
     //   disposable seed + teardown; not executed here. Server-side authz/RLS/SoD/financial
