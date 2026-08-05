@@ -69,11 +69,19 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > enforcement (deferred trigger via `SET CONSTRAINTS IMMEDIATE`), three-way match, supplier
 > IBAN dual-control, direct-expense unified engine (4-layer evidence + 3-stage chain +
 > chain-approver-can't-execute SoD → closed), bulk approve, idempotency + reopen-award, and
-> void/saga — with SoD negatives DENIED throughout. **1 block INCONCLUSIVE:** higher-tier
-> (300K) committee PO stage (`لست المُعتمِد`) — likely `committee_policy.max_amount_inclusive
-> =125000` config (launch data-setup gap, committee proven at 100K), unconfirmed because the
-> connector dropped mid-run; to re-run. See `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`.
-> **DB-level only — does NOT replace the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
+> void/saga — with SoD negatives DENIED throughout. **B12 RE-RUN & RESOLVED (2026-08-05, per
+> owner Gate review of `be0c204`):** the 300K PO chain is **finance→GM** (not committee-first —
+> the first run wrongly approved as committee); walked live with SoD (committee-member &
+> non-GM denied, GM approves → payment). Exact evidence captured: active `committee_policy`
+> (max 125000, fallback null), zero seeded `can_approve_committee` holders (committee resolves
+> via `committee_members` list), resolver decision + built PO stages at boundaries **125000
+> (committee) / 125001 (<none>) / 300000 (finance→GM)**. **NEW governance finding F-PO-125K:**
+> the **(125000, 150000] band gets ZERO second-line PO approval** (DoA tier-2 = committee-only,
+> but policy caps committee at 125000 with null fallback → 125001 issues PO directly to
+> payment). **Config/DoA interaction, not a code defect; owner policy decision to remediate
+> (max→150000, or set fallback_role_key, or DoA change). No change made.** See
+> `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`. **DB-level only — does NOT replace
+> the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
 
 > **2026-08-05 live-staging RE-verification (connector re-attached; zero-persistence, rolled
 > back):** re-ran at owner request against isolated staging `vpfnycxzqziltsnzxbpb` (prod ref
