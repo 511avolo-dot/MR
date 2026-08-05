@@ -25,7 +25,10 @@ P0L="$ROOT/db/portal-migrations/p0_1l-final-independent-review-remediation.sql"
 P0L_DUP_FIXTURE="$ROOT/db/portal-tests/p0_1l-pre-p0i-duplicate-fixture.sql"
 P0M="$ROOT/db/portal-migrations/p0_1m-clean-install-raw-read-grants.sql"
 P0N="$ROOT/db/portal-migrations/p0_1n-direct-expense-raw-read-boundary.sql"
-DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening|43_exact_head_review_remediation|44_independent_review_remediation|45_final_independent_review_remediation)\.sql$'
+P0O="$ROOT/db/portal-migrations/p0_1o-committee-ceiling-150k.sql"
+# Tests that depend on post-baseline (062 / P0-1i-phase / later) migrations, skipped in Phase A.
+# 47_committee_ceiling depends on p0_1o (committee ceiling 150k) which is applied only in Phase B.
+DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening|43_exact_head_review_remediation|44_independent_review_remediation|45_final_independent_review_remediation|47_committee_ceiling)\.sql$'
 
 echo "▶ [1] drift guard: baseline مطابق للمولَّد الحتميّ"
 node "$ROOT/scripts/deploy/build-baseline.mjs" --check
@@ -72,7 +75,7 @@ PRE=$("${PSQL[@]}" -d "$DBB" -tAc "select count(*) from information_schema.table
 [ "$PRE" = "1" ] || { echo "❌ 062 يجب أن تظهر بعد التطبيق (=$PRE)"; exit 1; }
 
 echo "▶ [6] المرحلة ب — الحزمة الكاملة على أساس+062"
-b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0; b_p0i=0; b_p0j=0; b_p0k=0; b_p0l=0; b_p0m=0; b_p0n=0
+b_pass=0; b_p0b=0; b_p0d=0; b_p0e=0; b_p0f=0; b_p0g=0; b_p0h=0; b_p0i=0; b_p0j=0; b_p0k=0; b_p0l=0; b_p0m=0; b_p0n=0; b_p0o=0
 for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
   b=$(basename "$f")
   if [[ "$b" == "38_portal_users_least_privilege.sql" && "$b_p0b" = "0" ]]; then
@@ -104,6 +107,9 @@ for f in $(ls "$ROOT"/db/portal-tests/[0-9]*.sql | sort); do
     "${PSQL[@]}" -d "$DBB" -f "$P0L" >/tmp/p0l_b.log 2>&1 || { echo "❌ P0-1l B"; cat /tmp/p0l_b.log; exit 1; }; b_p0l=1
     "${PSQL[@]}" -d "$DBB" -f "$P0M" >/tmp/p0m_b.log 2>&1 || { echo "❌ P0-1m B"; cat /tmp/p0m_b.log; exit 1; }; b_p0m=1
     "${PSQL[@]}" -d "$DBB" -f "$P0N" >/tmp/p0n_b.log 2>&1 || { echo "❌ P0-1n B"; cat /tmp/p0n_b.log; exit 1; }; b_p0n=1
+  fi
+  if [[ "$b" == "47_committee_ceiling.sql" && "$b_p0o" = "0" ]]; then
+    "${PSQL[@]}" -d "$DBB" -f "$P0O" >/tmp/p0o_b.log 2>&1 || { echo "❌ P0-1o B"; cat /tmp/p0o_b.log; exit 1; }; b_p0o=1
   fi
   "${PSQL[@]}" -d "$DBB" -f "$f" >/tmp/phaseB.log 2>&1 || { echo "❌ المرحلة ب فشل $b:"; grep -iE "ERROR|EXCEPTION" /tmp/phaseB.log | head -5; exit 1; }
   b_pass=$((b_pass+1))
