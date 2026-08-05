@@ -63,6 +63,19 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > browser E2E (scaffold ready), leaked-password toggle, `service_role` rotation, R2/QA
 > residue, independent adversarial review.
 
+> **2026-08-05 live-staging RE-verification (connector re-attached; zero-persistence, rolled
+> back):** re-ran at owner request against isolated staging `vpfnycxzqziltsnzxbpb` (prod ref
+> still unreachable). **Full ≤25K lifecycle to `closed`** via real RPC (create→3-stage need→
+> pricing→2 offers→award→award-approval→bank payment→3rd-party disburse→full receipt) + **SoD
+> negatives N1–N3 denied** + **payment evidence gate G1 enforced** (*"مستند الدفع مطلوب…"*) +
+> **RLS/least-privilege** under real `authenticated` (requester/finance/procurement see 0 other
+> `portal_users`; admin sees all 23; `portal_user_directory` = safe cols only; `audit_verify`
+> denied for requester / ok for finance) + **escalation negative quality-checked** (non-admin
+> self-`UPDATE` → `ROW_COUNT=0`, role still `user` by row-count+read-back, not absence-of-error).
+> **Cleanliness after: 20 requests / 23 users unchanged, both evidence flags reverted to 1, 0
+> leaked rows.** See `audit-output/LIVE_STAGING_VERIFICATION_2026-08-05.md`. Owner-owned items
+> unchanged (leaked-password toggle, account/`service_role`/staging→prod ops). Gate 1 **HELD**.
+
 > **2026-08-03 P0-1n controlling update:** the fresh review of exact head
 > `f8254fb134` raised two additional current findings after the prior seven.
 > P0-1l is implemented and transaction-tested, and Staging migrations
