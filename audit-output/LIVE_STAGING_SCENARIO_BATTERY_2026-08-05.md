@@ -9,6 +9,34 @@
 > **This is DATABASE-LEVEL evidence** — it does NOT replace the controlling authenticated hosted
 > **browser** E2E (still OPEN in CI) or independent review. Gate 1 remains **HELD**.
 
+## Phase-1 completion blocks (2026-08-05, owner "كمل هذه الاختبارات") — returns / edit-returned / recurring
+Ran to close 100% scenario coverage (real RPC, rolled back). All PASS:
+- **B10 — returns + debit note (034/039):** full cycle → `closed` (received 2), then: return of a
+  non-order item (seq 99) **DENIED**; return without reason **DENIED**; return qty>received (3>2)
+  **DENIED**; return qty 1 → **debit note `DN-4672-01`, debit 3000**; cumulative return exceeding
+  received (1 prior +2 >2) **DENIED**; second return qty 1 accepted → `returns_total=6000`. ✅
+- **B11 — smart rework / edit-returned (043):** dept-manager returns to requester → `returned`;
+  **unauthorized** edit **DENIED**; requester `portal_update_request` edits content (10000→**31000**,
+  items replaced) → **revision=1, all need-approvals reset**; `resubmit` → `in_review` → full
+  re-approval → `pricing`; edit of a **non-returned** (pricing) request **DENIED**. ✅
+- **B-REC — recurring/scheduled expense (055):** template save (bank IBAN + beneficiary validation);
+  `portal_recurring_run()` (service_role) → generates **1 `direct_expense` with a 3-stage
+  disbursement chain**; second run same day → **no duplicate** (next_run advanced, flood-protected);
+  **deactivated** template due → **does NOT generate**. ✅
+  - **⚠️ FINDING F-REC-062 (staging-only divergence, NOT a repo/production defect):** on staging the
+    live `portal_recurring_run` is the **migration-055 version that auto-submits** the generated
+    expense, which trips `trg_portal_requests_05_verified_evidence` (from p0_1j/k) — because **062
+    (which makes `recurring_run` keep the generated request as a draft pending evidence) is NOT
+    applied on staging**, while the evidence guard IS. In the **repo/CI** (062 merged into
+    `portal-standalone`, test `31_recurring_expenses` RC1–RC7 green) and in **production once the
+    launch-plan migration delta applies 062**, `recurring_run` keeps drafts and there is no
+    collision. To prove the generation logic live here, the single 062-interaction guard
+    (`trg_portal_requests_05_verified_evidence`) was **disabled only inside the rolled-back tx** and
+    **verified re-ENABLED (`tgenabled='O'`) afterward** — staging guard intact. **Action:** the
+    production cutover MUST include 062 (already listed in `LAUNCH_PLAN_TO_PRODUCTION.md` §5.1).
+- **Post-run cleanliness:** `total_requests=20` unchanged, 0 recurring templates, 0 `LIVE-*`/`RP `
+  rows, evidence guard re-enabled. Staging dataset intact.
+
 ## Blocks executed — result summary
 | # | Scenario | Result |
 |---|---|---|
