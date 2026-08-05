@@ -84,8 +84,26 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > approved `fallback_role_key`, or change DoA tier-2), (2) it is explicitly authorized, and
 > (3) the fixed boundaries are proven live at 125000/125001/149999/150000/150001 with generated
 > `portal_po_approvals` stages + full SoD walk. **No config/DoA change made** (owner-owned; not
-> authorized by the Gate review). Boundary map (2 points live-proven, 3 derived pending re-auth)
-> in `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`. **DB-level only — does NOT
+> authorized by the Gate review).
+>
+> **Boundary map — ALL FIVE POINTS LIVE-PROVEN (2026-08-05, zero-persistence, rolled back).**
+> Method for every amount: impersonated real RPC `portal_create_request` → 3 need approvals
+> (`qa_dept_manager` → `stg_finance` → `stg_procurement`, each via `portal_pr_transition approve`)
+> → `portal_submit_offer` → `portal_award` → `portal_award_transition approve` (by `qa_procurement`,
+> SoD-clean) — which builds the PO chain — then `portal_po_approvals` rows dumped; block ends with
+> `RAISE EXCEPTION` (full rollback). Two runs: **B12 run** (125000, 125001, 300000) + **boundary
+> run** (149999, 150000, 150001). Generated stages:
+> | amount | run | `portal_po_approvals` (seq:kind/role_key) | request state |
+> |---|---|---|---|
+> | 125000 | B12 | `seq1:committee/can_approve_committee` | `po_review` |
+> | 125001 | B12 | `<none>` (0 rows) | `awarded/payment` |
+> | 149999 | boundary | `<none>` (0 rows) | `awarded/payment` |
+> | 150000 | boundary | `<none>` (0 rows) | `awarded/payment` |
+> | 150001 | boundary | `seq1:finance/can_approve_finance` | `po_review` |
+> | 300000 | B12 | `seq1:finance/can_approve_finance → seq2:gm/can_manage_users` | `po_review`; **SoD walk:** committee-member on finance stage DENIED · finance approves · non-GM on GM stage DENIED · GM approves → `payment` |
+> Rollback/zero-persistence confirmed after both runs (`total_requests=20` unchanged, 0 `LIVE-*`
+> rows, enforcement flags back to defaults). Full detail in
+> `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`. **DB-level only — does NOT
 > replace the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
 
 > **2026-08-05 live-staging RE-verification (connector re-attached; zero-persistence, rolled
