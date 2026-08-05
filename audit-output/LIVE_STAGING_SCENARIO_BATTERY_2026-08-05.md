@@ -66,12 +66,23 @@ passed with `qa_committee`.
 proven at ≤125000 (B1 + the 125000 boundary here).
 
 ## 🚫 F-PO-125K — OWNER-DECISION BLOCKER (Gate 1 blocker, per owner Gate review of `3a3f6cd`)
-**Classification: BLOCKER — awaiting an explicit owner policy decision.** Not merely
-informational. Gate 1 cannot pass until (1) the owner selects one remediation path, (2) it is
-explicitly authorized, and (3) the fixed boundaries are proven live at
-`125000 / 125001 / 149999 / 150000 / 150001` with generated `portal_po_approvals` stages and a
-full positive/negative SoD walk. **No config/DoA change has been made** (config/governance is
-the owner's; the Gate review does not authorize any config/migration/production change).
+**Classification: BLOCKER.** Gate 1 cannot pass until (1) the owner selects a remediation path
+[**DONE**], (2) the owner explicitly authorizes the change [**PENDING**], and (3) the fixed
+boundaries are proven live at `125000 / 125001 / 149999 / 150000 / 150001` with generated
+`portal_po_approvals` stages and a full positive/negative SoD walk [**PENDING** — runs after (2)].
+
+**✅ (1) Owner policy decision RECORDED (2026-08-05):** **Path A — raise the committee ceiling to
+150,000** (`committee_policy.max_amount_inclusive = 150000`), aligning committee coverage
+(25,001–150,000) with the DoA tier-2 boundary; amounts >150,000 keep the finance/GM PO stages
+per DoA. (Chosen over: fallback_role_key, or a DoA-tier restructure.)
+
+**⏸ (2) Implementation NOT started — awaiting explicit authorization.** No config/DoA change has
+been made on staging or production, and the repo migration is **not** prepared yet. The owner's
+decision recorded the *path only*; applying it (repo migration + staging apply) needs an explicit
+"authorize the change" per the Gate review. When authorized, the plan is: a new idempotent
+migration setting `committee_policy.max_amount_inclusive=150000` (+ merge into
+`portal-standalone.sql` baseline + a boundary assertion test), then apply to isolated staging,
+then the (3) fixed-behavior live re-proof.
 
 **Exact boundary map — current (pre-remediation) behavior. ALL FIVE POINTS LIVE-PROVEN**
 (2026-08-05, real RPC to award-approval → `portal_po_approvals` stages dumped, all rolled back).

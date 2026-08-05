@@ -80,10 +80,12 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > but `committee_policy.max_amount_inclusive=125000` with null fallback → 125001 issues the PO
 > directly to payment; the band closes at 150001 where DoA t3 adds a finance PO stage).
 > **Classified as an owner-decision BLOCKER, not an informational note.** Gate 1 cannot pass
-> until: (1) the owner selects one remediation path (align committee max→150000, or set an
-> approved `fallback_role_key`, or change DoA tier-2), (2) it is explicitly authorized, and
-> (3) the fixed boundaries are proven live at 125000/125001/149999/150000/150001 with generated
-> `portal_po_approvals` stages + full SoD walk. **No config/DoA change made** (owner-owned; not
+> until: (1) the owner selects one remediation path — **✅ DONE: Path A, raise committee ceiling
+> to 150000 (`committee_policy.max_amount_inclusive=150000`), recorded 2026-08-05**; (2) the owner
+> explicitly authorizes the change — **⏸ PENDING (decision recorded path only; no config/migration
+> prepared or applied)**; and (3) the fixed boundaries are proven live at
+> 125000/125001/149999/150000/150001 with generated `portal_po_approvals` stages + full SoD walk —
+> **⏸ PENDING, runs after (2)**. **No config/DoA change made** (owner-owned; not
 > authorized by the Gate review).
 >
 > **Boundary map — ALL FIVE POINTS LIVE-PROVEN (2026-08-05, zero-persistence, rolled back).**
