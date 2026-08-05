@@ -79,13 +79,16 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > the **`(125000, 150000]` band gets ZERO second-line PO approval** (DoA tier-2 = committee-only,
 > but `committee_policy.max_amount_inclusive=125000` with null fallback → 125001 issues the PO
 > directly to payment; the band closes at 150001 where DoA t3 adds a finance PO stage).
-> **Classified as an owner-decision BLOCKER, not an informational note.** Gate 1 cannot pass
-> until: (1) the owner selects one remediation path — **✅ DONE: Path A, raise committee ceiling
-> to 150000 (`committee_policy.max_amount_inclusive=150000`), recorded 2026-08-05**; (2) the owner
-> explicitly authorizes the change — **⏸ PENDING (decision recorded path only; no config/migration
-> prepared or applied)**; and (3) the fixed boundaries are proven live at
-> 125000/125001/149999/150000/150001 with generated `portal_po_approvals` stages + full SoD walk —
-> **⏸ PENDING, runs after (2)**. **No config/DoA change made** (owner-owned; not
+> **Owner-decision BLOCKER — REMEDIATED on staging (2026-08-05).** (1) Path selected — **✅ Path A,
+> raise committee ceiling to 150000**; (2) change authorized (owner: "both steps, staging only") —
+> **✅ implemented**: migration `p0_1o-committee-ceiling-150k.sql` + test `47_committee_ceiling.sql`
+> (CC1–CC4) wired into `run.sh` (**local suite 287 SQL PASS, exit 0, zero regression**), applied to
+> staging via `apply_migration` (`{"success":true}`, `committee_policy.max_amount_inclusive=150000`
+> verified live); (3) fixed-behavior boundaries **✅ re-proven live** — post-fix PO stages:
+> 125000/125001/149999/150000 → `committee` (the previously-uncontrolled band, now covered),
+> 150001 → `finance` (DoA t3); SoD walk at 149999: non-member (finance) DENIED, committee approves
+> → payment. Staging clean (20 requests unchanged, policy fix persists). **No production change; PR
+> Draft; still no browser-E2E / other open items.** **No config/DoA change made** (owner-owned; not
 > authorized by the Gate review).
 >
 > **Boundary map — ALL FIVE POINTS LIVE-PROVEN (2026-08-05, zero-persistence, rolled back).**

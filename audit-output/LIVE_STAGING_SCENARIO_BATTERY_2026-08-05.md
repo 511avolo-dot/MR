@@ -66,23 +66,39 @@ passed with `qa_committee`.
 proven at ≤125000 (B1 + the 125000 boundary here).
 
 ## 🚫 F-PO-125K — OWNER-DECISION BLOCKER (Gate 1 blocker, per owner Gate review of `3a3f6cd`)
-**Classification: BLOCKER.** Gate 1 cannot pass until (1) the owner selects a remediation path
-[**DONE**], (2) the owner explicitly authorizes the change [**PENDING**], and (3) the fixed
-boundaries are proven live at `125000 / 125001 / 149999 / 150000 / 150001` with generated
-`portal_po_approvals` stages and a full positive/negative SoD walk [**PENDING** — runs after (2)].
+**Classification: BLOCKER — REMEDIATED on staging (2026-08-05).** All three steps done:
+(1) owner selects a path [**✅ DONE**], (2) owner authorizes the change [**✅ DONE — staging only**],
+(3) fixed boundaries proven live [**✅ DONE**].
 
-**✅ (1) Owner policy decision RECORDED (2026-08-05):** **Path A — raise the committee ceiling to
-150,000** (`committee_policy.max_amount_inclusive = 150000`), aligning committee coverage
-(25,001–150,000) with the DoA tier-2 boundary; amounts >150,000 keep the finance/GM PO stages
-per DoA. (Chosen over: fallback_role_key, or a DoA-tier restructure.)
+**✅ (1) Owner policy decision (2026-08-05):** **Path A — raise the committee ceiling to 150,000**
+(`committee_policy.max_amount_inclusive = 150000`), aligning committee coverage (25,001–150,000)
+with the DoA tier-2 boundary; amounts >150,000 keep finance/GM per DoA. (Chosen over
+fallback_role_key / DoA-tier restructure.)
 
-**⏸ (2) Implementation NOT started — awaiting explicit authorization.** No config/DoA change has
-been made on staging or production, and the repo migration is **not** prepared yet. The owner's
-decision recorded the *path only*; applying it (repo migration + staging apply) needs an explicit
-"authorize the change" per the Gate review. When authorized, the plan is: a new idempotent
-migration setting `committee_policy.max_amount_inclusive=150000` (+ merge into
-`portal-standalone.sql` baseline + a boundary assertion test), then apply to isolated staging,
-then the (3) fixed-behavior live re-proof.
+**✅ (2) Implemented — repo + staging (owner-authorized "both steps, staging only", 2026-08-05):**
+- Repo: migration `db/portal-migrations/p0_1o-committee-ceiling-150k.sql` (idempotent, updates the
+  `committee_policy` setting to `max_amount_inclusive=150000` + keeps the clean-install fallback
+  default in sync) + boundary test `db/portal-tests/47_committee_ceiling.sql` (CC1–CC4) + wired
+  into `run.sh`. **Full local suite = 287 SQL assertions PASS, exit 0, zero regression.**
+- Staging: applied via `apply_migration` (`p0_1o_committee_ceiling_150k`, `{"success":true}`).
+  Verified live: `committee_policy.max_amount_inclusive=150000`; resolver `use_committee` = true
+  at 125000/125001/149999/150000 and false at 150001. **No production change.**
+
+**✅ (3) Fixed-behavior live re-proof (2026-08-05, rolled back except the policy fix).** Built the
+actual PO chain at each boundary post-fix and ran a full SoD walk on a newly-covered amount:
+| amount | PO stages (post-fix, LIVE) | note |
+|---|---|---|
+| 125000 | `seq1: committee/can_approve_committee` | unchanged |
+| **125001** | `seq1: committee/can_approve_committee` | ✅ **was `<none>` — now committee** |
+| **149999** | `seq1: committee/can_approve_committee` | ✅ **was `<none>`**; SoD walk: finance (non-member) **DENIED** · committee member approves → **payment** |
+| **150000** | `seq1: committee/can_approve_committee` | ✅ **was `<none>` — now committee** |
+| 150001 | `seq1: finance/can_approve_finance` | DoA t3 (committee out of band) |
+**The `(125000, 150000]` uncontrolled band is closed** — every PO in it now requires committee
+approval. Staging post-run: `total_requests=20` unchanged, 0 test rows, `committee_max=150000`
+(fix persists). **F-PO-125K remediated & re-proven on staging.**
+
+---
+### (historical — superseded by the REMEDIATED status above)
 
 **Exact boundary map — current (pre-remediation) behavior. ALL FIVE POINTS LIVE-PROVEN**
 (2026-08-05, real RPC to award-approval → `portal_po_approvals` stages dumped, all rolled back).

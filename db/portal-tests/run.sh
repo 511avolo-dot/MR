@@ -94,5 +94,8 @@ run_sql "P0-1n: إبقاء القراءة الخام للصرف المباشر �
 run_sql "اختبار P0-1l: العزل الخام/العقد الآمن/rollback مغلق/duplicate keys" "$HERE/45_final_independent_review_remediation.sql"
 run_sql "سلبيات تفويض لكل توقيع DEFINER كتابة (advisor closure)" "$HERE/46_definer_authz_negatives.sql"
 
+run_sql "p0_1o: رفع سقف اللجنة إلى 150000 (إصلاح F-PO-125K، قرار المالك مسار A)" "$ROOT/db/portal-migrations/p0_1o-committee-ceiling-150k.sql"
+run_sql "اختبار p0_1o: حدود اللجنة (25000/25001/125001/149999/150000/150001)" "$HERE/47_committee_ceiling.sql"
+
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (283 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (287 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
