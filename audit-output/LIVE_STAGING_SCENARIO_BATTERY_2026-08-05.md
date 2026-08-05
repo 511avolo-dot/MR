@@ -65,7 +65,33 @@ passed with `qa_committee`.
 (unauthorized identities denied at each stage). **B12 is resolved.** The committee stage is
 proven at ≤125000 (B1 + the 125000 boundary here).
 
-## ⚠️ NEW governance finding (F-PO-125K) — surfaced by the B12 boundary coverage
+## 🚫 F-PO-125K — OWNER-DECISION BLOCKER (Gate 1 blocker, per owner Gate review of `3a3f6cd`)
+**Classification: BLOCKER — awaiting an explicit owner policy decision.** Not merely
+informational. Gate 1 cannot pass until (1) the owner selects one remediation path, (2) it is
+explicitly authorized, and (3) the fixed boundaries are proven live at
+`125000 / 125001 / 149999 / 150000 / 150001` with generated `portal_po_approvals` stages and a
+full positive/negative SoD walk. **No config/DoA change has been made** (config/governance is
+the owner's; the Gate review does not authorize any config/migration/production change).
+
+**Exact boundary map — current (pre-remediation) behavior. ALL FIVE POINTS LIVE-PROVEN**
+(2026-08-05, real RPC to award-approval → `portal_po_approvals` stages dumped, all rolled back).
+`in-band = 25000 < amt ≤ 125000` (`portal_committee_route`) × DoA tiers (t2 ≤150000 =
+committee-only; t3 ≤250000 = committee+finance):
+
+| amount | in-band? | DoA tier | committee stage | finance/GM | resulting PO stages (LIVE) | second-line control |
+|---|---|---|---|---|---|---|
+| 125000 ✅live | yes | t2 | yes | — | `[seq1: committee/can_approve_committee]` | ✅ present |
+| 125001 ✅live | no | t2 | dropped (null fallback) | none (t2) | **`<none>` → `awarded/payment`** | ❌ **NONE** |
+| 149999 ✅live | no | t2 | dropped | none (t2) | **`<none>` → `awarded/payment`** | ❌ **NONE** |
+| 150000 ✅live | no | t2 | dropped | none (t2) | **`<none>` → `awarded/payment`** | ❌ **NONE** |
+| 150001 ✅live | no | t3 | dropped | **finance** (t3) | `[seq1: finance/can_approve_finance]` | ✅ present |
+
+The precise uncontrolled band is **`(125000, 150000]`** — live-confirmed at all five points; it
+closes at `150001` where DoA t3 adds a finance PO stage. This is the **current** behavior
+(informs the owner's decision). The **fixed-behavior** re-proof (with negative/positive SoD
+walks per stage) runs **after** the owner authorizes a remediation path, per the Gate review.
+
+## ⚠️ ORIGINAL note (superseded by the BLOCKER classification above) — F-PO-125K mechanism
 The **(125000, 150000]** amount band gets **zero second-line PO approval**. Mechanism: DoA
 tier-2 (≤150000) mandates **committee only** (`po_committee=true, po_finance=false,
 po_gm=false`), but `committee_policy.max_amount_inclusive=125000` with a **null

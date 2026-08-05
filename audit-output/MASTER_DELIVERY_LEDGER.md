@@ -75,13 +75,18 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > non-GM denied, GM approves → payment). Exact evidence captured: active `committee_policy`
 > (max 125000, fallback null), zero seeded `can_approve_committee` holders (committee resolves
 > via `committee_members` list), resolver decision + built PO stages at boundaries **125000
-> (committee) / 125001 (<none>) / 300000 (finance→GM)**. **NEW governance finding F-PO-125K:**
-> the **(125000, 150000] band gets ZERO second-line PO approval** (DoA tier-2 = committee-only,
-> but policy caps committee at 125000 with null fallback → 125001 issues PO directly to
-> payment). **Config/DoA interaction, not a code defect; owner policy decision to remediate
-> (max→150000, or set fallback_role_key, or DoA change). No change made.** See
-> `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`. **DB-level only — does NOT replace
-> the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
+> (committee) / 125001 (<none>) / 300000 (finance→GM)**. **🚫 F-PO-125K — OWNER-DECISION BLOCKER (Gate 1 blocker, per owner Gate review of `3a3f6cd`):**
+> the **`(125000, 150000]` band gets ZERO second-line PO approval** (DoA tier-2 = committee-only,
+> but `committee_policy.max_amount_inclusive=125000` with null fallback → 125001 issues the PO
+> directly to payment; the band closes at 150001 where DoA t3 adds a finance PO stage).
+> **Classified as an owner-decision BLOCKER, not an informational note.** Gate 1 cannot pass
+> until: (1) the owner selects one remediation path (align committee max→150000, or set an
+> approved `fallback_role_key`, or change DoA tier-2), (2) it is explicitly authorized, and
+> (3) the fixed boundaries are proven live at 125000/125001/149999/150000/150001 with generated
+> `portal_po_approvals` stages + full SoD walk. **No config/DoA change made** (owner-owned; not
+> authorized by the Gate review). Boundary map (2 points live-proven, 3 derived pending re-auth)
+> in `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`. **DB-level only — does NOT
+> replace the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
 
 > **2026-08-05 live-staging RE-verification (connector re-attached; zero-persistence, rolled
 > back):** re-ran at owner request against isolated staging `vpfnycxzqziltsnzxbpb` (prod ref
