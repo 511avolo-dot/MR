@@ -35,8 +35,7 @@
  *                   cannot egress directly but Node can)
  */
 import assert from 'node:assert/strict';
-
-const PROD_REF = 'mwbjoysuybgbrvfrprex';
+import { validateTarget, PROD_REF } from './target-guard.mjs';
 const base = String(process.env.PREVIEW_BASE_URL || '').replace(/\/$/, '');
 const expectedRef = String(process.env.EXPECTED_STAGING_REF || '');
 const rawUsers = String(process.env.STAGING_E2E_USERS || '').trim();
@@ -85,14 +84,12 @@ async function attachRelay(ctx) {
   });
 }
 
-// ── Isolation pre-flight: the hosted target must resolve to isolated staging ──
+// ── Isolation pre-flight: the hosted target must resolve ONLY to isolated staging ──
+// (validates BOTH ref and url host, and rejects the production ref in either).
 const cfgRes = await fetch(`${base}/api/portal-config`, { cache: 'no-store' });
 assert.equal(cfgRes.status, 200, 'portal-config must be reachable (HTTP 200).');
 const cfg = await cfgRes.json();
-assert.equal(cfg?.ok, true, 'portal-config must report ok:true.');
-assert.equal(cfg.env, 'preview', 'portal-config env must be preview (never production).');
-assert.equal(cfg.ref, expectedRef, 'portal-config ref must match the isolated staging ref.');
-assert.equal(String(cfg.ref).includes(PROD_REF), false, 'portal-config must never expose the production ref.');
+validateTarget(cfg, expectedRef); // throws unless url host === <staging>.supabase.co and no prod ref
 console.log('▶ Authenticated multi-role hosted journey');
 console.log(`  Target: ${new URL(base).host}  · isolated staging ${expectedRef}${useRelay ? ' · relay' : ''}`);
 
@@ -150,6 +147,13 @@ for (const role of roleNames) {
         const email = sess.user.email;
         out.email = email;
         const c = await (await fetch('/api/portal-config', { cache: 'no-store' })).json();
+        // Mirror the isolated-target guard IN-BROWSER before any authenticated REST call,
+        // using the passed expected ref — reject a staging ref advertised with a prod URL.
+        const PROD = 'mwbjoysuybgbrvfrprex';
+        if (!c || c.ok !== true || c.env !== 'preview') { out.fatal = 'in-browser: portal-config not preview/ok'; return out; }
+        if (c.ref !== ref || String(c.ref).includes(PROD)) { out.fatal = 'in-browser: ref mismatch/prod'; return out; }
+        let host; try { host = new URL(String(c.url)).hostname; } catch { out.fatal = 'in-browser: url invalid'; return out; }
+        if (host !== ref + '.supabase.co' || String(c.url).includes(PROD)) { out.fatal = `in-browser: url host ${host} != ${ref}.supabase.co (or prod)`; return out; }
         const url = c.url, H = { apikey: c.anonKey, Authorization: 'Bearer ' + tok };
         const jH = Object.assign({}, H, { 'Content-Type': 'application/json', Accept: 'application/json' });
         let r = await fetch(url + '/rest/v1/portal_users?select=username&email=neq.' + encodeURIComponent(email) + '&limit=5', { headers: H });
