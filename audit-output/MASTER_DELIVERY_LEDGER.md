@@ -115,7 +115,7 @@ dynamically verified live · **Owner-open** = owner-external / still open.
 | RLS / privacy (cross-dept, p0_1n boundary, `portal_users` least-priv, safe directory) | ✅ | ✅ | ✅ live, incl. 4-role probe matrix (§7b), `P0001` denial | — |
 | Security Advisor `SECURITY DEFINER` disposition (96 = 86/2/7/1; 0 mutable path; 0 definer view) | ✅ doc | ✅ | ✅ live `get_advisors` match + per-sig owner/grants attestation | per-sig negative tests + independent review |
 | Audit hash-chain (057) | ✅ | ✅ | ✅ `portal_audit_verify()=ok` | — |
-| **Authenticated hosted BROWSER E2E** | scaffold ✅ (error-specific probes) | n/a | **DB-equivalent probe matrix ✅; BROWSER run ❌ NOT RUN** | **yes — no non-skipped run; needs CI workflow + `STAGING_E2E_USERS` secret (bot cannot set secret / dispatch; sandbox browser egress blocked)** |
+| **Authenticated hosted BROWSER E2E** | scaffold ✅ (error-specific probes) | n/a | **EXECUTED (2026-08-04) — 4 roles, non-skipped, real Chromium + real Supabase logins via Node relay against the hosted Preview; per-role RLS/authz probes PASS incl. `P0001` denial; see `LIVE_STAGING_VERIFICATION` §7c** | **partially — ran from the agent env via relay with transient (restored) test passwords, NOT in GitHub CI; the CI run via `authenticated-multirole-e2e` + owner secret remains the clean-channel artifact** |
 | QA/R2 staging residue | n/a | fixtures present | characterized only | **yes — classification UNVERIFIED (owner attestation) + purge not done** |
 | `service_role` rotation · leaked-password protection | n/a | n/a | n/a | **yes — owner Auth/ops** |
 | Independent adversarial review | n/a | n/a | n/a | **yes — Codex usage-limit blocked** |

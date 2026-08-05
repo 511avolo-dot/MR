@@ -91,6 +91,30 @@ Node egress works but Chromium's tunnel is reset by the egress proxy — so the 
 must run in **CI** (`authenticated-e2e` workflow + the owner's `STAGING_E2E_USERS` secret);
 the authorization evidence above is the DB-level equivalent.
 
+## 7c. Authenticated hosted BROWSER E2E — EXECUTED (2026-08-04, 4 roles, non-skipped)
+Ran the real-browser journey (`scripts/e2e/authenticated-multirole-journey.mjs`) in
+**real Chromium** against the **hosted** Preview `audit-enterprise-certificati.aldeyabi-procurement.pages.dev`
+(portal-config → isolated staging `vpfnycxzqziltsnzxbpb`). Each role performs a **real
+Supabase `signInWithPassword`** through the actual login form, then the browser's own
+persisted session token drives authenticated REST authz/RLS probes. **All 4 roles PASS
+(exit 0):**
+
+| Role (real login) | other `portal_users` (RLS) | `portal_user_directory` cols | `can_manage_users` | `portal_audit_verify` |
+|---|---|---|---|---|
+| requester | **0** | active,department_id,display_name,username | false | **denied HTTP 400 / `P0001`** |
+| finance | 0 | (same safe cols) | false | 200 (allowed via `can_see_finance`) |
+| procurement | 0 | (same safe cols) | false | 200 |
+| admin | **5** (reads all) | (same safe cols) | true | 200 |
+
+**Execution context (honest scope):** run from the agent environment; the browser cannot
+egress the sandbox directly, so every request was relayed through Node (`PW_RELAY`) — the
+page, assets, `signInWithPassword`, and REST all traverse the real hosted app and real
+staging. It is a **non-skipped, credentialed** run with role-by-role results, but it ran
+**outside GitHub CI** and used **transient** `stg.*` test passwords that were **reset and
+restored (verified 4/4)**. The equivalent CI run remains available via the
+`authenticated-multirole-e2e` workflow + owner secret. Client-side nav is not asserted
+(not an authorization boundary; the authoritative checks are the server-side probes above).
+
 ## 8. Production-cleanliness after the run (all tests rolled back)
 `requests=20` (unchanged) · `LIVE %` test requests = **0** · `b3_%` test users = **0**
 · `payment_docs_required` back to **1** (the in-tx relax reverted) · OPS manager
