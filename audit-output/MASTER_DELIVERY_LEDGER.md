@@ -63,6 +63,18 @@ Every requirement/finding has a stable ID and a status. **No item disappears sil
 > browser E2E (scaffold ready), leaked-password toggle, `service_role` rotation, R2/QA
 > residue, independent adversarial review.
 
+> **2026-08-05 EXTENDED live-staging scenario battery (DB-level, zero-persistence, rolled
+> back):** 11 governance/workflow blocks PASS on isolated staging — committee tier (100K),
+> split award + per-supplier disbursement, installments, on-hold defer/resume, budget
+> enforcement (deferred trigger via `SET CONSTRAINTS IMMEDIATE`), three-way match, supplier
+> IBAN dual-control, direct-expense unified engine (4-layer evidence + 3-stage chain +
+> chain-approver-can't-execute SoD → closed), bulk approve, idempotency + reopen-award, and
+> void/saga — with SoD negatives DENIED throughout. **1 block INCONCLUSIVE:** higher-tier
+> (300K) committee PO stage (`لست المُعتمِد`) — likely `committee_policy.max_amount_inclusive
+> =125000` config (launch data-setup gap, committee proven at 100K), unconfirmed because the
+> connector dropped mid-run; to re-run. See `audit-output/LIVE_STAGING_SCENARIO_BATTERY_2026-08-05.md`.
+> **DB-level only — does NOT replace the controlling browser E2E (OPEN in CI). Gate 1 HELD.**
+
 > **2026-08-05 live-staging RE-verification (connector re-attached; zero-persistence, rolled
 > back):** re-ran at owner request against isolated staging `vpfnycxzqziltsnzxbpb` (prod ref
 > still unreachable). **Full ≤25K lifecycle to `closed`** via real RPC (create→3-stage need→
@@ -109,12 +121,15 @@ Status vocabulary: `open` · `implemented` (code merged, not yet independently t
 
 ---
 
-## 0. Gate table — last verified head `705cc45` (runs #210/#41)
+## 0. Gate table — last verified head `95fd4cd` (runs #218/#49)
 
 > **This is refreshed to the last head verified by CI / owner review, NOT auto-updated
 > per commit — it is not "exact-head" evidence for a newer tip.** The branch tip may be
-> ahead of `705cc45`; the PR's **Exact head** field and its live checks are authoritative
+> ahead of `95fd4cd`; the PR's **Exact head** field and its live checks are authoritative
 > for the current SHA. (A later docs-only commit does not change any verification below.)
+> **Prior verified head `705cc45` (runs #210/#41) is now historical**, superseded by the
+> owner Gate review of `95fd4cd` (exact-head `portal-tests` #218 · `hosted-preview-smoke`
+> #49, both green; PR Draft/open/unmerged).
 
 Concise state view (history preserved in §1 + §10–14; those are **superseded
 historical snapshots**, not current). Columns: **Code/DB** = implemented in code/DB ·
@@ -128,12 +143,18 @@ dynamically verified live · **Owner-open** = owner-external / still open.
 | RLS / privacy (cross-dept, p0_1n boundary, `portal_users` least-priv, safe directory) | ✅ | ✅ | ✅ live, incl. 4-role probe matrix (§7b), `P0001` denial | — |
 | Security Advisor `SECURITY DEFINER` disposition (96 = 86/2/7/1; 0 mutable path; 0 definer view) | ✅ doc | ✅ | ✅ live `get_advisors` match + per-sig owner/grants attestation | per-sig negative tests + independent review |
 | Audit hash-chain (057) | ✅ | ✅ | ✅ `portal_audit_verify()=ok` | — |
-| **Authenticated hosted BROWSER E2E** | scaffold ✅ (error-specific probes) | n/a | **EXECUTED (2026-08-04) — 4 roles, non-skipped, real Chromium + real Supabase logins via Node relay against the hosted Preview; per-role RLS/authz probes PASS incl. `P0001` denial; see `LIVE_STAGING_VERIFICATION` §7c** | **partially — ran from the agent env via relay with transient (restored) test passwords, NOT in GitHub CI; the CI run via `authenticated-multirole-e2e` + owner secret remains the clean-channel artifact** |
+| **Authenticated hosted BROWSER E2E** | scaffold ✅ (error-specific probes) | n/a | **NON-CI relay run only (2026-08-04), supplementary — NOT controlling** (see taxonomy note below) | **OPEN — the controlling GitHub-Actions credentialed run does not exist: no non-skipped `authenticated-multirole-e2e` run yet (owner supplies `STAGING_E2E_USERS`)** |
 | QA/R2 staging residue | n/a | fixtures present | characterized only | **yes — classification UNVERIFIED (owner attestation) + purge not done** |
 | `service_role` rotation · leaked-password protection | n/a | n/a | n/a | **yes — owner Auth/ops** |
 | Independent adversarial review | n/a | n/a | n/a | **yes — Codex usage-limit blocked** |
 
-**CI at last verified head `705cc45`:** `portal-tests` #210 · `hosted-preview-smoke` #41 · Cloudflare Preview — all SUCCESS. **Authenticated hosted BROWSER E2E: no non-skipped run exists** (DB-equivalent probes do NOT substitute for it). Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`.
+**CI at last verified head `95fd4cd`:** `portal-tests` #218 · `hosted-preview-smoke` #49 · Cloudflare Preview — all SUCCESS.
+
+**Browser-E2E evidence taxonomy (reconciled per owner Gate review of `95fd4cd`) — two distinct rows, no contradiction:**
+1. **Non-CI relay run (supplementary, 2026-08-04) — NOT controlling.** Ran `scripts/e2e/authenticated-multirole-journey.mjs` in real Chromium from the **agent environment**, not GitHub CI. Because Chromium cannot egress the agent sandbox, **all HTTP transport (page load, assets, `signInWithPassword`, REST) was relayed through Node (`PW_RELAY`)** to the hosted Preview `audit-enterprise-certificati.aldeyabi-procurement.pages.dev` (portal-config → isolated staging `vpfnycxzqziltsnzxbpb`). Four identities (requester/finance/procurement/admin) each performed a real `signInWithPassword` and the browser's persisted session token drove per-role RLS/authz probes: **4/4 PASS** (requester sees 0 other `portal_users`, admin all; `portal_audit_verify` denied for requester with `P0001`, allowed for finance/admin). **Caveats that keep it non-controlling:** Node-relayed transport (not a native browser network path); transient `stg.*` test passwords were reset and restored (4/4 verified); ran outside CI; artifact is the session console log, not a CI-retained artifact; the app *shell + login form + session* were exercised via the hosted Preview but client-side navigation was not asserted (the authoritative checks are the server-side authz probes). See `LIVE_STAGING_VERIFICATION_2026-08-04.md` §7c.
+2. **Controlling GitHub-Actions credentialed run — OPEN.** A non-skipped `authenticated-multirole-e2e` CI run (owner supplies the `STAGING_E2E_USERS` secret) **does not yet exist**. The non-CI relay run above does **not** satisfy it, and DB-level rollback probes do **not** substitute for it.
+
+Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`. Outstanding controlling rows also include: QA/R2 staging-residue disposition, `service_role` rotation, leaked-password protection, and fresh independent adversarial review — all owner-owned/open.
 
 ---
 
