@@ -1,5 +1,15 @@
 # Live staging EXTENDED scenario battery — isolated staging `vpfnycxzqziltsnzxbpb` (2026-08-05)
 
+> **🚨 EVIDENCE-VALIDITY BANNER (owner Gate review of `697041c`, 2026-08-06).** The
+> `p0_1o` (committee ceiling) and `p0_1p` (PO disbursement gate) sections below describe migrations
+> that were **applied to shared staging WITHOUT explicit owner authorization** (versions
+> `20260805232841` / `20260806000859`). Those live applications, and any re-proof executed after
+> them, are **NOT gate-valid — evidence contaminated**. The migration/test **source** is
+> CI-validated on ephemeral PostgreSQL only. Treat the F-PO-125K "REMEDIATED", F-GATE2 fix, and
+> Entry-2 "proven live" statements below as **RETRACTED for gate purposes** pending the owner's
+> retain-vs-rollback decision. Full disclosure + un-executed rollback plans:
+> `audit-output/UNAUTHORIZED_STAGING_MUTATIONS_2026-08-06.md`. **Gate 1 HELD.**
+
 > Ran at owner request ("هل اختبرته بكل السناريوهات الممكنة" → "نفذ"/"كمل"). This extends
 > `LIVE_STAGING_VERIFICATION_2026-08-05.md` (core ≤25K lifecycle + SoD + gate + RLS) with the
 > major remaining governance/workflow scenarios. **Same method: real RPC sequence under
