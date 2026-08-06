@@ -2538,6 +2538,52 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
       </div>
     </div>
 
+    <!-- ════ شهادة المحتوى المحلي (اختيارية) ════ -->
+    <div class="card">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.5 5.5L20 8l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"></path></svg>
+        شهادة المحتوى المحلي
+        <span style="margin-inline-start:8px;font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-wash);border:1px solid var(--line-gold-soft);border-radius:999px;padding:2px 10px">اختيارية</span>
+      </div>
+      <div class="card-subtitle">إن كانت لدى منشأتك شهادة محتوى محلي سارية من هيئة المحتوى المحلي والمشتريات الحكومية، يسعدنا تسجيلها — فهي تُعزّز أفضليتك عند التقييم. وليست شرطاً لإتمام التسجيل.</div>
+
+      <div class="field" style="margin-bottom:14px">
+        <label>هل لدى منشأتك شهادة محتوى محلي سارية؟ <span class="req">*</span></label>
+        <div class="check-group" style="margin-top:6px">
+          <label class="check-item"><input type="radio" name="lc_has" value="yes" id="lc-yes" onchange="toggleLocalContent()"> نعم، لديّ شهادة سارية</label>
+          <label class="check-item"><input type="radio" name="lc_has" value="no" id="lc-no" onchange="toggleLocalContent()" checked> لا / غير متوفّرة</label>
+        </div>
+      </div>
+
+      <div id="lc-details" style="display:none">
+        <hr class="section-sep">
+        <div class="section-label">بيانات الشهادة</div>
+        <div class="form-row">
+          <div class="field">
+            <label>رقم الشهادة <span class="req">*</span></label>
+            <input type="text" id="f-lc-no" dir="ltr" placeholder="رقم شهادة المحتوى المحلي">
+          </div>
+          <div class="field">
+            <label>نسبة المحتوى المحلي (%) <span class="req">*</span></label>
+            <input type="number" id="f-lc-pct" dir="ltr" min="0" max="100" step="0.01" placeholder="مثال: 45" oninput="lcPctCheck()">
+            <div id="f-lc-pct-hint" style="display:none;font-size:11.5px;margin-top:5px;color:#b4453f">النسبة تكون بين ٠ و ١٠٠.</div>
+          </div>
+        </div>
+        <div class="field" style="margin-top:4px">
+          <label>إرفاق الشهادة <span class="req">*</span></label>
+          <input type="file" id="fi-local_content" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="display:none" onchange="handleLocalContentFile(event)">
+          <div id="lc-drop" onclick="document.getElementById('fi-local_content').click()"
+               style="border:1.5px dashed var(--line-gold);border-radius:12px;padding:18px 16px;text-align:center;cursor:pointer;background:var(--accent-wash);transition:border-color .15s,background .15s">
+            <div id="lc-file-status" style="font-size:13px;color:var(--muted)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:6px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              اسحب الملف أو انقر للرفع — PDF أو JPG أو PNG (حتى ١٠ ميجابايت)
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:var(--subtle);margin-top:6px">تُرفَق الشهادة هنا فقط عند اختيار «نعم» — وليست ضمن الوثائق الإلزامية في خطوة رفع الوثائق.</div>
+        </div>
+      </div>
+    </div>
+
     <div class="step-nav">
       <button class="btn btn-ghost" onclick="goStep(1)">← رجوع</button>
       <button class="btn btn-primary" onclick="step2Next()">التالي: بيانات التواصل →</button>
@@ -3264,6 +3310,19 @@ function prefillForm(data) {
   setVal('f-rep-title', data.rep_title);
   setVal('f-rep-id', data.rep_id_number);
   setVal('f-contractor-grade', data.contractor_grade);
+  // شهادة المحتوى المحلي (اختيارية)
+  if (data.local_content_has) {
+    const yes = document.getElementById('lc-yes'); if (yes) yes.checked = true;
+    const no  = document.getElementById('lc-no');  if (no)  no.checked  = false;
+    setVal('f-lc-no', data.local_content_cert_no);
+    setVal('f-lc-pct', data.local_content_percentage);
+    toggleLocalContent();
+    if ((_existingDocPaths || {})['local_content']) {
+      const st = document.getElementById('lc-file-status');
+      if (st) st.innerHTML = '<span style="color:var(--success);font-weight:600">✓ الشهادة مرفوعة مسبقاً</span> — انقر للاستبدال';
+      const drop = document.getElementById('lc-drop'); if (drop) drop.style.borderColor = 'var(--success)';
+    }
+  }
   // Checkboxes for scope
   (data.business_scope || []).forEach(v => {
     const cb = document.querySelector(`input[name=scope][value="${v}"]`);
@@ -3554,6 +3613,67 @@ function removeDoc(docId) {
   } else {
     statusEl.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> اسحب أو انقر للرفع`;
   }
+}
+
+/* ════════════════════════════════════
+   شهادة المحتوى المحلي (اختيارية — خطوة ٢)
+   ════════════════════════════════════ */
+// يُظهر/يُخفي بيانات الشهادة حسب اختيار «نعم/لا». عند «لا» يُمسح كل ما أُدخل
+// ومرفقها من uploadedDocs فلا يُرفع أو يُحفظ شيء (طلب المالك: لا إلزام عند «لا»).
+function toggleLocalContent() {
+  const has = document.getElementById('lc-yes')?.checked;
+  const box = document.getElementById('lc-details');
+  if (box) box.style.display = has ? 'block' : 'none';
+  if (!has) {
+    const no = document.getElementById('f-lc-no');   if (no)  no.value  = '';
+    const pct = document.getElementById('f-lc-pct'); if (pct) pct.value = '';
+    const hint = document.getElementById('f-lc-pct-hint'); if (hint) hint.style.display = 'none';
+    delete uploadedDocs['local_content'];
+    _resetLocalContentDrop();
+  }
+}
+
+function lcPctCheck() {
+  const el = document.getElementById('f-lc-pct');
+  const hint = document.getElementById('f-lc-pct-hint');
+  if (!el || !hint) return;
+  const v = parseFloat(el.value);
+  hint.style.display = (el.value !== '' && (isNaN(v) || v < 0 || v > 100)) ? 'block' : 'none';
+}
+
+function _resetLocalContentDrop() {
+  const st = document.getElementById('lc-file-status');
+  if (st) st.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-inline-end:6px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> اسحب الملف أو انقر للرفع — PDF أو JPG أو PNG (حتى ١٠ ميجابايت)';
+  const drop = document.getElementById('lc-drop');
+  if (drop) drop.style.borderColor = 'var(--line-gold)';
+}
+
+// مرفق الشهادة: يُخزَّن في uploadedDocs['local_content'] فيلتقطه رافع الوثائق العامّ
+// وقت الإرسال ويُخزَّن مساره في doc_paths.local_content (لا عمود جديد للمستند).
+function handleLocalContentFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!_validateDocFile(file)) { event.target.value = ''; return; }
+  uploadedDocs['local_content'] = {file, name: file.name, size: file.size, path: null};
+  const kb = Math.round(file.size / 1024);
+  const st = document.getElementById('lc-file-status');
+  if (st) st.innerHTML = '<span style="color:var(--success);font-weight:600">✓ ' + escapeHtml(file.name) + ' (' + kb + ' KB)</span> — انقر للاستبدال';
+  const drop = document.getElementById('lc-drop');
+  if (drop) drop.style.borderColor = 'var(--success)';
+  event.target.value = '';   // يتيح إعادة اختيار نفس الملف
+}
+
+// تحقّق قبل الانتقال/الإرسال: «نعم» ⇒ رقم + نسبة صحيحة + مرفق. «لا» ⇒ لا شيء مطلوب.
+function validateLocalContent() {
+  const has = document.getElementById('lc-yes')?.checked;
+  if (!has) return true;
+  const no  = (document.getElementById('f-lc-no')?.value || '').trim();
+  const pctRaw = (document.getElementById('f-lc-pct')?.value || '').trim();
+  const pct = parseFloat(pctRaw);
+  if (!no)  { toast('warn','يرجى إدخال رقم شهادة المحتوى المحلي، أو اختيار «لا» إن لم تكن متوفّرة'); return false; }
+  if (pctRaw === '' || isNaN(pct) || pct < 0 || pct > 100) { toast('warn','يرجى إدخال نسبة محتوى محلي صحيحة بين ٠ و ١٠٠'); return false; }
+  if (!uploadedDocs['local_content']) { toast('warn','يرجى إرفاق شهادة المحتوى المحلي، أو اختيار «لا» إن لم تكن متوفّرة'); return false; }
+  return true;
 }
 
 /* ════════════════════════════════════
@@ -3963,6 +4083,7 @@ function step2Next() {
   if (!phone)   { toast('warn','يرجى إدخال هاتف المنشأة'); return; }
   if (!email)   { toast('warn','يرجى إدخال البريد الإلكتروني للمنشأة'); return; }
   if (!entity)  { toast('warn','يرجى تحديد نوع الكيان القانوني'); return; }
+  if (!validateLocalContent()) return;   // شهادة المحتوى المحلي: إن اختار «نعم» يجب استكمال بياناتها ومرفقها
   goStep(3);
 }
 
@@ -4024,8 +4145,12 @@ function renderSummary() {
     ['الشخص الرئيسي للتواصل', v('f-con-name')],
     ['جوال الشخص الرئيسي', v('f-con-mobile')],
     ['وصف النشاط', (v('f-biz-desc') || '').slice(0, 80) + (v('f-biz-desc').length > 80 ? '...' : '')],
+    ['شهادة المحتوى المحلي', document.getElementById('lc-yes')?.checked
+      ? ('نعم — رقم ' + (v('f-lc-no') || '—') + '، نسبة ' + (v('f-lc-pct') || '—') + '%')
+      : 'لا / غير متوفّرة'],
     ['الوثائق المرفوعة', [...new Set([...Object.keys(uploadedDocs), ...Object.keys(_existingDocPaths || {})])].map(k =>
-      [...REQUIRED_DOCS,...OPTIONAL_DOCS].find(d=>d.id===k)?.name || k
+      k === 'local_content' ? 'شهادة المحتوى المحلي'
+        : ([...REQUIRED_DOCS,...OPTIONAL_DOCS].find(d=>d.id===k)?.name || k)
     ).join('، ') || '—'],
   ];
   document.getElementById('summary-body').innerHTML = rows.map(([label, val]) =>
@@ -4064,6 +4189,9 @@ async function submitForm() {
 
   // امنع إرسال مستند منتهي الصلاحية (تاريخ انتهاء في الماضي)
   if (!_validateExpiryDates()) return;
+
+  // شهادة المحتوى المحلي: تحقّق نهائي (لو عاد المستخدم وعدّل الخطوة ٢)
+  if (!validateLocalContent()) { goStep(2); return; }
 
   const btn = document.getElementById('submit-btn');
   if (!btn) return;
@@ -4207,6 +4335,10 @@ async function submitForm() {
       business_scope:       scopes,
       sectors:              sectors,
       products_services:    services,
+      // شهادة المحتوى المحلي (اختيارية) — «لا» ⇒ لا رقم/نسبة، والمستند غير مرفق
+      local_content_has:        !!document.getElementById('lc-yes')?.checked,
+      local_content_cert_no:    document.getElementById('lc-yes')?.checked ? getVal('f-lc-no') : null,
+      local_content_percentage: document.getElementById('lc-yes')?.checked ? (parseFloat(document.getElementById('f-lc-pct')?.value) || null) : null,
       // Section 9
       rep_name:             repName,
       rep_title:            repTitle,
@@ -4230,18 +4362,38 @@ async function submitForm() {
       dbErr = error;
     } else {
       let {error} = await SB.from(REG_TABLE).insert(payload);
-      // إن لم يكن عمود المقاييس موجوداً بعد (لم تُشغّل الترقية)، أعد الإرسال بدونه
-      // حتى لا يفشل التسجيل إطلاقاً — التسجيل أهمّ من حفظ المقاييس.
-      if (error && /metrics/i.test(error.message || '')) {
-        const cleaned = Object.assign({}, payload); delete cleaned.metrics;
-        ({error} = await SB.from(REG_TABLE).insert(cleaned));
+      // إعادة محاولة رشيقة: إن لم تُشغَّل ترقية بعد (عمود اختياري مفقود)، أسقِط الأعمدة
+      // الاختيارية المذكورة في الخطأ فقط وأعد الإرسال — التسجيل أهمّ من عمود اختياري.
+      // (المقاييس + حقول شهادة المحتوى المحلي؛ المستند نفسه محفوظ في doc_paths دائماً.)
+      if (error) {
+        const OPTIONAL_COLS = ['metrics','local_content_has','local_content_cert_no','local_content_percentage'];
+        const cleaned = Object.assign({}, payload);
+        let guard = 0;
+        while (error && guard++ < OPTIONAL_COLS.length) {
+          const col = OPTIONAL_COLS.find(c => (c in cleaned) && new RegExp('\\b'+c+'\\b','i').test(error.message || ''));
+          if (!col) break;
+          delete cleaned[col];
+          ({error} = await SB.from(REG_TABLE).insert(cleaned));
+        }
       }
       dbErr = error;
     }
     if (dbErr) throw dbErr;
 
-    // إشعار بريد بالاستلام (إن كان مُفعّلاً على الخادم) — لا يعطّل التسجيل عند الفشل
-    try { fetch('/api/notify', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: regId, event: 'received'})}).catch(()=>{}); } catch(_){}
+    // إشعار بريد بالاستلام — لا يعطّل التسجيل عند الفشل.
+    // إصلاح موثوقية (2026-08-06): كان «أطلِق وانسَ» بلا await، فيُلغى الطلب أحياناً إن أُغلق
+    // التبويب/انتقلت الصفحة قبل اكتماله → يضيع الإيميل بصمت. الآن keepalive يضمن اكتمال
+    // الطلب حتى بعد مغادرة الصفحة، مع انتظار قصير (≤4ث) كي يُرسَل قبل أي انتقال محتمل.
+    try {
+      await Promise.race([
+        fetch('/api/notify', {
+          method:'POST', keepalive:true,
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({id: regId, event: 'received'})
+        }).catch(()=>{}),
+        new Promise(res => setTimeout(res, 4000)),
+      ]);
+    } catch(_){}
 
     hideProc();
     document.getElementById('main-form').style.display = 'none';

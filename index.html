@@ -8204,6 +8204,12 @@ async function _loadSupplierRegLink(sup) {
       rsect('ممثل المنشأة', [
         ['الاسم', reg.rep_name], ['المنصب', reg.rep_title], ['رقم الهوية / الإقامة', reg.rep_id_number],
       ]),
+      rsect('شهادة المحتوى المحلي', [
+        ['لديه شهادة سارية', reg.local_content_has == null ? null : (reg.local_content_has ? 'نعم' : 'لا')],
+        ['رقم الشهادة', reg.local_content_cert_no],
+        ['نسبة المحتوى المحلي', reg.local_content_percentage != null ? reg.local_content_percentage + '%' : null],
+        ['المستند المرفق', (reg.doc_paths && reg.doc_paths.local_content) ? 'مرفق ✓ (ضمن المستندات)' : null],
+      ]),
     ].join('');
     box.innerHTML = `<div style="margin:8px 0 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
@@ -22218,11 +22224,17 @@ async function openRegDetail(jsonStr) {
       ['المنصب', r.rep_title],
       ['رقم الهوية / الإقامة', r.rep_id_number],
     ]),
+    sect('شهادة المحتوى المحلي', [
+      ['لديه شهادة سارية', r.local_content_has == null ? null : (r.local_content_has ? 'نعم ✓' : 'لا')],
+      ['رقم الشهادة', r.local_content_cert_no],
+      ['نسبة المحتوى المحلي', r.local_content_percentage != null ? r.local_content_percentage + '%' : null],
+      ['المستند', (r.doc_paths && r.doc_paths.local_content) ? 'مرفق ✓ (انظر الوثائق أدناه)' : null],
+    ]),
   ].join('');
 
   // Documents
   const docPaths = r.doc_paths || {};
-  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور'};
+  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور', local_content:'شهادة المحتوى المحلي'};
   if (Object.keys(docPaths).length) {
     // Generate signed URLs (valid 1 hour) — bucket is private
     const docEntries = await Promise.all(
