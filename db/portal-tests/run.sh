@@ -96,6 +96,8 @@ run_sql "سلبيات تفويض لكل توقيع DEFINER كتابة (advisor c
 
 run_sql "p0_1o: رفع سقف اللجنة إلى 150000 (إصلاح F-PO-125K، قرار المالك مسار A)" "$ROOT/db/portal-migrations/p0_1o-committee-ceiling-150k.sql"
 run_sql "اختبار p0_1o: حدود اللجنة (25000/25001/125001/149999/150000/150001)" "$HERE/47_committee_ceiling.sql"
+run_sql "p0_1p: استعادة بوّابة الصرف على مسار الشراء (إصلاح F-GATE2)" "$ROOT/db/portal-migrations/p0_1p-restore-po-disbursement-gate.sql"
+run_sql "اختبار p0_1p: بوّابة الصرف المتدرّجة حاضرة في po_transition" "$HERE/48_po_disbursement_gate.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (287 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (291 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

@@ -37,6 +37,31 @@ Ran to close 100% scenario coverage (real RPC, rolled back). All PASS:
 - **Post-run cleanliness:** `total_requests=20` unchanged, 0 recurring templates, 0 `LIVE-*`/`RP `
   rows, evidence guard re-enabled. Staging dataset intact.
 
+## Phase-1 item 1.4 — Entry-2 disbursement gate (2026-08-06) + finding F-GATE2 + fix p0_1p
+**🚫 F-GATE2 (repo-level, fixed):** the generated `baseline_through_061.sql` (the source staging &
+production are built from) ended with a `portal_po_transition` **lacking the `disb_gate_purchase`
+branch** that migration 050 and `portal-standalone.sql` carry. Effect: with `disb_gate_purchase=1`
+a purchase finishing its PO chain fell through to the **flat** payment approval instead of building
+the graduated financial disbursement chain (the colleague-merge **Entry 2**). Latent (gate defaults
+0), but it would ship to production. **Proven:** live staging `portal_po_transition` had
+`has_gate_branch=false`; F1 Phase-A (bare baseline) failed the new assertion `48_po_disbursement_gate`.
+- **Fix — migration `p0_1p-restore-po-disbursement-gate.sql`:** re-defines `portal_po_transition` to
+  the authoritative gate-aware version (byte-identical to `portal-standalone.sql`; idempotent; no
+  DoA/SoD/committee change — only the completion branch regains the gate). Test
+  `48_po_disbursement_gate.sql` (PG1–PG4 introspection) wired into `run.sh` (**291 SQL, exit 0**) and
+  F1 (Phase-A-skipped like 47; Phase-B applies p0_1p → **F1 PASS A=31/9, B=40**). Applied to staging
+  via `apply_migration` (`{"success":true}`, `po_has_gate_now=true`).
+- **Entry-2 behavioral re-proof (live, rolled back):**
+  - **gate=1:** 300K purchase → PO chain (finance→GM) completes → **enters the `disbursement` cycle**
+    with the graduated chain `can_approve_disbursement → can_approve_finance → can_manage_users`
+    (رئيس الحسابات → المدير المالي → المدير العام) — **not** flat payment. Unauthorized disbursement
+    approve **DENIED**; first stage approved.
+  - **gate=0 (regression):** 300K PO completes → **flat `payment`, no disbursement cycle** — existing
+    behavior preserved.
+  - Post-run: `total_requests=20` unchanged, 0 leaked, `disb_gate_purchase` back to **0** (inert),
+    p0_1p fix persists. **This confirms the colleague-merge Entry 2 works when enabled** and closes
+    Phase-1 item 1.4. **Production cutover MUST include p0_1p** (added to the launch-plan delta).
+
 ## Blocks executed — result summary
 | # | Scenario | Result |
 |---|---|---|
