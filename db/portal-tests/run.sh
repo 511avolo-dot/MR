@@ -99,5 +99,8 @@ run_sql "اختبار p0_1o: حدود اللجنة (25000/25001/125001/149999/15
 run_sql "p0_1p: استعادة بوّابة الصرف على مسار الشراء (إصلاح F-GATE2)" "$ROOT/db/portal-migrations/p0_1p-restore-po-disbursement-gate.sql"
 run_sql "اختبار p0_1p: بوّابة الصرف المتدرّجة حاضرة في po_transition" "$HERE/48_po_disbursement_gate.sql"
 
+run_sql "p0_1r: إدراج can_approve_disbursement في قائمة صلاحيات الوظائف (تكليف المالك A2)" "$ROOT/db/portal-migrations/p0_1r-jobs-permission-whitelist-disbursement.sql"
+run_sql "اختبار p0_1r: صكّ/إسناد صلاحية الصرف للوظائف بحوكمة منع التصعيد" "$HERE/49_jobs_disbursement_permission.sql"
+
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (291 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (298 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

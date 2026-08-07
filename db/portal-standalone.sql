@@ -2642,9 +2642,10 @@ DECLARE
   v_me text := portal_username(); v_holders int; v_k text;
   v_allowed text[] := ARRAY['can_approve_stage','can_approve_award','can_issue_po','can_manage_procurement',
     'can_approve_finance','can_disburse','can_create','can_edit','can_manage_users','can_see_finance',
-    'can_verify_stock','can_manage_company','can_approve_committee'];
+    'can_verify_stock','can_manage_company','can_approve_committee','can_approve_disbursement'];
   v_sensitive text[] := ARRAY['can_manage_users','can_manage_company','can_disburse','can_approve_award',
-    'can_approve_finance','can_approve_stage','can_manage_procurement','can_issue_po','can_approve_committee','can_see_finance'];
+    'can_approve_finance','can_approve_stage','can_manage_procurement','can_issue_po','can_approve_committee',
+    'can_see_finance','can_approve_disbursement'];
 BEGIN
   IF NOT (portal_is_admin() OR portal_has_perm('can_manage_users') OR portal_is_privileged()) THEN
     RAISE EXCEPTION 'تعديل الوظائف يتطلّب صلاحية «إدارة المستخدمين»';
@@ -2699,7 +2700,7 @@ BEGIN
   v_grants_sensitive := (p_job_key = 'gm')
     OR (coalesce(v_job.permissions,'{}'::jsonb) ?| ARRAY['can_manage_users','can_manage_company','can_disburse',
         'can_approve_award','can_approve_finance','can_approve_stage','can_manage_procurement',
-        'can_issue_po','can_approve_committee','can_see_finance']);
+        'can_issue_po','can_approve_committee','can_see_finance','can_approve_disbursement']);
   IF v_grants_sensitive AND NOT (portal_is_admin() OR portal_is_privileged()) THEN
     RAISE EXCEPTION 'إسناد صلاحيات اعتماد/صرف/إدارية يتطلّب صلاحية أدمن كاملة';
   END IF;
