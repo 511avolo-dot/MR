@@ -5190,31 +5190,76 @@ loadAll = async function(){
   var _ok=await _pa_loadAll_c();   /* لا بدّ من التقاط نتيجة الأصل وإرجاعها — وإلا رجعت undefined فيفشل الدخول */
   try{ var r=await SB.from('portal_settings').select('value').eq('key','committee_members').maybeSingle();
        PA_COMMITTEE=(r.data&&Array.isArray(r.data.value))?r.data.value:(PA_COMMITTEE||[]); }catch(e){}
-  /* م1c: أسماء عرض متوافقة — مربّعات PERM_DEFS المرجعية تقرأ مفاتيح قديمة؛ نضيف
-     مرايا قراءة فقط كي يظهر الوضع الصحيح (الكتابة تُترجَم في togglePerm وتُنظَّف). */
-  try{ Object.keys(USERS).forEach(function(u){ var p=USERS[u].perms||{};
-    p.can_approve_l1=!!p.can_approve_stage; p.can_approve_l2=!!p.can_manage_users;
-    p.can_manage_rfq=!!p.can_manage_procurement; USERS[u].perms=p; }); }catch(e){}
+  /* (أُزيلت مرايا مفاتيح العرض القديمة can_approve_l1/l2/manage_rfq — مصفوفة الصلاحيات
+     الكاملة (A2/A4) تعرض المفاتيح الحيّة الحقيقية مباشرةً؛ togglePerm يحفظها بلا وسائط.) */
   pa_slaTick();   /* م4: نبضة تصعيد SLA كسولة (لا تُعطّل التحميل — fire and forget) */
   return _ok;
 };
 
-/* م1c: تبديل صلاحية فردية يحفظ فعلياً في القاعدة (عبر خادم الأدمن) بالمفاتيح الحيّة */
-var PA_PERM_MAP={can_approve_l1:'can_approve_stage',can_approve_l2:'can_manage_users',can_manage_rfq:'can_manage_procurement'};
-var PA_PERM_ALIASES=Object.keys(PA_PERM_MAP);
-togglePerm = async function(k,pk,on){
-  var u=USERS[k]; if(!u) return;
-  var real=PA_PERM_MAP[pk]||pk;
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك A2/A3/A4 — مصفوفة صلاحيات المستخدم الكاملة (كل مفاتيح المحرّك الـ14)
+   قابلة للتعديل الفردي بقرار مدير البوابة، ووحدة العرض المالي (can_see_finance)
+   تُمنَح كوحدة (module) لمستخدم بعينه. تعديل في المُحوِّل فقط (تغليف userCard/togglePerm
+   بأسماء ref فريدة). منطقة التصميم 1–2555 دون مساس. الحفظ عبر خادم الأدمن (setProfile،
+   المحروس بـ«أدمن نشط فقط»)؛ الحوكمة الخلفية (portal_users_guard/RLS) دون إضعاف.
+   ملاحظة النموذج: user.permissions في القاعدة نسخة كاملة قابلة للتحرير (تُبذَر من الوظيفة
+   عبر portal_apply_job ثم يحرّرها الأدمن)، فالتبديل يحرّر المجموعة الفعلية ويحفظها. */
+var PA_PERM_GROUPS=[
+  { t:'الإنشاء والمتابعة', keys:[['can_create','رفع الطلبات'],['can_edit','تعديل الطلبات']] },
+  { t:'اعتماد الحاجة', keys:[['can_approve_stage','اعتماد الحاجة (مدير القسم/القطاع)']] },
+  { t:'المشتريات والتعميد', keys:[['can_manage_procurement','إدارة المشتريات والتسعير'],['can_approve_award','اعتماد التعميد'],['can_issue_po','إصدار أمر الشراء'],['can_approve_committee','اعتماد اللجنة']] },
+  { t:'المالية والصرف', keys:[['can_approve_finance','الاعتماد المالي المسبق'],['can_approve_disbursement','اعتماد الصرف'],['can_disburse','تنفيذ الصرف (أمين الصندوق)']] },
+  { t:'الوحدات (Modules)', mod:true, keys:[['can_see_finance','وحدة العرض المالي — التكاليف والعروض والمبالغ'],['can_verify_stock','تدقيق واستلام المستودع']] },
+  { t:'إدارة البوابة', keys:[['can_manage_users','إدارة المستخدمين والبوابة'],['can_manage_company','إدارة إعدادات الشركة']] }
+];
+function pa_permMatrixHTML(k,u){
+  var isAdm=!!u.admin, pr=u.perms||{};
+  return PA_PERM_GROUPS.map(function(g){
+    var boxes=g.keys.map(function(pair){
+      var pk=pair[0], pl=pair[1], on=isAdm||!!pr[pk];
+      return '<label style="'+_pchk+'" title="'+esc(pk)+'"><input type="checkbox" '+(on?'checked':'')+' '+(isAdm?'disabled':'')+' onchange="togglePerm(\''+k+'\',\''+pk+'\',this.checked)"> '+esc(pl)+'</label>';
+    }).join('');
+    var modStyle=g.mod?'border:1px solid var(--gold);background:rgba(194,160,99,.06)':'border:1px solid var(--line-2)';
+    return '<div style="'+modStyle+';border-radius:10px;padding:9px 11px;margin-top:8px">'
+      +'<div class="muted" style="font-size:10.5px;font-weight:800;letter-spacing:.2px;margin-bottom:6px">'+(g.mod?ic('scale',12)+' ':'')+esc(g.t)+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:9px 16px">'+boxes+'</div></div>';
+  }).join('');
+}
+/* تغليف بطاقة المستخدم المرجعية: نُبقي كل بنيتها ونستبدل كتلة الصلاحيات الخماسية القديمة
+   بمصفوفة كاملة. أسماء ref فريدة (_pa_refUserCard) تفادياً للتكرار اللانهائي. */
+var _pa_refUserCard = userCard;
+userCard = function(k,u){
+  var pending=u.active===false;
+  var perms = pa_permMatrixHTML(k,u);
+  var delegOpt=['<option value="">— بلا —</option>'].concat(Object.keys(USERS).filter(function(x){return x!==k;}).map(function(x){return '<option value="'+x+'" '+(u.delegate===x?'selected':'')+'>'+esc(uName(x))+'</option>';})).join('');
+  var deptOpt=Object.entries(DEPTS).map(function(e){var dk=e[0],d=e[1];return '<option value="'+dk+'" '+(u.deptId===dk?'selected':'')+'>'+esc(d.n)+' — '+esc(d.sector)+'</option>';}).join('');
+  return '<div class="card" style="'+(pending?'border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,160,99,.1),var(--sh-2)':'')+';margin-bottom:14px">'
+    +'<div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">'+avatar(u.n)
+    +'<div style="flex:1;min-width:160px"><div style="font-weight:700">'+esc(u.n)+' '+(u.admin?'<span class="badge gold">أدمن</span>':'')+' '+(pending?'<span class="badge warn">بانتظار التفعيل</span>':'')+' '+(u.away?'<span class="badge info">في إجازة</span>':'')+' '+(u.suspended?'<span class="badge danger">موقوف الدخول</span>':'')+'</div>'
+    +'<div class="muted" style="font-size:11.5px" dir="ltr">'+esc(u.email||'')+'</div></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(pending?'<button class="btn btn-primary btn-sm" onclick="activateUser(\''+k+'\')">'+ic('check',14)+' تفعيل</button><button class="btn btn-danger btn-sm" onclick="rejectUser(\''+k+'\')">'+ic('x',14)+' رفض</button>':'<button class="btn btn-ghost btn-sm" onclick="toggleAway(\''+k+'\')">'+ic('clock',14)+' '+(u.away?'إنهاء الإجازة':'وضع في إجازة')+'</button>'+(u.admin?'':'<button class="btn btn-ghost btn-sm" onclick="toggleSuspend(\''+k+'\')">'+ic(u.suspended?'check':'lock',14)+' '+(u.suspended?'إعادة تفعيل الدخول':'إيقاف الدخول')+'</button><button class="btn btn-danger btn-sm" onclick="askDeleteUser(\''+k+'\')">'+ic('trash',14)+' حذف</button>'))+'</div>'
+    +'</div>'
+    +((pending&&(u.reqJob||u.reqRole))?'<div class="chip" style="margin-top:10px">'+ic('user',13)+' طلب الحساب: '+esc(u.reqJob&&JOBS[u.reqJob]?JOBS[u.reqJob].title:(u.reqRole==='approver'?'صلاحية اعتماد':'موظف'))+'</div>':'')
+    +'<div style="margin-top:13px;padding-top:12px;border-top:1px solid var(--line-2)">'
+    +'<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:700">'+ic('shield',13)+' الوظيفة:</span>'
+    +'<select class="select" style="max-width:280px" onchange="setUserJob(\''+k+'\',this.value)" '+(u.admin?'disabled':'')+'>'+jobOptions(u.job)+'</select></div>'
+    +((u.job&&JOBS[u.job])?'<div class="muted" style="font-size:11.5px;margin-top:7px">'+esc(JOBS[u.job].desc)+'</div>'+jobPermChips(u.job):'')
+    +'</div>'
+    +'<div style="margin-top:12px"><div class="muted" style="font-size:12px;font-weight:700;margin-bottom:2px">'+ic('scale',13)+' صلاحيات المستخدم (قابلة للتعديل بقرارك)'+(u.admin?' — <span style="color:var(--gold)">الأدمن يملك كل الصلاحيات</span>':'')+'</div>'+perms+'</div>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:600">القطاع/القسم:</span><select class="select" style="max-width:240px" onchange="setUserDept(\''+k+'\',this.value)">'+deptOpt+'</select></div>'
+    +'<div style="margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:600">المفوَّض عند الغياب:</span><select class="select" style="max-width:220px" onchange="setDelegate(\''+k+'\',this.value)">'+delegOpt+'</select></div>'
+    +'</div>';
+};
+/* التبديل الفردي: يحرّر المجموعة الفعلية (نموذج القاعدة: نسخة كاملة قابلة للتحرير) بالمفاتيح
+   الحيّة الحقيقية ويحفظها عبر خادم الأدمن. لا مفاتيح عرض وسيطة بعد الآن. */
+togglePerm = async function(k,real,on){
+  var u=USERS[k]; if(!u||u.admin) return;
   var perms=Object.assign({},u.perms||{});
-  PA_PERM_ALIASES.forEach(function(a){ delete perms[a]; });   /* لا تُحفَظ مفاتيح العرض */
+  /* تنظيف أي مفاتيح عرض قديمة قد تكون بقيت من نسخ سابقة */
+  delete perms.can_approve_l1; delete perms.can_approve_l2; delete perms.can_manage_rfq;
   if(on) perms[real]=true; else delete perms[real];
   var d=await pa_apiPost('/api/portal-users',{action:'setProfile',username:k,permissions:perms});
-  if(d){
-    u.perms=perms;
-    u.perms.can_approve_l1=!!perms.can_approve_stage; u.perms.can_approve_l2=!!perms.can_manage_users;
-    u.perms.can_manage_rfq=!!perms.can_manage_procurement;
-    delete u.acc; toast('حُفظت الصلاحية','ok');
-  }
+  if(d){ u.perms=perms; delete u.acc; toast('حُفظت الصلاحية','ok'); }
   render();
 };
 
