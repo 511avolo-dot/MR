@@ -2810,6 +2810,43 @@ REVOKE ALL ON FUNCTION portal_perm_overrides_delta(jsonb,jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION portal_set_user_permission(text,text,boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION portal_set_user_permission(text,text,boolean) TO authenticated, service_role;
 
+-- ── (P0-1t) ضبط مفاتيح الحوكمة من الإعدادات — أدمن فقط، قائمة بيضاء، مدقّق (تكليف هـ.2) ──
+CREATE OR REPLACE FUNCTION portal_set_governance_flag(p_key text, p_value numeric)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text := portal_username();
+  v_allowed text[] := ARRAY['budget_enforce','iban_change_control','three_way_enforce',
+    'three_way_tolerance_pct','contract_enforce','quote_doc_required','disb_gate_purchase',
+    'txn_notifications'];
+BEGIN
+  IF NOT (portal_is_admin() OR portal_is_privileged()) THEN
+    RAISE EXCEPTION 'ضبط الحوكمة يتطلّب صلاحية أدمن كاملة';
+  END IF;
+  IF NOT (p_key = ANY(v_allowed)) THEN RAISE EXCEPTION 'مفتاح إعداد غير معروف: %', p_key; END IF;
+  IF p_value IS NULL OR p_value < 0 OR p_value > 100 THEN
+    RAISE EXCEPTION 'قيمة غير صالحة (0..100): %', p_value;
+  END IF;
+  IF p_key <> 'three_way_tolerance_pct' AND p_value NOT IN (0,1) THEN
+    RAISE EXCEPTION 'هذا المفتاح ثنائي (0 أو 1): %', p_key;
+  END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_settings
+     SET value = coalesce(value,'{}'::jsonb) || jsonb_build_object(p_key, p_value)
+   WHERE key = 'portal_settings';
+  IF NOT FOUND THEN
+    INSERT INTO portal_settings(key, value)
+      VALUES ('portal_settings', jsonb_build_object(p_key, p_value));
+  END IF;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(NULL, 'governance_flag_set', v_me, 'portal',
+    jsonb_build_object('key', p_key, 'value', p_value));
+  RETURN jsonb_build_object('ok', true, 'key', p_key, 'value', p_value);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_set_governance_flag(text,numeric) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_set_governance_flag(text,numeric) TO authenticated, service_role;
+
 -- ── (هـ) RLS: بوابة مالية على قراءة الصرف (كان أي دور all-scope يرى كل الآيبانات) ──
 DROP POLICY IF EXISTS "see_by_request" ON portal_payments;
 CREATE POLICY "see_by_request" ON portal_payments FOR SELECT TO authenticated

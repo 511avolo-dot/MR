@@ -6419,6 +6419,46 @@ if(typeof detailHTML==='function'){ var _pa_refDetailHTML_c4=detailHTML;
   };
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C5 + مبدأ هـ.2 — ضوابط الحوكمة قابلة للتفعيل/الإقفال من الإعدادات.
+   كانت مفاتيح الإنفاذ (ميزانية/آيبان/مطابقة/عقد/مستند عرض/بوّابة صرف/إشعارات) تُذكَر
+   كتلميحات نصّية فقط بلا تبديل. الآن بطاقة تبديل مُحفَّظة عبر RPC أدمن محروس
+   (portal_set_governance_flag). المُحوِّل فقط، اسم ref فريد. */
+async function pa_setGovFlag(key,val){
+  try{ await pa_rpc('portal_set_governance_flag',{p_key:key,p_value:Number(val)}); toast('حُدّث الضبط','ok'); await loadAll(); render(); }
+  catch(e){ /* pa_rpc يُظهر الخطأ */ }
+}
+function pa_govCard(){
+  try{ if(typeof isAdmin==='function' && !isAdmin()) return ''; }catch(e){ return ''; }
+  var P=(typeof PSET!=='undefined'&&PSET)||{};
+  var flags=[
+    ['budget_enforce','منع تجاوز الميزانية','يمنع تعميداً/صرفاً يتجاوز ميزانية القسم المعتمَدة (يتطلّب تعريف ميزانية للقسم/السنة).'],
+    ['contract_enforce','منع تجاوز سقف العقد الإطاري','يمنع أمر سحب يتجاوز سقف العقد أو على عقد منتهٍ.'],
+    ['iban_change_control','ضبط تغيير الآيبان (مورد/مستفيد)','يفرض مسار طلب + اعتماد مزدوج لتغيير أي آيبان بنكي — وقاية احتيال.'],
+    ['three_way_enforce','المطابقة الثلاثية (الصرف الآجل)','يمنع صرفاً آجلاً بلا مطابقة أمر الشراء ↔ الاستلام ↔ الفاتورة.'],
+    ['quote_doc_required','إلزام مستند عرض المورد','يمنع تسجيل عرض سعر بلا إرفاق مستند العرض الرسمي.'],
+    ['disb_gate_purchase','بوّابة صرف متدرّجة على مسار الشراء','عند اكتمال أمر الشراء تُبنى سلسلة اعتماد صرف متدرّجة بدل الاعتماد المسطّح.'],
+    ['txn_notifications','إشعارات معامَلاتية للاعتماد','التقاط إشعار المعتمِد التالي داخل معاملة الانتقال (تسليم مضمون عبر الصادر).']
+  ];
+  var rows=flags.map(function(f){ var on=Number(P[f[0]]||0)>=1;
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)">'
+      +'<input type="checkbox" style="margin-top:3px;width:16px;height:16px;cursor:pointer" '+(on?'checked':'')+' onchange="pa_setGovFlag(\''+f[0]+'\',this.checked?1:0)">'
+      +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(f[1])+' '+(on?'<span class="badge ok" style="font-size:9px">مُفعَّل</span>':'<span class="badge" style="font-size:9px;opacity:.7">مُعطَّل</span>')+'</div>'
+      +'<div class="muted" style="font-size:11.5px;margin-top:2px">'+esc(f[2])+'</div></div></div>';
+  }).join('');
+  var tol=Number(P.three_way_tolerance_pct||0);
+  var tolRow='<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)">'
+    +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">نسبة تسامح المطابقة الثلاثية %</div>'
+    +'<div class="muted" style="font-size:11.5px;margin-top:2px">الفارق المسموح بين أمر الشراء والفاتورة قبل المنع (يعمل عند تفعيل المطابقة).</div></div>'
+    +'<input class="input num" type="number" min="0" max="100" style="max-width:90px" value="'+tol+'" onchange="pa_setGovFlag(\'three_way_tolerance_pct\',+this.value)"></div>';
+  return '<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>ضوابط الحوكمة — تفعيل/إقفال من الإعدادات</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:4px">كل ضابط اختياري ويُضبط بقرارك. إطفاؤه <b>لا يُضعف</b> فصل المهام ولا الرفض الافتراضي ولا التدقيق — يوقف الإنفاذ المانع لهذا الضابط تحديداً فقط.</div>'
+    +rows+tolRow+'</div>';
+}
+if(typeof adminSettings==='function'){ var _pa_refAdminSettings=adminSettings;
+  adminSettings=function(){ var h=_pa_refAdminSettings(); try{ h+=pa_govCard(); }catch(e){} return h; };
+}
+
 /* الإقلاع الفعلي */
 /* بوابة الإقلاع الواعية بالبيئة: لا يبدأ التطبيق إلا بعد جلب إعداد Supabase بنجاح (fail-closed). */
 (async()=>{ if(await __bootConfig()) boot(); })();
