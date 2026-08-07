@@ -89,11 +89,10 @@ try {
   pass('purchase-portal.html boots to login with zero uncaught page errors');
 
   // (2) الدوال الجديدة موجودة في النطاق العامّ
-  const present = await page.evaluate(() => ['pa_govCard','pa_permMatrixHTML','pa_disbFlow','pa_actionBanner',
-    'pa_setGovFlag','pa_saveWorkflow','pa_docView','togglePerm','userCard']
-    .filter((n) => typeof window[n] === 'function'));
-  assert.deepEqual(present.sort(), ['pa_actionBanner','pa_disbFlow','pa_docView','pa_govCard','pa_permMatrixHTML',
-    'pa_saveWorkflow','pa_setGovFlag','togglePerm','userCard'].sort(),
+  const expected = ['pa_actionBanner','pa_auditVerify','pa_deleteWorkflow','pa_disbFlow','pa_docPrint','pa_docView',
+    'pa_govCard','pa_permMatrixHTML','pa_saveWorkflow','pa_setGovFlag','togglePerm','userCard'];
+  const present = await page.evaluate((names) => names.filter((n) => typeof window[n] === 'function'), expected);
+  assert.deepEqual(present.sort(), expected.slice().sort(),
     'missing converter functions: got ' + JSON.stringify(present));
   pass('all new converter functions are defined on window');
 

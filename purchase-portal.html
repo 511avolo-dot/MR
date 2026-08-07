@@ -6565,13 +6565,43 @@ async function pa_saveWorkflow(){
     toast('حُفظ المسار إلى القاعدة ✦','ok'); await loadAll(); render();
   }catch(e){ toast(String((e&&e.message)||'تعذّر الحفظ'),'err'); }
 }
+async function pa_deleteWorkflow(){
+  var wf=(typeof getWF==='function')?getWF():null;
+  if(!wf || wf.id==='award'){ toast('لا يمكن حذف هذا المسار من هنا','info'); return; }
+  if(!window.confirm('حذف المسار «'+(wf.name||wf.id)+'»؟ (يُعطَّل تلقائياً إن كان مستخدَماً في طلبات قائمة)')) return;
+  try{ var r=await pa_rpc('portal_delete_workflow',{p_id:wf.id});
+    toast((r&&r.mode==='deactivated')?'عُطِّل المسار (مستخدَم في طلبات — حُفظ للتدقيق)':'حُذف المسار','ok');
+    await loadAll(); render();
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); }
+}
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
   designerHTML=function(){ var h=_pa_refDesignerHTML();
     try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
       h+='<div class="card" style="margin-top:14px;border-color:var(--gold)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<div style="flex:1;min-width:200px"><div style="font-weight:800;color:var(--ink)">'+ic('route',15)+' حفظ المسار إلى القاعدة</div>'
         +'<div class="muted" style="font-size:11.5px">التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.</div></div>'
-        +'<button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button></div></div>';
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button>'
+        +'<button class="btn btn-danger btn-sm" onclick="pa_deleteWorkflow()">'+ic('trash',14)+' حذف المسار</button></div></div></div>';
+    } }catch(e){}
+    return h; };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C1 (تغطية الواجهات) — زرّ التحقّق من سلامة سجلّ التدقيق (WORM بسلسلة تجزئة،
+   الهجرة 057) كان بلا واجهة. الآن في تبويب «سجل التدقيق». المُحوِّل فقط، اسم ref فريد. */
+async function pa_auditVerify(){
+  var el=document.getElementById('pa-audit-vr'); if(el) el.innerHTML='<span class="muted" style="font-size:12px">⏳ جارٍ التحقّق…</span>';
+  try{ var r=await pa_rpc('portal_audit_verify',{});
+    if(r&&r.ok){ if(el) el.innerHTML='<span class="badge ok">'+ic('check',12)+' سليم — فُحِص '+(r.checked||0)+' سجلّاً، السلسلة غير معبوث بها</span>'; toast('سجلّ التدقيق سليم ✦','ok'); }
+    else{ if(el) el.innerHTML='<span class="badge" style="background:var(--danger-bg);color:var(--danger)">'+ic('x',12)+' تحذير: كسر محتمل عند السجلّ #'+((r&&r.broken_at)||'?')+'</span>'; toast('تحذير: كسر في سلسلة التدقيق','err'); }
+  }catch(e){ if(el) el.innerHTML=''; }
+}
+if(typeof adminAudit==='function'){ var _pa_refAdminAudit=adminAudit;
+  adminAudit=function(){ var h=_pa_refAdminAudit();
+    try{ if(typeof isAdmin==='function' && isAdmin()){
+      h='<div class="card" style="margin-bottom:14px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>سلامة سجلّ التدقيق (WORM بسلسلة تجزئة)</div>'
+        +'<div class="muted" style="font-size:12px;margin-bottom:8px">التدقيق مقاوم للعبث تشفيريّاً (SHA-256 متسلسل). اضغط للتحقّق من ترابط السلسلة كاملةً وكشف أيّ تعديل/حذف.</div>'
+        +'<button class="btn btn-gold btn-sm" onclick="pa_auditVerify()">'+ic('check',14)+' تحقّق من السلامة</button> <span id="pa-audit-vr"></span></div>'+h;
     } }catch(e){}
     return h; };
 }
