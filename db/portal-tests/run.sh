@@ -102,5 +102,8 @@ run_sql "اختبار p0_1p: بوّابة الصرف المتدرّجة حاضر
 run_sql "p0_1r: إدراج can_approve_disbursement في قائمة صلاحيات الوظائف (تكليف المالك A2)" "$ROOT/db/portal-migrations/p0_1r-jobs-permission-whitelist-disbursement.sql"
 run_sql "اختبار p0_1r: صكّ/إسناد صلاحية الصرف للوظائف بحوكمة منع التصعيد" "$HERE/49_jobs_disbursement_permission.sql"
 
+run_sql "p0_1s: بقاء تخصيصات صلاحيات المستخدم عبر تعديل الوظيفة (نموذج الدلتا، تكليف A3)" "$ROOT/db/portal-migrations/p0_1s-per-user-permission-overrides.sql"
+run_sql "اختبار p0_1s: الدلتا تبقى عبر تعديل الوظيفة + منع التصعيد + إعادة التعيين" "$HERE/50_perm_overrides.sql"
+
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (298 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (306 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

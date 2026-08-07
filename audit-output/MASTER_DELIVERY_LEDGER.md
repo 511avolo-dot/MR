@@ -696,3 +696,17 @@ Owner accepted G0-F2A and G0-F3A/B. Five traceability disposition corrections; o
 
 **Gate 0 remains HELD.** No Stage 1, no migration 063, no DoA seed change, no production/DB/config/storage change.
 
+
+## 15. Mandate-A permission work (owner Gate review of `6fdb581`) — HOLD honored
+
+Owner Gate review (PR #74, 2026-08-07) placed two new repo-only commits under HOLD and named a
+material A3 defect. Recorded here for program sequencing; **no gate is flipped, Gate 1 remains HELD.**
+
+| ID | Item | Disposition | State |
+|---|---|---|---|
+| MA-A2 | `p0_1r` — add `can_approve_disbursement` to `portal_save_job` allow-list + both sensitive-key guards (anti-escalation kept) | Repo only (standalone + `p0_1r-*.sql`); test `49` (D1–D7). **Not applied to any DB.** | repo-complete — awaiting gate |
+| MA-A3-DEFECT | Owner finding: `portal_save_job` cascade `UPDATE portal_users SET permissions=…` **destroys per-user overrides** on any job edit | **Fixed `p0_1s`:** precedence model defined (job baseline vs `perm_overrides` delta; `permissions` = baseline⊕delta, materialized, read path unchanged); job edit **preserves** overrides; new job assignment **resets** them; per-user edits via `portal_set_user_permission` (**full-admin only**); backfill for legacy divergence. Test `50` (OV1–OV8, incl. OV3 override-survives-job-edit + OV7 anti-escalation). Repo only. | fixed in repo — awaiting gate |
+| MA-A3A4-UI | 14-key per-user matrix + `can_see_finance` module (converter-only) | Built; **browser verification owed (owner point 4)** before A3/A4 marked complete — status kept 🟡 in the mandate doc | built — browser-verify owed |
+| MA-CI | Exact-head PR-triggered CI evidence | Local suite = **306 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Push of the fix re-triggers `portal-tests.yml`; local claims are not a substitute for exact-head CI (owner note acknowledged) | awaiting CI on new head |
+
+**Sequencing:** this is Mandate-A (functions/permissions) work on the audit branch; it does **not** advance Gate 1 or the MASTER OWNER-AUTHORIZED EXECUTION PROGRAM stages, and does not touch the open owner-decision/authorized-state blockers (p0_1o/p0_1p disposition, staging authorized state, service_role rotation, leaked-password protection, Gate-2 hosted Playwright). **No staging/production migration, config, email, or `budget_enforce`/enforcement-flag change. PR stays Draft/unmerged; no migration 063.**

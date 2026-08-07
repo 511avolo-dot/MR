@@ -2833,7 +2833,7 @@ async function loadAll(){
     USERS[u.username]=Object.assign(USERS[u.username]||{}, { n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
       job:u.job_key, admin:isAdm, deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
       away:!!u.is_away, delegate:u.delegate_to||null, suspended:u.active===false, active:u.active!==false,
-      email:u.email, perms:effectivePerms, acc:pa_acc(effectivePerms,(JOBS[u.job_key]||{}).scope,isAdm) }); });
+      email:u.email, perms:effectivePerms, ov:(u.perm_overrides||{}), acc:pa_acc(effectivePerms,(JOBS[u.job_key]||{}).scope,isAdm) }); });
   /* الموردون */
   SUPPLIERS={}; pa_supByName={}; (supR.data||[]).forEach(s=>{ const k=String(s.id);
     SUPPLIERS[k]={n:s.name,cr:s.cr||'',vat:s.vat||'',iban:s.iban||'',contact:s.contact||'',active:s.active!==false,_sid:s.id};
@@ -5213,11 +5213,13 @@ var PA_PERM_GROUPS=[
   { t:'إدارة البوابة', keys:[['can_manage_users','إدارة المستخدمين والبوابة'],['can_manage_company','إدارة إعدادات الشركة']] }
 ];
 function pa_permMatrixHTML(k,u){
-  var isAdm=!!u.admin, pr=u.perms||{};
+  var isAdm=!!u.admin, pr=u.perms||{}, ov=u.ov||{};
   return PA_PERM_GROUPS.map(function(g){
     var boxes=g.keys.map(function(pair){
       var pk=pair[0], pl=pair[1], on=isAdm||!!pr[pk];
-      return '<label style="'+_pchk+'" title="'+esc(pk)+'"><input type="checkbox" '+(on?'checked':'')+' '+(isAdm?'disabled':'')+' onchange="togglePerm(\''+k+'\',\''+pk+'\',this.checked)"> '+esc(pl)+'</label>';
+      var edited=Object.prototype.hasOwnProperty.call(ov,pk);
+      var badge=edited?' <span class="badge info" style="font-size:8.5px;padding:1px 5px">معدّل</span>':'';
+      return '<label style="'+_pchk+'" title="'+esc(pk)+(edited?' — قيمة مخصّصة تختلف عن الوظيفة':'')+'"><input type="checkbox" '+(on?'checked':'')+' '+(isAdm?'disabled':'')+' onchange="togglePerm(\''+k+'\',\''+pk+'\',this.checked)"> '+esc(pl)+badge+'</label>';
     }).join('');
     var modStyle=g.mod?'border:1px solid var(--gold);background:rgba(194,160,99,.06)':'border:1px solid var(--line-2)';
     return '<div style="'+modStyle+';border-radius:10px;padding:9px 11px;margin-top:8px">'
@@ -5250,17 +5252,14 @@ userCard = function(k,u){
     +'<div style="margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:600">المفوَّض عند الغياب:</span><select class="select" style="max-width:220px" onchange="setDelegate(\''+k+'\',this.value)">'+delegOpt+'</select></div>'
     +'</div>';
 };
-/* التبديل الفردي: يحرّر المجموعة الفعلية (نموذج القاعدة: نسخة كاملة قابلة للتحرير) بالمفاتيح
-   الحيّة الحقيقية ويحفظها عبر خادم الأدمن. لا مفاتيح عرض وسيطة بعد الآن. */
+/* التبديل الفردي (P0-1s): يسجّل دلتا المستخدم مقابل أساس الوظيفة عبر RPC ذرّية محروسة بأدمن،
+   فتبقى التخصيصات الفردية حتى لو عُدِّلت الوظيفة لاحقاً (إصلاح عيب مراجعة المالك A3). */
 togglePerm = async function(k,real,on){
   var u=USERS[k]; if(!u||u.admin) return;
-  var perms=Object.assign({},u.perms||{});
-  /* تنظيف أي مفاتيح عرض قديمة قد تكون بقيت من نسخ سابقة */
-  delete perms.can_approve_l1; delete perms.can_approve_l2; delete perms.can_manage_rfq;
-  if(on) perms[real]=true; else delete perms[real];
-  var d=await pa_apiPost('/api/portal-users',{action:'setProfile',username:k,permissions:perms});
-  if(d){ u.perms=perms; delete u.acc; toast('حُفظت الصلاحية','ok'); }
-  render();
+  try{ await pa_rpc('portal_set_user_permission',{p_username:k,p_key:real,p_on:!!on}); }
+  catch(e){ return; }   /* pa_rpc يُظهر الخطأ */
+  toast('حُفظت الصلاحية','ok');
+  await loadAll(); render();
 };
 
 /* ══════ م2: طباعة مضغوطة — كل مستند في صفحة A4 واحدة (مقيسة بـChromium PDF) ══════

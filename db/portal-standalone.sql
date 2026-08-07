@@ -2635,6 +2635,35 @@ BEGIN
 END $fn$;
 
 -- ── (ج/د) محرّر الوظائف: منع صكّ صلاحيات اعتماد/صرف لغير الأدمن + رفع علم الانتقال حول كتابة الضبط ──
+-- ═══ صلاحيات المستخدم القابلة للتعديل الفردي مع بقائها عبر تعديل الوظيفة (P0-1s، تكليف A3) ═══
+-- perm_overrides = دلتا المستخدم مقابل أساس الوظيفة؛ permissions = الأساس ⊕ الدلتا (المادّي).
+ALTER TABLE portal_users ADD COLUMN IF NOT EXISTS perm_overrides jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE OR REPLACE FUNCTION portal_apply_perm_overrides(p_base jsonb, p_ov jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path = public AS $fn$
+  SELECT coalesce(jsonb_object_agg(k, true) FILTER (WHERE eff), '{}'::jsonb)
+  FROM (
+    SELECT k, CASE WHEN coalesce(p_ov,'{}'::jsonb) ? k
+                   THEN coalesce((p_ov->>k)::boolean, false)
+                   ELSE coalesce((p_base->>k)::boolean, false) END AS eff
+    FROM (SELECT jsonb_object_keys(coalesce(p_base,'{}'::jsonb)) AS k
+          UNION
+          SELECT jsonb_object_keys(coalesce(p_ov,'{}'::jsonb))) u
+  ) e;
+$fn$;
+
+CREATE OR REPLACE FUNCTION portal_perm_overrides_delta(p_eff jsonb, p_base jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE SET search_path = public AS $fn$
+  SELECT coalesce(jsonb_object_agg(k, ev) FILTER (WHERE ev IS DISTINCT FROM bv), '{}'::jsonb)
+  FROM (
+    SELECT k, coalesce((p_eff->>k)::boolean, false) AS ev,
+              coalesce((p_base->>k)::boolean, false) AS bv
+    FROM (SELECT jsonb_object_keys(coalesce(p_eff,'{}'::jsonb)) AS k
+          UNION
+          SELECT jsonb_object_keys(coalesce(p_base,'{}'::jsonb))) u
+  ) d;
+$fn$;
+
 CREATE OR REPLACE FUNCTION portal_save_job(p_key text, p_title text, p_category text,
     p_scope text, p_permissions jsonb, p_description text DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
@@ -2671,7 +2700,11 @@ BEGIN
   VALUES (p_key, trim(p_title), p_category, p_scope, coalesce(p_permissions,'{}'::jsonb), p_description, true)
   ON CONFLICT (key) DO UPDATE SET title = EXCLUDED.title, category = EXCLUDED.category,
     scope = EXCLUDED.scope, permissions = EXCLUDED.permissions, description = EXCLUDED.description;
-  UPDATE portal_users SET permissions = coalesce(p_permissions,'{}'::jsonb) WHERE job_key = p_key;
+  -- إعادة حساب الصلاحيات الفعّالة لكل حامل من الأساس الجديد مع **إبقاء دلتا المستخدم** (P0-1s).
+  UPDATE portal_users u
+    SET permissions = portal_apply_perm_overrides(coalesce(p_permissions,'{}'::jsonb),
+                                                  coalesce(u.perm_overrides,'{}'::jsonb))
+    WHERE u.job_key = p_key;
   GET DIAGNOSTICS v_holders = ROW_COUNT;
   PERFORM set_config('app.portal_transition', '0', true);
 
@@ -2722,7 +2755,8 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
-  UPDATE portal_users SET job_key = p_job_key, permissions = v_job.permissions, role = v_new_role
+  UPDATE portal_users SET job_key = p_job_key, permissions = v_job.permissions,
+      perm_overrides = '{}'::jsonb, role = v_new_role
     WHERE username = p_username;
   PERFORM set_config('app.portal_transition', '0', true);
 
@@ -2730,6 +2764,51 @@ BEGIN
     jsonb_build_object('user', p_username, 'job', p_job_key));
   RETURN jsonb_build_object('ok', true, 'job', p_job_key, 'role', v_new_role);
 END $fn$;
+
+-- ── (P0-1s) تعديل صلاحية فردية للمستخدم (منح/سحب) — أدمن فقط، تبقى عبر تعديل الوظيفة ──
+CREATE OR REPLACE FUNCTION portal_set_user_permission(p_username text, p_key text, p_on boolean)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text := portal_username();
+  v_user portal_users%ROWTYPE;
+  v_base jsonb; v_ov jsonb; v_base_has boolean;
+  v_allowed text[] := ARRAY['can_approve_stage','can_approve_award','can_issue_po','can_manage_procurement',
+    'can_approve_finance','can_disburse','can_create','can_edit','can_manage_users','can_see_finance',
+    'can_verify_stock','can_manage_company','can_approve_committee','can_approve_disbursement'];
+BEGIN
+  IF NOT (portal_is_admin() OR portal_is_privileged()) THEN
+    RAISE EXCEPTION 'تعديل صلاحيات المستخدم يتطلّب صلاحية أدمن كاملة';
+  END IF;
+  IF NOT (p_key = ANY(v_allowed)) THEN RAISE EXCEPTION 'مفتاح صلاحية غير معروف: %', p_key; END IF;
+  SELECT * INTO v_user FROM portal_users WHERE username = p_username FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
+  IF v_user.role = 'admin' THEN
+    RAISE EXCEPTION 'الأدمن يملك كل الصلاحيات — لا يُعدَّل بشكل فردي';
+  END IF;
+
+  v_base := coalesce((SELECT permissions FROM portal_jobs WHERE key = v_user.job_key AND active), '{}'::jsonb);
+  v_base_has := coalesce((v_base->>p_key)::boolean, false);
+  v_ov := coalesce(v_user.perm_overrides, '{}'::jsonb);
+  IF p_on = v_base_has THEN
+    v_ov := v_ov - p_key;
+  ELSE
+    v_ov := jsonb_set(v_ov, ARRAY[p_key], to_jsonb(p_on), true);
+  END IF;
+
+  PERFORM set_config('app.portal_transition', '1', true);
+  UPDATE portal_users SET perm_overrides = v_ov,
+      permissions = portal_apply_perm_overrides(v_base, v_ov)
+    WHERE username = p_username;
+  PERFORM set_config('app.portal_transition', '0', true);
+
+  PERFORM portal_audit_write(NULL, 'user_perm_set', v_me, 'portal',
+    jsonb_build_object('user', p_username, 'key', p_key, 'on', p_on));
+  RETURN jsonb_build_object('ok', true, 'key', p_key, 'on', p_on, 'overrides', v_ov);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_apply_perm_overrides(jsonb,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_perm_overrides_delta(jsonb,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_set_user_permission(text,text,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION portal_set_user_permission(text,text,boolean) TO authenticated, service_role;
 
 -- ── (هـ) RLS: بوابة مالية على قراءة الصرف (كان أي دور all-scope يرى كل الآيبانات) ──
 DROP POLICY IF EXISTS "see_by_request" ON portal_payments;
