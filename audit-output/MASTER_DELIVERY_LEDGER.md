@@ -727,3 +727,29 @@ governance-settings card must not let an ordinary admin click flip the owner-loc
 release; System-3 email stays legacy immediate mode until separately authorized. No code path lets an
 ordinary admin change them. No staging/production migration, config, email, or enforcement-flag mutation
 performed. PR stays Draft/unmerged; no migration 063.
+
+## 17. `p0_1u` reclassified as transitional persistence (owner review of `74df291`)
+
+Owner Gate review confirmed the p0_1t release-lock remediation and required that `p0_1u` NOT be treated
+as Stage-5 completion. Corrected accordingly; **Gate 1 remains HELD.**
+
+- **MA-C6 classification:** `p0_1u` is **transitional persistence for the existing designer only** — NOT
+  the Stage-5 versioned approval-design engine. The Stage-5 rows (draft/published/retired versions,
+  effective dating, immutable workflow-version snapshots bound to requests, server-side matching,
+  validation/simulation/impact preview, governed rollback) **remain OPEN and authoritative**. Building
+  `portal_save_workflow` does not advance any stage.
+- **Safe transitional contract (proved, test 52):** (a) editing/deleting a workflow **cannot rewrite the
+  chain of an already-submitted/in-flight request** — the chain is snapshotted into `portal_approvals` at
+  submit and is never re-derived mid-flight (WF9, byte-equal snapshot + unchanged status/seq); (b)
+  **fail-closed before publication** — a role stage with no possible approver (no active user holds the
+  effective permission) is rejected (WF10), and duplicate stage `seq` is rejected (WF11); plus resolver /
+  role-key-whitelist / existing-approver / ≥1-stage checks. Runtime SoD and deny-by-default remain
+  enforced at every transition regardless of chain design.
+- **Not applied:** `p0_1r`, `p0_1s`, `p0_1t`, `p0_1u` remain **repo-only, unapplied** to shared staging or
+  production under the current gate. A live apply would require the Stage-5 governed publish model or an
+  explicitly authorized publish action — neither is authorized now.
+- **Evidence:** local suite = **329 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Exact-head
+  PR CI still not triggered (owner-confirmed) — local ≠ exact-head CI gate evidence.
+
+**budget_enforce=0 / txn_notifications=0 kept; no migration/config/production/email/enforcement mutation.
+PR stays Draft/unmerged; no migration 063.**

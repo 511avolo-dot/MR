@@ -2886,6 +2886,12 @@ BEGIN
       IF NOT ((v_stage->>'role_key') = ANY(v_allowed_roles)) THEN
         RAISE EXCEPTION 'مفتاح الدور غير معروف في المرحلة %: %', v_n, coalesce(v_stage->>'role_key','(فارغ)');
       END IF;
+      -- فشل-مغلق (تحقّق تغطية): مرحلة دور بلا أيّ معتمِد ممكن (لا مستخدم نشط يملك الصلاحية
+      -- الفعّالة) تُرفض قبل النشر — تمنع مساراً يتوقّف بلا معتمِد.
+      IF NOT EXISTS (SELECT 1 FROM portal_users
+                     WHERE active AND coalesce((permissions->>(v_stage->>'role_key'))::boolean,false)) THEN
+        RAISE EXCEPTION 'المرحلة % بلا معتمِد ممكن: لا مستخدم نشط يملك الصلاحية «%»', v_n, v_stage->>'role_key';
+      END IF;
     ELSIF v_res = 'user' THEN
       IF NOT EXISTS (SELECT 1 FROM portal_users WHERE username = (v_stage->>'approver') AND active) THEN
         RAISE EXCEPTION 'المعتمِد المحدَّد في المرحلة % غير موجود أو غير نشط', v_n;
@@ -2893,6 +2899,10 @@ BEGIN
     END IF;
   END LOOP;
   IF v_n = 0 THEN RAISE EXCEPTION 'يجب أن يحتوي المسار على مرحلة واحدة على الأقل'; END IF;
+  -- فشل-مغلق: أرقام تسلسل المراحل يجب أن تكون فريدة (تكرار seq يفسد الترتيب/الاعتماد).
+  IF (SELECT count(DISTINCT (e->>'seq')) FROM jsonb_array_elements(p_stages) e) <> v_n THEN
+    RAISE EXCEPTION 'أرقام تسلسل المراحل (seq) مكرّرة أو ناقصة';
+  END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
   INSERT INTO portal_workflows(id, name, priority, sector, min_total, max_total, stages, active, cycle)
