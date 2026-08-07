@@ -8,9 +8,27 @@
 > `loadAll` calls and merges (`purchase-portal.html:2730` and the merge at lines 2749–2771). No fix is
 > needed; **no code/DB change was made** (a proposed `p0_1q` safe-view migration was discarded before commit).
 
-## Live verification of the correction (rolled back, zero persistence)
+## Live verification of the correction (rolled back, zero persistence) — head `6f8b48f`
 As requester `zzk_e` (`{can_create}`, no privileged permission), after creating request `R-check`:
 - `portal_my_purchase_dossiers()` → `requester=zzk_e`, `total_dossiers=1`, **`includes_own_r1=true`**.
+
+### Deterministic merge contract test (per owner Gate review, requirements 1+2)
+Reproduced the exact `loadAll` shape under the real `authenticated` role with the requester's identity:
+| step | value |
+|---|---|
+| (1) raw `SELECT … FROM portal_requests WHERE id=own` (RLS) | **0** — intentional privacy boundary |
+| (2) `portal_my_purchase_dossiers()` includes own request | **true** |
+| (3) `loadAll` merge `PA_REQ_ROWS = raw ∪ dossier` (`pa_mergeSafeRows`) → **final requester-visible** | **true** |
+
+⇒ The final merged, requester-visible list **contains the own request**. The raw-table denial is a
+privacy boundary, **not** a UI regression. Requirement outcome: **retract/downgrade to observation (case 3).**
+
+### Ledger reconciliation (requirement 5)
+- `INDEPENDENT_VERIFICATION_2026-08-07.md`: VI entry corrected (withdrawal recorded).
+- `MASTER_DELIVERY_LEDGER.md`: already consistent — it documents the **requester-safe purchase
+  dossier/routing** (lines ~148, ~190) and never carried this HIGH finding; no change required.
+- Retained observation (intentional): an ordinary requester is denied the **raw** `portal_requests`
+  row by design (`portal_can_read_raw_request`); UI visibility is delivered via the safe dossier feed.
 
 So the requester **does** see their own purchase request through the app's safe path. The raw-table
 restriction is defense-in-depth (protects sensitive columns / direct table access); the safe dossier
