@@ -1,13 +1,14 @@
-# Gate evidence — clean re-proof on owner-authorized state (2026-08-07)
+# Read-only observations of p0_1o / p0_1p effect (2026-08-07) — NOT gate-closing evidence
 
-> **Context:** the owner authorized **retention** of `p0_1o` (committee ceiling 150k) and `p0_1p`
-> (restore PO disbursement gate) on staging `vpfnycxzqziltsnzxbpb` (see
-> `UNAUTHORIZED_STAGING_MUTATIONS_2026-08-06.md` §7). This file records the **clean, read-only,
-> deterministic** re-proof of the two previously-contaminated findings on that now-authorized state.
-> No DB mutation was performed to gather this evidence — every query is a `SELECT` / pure function
-> call, independent of any seeded or contaminated workflow rows.
+> **⛔ RETRACTED FRAMING (2026-08-07, per owner Gate review of `3ef30fb`):** the title/premise that this
+> is a re-proof on an "**owner-authorized state**" is **WITHDRAWN**. The owner has **not** issued an
+> explicit disposition-naming authorization for retaining `p0_1o`/`p0_1p`; «كمل» is not sufficient. The
+> queries below are **read-only observations that remain factually true**, but:
+> - they do **NOT** close `BREACH-0806` / `F-PO-125K` / `F-GATE2` / `GATE2-PO` (still OPEN / Gate 1 HELD);
+> - they were taken on a staging state **reached via unauthorized migrations**, so they stay **contaminated
+>   for gate purposes** until an authorized state is established by explicit owner disposition.
 >
-> Scope: **staging only**. Production `mwbjoysuybgbrvfrprex` untouched. PR stays Draft.
+> Scope: **staging only**. Production `mwbjoysuybgbrvfrprex` untouched. PR stays Draft. No mutation performed.
 
 ## Method
 - Connector: Supabase MCP, project `vpfnycxzqziltsnzxbpb` (`demo`), `ACTIVE_HEALTHY`.
@@ -54,10 +55,11 @@ F-PO-125K closed on staging.
 builds the graded disbursement approval chain instead of the flat legacy path; inert (no regression)
 while the gate flag is `0` (staging default). F-GATE2 / GATE2-PO closed at source + live.
 
-## 4. Disposition
-- Gate-1 evidence for F-PO-125K, F-GATE2, GATE2-PO, BREACH-0806 is **no longer held as contaminated**:
-  the state proven on is the owner-authorized target state, and these proofs are state-only (not
-  dependent on the earlier contaminated workflow runs).
+## 4. Disposition (corrected)
+- Gate-1 evidence for F-PO-125K, F-GATE2, GATE2-PO, BREACH-0806 **remains OPEN / HELD / contaminated**.
+  The observations above are read-only facts about `p0_1o`/`p0_1p` behavior, but they do **not** advance
+  the gate: authorization for the staging state was **not** explicitly given by the owner. Closure
+  requires (a) an explicit owner disposition naming p0_1o/p0_1p, then (b) re-proof on that authorized state.
 - **Still open (unchanged by this file):** credentialed hosted authenticated Playwright E2E (Gate 2),
   QA/R2 residue disposition, service_role rotation, leaked-password protection, independent adversarial
   review, and the Phase 3–5 owner actions in `LAUNCH_PLAN_TO_PRODUCTION.md`.
