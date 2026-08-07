@@ -6100,10 +6100,45 @@ function pa_disbChainPanel(r){
     return '<div class="par-row"><div class="av sm" style="background:'+(done?'linear-gradient(155deg,#36916b,#2e7d5b)':active?'linear-gradient(155deg,#c2a063,#a37f43)':'#cdc4b2')+';color:#fff">'+(done?'✓':(s.seq||(i+1)))+'</div>'
       +'<div class="nm" style="flex:1">'+esc(s.label||'')+'<div class="rl muted" style="font-size:10.5px;font-weight:500">'+esc(uName(s.user||''))+(s.comment?(' · '+esc(s.comment)):'')+'</div></div>'+right+'</div>';
   }).join('');
+  var isDirect=(r.reqType==='direct_expense'||r.kind==='expense');
+  /* B1 — وضوح التسليم: من أين جاء الصرف (مباشر أم من اكتمال دورة الشراء) */
+  var handoff = isDirect
+    ? '<div class="chip" style="margin-bottom:10px">'+ic('user',13)+' صرف مباشر مستقلّ — بلا دورة شراء</div>'
+    : '<div class="chip" style="margin-bottom:10px;background:rgba(46,125,91,.12);color:var(--ok)">'+ic('cart',13)+' تسليم من دورة الشراء: اكتمل أمر الشراء ودخل الطلب دورة الصرف</div>';
   return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
     +'<div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>سلسلة اعتماد الصرف</div>'
-    +'<div class="muted" style="font-size:11.5px;margin-bottom:10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
+    + handoff
+    + pa_disbFlow(r)   /* B2 — تصوّر بصريّ لسلسلة موافقات الصرف (كدورة الحاجة) */
+    +'<div class="muted" style="font-size:11.5px;margin:12px 0 10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
     + rows + '</div>';
+}
+/* B2 — الجدول الزمنيّ البصريّ لسلسلة الصرف (يعيد استخدام أنماط .flow المرجعية، المُحوِّل فقط) */
+function pa_disbFlow(r){
+  var ch=r.disbChain||[]; if(!ch.length) return '';
+  var isDirect=(r.reqType==='direct_expense'||r.kind==='expense');
+  var startLbl=isDirect?(r.beneficiary||'المستفيد'):'من دورة الشراء';
+  var startSub=isDirect?'صرف مباشر':'اكتمل أمر الشراء';
+  var parts=['<div class="fl-start">'+ic(isDirect?'user':'cart',20)+'<span class="lab">'+esc(startLbl)+'</span><span class="muted" style="font-size:10.5px">'+esc(startSub)+'</span></div>'];
+  var curIdx=-1; for(var i=0;i<ch.length;i++){ if(ch[i].decision==='pending'){ curIdx=i; break; } }
+  ch.forEach(function(s,i){
+    var st=s.decision==='approved'?'done':s.decision==='rejected'?'rej':(i===curIdx?'active':'wait');
+    var connState=st==='done'?'done':st==='active'?'active':'';
+    parts.push('<div class="fl-conn '+connState+'"></div>');
+    var badge=st==='done'?ic('check',15):st==='rej'?ic('x',15):(s.seq||(i+1));
+    var who=s.user?('<div class="fl-who">'+avatar(uName(s.user),'sm')+'<div><div class="nm">'+esc(uName(s.user))+'</div><div class="rl">'+esc(uRole(s.user))+'</div></div></div>'):'';
+    var meta=st==='done'?('<div class="fl-meta"><span class="fl-done-line">'+ic('check',13)+' اعتُمد</span></div>')
+      :st==='active'?('<div class="fl-meta">'+ic('clock',14)+' <span>بانتظار الاعتماد</span></div>')
+      :st==='rej'?('<div class="fl-meta">'+(s.comment?('«'+esc(String(s.comment).slice(0,40))+'»'):'مرفوض')+'</div>')
+      :'<div class="fl-meta muted">بالانتظار</div>';
+    parts.push('<div class="fl-node '+st+'"><div class="fl-badge">'+badge+'</div><div class="fl-stage">'+esc(s.label||'')+'</div>'+who+meta+'</div>');
+  });
+  var pay=(r.proc&&r.proc.payment)||null;
+  var paid=(pay&&pay.status==='disbursed')||r.phase==='closed';
+  var allApproved=ch.every(function(x){return x.decision==='approved';});
+  var endTxt=paid?'تمّ الصرف':(allApproved?'جاهز للتنفيذ (البنك/الصندوق)':'بانتظار اكتمال الاعتماد');
+  parts.push('<div class="fl-conn '+(paid?'done':'')+'"></div>');
+  parts.push('<div class="fl-end '+(paid?'':'pending')+'">'+ic(paid?'flag':'money',20)+'<span class="lab">'+esc(endTxt)+'</span></div>');
+  return '<div class="flow-scroll"><div class="flow">'+parts.join('')+'</div></div>';
 }
 function pa_canApproveDisb(s){ var a=accessOf(ME)||{}; if(isAdmin()) return true; var perms=(USERS[ME]||{}).perms||{};
   var rk=s.roleKey; if(!rk) return !!(a.can&&a.can.approveDisb);
