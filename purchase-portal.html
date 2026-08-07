@@ -4693,22 +4693,61 @@ function pa_docValidate(file){ if(!file) return true;
   var ok=/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type||'');
   if(!ok){ toast('المستند يجب أن يكون PDF أو صورة (JPG/PNG)','err'); return false; }
   if(file.size>10*1024*1024){ toast('حجم المستند يتجاوز 10 ميجابايت','err'); return false; } return true; }
-/* يفتح مستند صرف/استلام inline في نافذة النظام (blob، لا رابط R2 مكشوف) */
+/* ══════ معاينة مستندات بمستوى DMS (تكليف المالك D1) — عرض داخليّ (blob، لا رابط R2 مكشوف)
+   بشريط أدوات: تكبير/تصغير/ملاءمة/تدوير للصور + طباعة + تنزيل + إغلاق. بلا مكتبة خارجية
+   (آمن CSP). PDF عبر عارض المتصفّح الأصليّ داخل إطار، والصور بعارض تحويل CSS قابل للتصفّح. */
+var _paDocUrl=null, _paDvZoom=1, _paDvRot=0, _paDvKind='';
 async function pa_docView(key){
   var tok=await pa_sessionToken(); if(!tok){ toast('الجلسة غير صالحة','err'); return; }
-  try{ var resp=await fetch('/api/portal-doc?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
-    if(!resp.ok) throw 0; var url=URL.createObjectURL(await resp.blob());
+  try{
+    var resp=await fetch('/api/portal-doc?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
+    if(!resp.ok) throw 0;
+    var blob=await resp.blob();
+    var ct=((resp.headers.get('content-type')||blob.type||'')+'').toLowerCase();
+    var url=URL.createObjectURL(blob);
+    _paDocUrl=url; _paDvZoom=1; _paDvRot=0;
+    var isImg=/image\//.test(ct) || /\.(png|jpe?g)$/i.test(key);
+    _paDvKind=isImg?'img':'pdf';
+    var imgCtrls=isImg?(
+        '<button class="pqv-mini" onclick="pa_dvZoom(-0.2)" title="تصغير">−</button>'
+      +'<span class="pqv-mini" id="pa-dv-zl" style="min-width:48px;cursor:default;justify-content:center">100%</span>'
+      +'<button class="pqv-mini" onclick="pa_dvZoom(0.2)" title="تكبير">+</button>'
+      +'<button class="pqv-mini" onclick="pa_dvFit()" title="ملاءمة العرض">⤢</button>'
+      +'<button class="pqv-mini" onclick="pa_dvRotate()" title="تدوير">⟳</button>'):'';
+    var pane=isImg
+      ? '<div class="pqv-pane" id="pa-dv-pane" style="overflow:auto;display:flex;align-items:flex-start;justify-content:center;background:#12151b"><img id="pa-dv-img" src="'+url+'" alt="مستند" style="transform-origin:top center;transform:scale(1);max-width:100%;height:auto;transition:transform .12s ease"></div>'
+      : '<div class="pqv-pane"><iframe class="pqv-frame" src="'+url+'"></iframe></div>';
     $('modal').classList.add('modal-wide');
-    /* عرض داخليّ فقط — أُزيل «فتح في تبويب» (target=_blank) من تجربة مستندات الاعتماد (توجيه المالك). التنزيل ثانويّ. */
-    $('modal').innerHTML='<div class="pqv"><div class="pqv-bar"><h3>مستند</h3><div style="flex:1"></div>'
+    $('modal').innerHTML='<div class="pqv"><div class="pqv-bar"><h3>معاينة المستند</h3><div style="flex:1"></div>'
+      +imgCtrls
+      +'<button class="pqv-mini" onclick="pa_docPrint()" title="طباعة">🖨</button>'
       +'<a class="pqv-mini" href="'+url+'" download title="تنزيل">⬇</a>'
       +'<button class="pqv-mini" onclick="pa_docClose()" title="إغلاق">✕</button></div>'
-      +'<div class="pqv-canvas"><div class="pqv-grid single"><div class="pqv-pane"><iframe class="pqv-frame" src="'+url+'"></iframe></div></div></div></div>';
-    _paDocUrl=url; $('overlay').classList.add('show');
+      +'<div class="pqv-canvas"><div class="pqv-grid single">'+pane+'</div></div></div>';
+    $('overlay').classList.add('show');
   }catch(e){ toast('تعذّر فتح المستند','err'); }
 }
-var _paDocUrl=null;
-function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){} if(_paDocUrl){ try{ URL.revokeObjectURL(_paDocUrl); }catch(e){} _paDocUrl=null; } closeModal(); }
+function pa_dvApply(){ var im=$('pa-dv-img'); if(im){ im.style.transform='scale('+_paDvZoom+') rotate('+_paDvRot+'deg)'; }
+  var zl=$('pa-dv-zl'); if(zl) zl.textContent=Math.round(_paDvZoom*100)+'%'; }
+function pa_dvZoom(d){ _paDvZoom=Math.min(5,Math.max(0.2,Math.round((_paDvZoom+d)*100)/100)); pa_dvApply(); }
+function pa_dvFit(){ _paDvZoom=1; _paDvRot=0; pa_dvApply(); }
+function pa_dvRotate(){ _paDvRot=(_paDvRot+90)%360; pa_dvApply(); }
+/* طباعة داخليّة عبر إطار مخفيّ (بلا نافذة منبثقة): PDF بطباعة العارض الأصليّ، والصورة تُطبَع كما هي. */
+function pa_docPrint(){
+  try{ if(!_paDocUrl) return;
+    var old=document.getElementById('pa-dv-print'); if(old) old.remove();
+    var f=document.createElement('iframe'); f.id='pa-dv-print';
+    f.style.position='fixed'; f.style.right='-9999px'; f.style.width='0'; f.style.height='0'; f.style.border='0';
+    f.src=_paDocUrl;
+    f.onload=function(){ setTimeout(function(){ try{ f.contentWindow.focus(); f.contentWindow.print(); }
+      catch(e){ toast('تعذّرت الطباعة — استخدم التنزيل','err'); } }, 180); };
+    document.body.appendChild(f);
+  }catch(e){ toast('تعذّرت الطباعة','err'); }
+}
+function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){}
+  try{ var f=document.getElementById('pa-dv-print'); if(f) f.remove(); }catch(e){}
+  if(_paDocUrl){ try{ URL.revokeObjectURL(_paDocUrl); }catch(e){} _paDocUrl=null; }
+  _paDvZoom=1; _paDvRot=0; _paDvKind=''; closeModal(); }
 
 /* ══════ مركز المستندات الداعمة (062) — واجهة المُحوِّل فقط (أسماء _pa* فريدة) ══════
    نموذج مُطبَّع: مسودّة→رفع مصنَّف→تقديم. عرض داخليّ بلا تبويب خارجي. سجلّ إصدارات (مُستبدَل مرئيّ). */
