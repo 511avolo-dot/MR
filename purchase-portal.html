@@ -6374,6 +6374,51 @@ async function pa_supIbanRequest(){
 async function pa_supIbanApprove(cid){ try{ await pa_rpc('portal_supplier_iban_approve',{p_change_id:cid}); toast('اعتُمد تغيير الآيبان','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الاعتماد'),'err'); } }
 async function pa_supIbanReject(cid){ var n=window.prompt('سبب الرفض (اختياري):','')||null; try{ await pa_rpc('portal_supplier_iban_reject',{p_change_id:cid,p_note:n}); toast('رُفض الطلب','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الرفض'),'err'); } }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C2/C3 (+B2) — الإرشاد لا الاستكشاف: لافتة «مطلوب منك الآن» أعلى تفاصيل
+   الطلب. تعيد استخدام myTasks() (المصدر الموحّد لكل الدورات: اعتماد الحاجة/التعميد/أمر
+   الشراء/الصرف/الاستلام) فتُخبر المستخدم فوراً بما هو متوقّف عليه وأين ينقر — دون بحث.
+   المُحوِّل فقط، اسم ref فريد، منطقة التصميم 1–2555 دون مساس. */
+function pa_actionBanner(id){
+  try{
+    var r=(typeof REQS!=='undefined')&&REQS.find(function(x){return x.id===id;}); if(!r) return '';
+    var mine=[]; try{ mine=(myTasks()||[]).filter(function(t){return t.r&&t.r.id===id;}); }catch(e){}
+    if(mine.length){
+      var t=mine[0], urgent=mine.some(function(x){return x.urgent;});
+      var extra=mine.length>1?(' <span class="badge '+(urgent?'danger':'gold')+'" style="font-size:10px">+'+(mine.length-1)+' أخرى</span>'):'';
+      return '<div class="card" style="margin-bottom:16px;border:1px solid '+(urgent?'var(--danger-line)':'var(--gold)')+';background:'+(urgent?'var(--danger-bg)':'rgba(194,160,99,.09)')+'">'
+        +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        +'<div style="width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;color:#fff;background:'+(urgent?'var(--danger)':'linear-gradient(155deg,var(--gold),var(--gold-2))')+'">'+ic(t.ic||'check',20)+'</div>'
+        +'<div style="flex:1;min-width:180px"><div style="font-weight:800;font-size:14.5px;color:var(--ink)">'+(urgent?'⚡ ':'')+'مطلوب منك الآن: '+esc(t.label)+extra+'</div>'
+        +(t.sub?'<div class="muted" style="font-size:12px;margin-top:3px">'+esc(t.sub)+'</div>':'')+'</div>'
+        +'<button class="btn '+(urgent?'btn-danger':'btn-gold')+'" onclick="pa_gotoAction()">'+ic('route',15)+' انتقل للإجراء</button>'
+        +'</div></div>';
+    }
+    if(r.status==='cancelled'||r.phase==='closed') return '';
+    var lbl=((typeof STATUSMETA!=='undefined')&&STATUSMETA[r.status]&&STATUSMETA[r.status].l)||'قيد المعالجة';
+    var whoTxt=''; try{ var cs=(typeof curStage==='function')&&curStage(r); if(cs){ whoTxt=' — بانتظار '+esc(uName(resolveWho(cs))); } }catch(e){}
+    return '<div class="card" style="margin-bottom:16px;background:var(--surface-2)"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<span style="color:var(--muted)">'+ic('eye',16)+'</span>'
+      +'<div style="font-size:12.5px;color:var(--ink)">لا إجراء مطلوب منك الآن — أنت متابع لهذا الطلب. الحالة: <b>'+esc(lbl)+'</b>'+whoTxt+'</div>'
+      +'</div></div>';
+  }catch(e){ return ''; }
+}
+function pa_gotoAction(){ try{ var el=document.getElementById('pa-action-anchor'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
+if(typeof detailHTML==='function'){ var _pa_refDetailHTML_c4=detailHTML;
+  detailHTML=function(id){
+    var html=_pa_refDetailHTML_c4(id);
+    try{
+      /* مرساة القفز = رأس بطاقة سلسلة الموافقات (حاضرة دائماً) */
+      html=html.replace('سلسلة الموافقات — التتبّع الحيّ','<span id="pa-action-anchor"></span>سلسلة الموافقات — التتبّع الحيّ');
+      var b=pa_actionBanner(id);
+      if(b){ var bi=html.indexOf('id="backbar"');
+        if(bi>=0){ var ce=html.indexOf('</div>',bi); if(ce>=0){ ce+=6; html=html.slice(0,ce)+b+html.slice(ce); } else html=b+html; }
+        else html=b+html; }
+    }catch(e){}
+    return html;
+  };
+}
+
 /* الإقلاع الفعلي */
 /* بوابة الإقلاع الواعية بالبيئة: لا يبدأ التطبيق إلا بعد جلب إعداد Supabase بنجاح (fail-closed). */
 (async()=>{ if(await __bootConfig()) boot(); })();
