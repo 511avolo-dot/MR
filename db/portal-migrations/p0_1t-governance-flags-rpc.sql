@@ -30,6 +30,11 @@ BEGIN
     RAISE EXCEPTION 'ضبط الحوكمة يتطلّب صلاحية أدمن كاملة';
   END IF;
   IF NOT (p_key = ANY(v_allowed)) THEN RAISE EXCEPTION 'مفتاح إعداد غير معروف: %', p_key; END IF;
+  -- قفل الإطلاق (قرار المالك المُلزِم): budget_enforce و txn_notifications مقفلان لحالة
+  -- الإطلاق الحالية — لا يُفعَّلان بضغطة أدمن؛ يتطلّبان تفويض المالك (مسار مميَّز/هجرة).
+  IF p_key = ANY(ARRAY['budget_enforce','txn_notifications']) AND NOT portal_is_privileged() THEN
+    RAISE EXCEPTION 'الضابط «%» مقفل بقرار المالك في هذا الإصدار — يتطلّب تفويضاً صريحاً، لا يُضبط من الإعدادات', p_key;
+  END IF;
   IF p_value IS NULL OR p_value < 0 OR p_value > 100 THEN
     RAISE EXCEPTION 'قيمة غير صالحة (0..100): %', p_value;
   END IF;

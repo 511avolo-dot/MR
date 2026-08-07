@@ -105,8 +105,11 @@ run_sql "اختبار p0_1r: صكّ/إسناد صلاحية الصرف للوظ�
 run_sql "p0_1s: بقاء تخصيصات صلاحيات المستخدم عبر تعديل الوظيفة (نموذج الدلتا، تكليف A3)" "$ROOT/db/portal-migrations/p0_1s-per-user-permission-overrides.sql"
 run_sql "اختبار p0_1s: الدلتا تبقى عبر تعديل الوظيفة + منع التصعيد + إعادة التعيين" "$HERE/50_perm_overrides.sql"
 
-run_sql "p0_1t: ضبط مفاتيح الحوكمة من الإعدادات (تكليف المالك C5/هـ.2)" "$ROOT/db/portal-migrations/p0_1t-governance-flags-rpc.sql"
-run_sql "اختبار p0_1t: تبديل ضوابط الحوكمة أدمن فقط + قائمة بيضاء + نطاق" "$HERE/51_governance_flags.sql"
+run_sql "p0_1t: ضبط مفاتيح الحوكمة من الإعدادات + قفل الإطلاق (تكليف المالك C5/هـ.2 + مراجعة Gate)" "$ROOT/db/portal-migrations/p0_1t-governance-flags-rpc.sql"
+run_sql "اختبار p0_1t: تبديل الضوابط أدمن فقط + قائمة بيضاء + نطاق + قفل budget/txn المالك" "$HERE/51_governance_flags.sql"
+
+run_sql "p0_1u: حفظ مسار الاعتماد من المصمّم (تكليف المالك C6)" "$ROOT/db/portal-migrations/p0_1u-workflow-save-rpc.sql"
+run_sql "اختبار p0_1u: حفظ/حذف المسار أدمن فقط + تحقّق بنيوي" "$HERE/52_workflow_designer.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (313 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (326 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

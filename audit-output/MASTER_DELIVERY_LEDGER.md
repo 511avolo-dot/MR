@@ -710,3 +710,20 @@ material A3 defect. Recorded here for program sequencing; **no gate is flipped, 
 | MA-CI | Exact-head PR-triggered CI evidence | Local suite = **306 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Push of the fix re-triggers `portal-tests.yml`; local claims are not a substitute for exact-head CI (owner note acknowledged) | awaiting CI on new head |
 
 **Sequencing:** this is Mandate-A (functions/permissions) work on the audit branch; it does **not** advance Gate 1 or the MASTER OWNER-AUTHORIZED EXECUTION PROGRAM stages, and does not touch the open owner-decision/authorized-state blockers (p0_1o/p0_1p disposition, staging authorized state, service_role rotation, leaked-password protection, Gate-2 hosted Playwright). **No staging/production migration, config, email, or `budget_enforce`/enforcement-flag change. PR stays Draft/unmerged; no migration 063.**
+
+## 16. Gate remediation of `p0_1t` release-lock + C6 designer persistence (owner review of `332d3f6`)
+
+Owner Gate review (PR #74, 2026-08-07) verified repo progress and required a P0/P1 correction: the
+governance-settings card must not let an ordinary admin click flip the owner-locked launch decisions
+`budget_enforce` and `txn_notifications`. Remediation done repo-only; **Gate 1 remains HELD.**
+
+| ID | Item | Disposition | State |
+|---|---|---|---|
+| MA-C5-LOCK | `p0_1t` exposed toggles for owner-locked `budget_enforce`/`txn_notifications` | **Fixed:** server-side release lock in `portal_set_governance_flag` — those two keys require `portal_is_privileged()` (service_role/owner-authorized path); an admin JWT is **rejected at the RPC** (not UI-only). UI shows them read-only 🔒 "requires owner authorization". Neither value changed (both stay 0). Test `51` extended: GF7/GF8 admin-rejected, GF9 unchanged, GF11 authorized-path positive (local CI only, never shared Staging). | fixed in repo — awaiting gate |
+| MA-C6 | Workflow designer was a dead demo (no persistence) | **Built:** `portal_save_workflow`/`portal_delete_workflow` (admin-only, structural validation) + designer "save" button. Governance (SoD/deny-by-default) is independent of chain design — enforced at each transition regardless. Repo only. Test `52` (WF1–WF8). | built — browser-verify owed |
+| MA-CI | Exact-head PR CI evidence | Still no PR-triggered runs on the branch head (owner-confirmed). Local suite = **326 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Local ≠ exact-head CI (acknowledged). | awaiting CI/owner approval |
+
+**Owner-locked launch invariants restated:** `budget_enforce=0` and `txn_notifications=0` for the current
+release; System-3 email stays legacy immediate mode until separately authorized. No code path lets an
+ordinary admin change them. No staging/production migration, config, email, or enforcement-flag mutation
+performed. PR stays Draft/unmerged; no migration 063.

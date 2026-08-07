@@ -6431,20 +6431,23 @@ async function pa_setGovFlag(key,val){
 function pa_govCard(){
   try{ if(typeof isAdmin==='function' && !isAdmin()) return ''; }catch(e){ return ''; }
   var P=(typeof PSET!=='undefined'&&PSET)||{};
+  /* locked=true: قرار إطلاق مُلزِم للمالك — معروض كقراءة فقط، والخادم يرفض تغييره بضغطة أدمن (P0-1t). */
   var flags=[
-    ['budget_enforce','منع تجاوز الميزانية','يمنع تعميداً/صرفاً يتجاوز ميزانية القسم المعتمَدة (يتطلّب تعريف ميزانية للقسم/السنة).'],
-    ['contract_enforce','منع تجاوز سقف العقد الإطاري','يمنع أمر سحب يتجاوز سقف العقد أو على عقد منتهٍ.'],
-    ['iban_change_control','ضبط تغيير الآيبان (مورد/مستفيد)','يفرض مسار طلب + اعتماد مزدوج لتغيير أي آيبان بنكي — وقاية احتيال.'],
-    ['three_way_enforce','المطابقة الثلاثية (الصرف الآجل)','يمنع صرفاً آجلاً بلا مطابقة أمر الشراء ↔ الاستلام ↔ الفاتورة.'],
-    ['quote_doc_required','إلزام مستند عرض المورد','يمنع تسجيل عرض سعر بلا إرفاق مستند العرض الرسمي.'],
-    ['disb_gate_purchase','بوّابة صرف متدرّجة على مسار الشراء','عند اكتمال أمر الشراء تُبنى سلسلة اعتماد صرف متدرّجة بدل الاعتماد المسطّح.'],
-    ['txn_notifications','إشعارات معامَلاتية للاعتماد','التقاط إشعار المعتمِد التالي داخل معاملة الانتقال (تسليم مضمون عبر الصادر).']
+    ['budget_enforce','منع تجاوز الميزانية','يمنع تعميداً/صرفاً يتجاوز ميزانية القسم المعتمَدة (يتطلّب تعريف ميزانية للقسم/السنة).',true],
+    ['contract_enforce','منع تجاوز سقف العقد الإطاري','يمنع أمر سحب يتجاوز سقف العقد أو على عقد منتهٍ.',false],
+    ['iban_change_control','ضبط تغيير الآيبان (مورد/مستفيد)','يفرض مسار طلب + اعتماد مزدوج لتغيير أي آيبان بنكي — وقاية احتيال.',false],
+    ['three_way_enforce','المطابقة الثلاثية (الصرف الآجل)','يمنع صرفاً آجلاً بلا مطابقة أمر الشراء ↔ الاستلام ↔ الفاتورة.',false],
+    ['quote_doc_required','إلزام مستند عرض المورد','يمنع تسجيل عرض سعر بلا إرفاق مستند العرض الرسمي.',false],
+    ['disb_gate_purchase','بوّابة صرف متدرّجة على مسار الشراء','عند اكتمال أمر الشراء تُبنى سلسلة اعتماد صرف متدرّجة بدل الاعتماد المسطّح.',false],
+    ['txn_notifications','إشعارات معامَلاتية للاعتماد','التقاط إشعار المعتمِد التالي داخل معاملة الانتقال (تسليم مضمون عبر الصادر).',true]
   ];
-  var rows=flags.map(function(f){ var on=Number(P[f[0]]||0)>=1;
-    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)">'
-      +'<input type="checkbox" style="margin-top:3px;width:16px;height:16px;cursor:pointer" '+(on?'checked':'')+' onchange="pa_setGovFlag(\''+f[0]+'\',this.checked?1:0)">'
-      +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(f[1])+' '+(on?'<span class="badge ok" style="font-size:9px">مُفعَّل</span>':'<span class="badge" style="font-size:9px;opacity:.7">مُعطَّل</span>')+'</div>'
-      +'<div class="muted" style="font-size:11.5px;margin-top:2px">'+esc(f[2])+'</div></div></div>';
+  var rows=flags.map(function(f){ var on=Number(P[f[0]]||0)>=1, locked=!!f[3];
+    var state=locked?'<span class="badge gold" style="font-size:9px">🔒 قرار المالك — يتطلّب تفويضاً</span>'
+      :(on?'<span class="badge ok" style="font-size:9px">مُفعَّل</span>':'<span class="badge" style="font-size:9px;opacity:.7">مُعطَّل</span>');
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)'+(locked?';opacity:.72':'')+'">'
+      +'<input type="checkbox" style="margin-top:3px;width:16px;height:16px;cursor:'+(locked?'not-allowed':'pointer')+'" '+(on?'checked':'')+' '+(locked?'disabled':('onchange="pa_setGovFlag(\''+f[0]+'\',this.checked?1:0)"'))+'>'
+      +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(f[1])+' '+state+'</div>'
+      +'<div class="muted" style="font-size:11.5px;margin-top:2px">'+esc(f[2])+(locked?' <b>مقفل لحالة الإطلاق الحالية — لا يُفعَّل من الإعدادات.</b>':'')+'</div></div></div>';
   }).join('');
   var tol=Number(P.three_way_tolerance_pct||0);
   var tolRow='<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)">'
@@ -6452,11 +6455,51 @@ function pa_govCard(){
     +'<div class="muted" style="font-size:11.5px;margin-top:2px">الفارق المسموح بين أمر الشراء والفاتورة قبل المنع (يعمل عند تفعيل المطابقة).</div></div>'
     +'<input class="input num" type="number" min="0" max="100" style="max-width:90px" value="'+tol+'" onchange="pa_setGovFlag(\'three_way_tolerance_pct\',+this.value)"></div>';
   return '<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>ضوابط الحوكمة — تفعيل/إقفال من الإعدادات</div>'
-    +'<div class="muted" style="font-size:12px;margin-bottom:4px">كل ضابط اختياري ويُضبط بقرارك. إطفاؤه <b>لا يُضعف</b> فصل المهام ولا الرفض الافتراضي ولا التدقيق — يوقف الإنفاذ المانع لهذا الضابط تحديداً فقط.</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:4px">الضوابط القابلة للضبط تُفعَّل/تُقفَل بقرارك؛ إطفاؤها <b>لا يُضعف</b> فصل المهام ولا الرفض الافتراضي ولا التدقيق. الضابطان الموسومان 🔒 <b>مقفلان بقرار المالك لحالة الإطلاق الحالية</b> — لا يُفعَّلان من الإعدادات ويرفض الخادم تغييرهما بضغطة أدمن.</div>'
     +rows+tolRow+'</div>';
 }
 if(typeof adminSettings==='function'){ var _pa_refAdminSettings=adminSettings;
   adminSettings=function(){ var h=_pa_refAdminSettings(); try{ h+=pa_govCard(); }catch(e){} return h; };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C6 — تفعيل مصمّم سير العمل: كان يحرّر WORKFLOWS في الذاكرة فقط بلا
+   حفظ (يُفقَد عند إعادة التحميل — عنصر ميّت). الآن زرّ «حفظ المسار» يُسلسِل مراحل
+   المسار الحالي ويحفظها عبر RPC أدمن محروس (portal_save_workflow). المُحوِّل فقط. */
+function pa_wfStageToDb(s,i){
+  var t=s.type;
+  if(t==='parallel'){ throw new Error('المرحلة «'+(s.label||'')+'» متوازية (عدّة معتمِدين) — غير مدعومة في المحرّك: اجعل لكل معتمِد مرحلة مستقلّة.'); }
+  var out={seq:i+1, label:(s.label||('مرحلة '+(i+1)))};
+  if(t==='dept'){ out.resolver='dept_manager'; }
+  else if(t==='finance'){ out.resolver='role'; out.role_key='can_approve_finance'; }
+  else if(t==='role' && s.role){ out.resolver='role'; out.role_key=s.role; }
+  else if(t==='user' && s.approver){ out.resolver='user'; out.approver=s.approver; }
+  else { out.resolver='dept_manager'; }
+  return out;
+}
+async function pa_saveWorkflow(){
+  try{
+    var wf=(typeof getWF==='function')?getWF():null;
+    if(!wf){ toast('لا مسار محدّد','err'); return; }
+    if(wf.id==='award'){ toast('سلسلة التعميد تُدار من مصفوفة DoA لا من هنا','info'); return; }
+    var stages=(wf.stages||[]).map(pa_wfStageToDb);
+    if(!stages.length){ toast('أضف مرحلة واحدة على الأقل','err'); return; }
+    var cond=wf.cond||{};
+    await pa_rpc('portal_save_workflow',{ p_id:wf.id, p_name:wf.name, p_priority:wf.priority||100,
+      p_sector:(cond.sector||wf.sector||null), p_min_total:(cond.minTotal!=null?cond.minTotal:0),
+      p_max_total:(cond.maxTotal!=null?cond.maxTotal:null), p_stages:stages, p_cycle:'need' });
+    toast('حُفظ المسار إلى القاعدة ✦','ok'); await loadAll(); render();
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الحفظ'),'err'); }
+}
+if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
+  designerHTML=function(){ var h=_pa_refDesignerHTML();
+    try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
+      h+='<div class="card" style="margin-top:14px;border-color:var(--gold)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+        +'<div style="flex:1;min-width:200px"><div style="font-weight:800;color:var(--ink)">'+ic('route',15)+' حفظ المسار إلى القاعدة</div>'
+        +'<div class="muted" style="font-size:11.5px">التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.</div></div>'
+        +'<button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button></div></div>';
+    } }catch(e){}
+    return h; };
 }
 
 /* الإقلاع الفعلي */
