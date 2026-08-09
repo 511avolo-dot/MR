@@ -62,7 +62,12 @@ if (!/^[a-z0-9]{20}$/.test(expectedRef) || expectedRef === PROD_REF) {
 
 let chromium;
 try { ({ chromium } = await import('playwright')); }
-catch { skip('playwright is not installed in this environment'); }
+catch {
+  if (process.env.CI) {
+    throw new Error('playwright is required in CI; refusing a false-green authenticated E2E skip.');
+  }
+  skip('playwright is not installed in this environment');
+}
 
 const pwProxy = process.env.PW_PROXY ? { server: process.env.PW_PROXY } : undefined;
 const insecureTLS = process.env.PW_INSECURE === '1';

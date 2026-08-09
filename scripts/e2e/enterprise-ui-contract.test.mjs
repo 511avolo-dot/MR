@@ -31,6 +31,7 @@ const portal = readFileSync('purchase-portal.html', 'utf8');
 const portalWorkflow = readFileSync('.github/workflows/portal-tests.yml', 'utf8');
 const hostedWorkflow = readFileSync('.github/workflows/hosted-preview-smoke.yml', 'utf8');
 const authenticatedWorkflow = readFileSync('.github/workflows/authenticated-e2e.yml', 'utf8');
+const authenticatedJourney = readFileSync('scripts/e2e/authenticated-multirole-journey.mjs', 'utf8');
 const hostedSmoke = readFileSync('scripts/e2e/hosted-preview-smoke.mjs', 'utf8');
 const portalConfig = readFileSync('functions/api/portal-config.js', 'utf8');
 const portalShared = readFileSync('functions/api/_portal-shared.js', 'utf8');
@@ -215,6 +216,8 @@ assert.match(hostedWorkflow, /push:\s*\n\s*branches: \[audit\/enterprise-certifi
 assert.match(hostedWorkflow, /github\.ref_name == 'audit\/enterprise-certification-2026-07-27'/);
 assert.match(authenticatedWorkflow, /STAGING_E2E_USERS secret is not set — authenticated release gate cannot run/);
 assert.match(authenticatedWorkflow, /echo "::error::[^"]+"\s*\n\s*exit 1/);
+assert.match(authenticatedWorkflow, /npm install --no-save --package-lock=false playwright@1\.55\.0/);
+assert.match(authenticatedJourney, /process\.env\.CI[\s\S]*refusing a false-green authenticated E2E skip/);
 assert.doesNotMatch(authenticatedWorkflow, /authenticated E2E SKIPPED/);
 ok('release workflows are manually triggerable and missing authenticated credentials fail closed');
 ok('exact-head CI and hosted Preview gates run on certification-branch pushes with read-only contents access');
