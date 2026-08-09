@@ -201,6 +201,7 @@ assert.match(portalWorkflow, /branches: \[main, audit\/enterprise-certification-
 assert.match(portalWorkflow, /permissions:\s*\n\s*contents: read/);
 assert.match(portalWorkflow, /\.gitattributes/);
 assert.match(hostedWorkflow, /push:\s*\n\s*branches: \[audit\/enterprise-certification-2026-07-27\]/);
+assert.match(hostedWorkflow, /github\.ref_name == 'audit\/enterprise-certification-2026-07-27'/);
 assert.match(authenticatedWorkflow, /STAGING_E2E_USERS secret is not set — authenticated release gate cannot run/);
 assert.match(authenticatedWorkflow, /echo "::error::[^"]+"\s*\n\s*exit 1/);
 assert.doesNotMatch(authenticatedWorkflow, /authenticated E2E SKIPPED/);

@@ -39,7 +39,7 @@ concurrency:
 
 jobs:
   preview-smoke:
-    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'audit/enterprise-certification-2026-07-27'
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'audit/enterprise-certification-2026-07-27' || github.ref_name == 'audit/enterprise-certification-2026-07-27'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
