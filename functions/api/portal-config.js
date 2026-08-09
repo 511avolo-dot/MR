@@ -1,4 +1,5 @@
 /**
+ * Exact-head Preview revalidation marker: staging key rotation 2026-08-10.
  * Cloudflare Pages Function — إعداد البوابة الواعي بالبيئة (env-aware) — fail-closed.
  * ════════════════════════════════════════════════════════════════════════════
  * كان purchase-portal.html يُضمِّن عنوان مشروع Supabase الإنتاجي + anon مباشرةً، فمعاينة
