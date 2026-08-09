@@ -29,7 +29,8 @@ P0O="$ROOT/db/portal-migrations/p0_1o-committee-ceiling-150k.sql"
 P0P="$ROOT/db/portal-migrations/p0_1p-restore-po-disbursement-gate.sql"
 # Tests that depend on post-baseline (062 / P0-1i-phase / later) migrations, skipped in Phase A.
 # 47_committee_ceiling depends on p0_1o (committee ceiling 150k) which is applied only in Phase B.
-DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening|43_exact_head_review_remediation|44_independent_review_remediation|45_final_independent_review_remediation|47_committee_ceiling|48_po_disbursement_gate)\.sql$'
+# 54_security_definer_inventory audits the final post-P0 execution surface, not the legacy 061 surface.
+DEP062_RE='(11_security|37_request_documents|41_requester_safe_purchase_dossier|42_final_release_blocker_hardening|43_exact_head_review_remediation|44_independent_review_remediation|45_final_independent_review_remediation|47_committee_ceiling|48_po_disbursement_gate|54_security_definer_inventory)\.sql$'
 
 echo "▶ [1] drift guard: baseline مطابق للمولَّد الحتميّ"
 node "$ROOT/scripts/deploy/build-baseline.mjs" --check
