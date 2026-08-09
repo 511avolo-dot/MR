@@ -19,6 +19,11 @@ const STAGING = 'abcdefghij0123456789';
 let n = 0; const ok = (m) => { n++; console.log('  ✓ ' + m); };
 function node(args, env) { return spawnSync('node', args, { encoding: 'utf8', env: { ...process.env, ...(env || {}) } }); }
 function jwt(payload) { return 'eyJhbGciOiJIUzI1NiJ9.' + Buffer.from(JSON.stringify(payload)).toString('base64url') + '.sig'; }
+
+for (const shellPath of ['db/portal-tests/run.sh', 'db/staging-bootstrap/verify-baseline.sh']) {
+  assert.doesNotMatch(readFileSync(shellPath, 'utf8'), /\r\n/, `${shellPath} must use LF line endings for Linux CI`);
+}
+ok('all tracked shell launchers use LF line endings for Linux CI');
 const G = ['scripts/env-guard.mjs', '--ref', STAGING, '--confirm', 'STAGING'];
 
 console.log('▶ env-guard (مُحوّلات G1-R2-01):');

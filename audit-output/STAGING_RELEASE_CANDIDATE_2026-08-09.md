@@ -5,7 +5,7 @@
 
 ## Candidate identity
 
-- GitHub head: `4ec02c67ccc2680f0295460e963637309af2b564` before this launch-gate follow-up.
+- GitHub head before the line-ending follow-up: `aa7c1fa1c5c132be1ac5b654921a129a2f4b855d`.
 - Cloudflare Preview `/api/portal-config` reports the same head, branch
   `audit/enterprise-certification-2026-07-27`, environment `preview`, and the exact staging ref.
 - Applied preventive ACL migration: `p0_1w_function_default_privileges_hardening`
@@ -15,7 +15,7 @@
 
 ## Executed evidence
 
-- Local Node/browser suite: **155 passed / 0 failed / 0 skipped** across 10 files.
+- Local Node/browser suite: **157 passed / 0 failed / 0 skipped** across 10 files.
 - Real-browser subset: **21 passed** (network boundary, inline portal, enterprise UI).
 - Baseline deterministic check passed at
   `e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
@@ -23,6 +23,9 @@
   `EXECUTE` grant.
 - Live supplier dummy-token negatives fail before writes.
 - Security Advisor: **97 notices (7 INFO / 90 WARN)**; no regression from `p0_1w`.
+- Exact-head `portal-tests` run `31306917894` proved the PostgreSQL 16 service, browser job, and
+  Supabase CLI contract were healthy, but the SQL launcher stopped before execution because its remote
+  blob used CRLF. The follow-up forces LF for every shell launcher and adds a 62nd Stage-1 regression.
 
 ## Release gates changed to fail closed
 
