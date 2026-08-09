@@ -30,7 +30,7 @@ import { MIG_VERSION, assertExactly062, parsePendingVersions } from './mig-parse
 const PROD_REF = 'mwbjoysuybgbrvfrprex';
 // قطعة الأساس: مُثبَّتة البصمة. تُولَّد بـ scripts/deploy/build-baseline.mjs من portal-standalone.sql (قبل قسم 062).
 const BASELINE_SQL = 'db/staging-bootstrap/baseline_through_061.sql';
-const BASELINE_SHA = 'ffb7c23da96571187f253e659ab95c3b207cb87af7091232d0f70829be0046ea';
+const BASELINE_SHA = '38d54fddac6b18ff8396ee8d8f23661fe1366ab807d2fc20069950c6fd8b6a5f';
 const BASELINE_VERSION = '20260729120000';                                  // بعد 061 (…073619)، قبل 062 (…120000)
 const BASELINE_DEST = `${BASELINE_VERSION}_baseline_through_061.sql`;
 const MIG_062 = 'db/portal-migrations/062-request-documents.sql';

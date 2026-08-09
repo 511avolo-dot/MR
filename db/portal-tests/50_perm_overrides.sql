@@ -13,6 +13,19 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $acl$
+BEGIN
+  IF has_function_privilege('anon','portal_apply_perm_overrides(jsonb,jsonb)','EXECUTE')
+     OR has_function_privilege('anon','portal_perm_overrides_delta(jsonb,jsonb)','EXECUTE')
+     OR has_function_privilege('anon','portal_set_user_permission(text,text,boolean)','EXECUTE')
+     OR has_function_privilege('authenticated','portal_apply_perm_overrides(jsonb,jsonb)','EXECUTE')
+     OR has_function_privilege('authenticated','portal_perm_overrides_delta(jsonb,jsonb)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','portal_set_user_permission(text,text,boolean)','EXECUTE') THEN
+    RAISE EXCEPTION 'OV9 FAIL: P0-1s function ACLs are broader than intended';
+  END IF;
+  RAISE NOTICE 'PASS OV9 P0-1s ACL exposes only the authenticated admin mutation RPC';
+END $acl$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
@@ -111,4 +124,4 @@ DO $c$ BEGIN
   PERFORM set_config('app.portal_transition','0',true);
 END $c$;
 
-SELECT '════ PER-USER PERMISSION OVERRIDES (P0-1s): OV1..OV8 = 8/8 PASS ════' AS result;
+SELECT '════ PER-USER PERMISSION OVERRIDES (P0-1s): OV1..OV9 = 9/9 PASS ════' AS result;

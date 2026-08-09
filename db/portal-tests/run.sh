@@ -103,6 +103,7 @@ run_sql "p0_1r: إدراج can_approve_disbursement في قائمة صلاحيا
 run_sql "اختبار p0_1r: صكّ/إسناد صلاحية الصرف للوظائف بحوكمة منع التصعيد" "$HERE/49_jobs_disbursement_permission.sql"
 
 run_sql "p0_1s: بقاء تخصيصات صلاحيات المستخدم عبر تعديل الوظيفة (نموذج الدلتا، تكليف A3)" "$ROOT/db/portal-migrations/p0_1s-per-user-permission-overrides.sql"
+run_sql "p0_1v: سحب EXECUTE الصريح من anon عن دوال P0-1s (إصلاح أمامي بلا تغيير الهجرة المطبقة)" "$ROOT/db/portal-migrations/p0_1v-anon-execute-revocation.sql"
 run_sql "اختبار p0_1s: الدلتا تبقى عبر تعديل الوظيفة + منع التصعيد + إعادة التعيين" "$HERE/50_perm_overrides.sql"
 
 run_sql "p0_1t: ضبط مفاتيح الحوكمة من الإعدادات + قفل الإطلاق (تكليف المالك C5/هـ.2 + مراجعة Gate)" "$ROOT/db/portal-migrations/p0_1t-governance-flags-rpc.sql"
@@ -112,4 +113,4 @@ run_sql "p0_1u: حفظ مسار الاعتماد من المصمّم (تكليف
 run_sql "اختبار p0_1u: حفظ/حذف المسار أدمن فقط + تحقّق بنيوي" "$HERE/52_workflow_designer.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (329 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (332 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

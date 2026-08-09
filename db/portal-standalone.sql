@@ -2805,9 +2805,9 @@ BEGIN
     jsonb_build_object('user', p_username, 'key', p_key, 'on', p_on));
   RETURN jsonb_build_object('ok', true, 'key', p_key, 'on', p_on, 'overrides', v_ov);
 END $fn$;
-REVOKE ALL ON FUNCTION portal_apply_perm_overrides(jsonb,jsonb) FROM PUBLIC;
-REVOKE ALL ON FUNCTION portal_perm_overrides_delta(jsonb,jsonb) FROM PUBLIC;
-REVOKE ALL ON FUNCTION portal_set_user_permission(text,text,boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_apply_perm_overrides(jsonb,jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION portal_perm_overrides_delta(jsonb,jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION portal_set_user_permission(text,text,boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_set_user_permission(text,text,boolean) TO authenticated, service_role;
 
 -- ── (P0-1t) ضبط مفاتيح الحوكمة من الإعدادات — أدمن فقط، قائمة بيضاء، مدقّق (تكليف هـ.2) ──
@@ -2849,7 +2849,7 @@ BEGIN
     jsonb_build_object('key', p_key, 'value', p_value));
   RETURN jsonb_build_object('ok', true, 'key', p_key, 'value', p_value);
 END $fn$;
-REVOKE ALL ON FUNCTION portal_set_governance_flag(text,numeric) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_set_governance_flag(text,numeric) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_set_governance_flag(text,numeric) TO authenticated, service_role;
 
 -- ── (P0-1u) حفظ/حذف مسار الاعتماد من المصمّم — أدمن فقط، مُتحقَّق (تكليف C6) ──
@@ -2940,8 +2940,8 @@ BEGIN
     jsonb_build_object('id', p_id, 'mode', v_mode));
   RETURN jsonb_build_object('ok', true, 'id', p_id, 'mode', v_mode);
 END $fn$;
-REVOKE ALL ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION portal_delete_workflow(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION portal_delete_workflow(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION portal_delete_workflow(text) TO authenticated, service_role;
 

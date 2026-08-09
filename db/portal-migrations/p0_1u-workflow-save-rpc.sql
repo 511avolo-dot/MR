@@ -101,8 +101,8 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'id', p_id, 'mode', v_mode);
 END $fn$;
 
-REVOKE ALL ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION portal_delete_workflow(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION portal_delete_workflow(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_save_workflow(text,text,int,text,numeric,numeric,jsonb,text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION portal_delete_workflow(text) TO authenticated, service_role;
 

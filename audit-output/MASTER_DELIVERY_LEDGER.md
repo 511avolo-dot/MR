@@ -753,3 +753,21 @@ as Stage-5 completion. Corrected accordingly; **Gate 1 remains HELD.**
 
 **budget_enforce=0 / txn_notifications=0 kept; no migration/config/production/email/enforcement mutation.
 PR stays Draft/unmerged; no migration 063.**
+
+## 18. 2026-08-09 live-state reconciliation (supersedes stale apply-status claims)
+
+Read-only staging inspection found that the section-17 statement saying all of `p0_1r…p0_1u` were
+unapplied is no longer current: `p0_1r` (`20260808010845`) and `p0_1s` (`20260808010943`) are present in
+the staging migration ledger; `p0_1t` and `p0_1u` are absent. Authorization evidence for the `r/s` apply
+was not found in the repository/conversation available to this run, so their status is **applied;
+authorization evidence unverified** pending an explicit owner record.
+
+The same read-only inspection found an explicit anonymous `EXECUTE` grant on the new `SECURITY DEFINER`
+RPC `portal_set_user_permission`, and the Security Advisor inventory increased to **98 (7 INFO / 91 WARN)**.
+Repo-only forward repair `p0_1v` now revokes that exposure without rewriting the applied `p0_1s` file;
+the still-unapplied `p0_1t/p0_1u` sources are hardened directly. `p0_1v` remains unapplied and requires
+explicit owner authorization. Full evidence and remaining actions:
+`audit-output/CURRENT_STATE_RECONCILIATION_2026-08-09.md`.
+
+Gate 1 remains **HELD / NOT READY**. No Production, `main`, R2, config, data, or migration-history write
+was performed by this reconciliation; no migration 063.

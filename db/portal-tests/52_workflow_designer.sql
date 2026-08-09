@@ -14,6 +14,15 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $acl$
+BEGIN
+  IF has_function_privilege('anon','portal_save_workflow(text,text,integer,text,numeric,numeric,jsonb,text)','EXECUTE')
+     OR has_function_privilege('anon','portal_delete_workflow(text)','EXECUTE') THEN
+    RAISE EXCEPTION 'WF12 FAIL: anon retains EXECUTE on a workflow mutation RPC';
+  END IF;
+  RAISE NOTICE 'PASS WF12 anon cannot execute workflow mutation RPCs';
+END $acl$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
@@ -145,4 +154,4 @@ DO $c$ BEGIN
   PERFORM set_config('app.portal_transition','0',true);
 END $c$;
 
-SELECT '════ WORKFLOW DESIGNER PERSIST + عقد انتقالي (P0-1u): WF1..WF11 PASS ════' AS result;
+SELECT '════ WORKFLOW DESIGNER PERSIST + عقد انتقالي (P0-1u): WF1..WF12 PASS ════' AS result;

@@ -58,7 +58,7 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'key', p_key, 'value', p_value);
 END $fn$;
 
-REVOKE ALL ON FUNCTION portal_set_governance_flag(text,numeric) FROM PUBLIC;
+REVOKE ALL ON FUNCTION portal_set_governance_flag(text,numeric) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_set_governance_flag(text,numeric) TO authenticated, service_role;
 
 COMMIT;

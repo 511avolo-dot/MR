@@ -20,6 +20,10 @@ const remediation = readFileSync('db/portal-migrations/p0_1j-exact-head-review-r
 const independentRemediation = readFileSync('db/portal-migrations/p0_1k-independent-review-remediation.sql', 'utf8');
 const finalRemediation = readFileSync('db/portal-migrations/p0_1l-final-independent-review-remediation.sql', 'utf8');
 const directExpenseBoundary = readFileSync('db/portal-migrations/p0_1n-direct-expense-raw-read-boundary.sql', 'utf8');
+const permissionOverrides = readFileSync('db/portal-migrations/p0_1s-per-user-permission-overrides.sql', 'utf8');
+const anonExecuteRevocation = readFileSync('db/portal-migrations/p0_1v-anon-execute-revocation.sql', 'utf8');
+const governanceFlags = readFileSync('db/portal-migrations/p0_1t-governance-flags-rpc.sql', 'utf8');
+const workflowSave = readFileSync('db/portal-migrations/p0_1u-workflow-save-rpc.sql', 'utf8');
 const supabasePush = readFileSync('scripts/deploy/supabase-push.mjs', 'utf8');
 const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
 const portal = readFileSync('purchase-portal.html', 'utf8');
@@ -148,6 +152,13 @@ assert.match(supabasePush, /p0_1n-direct-expense-raw-read-boundary/);
 assert.match(supabasePush, /parsePendingVersions/);
 ok('P0-1n preserves finance-only direct-expense rows and the guarded deploy payload includes the complete ordered remediation chain');
 
+assert.match(anonExecuteRevocation, /portal_set_user_permission\(text,text,boolean\) FROM PUBLIC, anon/);
+assert.match(anonExecuteRevocation, /portal_apply_perm_overrides\(jsonb,jsonb\) FROM PUBLIC, anon, authenticated/);
+assert.match(governanceFlags, /portal_set_governance_flag\(text,numeric\) FROM PUBLIC, anon/);
+assert.match(workflowSave, /portal_save_workflow\(text,text,int,text,numeric,numeric,jsonb,text\) FROM PUBLIC, anon/);
+assert.match(workflowSave, /portal_delete_workflow\(text\) FROM PUBLIC, anon/);
+ok('P0-1s/P0-1t/P0-1u explicitly revoke anonymous execution from new privileged RPCs');
+
 assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
 assert.match(cleanup, /aldeyabi-quotes-staging/);
 assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
@@ -178,7 +189,7 @@ assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
 assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
 ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, cleanup].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, governanceFlags, workflowSave, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

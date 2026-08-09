@@ -14,6 +14,14 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $acl$
+BEGIN
+  IF has_function_privilege('anon','portal_set_governance_flag(text,numeric)','EXECUTE') THEN
+    RAISE EXCEPTION 'GF12 FAIL: anon retains EXECUTE on portal_set_governance_flag';
+  END IF;
+  RAISE NOTICE 'PASS GF12 anon cannot execute the governance mutation RPC';
+END $acl$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
@@ -111,4 +119,4 @@ DO $c$ BEGIN
   PERFORM set_config('app.portal_transition','0',true);
 END $c$;
 
-SELECT '════ GOVERNANCE FLAGS + قفل الإطلاق (P0-1t): GF1..GF11 = 11/11 PASS ════' AS result;
+SELECT '════ GOVERNANCE FLAGS + قفل الإطلاق (P0-1t): GF1..GF12 = 12/12 PASS ════' AS result;
