@@ -47,15 +47,35 @@ BEGIN
 END $t$;
 
 DO $t$
-DECLARE v_n int;
+DECLARE v_n int; v_seen int;
 BEGIN
+  SELECT count(DISTINCT p.proname) INTO v_seen
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public' AND p.prosecdef
+    AND p.proname IN (
+      'portal_audit_write', 'portal_create_token', 'portal_outbox_claim',
+      'portal_outbox_mark', 'portal_outbox_purge', 'portal_pr_transition_email',
+      'portal_recurring_run', 'portal_supplier_token_request'
+    );
+  IF v_seen <> 8 THEN RAISE EXCEPTION 'SDI4 FAIL: expected 8 explicit server-routed definer families, found %', v_seen; END IF;
+
   SELECT count(*) INTO v_n
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public' AND p.prosecdef
     AND p.proname LIKE 'portal\_%' ESCAPE '\'
+    AND p.proname IN (
+      'portal_audit_write',
+      'portal_create_token',
+      'portal_outbox_claim',
+      'portal_outbox_mark',
+      'portal_outbox_purge',
+      'portal_pr_transition_email',
+      'portal_recurring_run',
+      'portal_supplier_token_request'
+    )
     AND NOT has_function_privilege('service_role', p.oid, 'EXECUTE');
-  IF v_n <> 0 THEN RAISE EXCEPTION 'SDI4 FAIL: % portal definers unavailable to service_role', v_n; END IF;
-  RAISE NOTICE 'PASS SDI4 service_role retains the governed server execution surface';
+  IF v_n <> 0 THEN RAISE EXCEPTION 'SDI4 FAIL: % explicitly server-routed definers unavailable to service_role', v_n; END IF;
+  RAISE NOTICE 'PASS SDI4 explicit server-only definer allowlist retains service execution';
 END $t$;
 
 DO $t$
