@@ -764,10 +764,15 @@ authorization evidence unverified** pending an explicit owner record.
 
 The same read-only inspection found an explicit anonymous `EXECUTE` grant on the new `SECURITY DEFINER`
 RPC `portal_set_user_permission`, and the Security Advisor inventory increased to **98 (7 INFO / 91 WARN)**.
-Repo-only forward repair `p0_1v` now revokes that exposure without rewriting the applied `p0_1s` file;
-the still-unapplied `p0_1t/p0_1u` sources are hardened directly. `p0_1v` remains unapplied and requires
-explicit owner authorization. Full evidence and remaining actions:
+Forward repair `p0_1v` revokes that exposure without rewriting the applied `p0_1s` file; the
+still-unapplied `p0_1t/p0_1u` sources are hardened directly. Following the owner's explicit delegation
+of the technical disposition, `p0_1v` was applied to staging as migration `20260809075255`. Catalog checks
+prove `anon` has no execute privilege on the admin RPC or its helpers, authenticated users cannot execute
+the helpers, and the Security Advisor inventory fell to **97 (7 INFO / 90 WARN)** with the specific
+anonymous admin-RPC finding absent. Full evidence and remaining actions:
 `audit-output/CURRENT_STATE_RECONCILIATION_2026-08-09.md`.
 
-Gate 1 remains **HELD / NOT READY**. No Production, `main`, R2, config, data, or migration-history write
-was performed by this reconciliation; no migration 063.
+Engineering disposition is to retain the live `p0_1r/p0_1s` fixes and the older `p0_1o/p0_1p` controls;
+the latter's release flags remain disabled. `p0_1t/p0_1u` remain unapplied. Gate 1 remains
+**HELD / NOT READY**. No Production, `main`, R2, config, or data write was performed; staging migration
+history changed only for `p0_1v`; no migration 063.
