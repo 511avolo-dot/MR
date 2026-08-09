@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { onRequestGet } from '../functions/api/portal-config.js';
+import { svcHeaders } from '../functions/api/_portal-shared.js';
 import { isAllowedUrl, installNetworkAllowlist } from './e2e/net-allow.mjs';
 import { parsePendingVersions, assertExactly062, MIG_VERSION, MIG_DEST_NAME } from './deploy/mig-parse.mjs';
 
@@ -261,6 +262,18 @@ async function cfg(env) { const res = await onRequestGet({ env }); return { stat
   // main + مرجع الإنتاج + مفتاح مربوط للإنتاج ⇒ ok
   r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'main' });
   assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, PROD); ok('إنتاج على main بمفتاح مربوط ⇒ ok');
+}
+
+console.log('▶ Supabase server-key compatibility:');
+{
+  const legacy = svcHeaders({ PORTAL_SUPABASE_SERVICE_ROLE_KEY: jwt({ role: 'service_role' }) });
+  assert.equal(legacy.Authorization, `Bearer ${legacy.apikey}`);
+  ok('legacy service_role JWT keeps the Bearer header during migration');
+
+  const modern = svcHeaders({ PORTAL_SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_staging_fixture' });
+  assert.equal(modern.apikey, 'sb_secret_staging_fixture');
+  assert.equal(Object.hasOwn(modern, 'Authorization'), false);
+  ok('sb_secret server key is never misused as a Bearer JWT');
 }
 
 console.log(`\n✅ Stage-1 deployment-safety: ${n} تأكيداً — كلها نجحت.`);

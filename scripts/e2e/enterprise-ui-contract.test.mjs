@@ -33,6 +33,9 @@ const hostedWorkflow = readFileSync('.github/workflows/hosted-preview-smoke.yml'
 const authenticatedWorkflow = readFileSync('.github/workflows/authenticated-e2e.yml', 'utf8');
 const hostedSmoke = readFileSync('scripts/e2e/hosted-preview-smoke.mjs', 'utf8');
 const portalConfig = readFileSync('functions/api/portal-config.js', 'utf8');
+const portalShared = readFileSync('functions/api/_portal-shared.js', 'utf8');
+const portalUsers = readFileSync('functions/api/portal-users.js', 'utf8');
+const portalNotify = readFileSync('functions/api/portal-notify.js', 'utf8');
 
 let passed = 0;
 function ok(message){ passed += 1; console.log('  ✓ ' + message); }
@@ -196,6 +199,14 @@ assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
 assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
 ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
 
+assert.match(portalShared, /key\.startsWith\('sb_secret_'\)/);
+assert.match(portalShared, /headers\.Authorization = `Bearer \$\{key\}`/);
+assert.match(portalUsers, /const headers = svcHeaders\(env\)/);
+assert.match(portalNotify, /const svc = svcHeaders\(env\)/);
+assert.doesNotMatch(portalUsers, /Authorization: `Bearer \$\{key\}`/);
+assert.doesNotMatch(portalNotify, /Authorization: `Bearer \$\{portalKey\(env\)\}`/);
+ok('server calls support sb_secret API keys without treating them as JWTs while retaining legacy migration compatibility');
+
 assert.match(portalWorkflow, /workflow_dispatch:/);
 assert.match(portalWorkflow, /branches: \[main, audit\/enterprise-certification-2026-07-27\]/);
 assert.match(portalWorkflow, /permissions:\s*\n\s*contents: read/);
@@ -208,7 +219,7 @@ assert.doesNotMatch(authenticatedWorkflow, /authenticated E2E SKIPPED/);
 ok('release workflows are manually triggerable and missing authenticated credentials fail closed');
 ok('exact-head CI and hosted Preview gates run on certification-branch pushes with read-only contents access');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, functionDefaultPrivileges, governanceFlags, workflowSave, cleanup].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, portalShared, portalUsers, portalNotify, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, functionDefaultPrivileges, governanceFlags, workflowSave, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

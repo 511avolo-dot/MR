@@ -180,12 +180,643 @@ Status vocabulary: `open` ¬∑ `implemented` (code merged, not yet independently t
 > owner Gate review of `95fd4cd` (exact-head `portal-tests` #218 ¬∑ `hosted-preview-smoke`
 > #49, both green; PR Draft/open/unmerged).
 
-Concis€Mº⁄⁄$z{-ÆÈ‹j◊ùÑTƒB‚¢¢ÊÚ7FvR¬ÊÚ÷ñw&Fñˆ‚c2¬ÊÚFÙ6VVB6ÜÊvR¬ÊÚ&ˆGV7Fñˆ‚ÙD"ˆ6ˆÊfñr˜7F˜&vR6ÜÊvR‚ˆÊRfˆ7W6VBFˆ7V÷VÁG2÷ˆÊ«í6ˆ÷÷óB6∆˜6W2s‘c(
-ds‘cC≤FÜRvFRf∆ó2ˆÊ«ívÜV‚FÜR˜vÊW"66WG2FÜó2&V6ÜV6≤‡–†–¢222‚s‘c$Ús‘c4(	426∆˜7W&RF&∆RÜ˜vÊW"&V6ÜV6≤ˆbv&3c#Fê–†–§˜vÊW"66WFVB¢§s‘c¢¢ÊB¢§s‘cB¢¢ÜFˆ7V÷VÁFFñˆ‚66WFÊ6RˆÊ«íf˜"cBí‚&V÷ñÊñÊrf7GV¬6˜'&V7FñˆÁ2¬ˆÊRFˆ7V÷VÁG2÷ˆÊ«í6ˆ÷÷óC≤¢¶vFR7Fñ∆¬ÑTƒBÜÊ˜Bf∆óVBí¢¢‡–†–ß¬îB¬Ê˜FR¬6˜'&V7Fñˆ‚¬7FFR¿–ß¬““◊¬““◊¬““◊¬““◊¿–ß¬s‘c$¬F&∆R&˜w26ˆÊf∆FVB5¬w&ÁG2vóFÇVffV7FófR$≈2fó6ñ&ñ∆óGíÜRÊr‚˜'F≈˜7W∆ñW%ˆñ&Âˆ6ÜÊvW6ˆ˜'F≈˜&V7W'&ñÊuˆWáVÁ6W6ˆ˜'F≈˜7W∆ñW%ˆñÁfˆñ6W6ˆ˜'F≈˜&WGW&Á6ˆ˜'F≈ˆ&VÊVfñ6ñ&ñW6÷ó6∆&V∆VB%4TƒT5BWFÜVÁFñ6FVB"í¬WfW'íˆÊRˆbFÜR3RF&∆R&˜w2Ê˜r7FFW2¢ßFá&VR6W&FRf7G2¢£¢Éí5¬u$ÂFˆ$UdÙ¥V≤É"í$≈2ˆ∆ñ7íF&vWB≤¢¶WÜ7BVffV7FófR&VFñ6FR¢¢ÜF÷ñ‚ˆfñÊÊ6R˜&ˆ7W&V÷VÁBÇ˜7Fˆ6≤íˆ6Âˆ7&VFR˜&WVW7B◊66˜VBˆ˜v‚◊&˜r˜6W'fW"÷ˆÊ«í(	BfW&&Fñ“g&ˆ“6˜W&6Rì≤É2íw&óFRFÇ≤wV&Bı%2‚u$ÂB4TƒT5BDÚWFÜVÁFñ6FVFó2¢¶ÊÚ∆ˆÊvW"¢¢WVFVBvóFÇVÁ&W7G&ñ7FVBfó6ñ&ñ∆óGí‚gVÊ7Fñˆ‚v˜&FñÊr6ÜÊvVBFÚ¢¢%T$ƒî2ˆFVfV«BWÜV7WFS≤&ˆGíWFÜ˜&ó¶Fñˆ‚‰ıBñÊFWVÊFVÁF«ífW&ñfñVBñ‚vFR≤7FvR”"&WfñWr&WVó&VB‚"¢¢¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘c4¬Fá&VBîG2&V÷˜fVB¬¢¶Fá&VBîF6ˆ«V÷‚&W7F˜&VB¢¢Ü%%E˛(
-fí≤¢¶6ˆ÷÷VÁBU$¬¢¢W"&˜rá&W6ˆ«fW2FÚgV∆¬vóDáV"FWáBí¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘c4"¬fñÊFñÊw2G'VÊ6FVB'WB∆&V∆VB'&W6W'fVB"¬¢§gV∆¬6ˆ÷÷VÁB&ˆGí¢¢Ê˜rñÊ6«VFVBW"&˜rÜˆÊ«íFÜR&FvRñ÷vR≤%W6VgV√Ú"fˆ˜FW"7G&óVBì≤ÊÚG'VÊ6Fñˆ‚‚&WfñWvVB÷6ˆ÷÷óB6ˆ«V÷‚G&˜VBÑíFˆW2Ê˜B&WGW&‚óBí&FÜW"FÜ‚∆VgB&∆Ê≤¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘c42¬6WfW&¬6ÊˆÊñ6¬Fó7˜6óFñˆÁ2w&ˆÊs≤#VÁG&ñvVB"VÁ&V∆ñ&∆R¬&V'Vñ«Bg&ˆ“¢£sí◊FóF∆RWÜ7B÷¢¢ÜÊÚw&VVGí∂Wóv˜&G2í‚fóÜW3¢Sí◊&Vw&W76ñˆ‚(i"DU5B‘4ıdU$tVÜÊ˜B4T2”bí+r÷ÁV¬‘î$‚(i"ıt‚‘î$‚‘‘ÂT∆ÜÊ˜B4T2‘î$‚‘UÖı4Rí+r&V7W'&ñÊr&VÊVfñ6ñ'í&Vg&W6Ç(i"4EÇ‘$T‰Tb’$T5U"ÉcñÜÊ˜B4T2‘î$‚‘UÖı4Rí+rF÷ñ‚6ÙB(i"ıt‚‘D‘îÊÜÊ˜Bí’$ÙƒU2í+r‘ÙB”ìr(i"ıt‚‘‘ÙCìvÜÊ˜BFW7B6˜fW&vRí+r7W&6RU$¬'6Rb&W∆6V÷VÁB÷f˜&≤(i"4dr‘TÂfˆ4EÉ2’$Uƒ4VÜÊ˜Bí’$ıÖí‘%U4Rí+r4EÉ2‘ED4Ç’ñÜfóÜVBí6W&FVBg&ˆ“í‘DÙ52‘4Ù’ƒUDVÜ˜V‚í+rfW&ñfñVB÷'&Ê6Ç4dr‘TÂfÜfóÜVBí6W&FVBg&ˆ“vóDáV"’vW2tU2‘DUƒıñÜ˜V‚í‚4T2‘î$‚‘UÖı4VÊ˜r÷2FÚ¢¶ˆÊ«í¢¢FÜR$Fó66∆˜6R&WVW7FW"66W72FÚ&VÊVfñ6ñ'íî$Á2"fñÊFñÊr¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘c2ÜóFV“bí¬f∆ñFFñˆ‚ˆvVÊW&Fñˆ‚&W˜'B¬FFVBFÚFÜRVÊFóÇÜVFW#¢¢£"Fá&VG2+r"VÊóVRFá&VBîG2+r&∆Ê≤îG2+rVÊ∂Ê˜v‚6ÊˆÊñ6¬îG2+r"Fó7˜6óFñˆÁ2¢¢¬vóDáV"◊7FFR6˜VÁG2¬ÊBFÜR˜vÊW"66WFVB◊&ó6≤÷ñÊr∆ó7B¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–†–¢¢§vFR&V÷ñÁ2ÑTƒB‚¢¢ÊÚ7FvR¬ÊÚ÷ñw&Fñˆ‚c2¬ÊÚFÙ6VVB6ÜÊvR¬ÊÚ&ˆGV7Fñˆ‚ÙD"ˆ6ˆÊfñr˜7F˜&vR6ÜÊvR‚"&ˆGívñ∆¬Ê˜FRs‘c(
-dcB266WFVB¢¶ˆÊ«ígFW"¢¢FÜó26˜'&V7Fñˆ‚ó2ñÊFWVÊFVÁF«í66WFVBÜ˜vÊW"ñÁ7G'V7Fñˆ‚rí‡–†–¢22B‚s‘É(
-ds‘ÉR6∆˜7W&RF&∆RÜ˜vÊW"&V6ÜV6≤ˆbSf&fcÜê–†–§˜vÊW"66WFVBs‘c$ÊBs‘c4Ù"‚fófRG&6V&ñ∆óGíFó7˜6óFñˆ‚6˜'&V7FñˆÁ3≤ˆÊRFˆ7V÷VÁG2÷ˆÊ«í6ˆ÷÷óC≤¢¶vFR7Fñ∆¬ÑTƒBÜÊ˜Bf∆óVBí¢¢‡–†–ß¬îB¬Ê˜FR¬6˜'&V7Fñˆ‚¬7FFR¿–ß¬““◊¬““◊¬““◊¬““◊¿–ß¬s‘É¬Fá&VG23íÚ3"'fWGFVBˆ&˜fVB&VÊVfñ6ñ'íf˜"&Ê≤WáVÁ6W2"÷VBFÚ$T‰Tb‘‘5DU"ÉS2íñ◊∆V÷VÁFVF(	B6ˆÊf∆ñ7G2vóFÇ˜vÊW"w2÷ÁV¬‘î$‚FV6ó6ñˆ‚¬&V÷VBFÚ¢¶ıt‚‘î$‚‘‘ÂT∆Ú66WFVB◊&ó6≤¢£¢&VÊVfñ6ñ'í÷7FW"WÜó7G2ÉS2í¢¶'WB÷ÁV¬Êˆ‚÷÷7FW"î$‚&V÷ñÁ2∆∆˜vVB¢¢vóFÇ&WVó&VB&V6ˆ‚∂&FvR∂VFóC≤FÜR&WVW7FVB¢¶WÜ6«W6ófóGív2FV∆ñ&W&FV«í‰ıBñ◊∆V÷VÁFVB¢¢(	BÊÚ∆ˆÊvW"FW67&ñ&VB2fóÜVB¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘É"¬Fá&VB3ÇÜ∆∆˜v∆ó7B÷ó6÷F6Çí6Ü˜v‚4T2”b˜V‚Öñ2ñbVÊfóÜVB¬¢§∆∆˜v∆ó7B7V"÷óFV“÷&∂VBdïÑTBScÉcFfB¢¢Üf˜&ﬁ(iG6W'fW"∆ó7B&V6ˆÊ6ñ∆VBì≤¢ß&VÁB4T2”f∂WBıT‚¢¢26W&FRóFV◊2Ü6∆∆W"WFÇ+r6ñvÊVB&Vvó7G&Fñˆ‚÷&˜VÊBWFá¢+rÊˆ‚f∆∆&6≤&V÷˜f¬+r&FR˜V˜F+r7F˜&vR◊ˆ∆ñ7íí‚∆∆˜v∆ó7B6∆˜7W&RFˆW2¢¶Ê˜B¢¢ñ◊«í4T2”b6∆˜7W&R¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘É2¬Fá&VB3síÜFW'F÷VÁBñ6∂W"Tíí÷&∂VBˆÊ«íñ◊∆V÷VÁFVB3VcVfÜ&6∂VÊBí¬Fó7˜6óFñˆ‚Ê˜r&VfW&VÊ6W2¢¶&6∂VÊB3VcVf≤Tí#6CìCñf¢¢¬6ˆÁ6ó7FVÁBvóFÇFá&VB3Éí¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘ÉB¬Fá&VG23Ú3"ÜB&∆Ê≤6ˆ÷÷VÁBU$¬vÜñ∆RÜVFW"6∆ñ◊2U$¬W"&˜r¬¢•U$«2&V6˜fW&VB¢¢Ü(
-b6Fó67W76ñˆÂ˜#3csCCsì#&Ú(
-e˜#3csCCsì3Fì≤f∆ñFFñˆ‚&W˜'BWáFVÊFVBvóFÇ¢¶&∆Ê≤ˆÊ˜B&WGW&ÊVB'íñ6ˆ÷÷VÁBU$«2“¢£≤Fá&VBîB&V÷ñÁ2FÜR&ñ÷'í7F&∆R∂Wí¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–ß¬s‘ÉR¬Fá&VB3BVFóB◊Fñ¬Fó7˜6óFñˆ‚&Vv‚&FG&W76VBfñSr"Ü6˜V∆B&VB26∆˜6VBí¬&W7FFVBVÊ÷&ñwV˜W6«ì¢¢¶÷ñFF∆R◊&˜r◊WFFñˆ‚FWFV7Fñˆ‚ñ◊∆V÷VÁFVBÉSrì≤7VffóÇˆVÁFó&R÷6Üñ‚FV∆WFñˆ‚FWFV7Fñˆ‚&V÷ñÁ2ıT‚¢¢VÁFñ¬‚WáFW&Ê¬Ê6Ü˜"ˆ6ÜV6∑ˆñÁBó2ñ◊∆V÷VÁFVB≤FW7FVB‚ÊWr∆VFvW"óFV“¢¶TDïB’Dî¬‘‰4Ñı&¢¢Ö7FvR"Ûb¬˜V‚í¬6˜'&V7FVB(	BvóFñÊr&V6ÜV6≤¿–†–¢¢§vFR&V÷ñÁ2ÑTƒB‚¢¢ÊÚ7FvR¬ÊÚ÷ñw&Fñˆ‚c2¬ÊÚFÙ6VVB6ÜÊvR¬ÊÚ&ˆGV7Fñˆ‚ÙD"ˆ6ˆÊfñr˜7F˜&vR6ÜÊvR‡–†–†–¢22R‚÷ÊFFR‘W&÷ó76ñˆ‚v˜&≤Ü˜vÊW"vFR&WfñWrˆbffF#SÉí(	BÑÙƒBÜˆÊ˜&V@–†–§˜vÊW"vFR&WfñWrÖ"3sB¬##b”Ç”rí∆6VBGvÚÊWr&WÚ÷ˆÊ«í6ˆ÷÷óG2VÊFW"ÑÙƒBÊBÊ÷VB–¶÷FW&ñ¬2FVfV7B‚&V6˜&FVBÜW&Rf˜"&ˆw&“6WVVÊ6ñÊs≤¢¶ÊÚvFRó2f∆óVB¬vFR&V÷ñÁ2ÑTƒB‚¢†–†–ß¬îB¬óFV“¬Fó7˜6óFñˆ‚¬7FFR¿–ß¬““◊¬““◊¬““◊¬““◊¿–ß¬‘‘"¬Û&(	BFB6Âˆ&˜fUˆFó6'W'6V÷VÁFFÚ˜'F≈˜6fUˆ¶ˆ&∆∆˜r÷∆ó7B≤&˜FÇ6VÁ6óFófR÷∂WíwV&G2ÜÁFí÷W66∆Fñˆ‚∂WBí¬&WÚˆÊ«íá7FÊF∆ˆÊR≤Û"“¢Á7∆ì≤FW7BCñÑC(	4Crí‚¢§Ê˜B∆ñVBFÚÁíD"‚¢¢¬&WÚ÷6ˆ◊∆WFR(	BvóFñÊrvFR¿–ß¬‘‘2‘DTdT5B¬˜vÊW"fñÊFñÊs¢˜'F≈˜6fUˆ¶ˆ&666FRUDDR˜'F≈˜W6W'24UBW&÷ó76ñˆÁ3ﬁ(
-f¢¶FW7G&˜ó2W"◊W6W"˜fW'&ñFW2¢¢ˆ‚Áí¶ˆ"VFóB¬¢§fóÜVBÛ6¢¢¢&V6VFVÊ6R÷ˆFV¬FVfñÊVBÜ¶ˆ"&6V∆ñÊRg2W&’ˆ˜fW'&ñFW6FV«F≤W&÷ó76ñˆÁ6“&6V∆ñÊ^(©VFV«F¬÷FW&ñ∆ó¶VB¬&VBFÇVÊ6ÜÊvVBì≤¶ˆ"VFóB¢ß&W6W'fW2¢¢˜fW'&ñFW3≤ÊWr¶ˆ"76ñvÊ÷VÁB¢ß&W6WG2¢¢FÜV”≤W"◊W6W"VFóG2fñ˜'F≈˜6WE˜W6W%˜W&÷ó76ñˆÊÇ¢¶gV∆¬÷F÷ñ‚ˆÊ«í¢¢ì≤&6∂fñ∆¬f˜"∆Vv7íFófW&vVÊ6R‚FW7BSÑıc(	4ıcÇ¬ñÊ6¬‚ıc2˜fW'&ñFR◊7W'fófW2÷¶ˆ"÷VFóB≤ıcrÁFí÷W66∆Fñˆ‚í‚&WÚˆÊ«í‚¬fóÜVBñ‚&WÚ(	BvóFñÊrvFR¿–ß¬‘‘4B’Tí¬B÷∂WíW"◊W6W"÷G&óÇ≤6Â˜6VUˆfñÊÊ6V÷ˆGV∆RÜ6ˆÁfW'FW"÷ˆÊ«íí¬'Vñ«C≤¢¶'&˜w6W"fW&ñfñ6Fñˆ‚˜vVBÜ˜vÊW"ˆñÁBBí¢¢&Vf˜&R2ÙB÷&∂VB6ˆ◊∆WFR(	B7FGW2∂WB	˘˙ñ‚FÜR÷ÊFFRFˆ2¬'Vñ«B(	B'&˜w6W"◊fW&ñgí˜vVB¿–ß¬‘‘4í¬WÜ7B÷ÜVB"◊G&ñvvW&VB4íWfñFVÊ6R¬∆ˆ6¬7VóFR“¢£3b5¬≤ÇwV&B≤rVÊGˆñÁB¬WÜóB¢£≤Tí6ˆÁG&7BÇÛÇ‚W6ÇˆbFÜRfóÇ&R◊G&ñvvW'2˜'F¬◊FW7G2Áñ÷∆≤∆ˆ6¬6∆ñ◊2&RÊ˜B7V'7FóGWFRf˜"WÜ7B÷ÜVB4íÜ˜vÊW"Ê˜FR6∂Ê˜v∆VFvVBí¬vóFñÊr4íˆ‚ÊWrÜVB¿–†–¢¢•6WVVÊ6ñÊs¢¢¢FÜó2ó2÷ÊFFR‘ÜgVÊ7FñˆÁ2˜W&÷ó76ñˆÁ2ív˜&≤ˆ‚FÜRVFóB'&Ê6É≤óBFˆW2¢¶Ê˜B¢¢GfÊ6RvFR˜"FÜR‘5DU"ıt‰U"‘UDÑı$ï§TBUÑT5UDîÙ‚$Ùu$“7FvW2¬ÊBFˆW2Ê˜BF˜V6ÇFÜR˜V‚˜vÊW"÷FV6ó6ñˆ‚ˆWFÜ˜&ó¶VB◊7FFR&∆ˆ6∂W'2áÛÚ˜ÛFó7˜6óFñˆ‚¬7FvñÊrWFÜ˜&ó¶VB7FFR¬6W'fñ6U˜&ˆ∆R&˜FFñˆ‚¬∆V∂VB◊77v˜&B&˜FV7Fñˆ‚¬vFR”"Ü˜7FVB∆ów&ñváBí‚¢§ÊÚ7FvñÊr˜&ˆGV7Fñˆ‚÷ñw&Fñˆ‚¬6ˆÊfñr¬V÷ñ¬¬˜"'VFvWEˆVÊf˜&6VˆVÊf˜&6V÷VÁB÷f∆r6ÜÊvR‚"7Fó2G&gB˜VÊ÷W&vVC≤ÊÚ÷ñw&Fñˆ‚c2‚¢†–†–¢22b‚vFR&V÷VFñFñˆ‚ˆbÛF&V∆V6R÷∆ˆ6≤≤3bFW6ñvÊW"W'6ó7FVÊ6RÜ˜vÊW"&WfñWrˆb33&C6cfê–†–§˜vÊW"vFR&WfñWrÖ"3sB¬##b”Ç”rífW&ñfñVB&WÚ&ˆw&W72ÊB&WVó&VBı6˜'&V7Fñˆ„¢FÜP–¶v˜fW&ÊÊ6R◊6WGFñÊw26&B◊W7BÊ˜B∆WB‚˜&FñÊ'íF÷ñ‚6∆ñ6≤f∆óFÜR˜vÊW"÷∆ˆ6∂VB∆VÊ6ÇFV6ó6ñˆÁ0–¶'VFvWEˆVÊf˜&6VÊBGÜÂˆÊ˜Fñfñ6FñˆÁ6‚&V÷VFñFñˆ‚FˆÊR&WÚ÷ˆÊ«ì≤¢§vFR&V÷ñÁ2ÑTƒB‚¢†–†–ß¬îB¬óFV“¬Fó7˜6óFñˆ‚¬7FFR¿–ß¬““◊¬““◊¬““◊¬““◊¿–ß¬‘‘3R‘ƒÙ4≤¬ÛFWá˜6VBFˆvv∆W2f˜"˜vÊW"÷∆ˆ6∂VB'VFvWEˆVÊf˜&6VˆGÜÂˆÊ˜Fñfñ6FñˆÁ6¬¢§fóÜVC¢¢¢6W'fW"◊6ñFR&V∆V6R∆ˆ6≤ñ‚˜'F≈˜6WEˆv˜fW&ÊÊ6Uˆf∆v(	BFÜ˜6RGvÚ∂Wó2&WVó&R˜'F≈ˆó5˜&ófñ∆VvVBÇñá6W'fñ6U˜&ˆ∆Rˆ˜vÊW"÷WFÜ˜&ó¶VBFÇì≤‚F÷ñ‚•uBó2¢ß&V¶V7FVBBFÜR%2¢¢ÜÊ˜BTí÷ˆÊ«íí‚Tí6Ü˜w2FÜV“&VB÷ˆÊ«í	˘I"'&WVó&W2˜vÊW"WFÜ˜&ó¶Fñˆ‚"‚ÊVóFÜW"f«VR6ÜÊvVBÜ&˜FÇ7Fíí‚FW7BSWáFVÊFVC¢tcrÙtcÇF÷ñ‚◊&V¶V7FVB¬tcíVÊ6ÜÊvVB¬tcWFÜ˜&ó¶VB◊FÇ˜6óFófRÜ∆ˆ6¬4íˆÊ«í¬ÊWfW"6Ü&VB7FvñÊrí‚¬fóÜVBñ‚&WÚ(	BvóFñÊrvFR¿–ß¬‘‘3b¬v˜&∂f∆˜rFW6ñvÊW"v2FVBFV÷ÚÜÊÚW'6ó7FVÊ6Rí¬¢§'Vñ«C¢¢¢˜'F≈˜6fU˜v˜&∂f∆˜vˆ˜'F≈ˆFV∆WFU˜v˜&∂f∆˜vÜF÷ñ‚÷ˆÊ«í¬7G'V7GW&¬f∆ñFFñˆ‚í≤FW6ñvÊW"'6fR"'WGFˆ‚‚v˜fW&ÊÊ6RÖ6ÙBˆFVÁí÷'í÷FVfV«Bíó2ñÊFWVÊFVÁBˆb6Üñ‚FW6ñv‚(	BVÊf˜&6VBBV6ÇG&Á6óFñˆ‚&Vv&F∆W72‚&WÚˆÊ«í‚FW7BS&Ötc(	5tcÇí‚¬'Vñ«B(	B'&˜w6W"◊fW&ñgí˜vVB¿–ß¬‘‘4í¬WÜ7B÷ÜVB"4íWfñFVÊ6R¬7Fñ∆¬ÊÚ"◊G&ñvvW&VB'VÁ2ˆ‚FÜR'&Ê6ÇÜVBÜ˜vÊW"÷6ˆÊfó&÷VBí‚∆ˆ6¬7VóFR“¢£3#b5¬≤ÇwV&B≤rVÊGˆñÁB¬WÜóB¢£≤Tí6ˆÁG&7BÇÛÇ‚∆ˆ6¬(öWÜ7B÷ÜVB4íÜ6∂Ê˜v∆VFvVBí‚¬vóFñÊr4íˆ˜vÊW"&˜f¬¿–†–¢¢§˜vÊW"÷∆ˆ6∂VB∆VÊ6ÇñÁf&ñÁG2&W7FFVC¢¢¢'VFvWEˆVÊf˜&6S”ÊBGÜÂˆÊ˜Fñfñ6FñˆÁ3”f˜"FÜR7W'&VÁ@–ß&V∆V6S≤7ó7FV“”2V÷ñ¬7Fó2∆Vv7íñ÷÷VFñFR÷ˆFRVÁFñ¬6W&FV«íWFÜ˜&ó¶VB‚ÊÚ6ˆFRFÇ∆WG2‡–¶˜&FñÊ'íF÷ñ‚6ÜÊvRFÜV“‚ÊÚ7FvñÊr˜&ˆGV7Fñˆ‚÷ñw&Fñˆ‚¬6ˆÊfñr¬V÷ñ¬¬˜"VÊf˜&6V÷VÁB÷f∆r◊WFFñˆ‡–ßW&f˜&÷VB‚"7Fó2G&gB˜VÊ÷W&vVC≤ÊÚ÷ñw&Fñˆ‚c2‡–†–¢22r‚ÛV&V6∆76ñfñVB2G&Á6óFñˆÊ¬W'6ó7FVÊ6RÜ˜vÊW"&WfñWrˆbsFFc#ìê–†–§˜vÊW"vFR&WfñWr6ˆÊfó&÷VBFÜRÛB&V∆V6R÷∆ˆ6≤&V÷VFñFñˆ‚ÊB&WVó&VBFÜBÛV‰ıB&RG&VFV@–¶27FvR”R6ˆ◊∆WFñˆ‚‚6˜'&V7FVB66˜&FñÊv«ì≤¢§vFR&V÷ñÁ2ÑTƒB‚¢†–†–¢“¢§‘‘3b6∆76ñfñ6Fñˆ„¢¢¢ÛVó2¢ßG&Á6óFñˆÊ¬W'6ó7FVÊ6Rf˜"FÜRWÜó7FñÊrFW6ñvÊW"ˆÊ«í¢¢(	B‰ı@–¢FÜR7FvR”RfW'6ñˆÊVB&˜f¬÷FW6ñv‚VÊvñÊR‚FÜR7FvR”R&˜w2ÜG&gB˜V&∆ó6ÜVB˜&WFó&VBfW'6ñˆÁ2¿–¢VffV7FófRFFñÊr¬ñ÷◊WF&∆Rv˜&∂f∆˜r◊fW'6ñˆ‚6Ê6Ü˜G2&˜VÊBFÚ&WVW7G2¬6W'fW"◊6ñFR÷F6ÜñÊr¿–¢f∆ñFFñˆ‚˜6ñ◊V∆Fñˆ‚ˆñ◊7B&WfñWr¬v˜fW&ÊVB&ˆ∆∆&6≤í¢ß&V÷ñ‚ıT‚ÊBWFÜ˜&óFFófR¢¢‚'Vñ∆FñÊp–¢˜'F≈˜6fU˜v˜&∂f∆˜vFˆW2Ê˜BGfÊ6RÁí7FvR‡–¢“¢•6fRG&Á6óFñˆÊ¬6ˆÁG&7Bá&˜fVB¬FW7BS"ì¢¢¢ÜíVFóFñÊrˆFV∆WFñÊrv˜&∂f∆˜r¢¶6ÊÊ˜B&Ww&óFRFÜP–¢6Üñ‚ˆb‚«&VGí◊7V&÷óGFVBˆñ‚÷f∆ñváB&WVW7B¢¢(	BFÜR6Üñ‚ó26Ê6Ü˜GFVBñÁFÚ˜'F≈ˆ&˜f«6@–¢7V&÷óBÊBó2ÊWfW"&R÷FW&ófVB÷ñB÷f∆ñváBÖtcí¬'óFR÷WV¬6Ê6Ü˜B≤VÊ6ÜÊvVB7FGW2˜6Wì≤Ü"ê–¢¢¶fñ¬÷6∆˜6VB&Vf˜&RV&∆ñ6Fñˆ‚¢¢(	B&ˆ∆R7FvRvóFÇÊÚ˜76ñ&∆R&˜fW"ÜÊÚ7FófRW6W"Üˆ∆G2FÜP–¢VffV7FófRW&÷ó76ñˆ‚íó2&V¶V7FVBÖtcí¬ÊBGW∆ñ6FR7FvR6Wó2&V¶V7FVBÖtcì≤«W2&W6ˆ«fW"–¢&ˆ∆R÷∂Wí◊vÜóFV∆ó7BÚWÜó7FñÊr÷&˜fW"Ú(öS◊7FvR6ÜV6∑2‚'VÁFñ÷R6ÙBÊBFVÁí÷'í÷FVfV«B&V÷ñ‡–¢VÊf˜&6VBBWfW'íG&Á6óFñˆ‚&Vv&F∆W72ˆb6Üñ‚FW6ñv‚‡–¢“¢§Ê˜B∆ñVC¢¢¢Û&¬Û6¬ÛF¬ÛV&V÷ñ‚¢ß&WÚ÷ˆÊ«í¬VÊ∆ñVB¢¢FÚ6Ü&VB7FvñÊr˜ –¢&ˆGV7Fñˆ‚VÊFW"FÜR7W'&VÁBvFR‚∆ófR«ív˜V∆B&WVó&RFÜR7FvR”Rv˜fW&ÊVBV&∆ó6Ç÷ˆFV¬˜"‡–¢Wá∆ñ6óF«íWFÜ˜&ó¶VBV&∆ó6Ç7Fñˆ‚(	BÊVóFÜW"ó2WFÜ˜&ó¶VBÊ˜r‡–¢“¢§WfñFVÊ6S¢¢¢∆ˆ6¬7VóFR“¢£3#í5¬≤ÇwV&B≤rVÊGˆñÁB¬WÜóB¢£≤Tí6ˆÁG&7BÇÛÇ‚WÜ7B÷ÜV@–¢"4í7Fñ∆¬Ê˜BG&ñvvW&VBÜ˜vÊW"÷6ˆÊfó&÷VBí(	B∆ˆ6¬(öWÜ7B÷ÜVB4ívFRWfñFVÊ6R‡–†–¢¢¶'VFvWEˆVÊf˜&6S”ÚGÜÂˆÊ˜Fñfñ6FñˆÁ3”∂WC≤ÊÚ÷ñw&Fñˆ‚ˆ6ˆÊfñr˜&ˆGV7Fñˆ‚ˆV÷ñ¬ˆVÊf˜&6V÷VÁB◊WFFñˆ‚‡•"7Fó2G&gB˜VÊ÷W&vVC≤ÊÚ÷ñw&Fñˆ‚c2‚¢††¢22Ç‚##b”Ç”í∆ófR◊7FFR&V6ˆÊ6ñ∆ñFñˆ‚á7WW'6VFW27F∆R«í◊7FGW26∆ñ◊2ê†•&VB÷ˆÊ«í7FvñÊrñÁ7V7Fñˆ‚f˜VÊBFÜBFÜR6V7Fñˆ‚”r7FFV÷VÁB6ññÊr∆¬ˆbÛ.(
-gÛVvW&PßVÊ∆ñVBó2ÊÚ∆ˆÊvW"7W'&VÁC¢Û&Ü##cÉÉÉCVíÊBÛ6Ü##cÉÉìC6í&R&W6VÁBñ‡ßFÜR7FvñÊr÷ñw&Fñˆ‚∆VFvW#≤ÛFÊBÛV&R'6VÁB‚WFÜ˜&ó¶Fñˆ‚WfñFVÊ6Rf˜"FÜR"˜6«êßv2Ê˜Bf˜VÊBñ‚FÜR&W˜6óF˜'íˆ6ˆÁfW'6Fñˆ‚fñ∆&∆RFÚFÜó2'V‚¬6ÚFÜVó"7FGW2ó2¢¶∆ñVC∞¶WFÜ˜&ó¶Fñˆ‚WfñFVÊ6RVÁfW&ñfñVB¢¢VÊFñÊr‚Wá∆ñ6óB˜vÊW"&V6˜&B‡†•FÜR6÷R&VB÷ˆÊ«íñÁ7V7Fñˆ‚f˜VÊB‚Wá∆ñ6óBÊˆÁñ÷˜W2UÑT5UDVw&ÁBˆ‚FÜRÊWr4T5U$ïEíDTdî‰U& •%2˜'F≈˜6WE˜W6W%˜W&÷ó76ñˆÊ¬ÊBFÜR6V7W&óGíGfó6˜"ñÁfVÁF˜'íñÊ7&V6VBFÚ¢£ìÇÉrî‰dÚÚìt$‚í¢¢‡§f˜'v&B&Wó"Ûf&Wfˆ∂W2FÜBWá˜7W&RvóFÜ˜WB&Ww&óFñÊrFÜR∆ñVBÛ6fñ∆S≤FÜPß7Fñ∆¬◊VÊ∆ñVBÛB˜ÛV6˜W&6W2&RÜ&FVÊVBFó&V7F«í‚fˆ∆∆˜vñÊrFÜR˜vÊW"w2Wá∆ñ6óBFV∆VvFñˆ‡¶ˆbFÜRFV6ÜÊñ6¬Fó7˜6óFñˆ‚¬Ûfv2∆ñVBFÚ7FvñÊr2÷ñw&Fñˆ‚##cÉìsS#SV‚6F∆ˆr6ÜV6∑0ß&˜fRÊˆÊÜ2ÊÚWÜV7WFR&ófñ∆VvRˆ‚FÜRF÷ñ‚%2˜"óG2ÜV«W'2¬WFÜVÁFñ6FVBW6W'26ÊÊ˜BWÜV7WFPßFÜRÜV«W'2¬ÊBFÜR6V7W&óGíGfó6˜"ñÁfVÁF˜'ífV∆¬FÚ¢£ìrÉrî‰dÚÚìt$‚í¢¢vóFÇFÜR7V6ñfñ0¶ÊˆÁñ÷˜W2F÷ñ‚’%2fñÊFñÊr'6VÁB‚gV∆¬WfñFVÊ6RÊB&V÷ñÊñÊr7FñˆÁ3†¶VFóB÷˜WGWBÙ5U%$TÂEı5DDUı$T4Ù‰4îƒîDîÙÂÛ##b”Ç”íÊ÷F‡†§VÊvñÊVW&ñÊrFó7˜6óFñˆ‚ó2FÚ&WFñ‚FÜR∆ófRÛ"˜Û6fóÜW2ÊBFÜRˆ∆FW"ÛÚ˜Û6ˆÁG&ˆ«3∞ßFÜR∆GFW"w2&V∆V6Rf∆w2&V÷ñ‚Fó6&∆VB‚ÛB˜ÛV&V÷ñ‚VÊ∆ñVB‚vFR&V÷ñÁ0¢¢§ÑTƒBÚ‰ıB$TEí¢¢‚ÊÚ&ˆGV7Fñˆ‚¬÷ñÊ¬#"¬6ˆÊfñr¬˜"FFw&óFRv2W&f˜&÷VC≤7FvñÊr÷ñw&Fñˆ‡¶Üó7F˜'í6ÜÊvVBˆÊ«íf˜"Ûf≤ÊÚ÷ñw&Fñˆ‚c2‡†¢22í‚##b”Ç”íWÜV7WF&∆Rfˆ∆∆˜r◊Fá&˜VvÇ(	B'&˜w6W"'VÁFñ÷R≤FVÁí÷'í÷FVfV«BgWGW&RgVÊ7FñˆÁ0†•FÜR˜vÊW"ñÁ7G'V7FVBWÜV7WFñˆ‚ÊBFW7FñÊr&6VBˆ‚VÊvñÊVW&ñÊrWfñFVÊ6R‚FÜR&Wfñ˜W6«í6∂óVB∆ˆ6¿•∆ów&ñváB7VóFW2vW&R÷FRVÁfó&ˆÊ÷VÁB◊˜'F&∆S¢‚Wá∆ñ6óB∆ów&ñváBÙ4í'&˜w6W"&V÷ñÁ2&VfW'&VB¿ßvóFÇ‚ñÁ7F∆∆VB6á&ˆ÷RÙVFvRWÜV7WF&∆RW6VBˆÊ«í2∆ˆ6¬f∆∆&6≤‚∆¬Fá&VRf˜&÷W&«í&∆ˆ6∂VB7VóFW0ßFÜV‚WÜV7WFVB7V66W76gV∆«í‚FÜR6ˆ◊∆WFRÊˆFRˆ'&˜w6W"'V‚ó2¢£SÇ76VBÚfñ∆VB¢¢7&˜72fñ∆W3∞¶&6V∆ñÊRvVÊW&Fñˆ‚ˆ6ÜV6≤ó2FWFW&÷ñÊó7Fñ2@¶SfS##6C&CC&#&&3&V3cìcSC6#3f6CCffSSvS#ñ6fSssìf‡†§f˜'v&B÷ñw&Fñˆ‚ÛuˆgVÊ7FñˆÂˆFVfV«E˜&ófñ∆VvW5ˆÜ&FVÊñÊvv2∆ñVBÊBfW&ñfñVBˆ‚7FvñÊr0¶##cÉìÉV‚gWGW&R˜7Fw&W6÷˜vÊVBgVÊ7FñˆÁ2ñ‚V&∆ñ6ÊÚ∆ˆÊvW"WFÚ÷w&ÁBUÑT5UDVF¶T$ƒî6¬ÊˆÊ¬WFÜVÁFñ6FVF¬˜"6W'fñ6U˜&ˆ∆V≤WÜó7FñÊr&WfñWvVB4«2vW&RVÊ6ÜÊvVB‚f˜W"5¿ß&Vw&W76ñˆÁ2&ó6RFÜR&Vvó7FW&VB7VóFRg&ˆ“33"FÚ¢£33b¢¢76W'FñˆÁ2‚∆ófRGV÷◊í◊Fˆ∂V‚&ˆ&W2«6Ú&˜fPßFÜRGvÚñÁFVÁFñˆÊ¬ÊˆÁñ÷˜W27W∆ñW"VÊGˆñÁG2fñ¬6∆˜6VB&Vf˜&Rw&óFW2‚6V7W&óGíGfó6˜"&V÷ñÁ0¢¢£ìrÉrî‰dÚÚìt$‚í¢¢&V6W6RFÜR&WfVÁFófRFVfV«B4¬6ÜÊvW2ÊÚ7W'&VÁBgVÊ7Fñˆ‚w&ÁG2‡†§vFR&V÷ñÁ2¢§ÑTƒBÚ‰ıB$TEí¢£¢ÊÚWÜ7B÷ÜVB7FñˆÁ2'V‚˜"7&VFVÁFñ∆VBÜ˜7FVB◊V«Fí◊&ˆ∆R¶˜W&ÊWê¶WÜó7G2¬&V÷ñÊñÊrFVfñÊW"7W&f6W27Fñ∆¬ÊVVBW"◊6ñvÊGW&RFó7˜6óFñˆ‚ˆñÊFWVÊFVÁB&WfñWr¬ÊB∆V∂V@ß77v˜&B&˜FV7Fñˆ‚ˆ∂Wí&˜FFñˆ‚ı’#"6∆76ñfñ6Fñˆ‚&V÷ñ‚WáFW&Ê¬˜W&FñˆÊ¬7FñˆÁ2‚&ˆGV7Fñˆ‚¿¶÷ñÊ¬&ˆGV7Fñˆ‚#"¬∆ófRFF¬ÊB&V∆V6Rf∆w2vW&RVÁF˜V6ÜVC≤ÊÚ÷ñw&Fñˆ‚c2‡
+Concise state view (history preserved in ¬ß1 + ¬ß10‚Äì14; those are **superseded
+historical snapshots**, not current). Columns: **Code/DB** = implemented in code/DB ¬∑
+**Staging** = applied on isolated staging `vpfnycxzqziltsnzxbpb` ¬∑ **Dyn-verified** =
+dynamically verified live ¬∑ **Owner-open** = owner-external / still open.
+
+| Area | Code/DB | Staging | Dyn-verified | Owner-open |
+|---|---|---|---|---|
+| P0-1b‚Ä¶p0_1n chain (least-priv, quote confidentiality, requester-safe dossier, raw-read boundary, evidence gates) | ‚úÖ (head `33fbc33`, stable) | ‚úÖ `list_migrations` | ‚úÖ live rollback (`LIVE_STAGING_VERIFICATION`) | ‚Äî |
+| Approval workflow (need+award+PO) + SoD + financial (disburse triple, payment evidence gate) | ‚úÖ | ‚úÖ | ‚úÖ live rollback | ‚Äî |
+| RLS / privacy (cross-dept, p0_1n boundary, `portal_users` least-priv, safe directory) | ‚úÖ | ‚úÖ | ‚úÖ live, incl. 4-role probe matrix (¬ß7b), `P0001` denial | ‚Äî |
+| Security Advisor `SECURITY DEFINER` disposition (96 = 86/2/7/1; 0 mutable path; 0 definer view) | ‚úÖ doc | ‚úÖ | ‚úÖ live `get_advisors` match + per-sig owner/grants attestation | per-sig negative tests + independent review |
+| Audit hash-chain (057) | ‚úÖ | ‚úÖ | ‚úÖ `portal_audit_verify()=ok` | ‚Äî |
+| **Authenticated hosted BROWSER E2E** | scaffold ‚úÖ (error-specific probes) | n/a | **NON-CI relay run only (2026-08-04), supplementary ‚Äî NOT controlling** (see taxonomy note below) | **OPEN ‚Äî the controlling GitHub-Actions credentialed run does not exist: no non-skipped `authenticated-multirole-e2e` run yet (owner supplies `STAGING_E2E_USERS`)** |
+| QA/R2 staging residue | n/a | fixtures present | characterized only | **yes ‚Äî classification UNVERIFIED (owner attestation) + purge not done** |
+| `service_role` rotation ¬∑ leaked-password protection | n/a | n/a | n/a | **yes ‚Äî owner Auth/ops** |
+| Independent adversarial review | n/a | n/a | n/a | **yes ‚Äî Codex usage-limit blocked** |
+
+**CI at last verified head `95fd4cd`:** `portal-tests` #218 ¬∑ `hosted-preview-smoke` #49 ¬∑ Cloudflare Preview ‚Äî all SUCCESS.
+
+**Browser-E2E evidence taxonomy (reconciled per owner Gate review of `95fd4cd`) ‚Äî two distinct rows, no contradiction:**
+1. **Non-CI relay run (supplementary, 2026-08-04) ‚Äî NOT controlling.** Ran `scripts/e2e/authenticated-multirole-journey.mjs` in real Chromium from the **agent environment**, not GitHub CI. Because Chromium cannot egress the agent sandbox, **all HTTP transport (page load, assets, `signInWithPassword`, REST) was relayed through Node (`PW_RELAY`)** to the hosted Preview `audit-enterprise-certificati.aldeyabi-procurement.pages.dev` (portal-config ‚Üí isolated staging `vpfnycxzqziltsnzxbpb`). Four identities (requester/finance/procurement/admin) each performed a real `signInWithPassword` and the browser's persisted session token drove per-role RLS/authz probes: **4/4 PASS** (requester sees 0 other `portal_users`, admin all; `portal_audit_verify` denied for requester with `P0001`, allowed for finance/admin). **Caveats that keep it non-controlling:** Node-relayed transport (not a native browser network path); transient `stg.*` test passwords were reset and restored (4/4 verified); ran outside CI; artifact is the session console log, not a CI-retained artifact; the app *shell + login form + session* were exercised via the hosted Preview but client-side navigation was not asserted (the authoritative checks are the server-side authz probes). See `LIVE_STAGING_VERIFICATION_2026-08-04.md` ¬ß7c.
+2. **Controlling GitHub-Actions credentialed run ‚Äî OPEN.** A non-skipped `authenticated-multirole-e2e` CI run (owner supplies the `STAGING_E2E_USERS` secret) **does not yet exist**. The non-CI relay run above does **not** satisfy it, and DB-level rollback probes do **not** substitute for it.
+
+Gate 1 **HELD**; NOT READY; Draft/unmerged; no `063`. Outstanding controlling rows also include: QA/R2 staging-residue disposition, `service_role` rotation, leaked-password protection, and fresh independent adversarial review ‚Äî all owner-owned/open.
+
+---
+
+## 1. Reconciliation (supersedes stale certification language)
+
+| Item | Stale claim (old PR body) | **Current truth (source snapshot `1e44e33`)** |
+|---|---|---|
+| Verdict | "READY WITH CONDITIONS" | **NOT READY (WIP)** |
+| Findings | "0 HIGH" | Multiple owner/Codex P1 open (see ¬ß4) |
+| Migrations | "059 only" | **G0-01 CLOSED (live-verified `list_migrations` 2026-07-29):** 059/060/061 **applied live**; **062 absent (not applied)**; next free = 063 |
+| Assertions | "194" | **222** (197 SQL + 18 file-guard + 7 endpoint) |
+| PR body | stale | **Updated** (live-verified migration state) |
+
+> **G0-01 CLOSED:** the earlier "060‚Äì062 not applied" line is DISPROVED ‚Äî live `list_migrations` on `mwbjoysuybgbrvfrprex` (2026-07-29, Supabase MCP re-authorized) shows **059, 060, 061 applied; 062 absent**. Verbatim list + labels: `MIGRATION_HISTORY_RECONCILIATION.md`. **No production change was made to reconcile documentation** (read-only `list_migrations`).
+
+**Inventory of record:** `audit-output/SYSTEM_INVENTORY.md` (updated counts below). System-3 objects in `portal-standalone.sql` at this head: **35 tables ¬∑ 120 functions (distinct; 171 = raw CREATE-OR-REPLACE occurrences across merged migrations) ¬∑ 27 triggers ¬∑ 12 policies (distinct)**; **29 test files** (222 assertions); migrations through **062**; **next free migration number = 063**.
+
+---
+
+## 2. Migration dependency map (059 ‚Üí next)
+
+| Migration | Purpose | Live-applied? (evidence) |
+|---|---|---|
+| 059 | SEC-01 revoke anon sensitive reads | **YES ‚Äî applied live (VERIFIED, live `list_migrations` `20260728093548`)** |
+| 060 | AUTHZ-01 expense dept binding + recurring budget | **YES ‚Äî applied live (VERIFIED, `20260728170320`; commit `135f5af` proof)** |
+| 061 | Codex round-2 hardening | **YES ‚Äî applied live (VERIFIED, `20260729073619`)** |
+| 062 | Supporting documents (round-3/4 + R1 folded in-place) | **NO ‚Äî NOT applied (VERIFIED absent from live list)** |
+| **063 (next free)** | reserved ‚Äî Stage 9 work-items / routing policies (not yet created) | ‚Äî |
+| **CEM (post-063)** | Contract Execution & Milestone engine ‚Äî additive tables/views/RPCs; **no number assigned in design**, allocate next contiguous after all earlier authorized work (`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`); 023/027/037 never edited | ‚Äî (design only) |
+
+Ordering rule: 059‚Üí060‚Üí061‚Üí062 then 063+. 062 verified to apply cleanly + idempotently on top of `portal-standalone.sql` locally. **No further apply (062/063) without separate owner authorization on isolated staging first.** **G0-01 CLOSED ‚Äî live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** (`MIGRATION_HISTORY_RECONCILIATION.md`).
+
+---
+
+## 3. Binding owner decisions ‚Üí accepted-risk register
+
+| ID | Decision | Compensating control | Status |
+|---|---|---|---|
+| OWN-BUDGET | `budget_enforce=0` at launch | feature available; budget views must be labeled "ÿ∫Ÿäÿ± ŸÖŸÅÿπŸëŸÑÿ©/ŸÖÿπŸÑŸàŸÖÿßÿ™Ÿäÿ© ŸÅŸÇÿ∑"; no blocking when budget absent | accepted-risk |
+| OWN-EMAIL | Email stays legacy immediate; `txn_notifications=0`; no E1‚ÄìE6 cutover now | verify current email in staging/canary (Stage 11); E0 documented | accepted-risk |
+| OWN-IBAN-MANUAL | Manual IBAN allowed | mandatory reason + prominent badge + actor/time/source audit + restricted visibility | accepted-risk |
+| OWN-ADMIN | Admin superuser exception | explicit override labeling + immutable audit | accepted-risk |
+| OWN-MOD97 | IBAN MOD-97 out of scope | Saudi `SA\d{22}` shape validation retained | accepted-risk |
+| OWN-DRAFT | PR stays Draft; no merge/ready/auto-merge/apply without separate final authorization | ‚Äî | binding |
+| OWN-SYS12 | Preserve Systems 1/2 (no shared email/key/storage break) | dedicated `PORTAL_*` bindings when email work proceeds | binding |
+
+---
+
+## 4. Requirement / finding ledger
+
+Severity: P0 (release-blocking) ¬∑ P1 (high) ¬∑ P2 (medium) ¬∑ P3 (low). Source: O=owner, C=Codex, K=Claude/static.
+
+**Canonical-ID aliases (G0-F3/G0-F3C ‚Äî the `REVIEW_THREAD_TRACEABILITY.md` appendix uses these forms; each resolves to one ledger row or accepted-risk item):** `S8-PAY-EVID` = `PAY-DOCS-COMPLETE` ¬∑ `S8-RECUR-BLOCK` = `RECUR-BLOCKED` ¬∑ `S8-EXPENSE-EDIT` = `RET-EXPENSE-EDIT` ¬∑ `S10-STATES` = `BOOT-STATES` ¬∑ `AUTHZ-EXPENSE-DEPT (060)` (incl. recurring-budget / precision / serialize / inactive-dept / dept-lock) = live authz item **implemented @135f5af** ¬∑ `BENEF-MASTER (053)` = beneficiary-master feature **implemented (053, live)** ‚Äî but the *"bank IBAN must derive from an approved beneficiary" exclusivity* finding is **`OWN-IBAN-MANUAL` accepted-risk, NOT fixed** (G0-H1) ¬∑ `CDX-BENEF-RECUR (061)` = recurring beneficiary refresh **implemented @061 (NOT `SEC-IBAN-EXPOSE`)** ¬∑ `DOC-RESUBMIT-GATE (062)` = resubmit evidence gate (062, not applied) ¬∑ `CFG-ENV` (config URL parse / verified-branch / privileged-key reject / boot-bindings / env-guard) = **fixed @8cd7890** ¬∑ `CDX3-*`/`CDX4-*`/`DOC-UI`/`DOC-API`/`R1-CANONICAL` = implemented rows in this ¬ß4 ¬∑ `DOC-SIZE-LIMIT`/`DOC-ROLLBACK-FLAG` = implemented 062 doc-config items ¬∑ `SEC-FINANCE-READONLY` = **open Stage-2** (can_see_finance must not grant write) ¬∑ `TEST-COVERAGE`/`DOC-ACCURACY`/`MIG-ROLLBACK-DOC` = open Stage-2 test/doc items. **Owner accepted-risk (documentation acceptance only):** `OWN-ADMIN` (administrator SoD) ¬∑ `OWN-IBAN-MANUAL` (manual-IBAN reason rule; reason UI/RPC implemented) ¬∑ `OWN-MOD97` (MOD-97 out of scope; SA+22 shape retained). **G0-F3C fixes: 059-regression ‚Üí `TEST-COVERAGE` (not SEC-06); manual-IBAN ‚Üí `OWN-IBAN-MANUAL` (not SEC-IBAN-EXPOSE); recurring beneficiary refresh ‚Üí `CDX-BENEF-RECUR` (not SEC-IBAN-EXPOSE); admin SoD ‚Üí `OWN-ADMIN` (not PAY-ROLES); MOD-97 ‚Üí `OWN-MOD97` (not test coverage); Supabase URL parse & replacement-fork ‚Üí `CFG-ENV`/`CDX3-REPLACE` (not AI-PROXY-ABUSE); `CDX3-ATTACH-PAY` (fixed) ‚â† `PAY-DOCS-COMPLETE` (open); verified-branch `CFG-ENV` (fixed) ‚â† GitHub-Pages boot `PAGES-DEPLOY` (open).** `SEC-IBAN-EXPOSE` now maps to **only** the "Disclose requester access to beneficiary IBANs" finding.
+
+### Implemented (this branch) ‚Äî evidence type per row (G0-09)
+
+**Evidence legend:** `SRC`=static source verification ¬∑ `SQL`=SQL assertion test ¬∑ `EP`=endpoint/Node test ¬∑ `E2E`=browser Playwright ¬∑ `CONC`=concurrency (none yet) ¬∑ `LIVE`=live configuration verification. **No row is `verified` unless its evidence type actually ran; `implemented` = code merged, dynamic verification pending.**
+**Browser E2E (truthfulness reconciliation, owner recheck 574f1e5):** two distinct kinds ‚Äî (1) **repo-side real-Chromium fixture E2E = VERIFIED at `574f1e5`** (`scripts/e2e/browser-fixture.test.mjs`: real System-3 `#pa-*` login contract + HTTP/WebSocket/Service-Worker context boundary with exact per-host outcomes; runs in CI job `browser-e2e-fixture`); (2) **external isolated-staging browser E2E against a real staging project = NOT RUN / owner-gated** (Section 2). Concurrency (`CONC`) evidence: still none yet on this branch.
+
+| ID | Sev | Subsystem | Item | Commit | Evidence type | Status |
+|---|---|---|---|---|---|---|
+| SEC-01 | P1 | RLS | revoke anon SELECT on users/payments/suppliers/beneficiaries | 059 | SQL (`35_anon_hardening.sql` AH0‚ÄìAH2) ¬∑ **LIVE verified by Claude session** (059 present in live `list_migrations`) | implemented (SQL + LIVE-by-Claude) |
+| DOC-DB | P0 | documents | 062 normalized immutable versioned model + draft‚Üísubmit | ca5c7ba | SQL (`37` DD1‚ÄìDD19) | implemented |
+| DOC-API | P1 | documents | reqdoc endpoint (internal preview, ownership pre-check) | 8cd7890/b43ae88 | node --check; DD8/DD12 | implemented |
+| DOC-UI | P1 | UI | draft‚Üíupload‚Üísubmit + Document Center + manual-IBAN + dept lock | b3d949f | script parse; visual pending | implemented |
+| CFG-ENV | P1 | deploy | env-aware config fail-closed + env-guard | 8cd7890 | guard self-test; canonical URL parse | implemented |
+| CDX3-ATTACH-PAY | P1 | documents | attach payment-doc authz + payment/request match | 8cd7890 | DD11 | implemented |
+| CDX3-KEY-NS | P1 | documents | storage_key namespace binding | 8cd7890 | DD12 | implemented |
+| CDX3-REPLACE | P1 | documents | replace returned-only + atomic claim | 8cd7890 | DD10/DD10b/DD13 | implemented |
+| CDX3-BUDGET-DRAFT | P1 | budget | exclude drafts from committed | 8cd7890 | `28`/DD19 | implemented |
+| CDX3-RECURRING-GATE | P1 | recurring | generated occurrences stay doc-required drafts | 8cd7890 | recurring path | implemented |
+| CDX4-SUBMIT-AUTHZ | P1 | authz | submit requires requester/admin (not can_edit) | b43ae88 | DD15 | implemented |
+| CDX4-PHASE-CYCLE | P1 | workflow | submit/resubmit set phase=disbursement + cycle by req_type | b43ae88 | DD16 | implemented |
+| CDX4-TOKENS | P1 | email/token | invalidate email tokens on submit/resubmit | b43ae88 | DD17 | implemented |
+| CDX4-BENEF-REVAL | P1 | payments | beneficiary revalidated at submission | b43ae88 | `submit_expense` | implemented |
+| CDX4-FY | P2 | budget | fiscal year from created_at | b43ae88 | ‚Äî | implemented |
+| CDX4-PAY-EVID | P1 | documents | remove/replace reject payment-linked rows | b43ae88 | code | implemented |
+| CDX4-PAY-ROLE | P1/P2 | payments | payment-doc attach requires can_disburse (not can_see_finance) | b43ae88 | code | implemented |
+| CDX4-CONCURRENCY | P2 | documents | remove_document FOR UPDATE + DELETE RETURNING | b43ae88 | code | implemented |
+| CDX4-NOTIFY-DUP | P1 | email | UI sends only cycle-aware disbursement notification | b43ae88 | code | implemented |
+| CDX4-DOCS0 | P2 | UI | submit honors expense_docs_required=0 rollback | b43ae88 | code | implemented |
+| R1-CANONICAL | P1 | workflow | resubmit delegates direct-expense to submit_expense (one path) | 3861171 | DD18/DD19 | implemented |
+| E0 | P1 | email | email architecture inventory + isolation proof | d103215 | `EMAIL_ARCHITECTURE_AND_CUTOVER.md` | implemented |
+
+### Open (owner/Codex) ‚Äî must be dispositioned before release
+| ID | Sev | Subsystem | Item | Target stage | Status |
+|---|---|---|---|---|---|
+| DOC-RECEIPT | **P0** | documents | fabricated in-namespace key: server-issued single-use upload receipt (verify R2 object/metadata, consume once, verified_at, orphan cleanup) ‚Äî **release-blocking** | Stage 3 | open |
+| E2E | P0 | verification | **external** browser E2E on isolated staging with 062 applied (owner-authorized) ‚Äî distinct from the repo-side real-Chromium fixture E2E which is **VERIFIED at `574f1e5`** | Stage 1/13 | **open (owner-gated) ‚Äî ready-to-run scaffold added (2026-08-04):** `scripts/e2e/authenticated-multirole-journey.mjs` performs real Supabase logins through the actual portal login contract (`#pa-email`/`#pa-pass`/`#pa-lg-btn`) per owner-supplied role identity, asserts per-role nav/authorization visibility (positive+negative) and cross-env isolation (`portal-config` ref = staging, never prod). **Credential-gated: SKIPs (exit 0) with no `STAGING_E2E_USERS` ‚áí CI stays green.** Triggered via `workflow_dispatch` workflow `authenticated-multirole-e2e` (owner supplies the `STAGING_E2E_USERS` secret). Read-only in-app; state-mutating lifecycle stays TODO pending an authorized disposable seed. **Live run still owner-gated.** |
+| SEC-06 | **P0** | System 1 | `register.html` anon Storage fallback ‚Üí signed registration-bound upload + revoke anon writes | Stage 2 | open |
+| SEC-IBAN-EXPOSE | P1 | privacy | full beneficiary IBAN exposed to ordinary can_create ‚Äî restricted view/RPC + masking | Stage 2 | open |
+| SEC-FINANCE-READONLY | P2 | authz | **(G0-F3C)** `can_see_finance` must remain read-only ‚Äî verify it grants no write path on finance-scoped tables/RPCs | Stage 2 | open |
+| AUDIT-TAIL-ANCHOR | P2 | integrity | **(G0-H5)** 057 hash-chain detects **middle-row mutation** but not **suffix/entire-chain deletion** ‚Äî needs an external anchor/checkpoint (e.g. periodic signed head export) + test | Stage 2/6 | open |
+| SEC-06 (allowlist sub-item) | ‚Äî | System 1 | **(G0-H2)** reg-doc form‚Üîserver allowlist mismatch ‚Äî **FIXED @e6864fd** (cr/vat/gosi/chamber/natl_addr/iban_cert/municipal/quality/safety/clients/brochure). Parent **SEC-06 stays P0 open** for caller auth + signed registration-bound authz + anon fallback removal + rate/quota + Storage-policy closure | Stage 2 | fixed (sub-item) |
+| PAY-ROLES | P1 | payments | dedicated capabilities (`can_prepare_payment`/`can_attach_payment_documents`/`can_attach_disbursement_proof`) + type+state+role | Stage 4/8 | open |
+| RET-EXPENSE-EDIT | P1 | correction | editable core fields on returned direct expense (scoped) | Stage 8/9 | open |
+| ROUTE-AWARD-RETURN | P1 | workflow | award review lacks true return-for-correction (distinct from reject) | Stage 7/9 | open |
+| ROUTE-PO-RETURN | P1 | workflow | PO `return` behaves like `reject`; minor correction must not destroy award | Stage 7/9 | open |
+| ROUTE-PAY-ENUM | P1 | workflow | `p_return_to` not validated against closed enum (non-`award` ‚Üí procurement silently) | Stage 9 | open |
+| ROUTE-EMAIL-PARITY | P1 | workflow/email | email return parity / safe portal handoff | Stage 9/11 | open |
+| RECUR-BLOCKED | P1 | recurring | over-budget/no-doc recurring ‚Üí durable blocked work item (not `request_id=NULL` audit) | Stage 8/9 | open |
+| HISTORY-PRESERVE | P1 | workflow | resubmit clears approver/comment/timestamps ‚Äî target: new revision/cycle, retain prior | Stage 5/9 | open |
+| FISCAL-POLICY | P2 | budget | document + freeze `budget_period` at submit (not inferred from created_at forever) | Stage 8 (doc) | open |
+| S1-GUARD-COUPLE | P1 | deploy | command-coupled environment guard ‚Äî validated target must be the target the command uses | Stage 1 | ‚ö†Ô∏è **REPO-SIDE PASS; clean external rebuild NOT RUN.** F1 honest lineage: baseline(061) ‚Üí 062 ‚Üí SHA-pinned ordered P0-1b‚Ä¶P0-1n through three explicit launcher modes; `verify-baseline.sh` covers the same chain on clean PG16. F2/F3 browser fixture PASS. F4 one runner. CLI pinned `2.110.0`. Live clean rebuild + authenticated hosted E2E remain owner-gated. |
+| MIG-IDEMPOTENCY-P01B | INFO | deploy | **(2026-08-04 independent re-run scan)** of the whole P0-1b‚Ä¶P0-1n chain on the clean-install suite DB: **11/12 migrations are idempotent; `p0_1b` alone is not** ‚Äî line 29 `DROP VIEW IF EXISTS portal_user_directory` raises `"is not a view"` on a second apply, because p0_1b converts that object from a view to the synchronized RLS table it creates | Stage 1 | **tracked / accepted-inert.** Provably never applied twice in any real path (Supabase records migrations = apply-once ¬∑ CI builds a fresh DB ¬∑ guarded launcher applies only the *pending* chain once); already applied once to staging and SHA-pinned in the launcher. Deliberately **not** rewritten in place ‚Äî editing a shipped, applied, SHA-pinned migration would diverge the certified chain (the forbidden "migration repair"). Full-suite still **EXIT 0 / 273 SQL** with the chain applied once. Conforming fix, only if the owner wants it: a guarded forward-safe edit (`DROP TABLE IF EXISTS` + `DROP VIEW IF EXISTS`) + launcher SHA re-pin + re-verify. |
+| SUPPLIER-ENV | P1 | deploy | `supplier-quote.html` embedded prod project ‚Äî route via `/api/portal-config` | Stage 1 | **implemented (Stage 1, repo-only) ‚Äî runtime `/api/portal-config` fail-closed; pending Gate 1** |
+| PAGES-DEPLOY | P1 | deploy | GitHub Pages published Function-dependent pages (404 on `/api/*`) | Stage 1 | **implemented + G1-03/G1-R2-04-hardened (Stage 1, repo-only) ‚Äî per-page `needs_functions` manifest + set-equality `--check` + query+hash-preserving stub (script at end of body, actual-DOM test); `invite.html`/`register-portal.html` added; pending Gate 1** |
+| CFG-ENV-G1-02 | P1 | deploy | env identity self-asserted (`PORTAL_PROD_BRANCH`/`PORTAL_ENV`); no-ref JWT unbound; preview‚Üíprod bypass | Stage 1 | **implemented + G1-R2-02/03-hardened (Stage 1, repo-only) ‚Äî production branch is a code invariant (`main`), branch-absent ‚áí 503, production requires main+PROD_REF, preview requires ‚â†main+‚â†PROD_REF; no-ref JWT treated as unbound (needs expected-ref); exp/iss checks; pending Gate 1** |
+| CFG-KEY-STRUCTURAL | P2 | deploy | **(G1-R3-04)** anon-key check is structural (no signature/authenticity) | Stage 1 | **relabeled honestly (Stage 1, repo-only) ‚Äî `portal-config.js`/docs say "structural configuration validation"; opt-in live readiness = `scripts/deploy/probe-anon.mjs` (non-data endpoint, key never logged); runtime fail-closed; pending Gate 1** |
+| STAGING-PROVISION | ‚Äî | ops | **(G1-05)** isolated staging Supabase project + R2 + users/data + Preview bindings + cross-env isolation proof | Stage 1 (owner external) | **partially provisioned ‚Äî Gate 1 still HELD.** **Verified:** Supabase staging project `vpfnycxzqziltsnzxbpb` provisioned and carrying the applied chain baseline(061)‚Üí062‚ÜíP0-1b‚Ä¶P0-1n (latest `20260803125546_p0_1n‚Ä¶`, rollback-tested); and the Preview branch/runtime ‚Üí Staging Supabase ref binding, verified by the hosted smoke (`portal-config` reports Preview + Staging ref at `dae0016e`). **Still unverified for full G1-05:** authenticated multi-role browser/RLS journeys against hosted Preview/Staging; R2 binding/sentinel/seed; representative role identities and data; and full cross-environment negative (isolation) proof ‚Äî all owner-external. Gate 1 cannot fully pass until these are done. |
+| PREVIEW-DEPLOY-FACT | ‚Äî | deploy | **(G1-R2-05)** a public Cloudflare Preview deploys per commit (independent of `main`-only workflows) | Stage 1 | **recorded honestly ‚Äî Preview `/api/portal-config` verified read-only = 503 fail-closed, never returns production ref; no production/config change** |
+| BOOT-STATES | P2 | UI | accessible bootstrap states (aria-busy/timeout/retry/offline/fatal focus) | Stage 10 | open |
+| PAY-DOCS-COMPLETE | P1 | payments | configurable payment-document completeness (H) enforcing migration | Stage 8 | open |
+| SCHED-DECOUPLE | P1 | ops | **(G0-07)** `portal-outbox-drain.js:109` returns on missing/invalid Resend key **before** SLA (`:116`) + recurring (`:119`) ‚Üí **SLA escalation + recurring generation stop.** This is separable from the email freeze: decoupling `portal-scheduler` (SLA+recurring) from `portal-email-drain` changes **no email delivery behavior**. Owner froze email; owner did **not** accept loss of SLA/recurring execution | Stage 12 (scheduler split, email-neutral) ‚Äî else record launch impact + request explicit owner risk acceptance | **open (not deferred)** |
+| DOA-THRESHOLD-CONFLICT | P1 | workflow/config | **(G0-05) OWNER CONFIRMED 2026-07-29: authoritative small-committee band = 25,001‚Äì125,000.** Code/seed `portal_doa` currently uses **150,000** (`portal-standalone.sql:1832`) ‚Üí **must be changed 150,000 ‚Üí 125,000** in Stage 5 (seed edit + migration 063+ region), with boundary tests at **125,000 ¬±1**. **Not changed now** ‚Äî implementation is gated (owner chose "hold for recheck") | Stage 5 | **owner-confirmed (125,000); implementation gated** |
+| CRON-SECRET | P2 | ops | cron secret via `?key=` query string + non-constant-time compare | Stage 12 | open |
+| AI-PROXY-ABUSE | P1 | deploy/security | **(G0-F4)** `functions/api/ai.js` shared Gemini **OCR** proxy for System 1 (`register.html`) + System 2 (`index/requests/rfq.html`) ‚Äî **not** System 3. Key concealed server-side + model allowlist, **but abuse controls incomplete**: GET has no auth/origin check and calls the provider; POST relies only on forgeable Origin/Referer; no JWT/Turnstile/rate-limit/per-user quota/cost cap; 16 MiB body; size check only fires when `Content-Length` present (chunked bypass). Publicly-deployable quota/cost-abuse surface (no procurement data). **Actions:** add auth/rate/quota + deployment ownership; determine per-deployment need and **disable/exclude where unused**; tests for unauthenticated GET/POST, forged Origin, body limit without Content-Length, rate limiting, allowed deployment ownership | Stage 2/12 | open |
+
+### Program stages (documents/implementation not yet started)
+| ID | Stage | Scope | Status |
+|---|---|---|---|
+| S0 | 0 | ledger + 5 routing docs + inventory + G0/G0-R remediation | **‚úÖ Gate 0 PASSED (owner independent recheck at `9a62890`, 2026-07-30) ‚Äî documentation gate only; Stage 1 authorized repo-only** |
+| S1 | 1 | isolated staging + deployment safety (guards, manifest, Pages fix) | open |
+| S2 | 2 | security/RLS/privacy/service-boundary review + SEC-06 | open |
+| S3 | 3 | trusted document lifecycle (upload receipt, doc capabilities) | open |
+| S4 | 4 | governed users/jobs/roles/departments/sectors model | open |
+| S5 | 5 | versioned workflow/approval-design engine | open |
+| S6 | 6 | committee engine | open |
+| S7 | 7 | procurement lifecycle (RFQ/comparison/award/PO) | open |
+| S8 | 8 | disbursement/payment/financial integrity | open |
+| S9 | 9 | Correction & Work Routing Engine (R0‚ÄìR8) | **R0 docs delivered**; R2+ implementation gated |
+| S10 | 10 | UI/UX modernization (U0‚ÄìU7) | open |
+| S11 | 11 | current-email validation only (legacy) | open |
+| S12 | 12 | reliability/perf/observability/ops | open |
+| S13 | 13 | full staging acceptance + regression | open |
+| S14 | 14 | independent adversarial review on final SHA | open |
+| S15 | 15 | merge + release rehearsal (owner sign-off) | open |
+| CEM | 3‚Äì13 | Contract Execution & Milestone-Payment engine (owner mandate 2026-07-30) ‚Äî additive; spans S3 (docs) ¬∑ S4 (caps) ¬∑ S5 (workflow) ¬∑ S7 (contract/schedule) ¬∑ S8 (acceptance/claims/payment/ledgers) ¬∑ S9 (routing) ¬∑ S10 (dossier UI) ¬∑ S13 (E2E) | **docs delivered (`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`, CEM-* register); implementation gated** |
+
+---
+
+## 5. Unresolved review threads (deduplicated to canonical items)
+
+Codex posted repeated findings across `3b1bfc4`/`135f5af`/`79f4e2c`/`5975f2f`. Canonicalized:
+- **Draft/submit mismatch** (√ó6) ‚Üí CDX (fixed b3d949f/8cd7890).
+- **Manual-IBAN reason not collected** (√ó3) ‚Üí fixed b3d949f.
+- **Department picker** (√ó2) ‚Üí fixed b3d949f.
+- **Payment-doc authz / can_see_finance** (√ó2) ‚Üí CDX4-PAY-ROLE (fixed) + PAY-ROLES (open, dedicated caps).
+- **Fabricated key** (√ó3) ‚Üí **DOC-RECEIPT (open P0)**.
+- **replace/remove/resubmit bypass** (√ó4) ‚Üí CDX3-REPLACE/CDX4-PAY-EVID/R1-CANONICAL (fixed).
+- **recurring bypass** (√ó2) ‚Üí CDX3-RECURRING-GATE (fixed) + RECUR-BLOCKED (open, work item).
+- **config/guard** (√ó4) ‚Üí CFG-ENV (fixed) + SUPPLIER-ENV/PAGES-DEPLOY (open).
+Owner senior reviews ‚Üí captured as OWN-* + the open rows in ¬ß4.
+
+---
+
+## 6. Release-gate checklist (Gate 0 ‚Üí Gate 15)
+
+- [x] **G0 PASSED ‚Äî owner independent recheck cleared at exact SHA `9a62890189d12d6ae685b3dcf0a1e417714f037f` (2026-07-30, CI run 85 green). Documentation gate only ‚Äî does NOT certify the product, close any P0/P1 implementation item, or authorize deployment. Stage 1 authorized repo-only; all open ledger items + accepted-risk decisions preserved; no historical evidence rewritten.**
+- [ ] G1 Preview cannot reach production under malformed inputs; Pages cannot expose System-3; isolated staging exists
+- [ ] G2 no unresolved Critical/High authz/privacy/storage; dynamic negative-authz tests pass; SEC-06 closed
+- [ ] G3 zero fake evidence satisfies submission; inline evidence viewable by every approver in staging
+- [ ] G4 each role positive+negative caps dynamically tested
+- [ ] G5 DoA boundary tests at 25k/**125k (owner-confirmed)**/250k/500k ¬±1; deterministic or fail-closed
+- [ ] G6 committee quorum/recusal/alternate/concurrency tests pass
+- [ ] G7 full purchase path scenarios pass
+- [ ] G8 financial invariants + concurrency pass; disabled controls honest
+- [ ] G9 routing phase matrix + browser journeys incl. forged destinations + concurrent queue
+- [ ] G10 screenshots + visual regression + keyboard/mobile E2E per role
+- [ ] G11 current email proven with test recipients; best-effort limits documented
+- [ ] G12 SLOs, restore evidence, no unbounded query, runbooks
+- [ ] G13 zero Blocker/Critical/High; no unexplained skipped test
+- [ ] G14 independent verdict (not CI-only)
+- [ ] G15 merge rehearsal + owner sign-off
+
+**Gate 0 status: ‚úÖ PASSED at SHA `9a62890` (owner independent recheck, 2026-07-30).** Scope of this pass: **Stage-0 documentation gate only.** It does **not** certify the product, close the open P0/P1 implementation items (DOC-RECEIPT, SEC-06, E2E, etc. remain open), or authorize deployment/DB/config change. **Stage 1 is authorized repo-only.** G1 remains unchecked until Stage-1 evidence is independently reviewed (Gate 1). Restrictions still binding: PR Draft/unmerged ¬∑ no migration 062/063 apply ¬∑ no production/Storage/Cloudflare/Supabase/Resend change ¬∑ DoA seed 150‚Üí125 is Stage-5 ¬∑ `txn_notifications=0` ¬∑ `budget_enforce=0` ¬∑ Stage 2 does not begin until Gate 1.
+
+---
+
+## 7. Requirements register ‚Äî one row per requirement/mandate (G0-02)
+
+Every prior owner requirement / Codex finding / design mandate has its own stable ID. Source: O=owner, C=Codex, K=Claude. Ev = evidence type when done (SRC/SQL/EP/E2E/CONC/LIVE). Status: open / implemented / verified / accepted-risk / deferred-with-approval.
+
+### Stage 1 ‚Äî isolated staging & deployment safety
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S1-STAGING | O | P0 | separate Supabase project + separate R2 bucket/bindings + Preview-only vars + test users + non-prod email recipients | 1 | open (design: `STAGING_SETUP_PLAN.md`) |
+| S1-GUARD-COUPLE | O | P1 | environment validation **coupled to the exact migrate/E2E command** (impossible to validate one target, execute another) | 1 | open (`env-guard.mjs` exists but not command-coupled) |
+| S1-PAGES-EXCL | O | P1 | GitHub Pages must not publish a broken/misleading System-3 portal that needs `/api/portal-config` ‚Äî exclude entry points or disable workflow (=PAGES-DEPLOY) | 1 | open |
+| S1-SUPPLIER-ENV | O | P1 | `supplier-quote.html` env-aware config (remove embedded prod ref) (=SUPPLIER-ENV) | 1 | open |
+| S1-MANIFEST | O | P2 | deployment manifest mapping files/routes ‚Üí Systems 1/2/3 | 1 | open (partial: `ARTIFACT_INVENTORY*`) |
+| S1-NOSECRET | O | P1 | no secrets in static output/logs; validate anon key role/project + server bindings | 1 | implemented (portal-config; SRC) |
+
+### Stage 2 ‚Äî security / identity / RLS / privacy / service boundaries
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S2-LEASTCOL | O | P1 | least-privilege column exposure (beneficiaries/payments/users/suppliers) | 2 | open |
+| S2-IBAN-MASK | O | P1 | do not expose full beneficiary IBAN to ordinary can_create; restricted view/RPC + masking (=SEC-IBAN-EXPOSE) | 2 | open |
+| S2-XDEPT | O | P1 | cross-department/cross-role denial tests with real JWT/PostgREST | 2 | open |
+| S2-ADMIN-LABEL | O | accepted | admin override explicitly labeled/audited | 2 | open (UI labeling) |
+| S2-USERSTATE | O | P1 | active/suspended/deleted user behavior; role revocation immediate for new actions | 2 | open |
+| S2-TOKEN | O | P1 | token expiry/one-time/replay/brute-force controls + invalidation on state/revision change | 2 | partial (email-token invalidation done) |
+| S2-DEFINER | O | P1 | strict search_path + explicit execute grants; no direct mutable-table write bypassing guards | 2 | partial (040/030 hardening) |
+| S2-REDACT | O | P2 | secrets/log redaction | 2 | open |
+| S2-AUDIT-VERIFY | O | P1 | audit-chain full-history verification + truncation/gap detection | 2 | implemented (057 `portal_audit_verify`, SQL) |
+| SEC-06 | O/C | P0 | System-1 `register.html` anon Storage fallback ‚Üí signed registration-bound upload + revoke anon writes; recoverable, never insecure fallback | 2 | open |
+
+### Stage 3 ‚Äî trusted document/evidence lifecycle
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S3-RECEIPT | O/C | P0 | server-issued single-use upload receipt: server key + bind user/request/payment/type/MIME/size/checksum/state/expiry + verify R2 object + consume once + compensate on failure + submit counts only verified docs (=DOC-RECEIPT) | 3 | open |
+| S3-DOCCAPS | O | P1 | dedicated doc capabilities (request/payment-prep/disbursement-proof/receipt-quality/procurement-quote) | 3 | open |
+| S3-LINK | O | P1 | enforce request/payment linkage, state, ownership, scope, immutable/versioned replacement | 3 | partial (062 request-scope; payment linkage pending) |
+| S3-REMOVED | O | P1 | removed docs unreadable; superseded viewable only in authorized version history | 3 | implemented (reqdoc GET row-exists, SRC) |
+| S3-SIZE | O | P2 | unified size policy + magic-byte/content validation + rate limit + checksums + no public URLs | 3 | partial (file-guard EP; rate-limit open) |
+| S3-ORPHAN | O | P2 | orphan reconciliation + auditable cleanup | 3 | open |
+| S3-DOSSIER | O | P1 | full dossier continuity request‚Üípayment | 3/10 | open |
+| S3-NEGTESTS | O | P0 | negative tests: fabricated key, missing object, reused/expired/mismatched receipt, wrong request/payment/user, post-submit mutation, cross-dept, partial upload, DB-fail-after-upload | 3 | open |
+
+### Stage 9 ‚Äî Correction & Work Routing Engine (R0‚ÄìR8)
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S9-WORKITEMS | O | P1 | `portal_work_items` table (source phase/cycle/stage/seq, work_type, status, destination_type, assignee/role/dept/queue, scope, SLA, lineage) | 9 | open (R0 design) |
+| S9-EVENTS | O | P1 | append-only `portal_work_item_events` | 9 | open |
+| S9-POLICIES | O | P1 | versioned `portal_routing_policies` (server-enforced permitted destinations) | 9 | open |
+| S9-RPCS | O | P1 | governed RPCs (`portal_return_options`/create/accept/reassign/complete/clarify/reopen/cancel) with locks + expected-version + idempotency | 9 | open |
+| S9-DEST | O | P1 | user/role/dept/queue destinations only when policy permits; no arbitrary user | 9 | open |
+| S9-DELEG | O | P1 | reassignment/delegation/escalation/collaboration distinct; loop/depth/SLA-reset abuse prevention | 9 | open |
+| S9-SCOPE | O | P1 | scoped editable fields/documents; material-change impact class resets only affected downstream | 9 | open |
+| S9-HISTORY | O/C | P1 | preserve requester/department/approval-history/document versions (=HISTORY-PRESERVE) | 9 | open |
+| S9-COMPENSATE | O | P1 | post-payment/receipt via amendment/void/return/debit-note/dispute, not rewind | 9 | partial (void 051, returns 034) |
+| S9-AWARD-RET | O/C | P1 | award return-for-correction ‚â† reject (=ROUTE-AWARD-RETURN) | 9 | open |
+| S9-PO-RET | O/C | P1 | PO minor-correction ‚â† reject/material-reopen (=ROUTE-PO-RETURN) | 9 | open |
+| S9-PAY-ENUM | O/C | P1 | validate `p_return_to` closed enum (=ROUTE-PAY-ENUM) | 9 | open |
+| S9-EMAIL-PARITY | O/C | P1 | email return parity / safe portal handoff, legacy-email-only (=ROUTE-EMAIL-PARITY) | 9 | open |
+| S9-TESTS | O | P1 | RR-01‚Ä¶RR-25 + browser journeys incl. forged destinations + concurrent queue acceptance | 9 | open (`RETURN_ROUTING_TEST_MATRIX.md`) |
+
+### CEM ‚Äî Contract Execution & Milestone-Payment Engine (owner mandate 2026-07-30, cross-stage 3‚Äì13)
+Additive governed milestone-payment domain. **Design/docs only now; implementation gated per stage.** Full model:
+`CONTRACT_EXECUTION_MILESTONE_ARCHITECTURE.md`. Non-breaking: does **not** repurpose `portal_contracts`(037)/
+`pay_installments`(027)/`portal_receipts`(023); those + migrations 023/027/037 stay immutable.
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| CEM-DOCS | O | P1 | architecture doc + ledger/routing/inventory registration | 3‚Äì13 | **done (docs)** |
+| CEM-P0 | O | P1 | **CEM v2 design freeze** (arch doc ¬ß15: 5 mandatory corrections + expanded domain + P0‚ÄìP9 packages + ‚â•24 tests + rollout/DoD) ‚Äî docs-only | 3‚Äì13 | **done (docs, design freeze)** |
+| CEM-V2-01 | O | P1 | contract cardinality = one per **awarded party/PO slice** (single: award_offer_id=NULL; split: per offer); request dossier aggregates; parent closes when all contracts closed | 7 | open (planned; supersedes v1 one-per-request) |
+| CEM-V2-02 | O | P1 | separate earned_value vs advance vs retention_release vs adjustment; Œ£ earned_value = net value; cash events never inflate value/ceiling | 8 | open (planned) |
+| CEM-V2-03 | O | **P0** | append-only `portal_contract_financial_events` ledger (16 event classes) as source of truth; computed status RPC/view; no mutable running-balance authority | 8 | open (planned) |
+| CEM-V2-04 | O | P1 | structured `portal_contract_amendments`/`_guarantees`/`portal_supplier_invoices`/`portal_claim_adjustments`; version reduction below certified/paid fails closed absent recovery plan | 7/8 | open (planned) |
+| CEM-V2-05 | O | **P0** | acceptance engine must NOT call `portal_record_receipt` closure; goods via internal compat helper (no parent close on non-final); services/works by period/value | 8 | open (planned) |
+| CEM-P1..P9 | O | P1 | staged packages: P1 schema-disabled ¬∑ P2 contract/version/doc/guarantee RPC ¬∑ P3 schedule engine ¬∑ P4 acceptance ¬∑ P5 claims/invoices/adjustments/ledger ¬∑ P6 claim-payment ¬∑ P7 amendments/routing ¬∑ P8 dossier UI ¬∑ P9 staging acceptance/rollout | 7‚Äì13 | open (planned) |
+| CEM-EC-TABLES | O | P1 | `portal_execution_contracts` + immutable `portal_execution_contract_versions` (draft‚Üíunder_review‚Üípublished‚Üísuperseded/terminated) + `portal_execution_contract_documents` (versioned, trusted-object links only) | 7 | open (planned) |
+| CEM-SCHEDULE | O | P1 | `portal_contract_milestones` + explicit `..._dependencies` (acyclic) + `portal_milestone_evidence_requirements`; publish-time validation (dup/cycle/sum=basis¬±tol/non-neg/advance+retention defined/‚â§remaining) | 7 | open (planned) |
+| CEM-ACCEPT | O | P1 | `portal_acceptance_records` (typed: site_visit‚Ä¶final_acceptance/defect/return) + `portal_acceptance_lines`; evidence-only vs eligibility-creating per milestone policy | 8 | open (planned) |
+| CEM-CLAIM | O | P1 | `portal_milestone_claims` (multi/partial) + certified amount/deductions/retention/advance/VAT/net-payable + append-only claim events | 8 | open (planned) |
+| CEM-PAY | O | **P0** | nullable `portal_payments` links/snapshots + `portal_create_payment_from_claim` (locks, server-derived, certified+unpaid, evidence accepted, balances, one active payment/claim); legacy free-form path fails closed when active EC exists | 8 | open (planned) |
+| CEM-INVARIANTS | O | **P0** | server-side one-transaction financial invariants (¬ß5): earned-value/cash/claim/milestone ceilings, retention & advance as ledger balances, immutability, exact rounding, no duplicate payment | 8 | open (planned) |
+| CEM-CAPS | O | P1 | 13 versioned capabilities (¬ß6) + SoD (submitter‚â†certifier, preparer‚â†approver‚â†executor); admin override labeled+audited | 4 | open (planned) |
+| CEM-RPC | O | P1 | RPC-only boundary (¬ß7): every mutating RPC validates state/capability/SoD/expected-revision/evidence/ceilings/idempotency + writes event+audit in same txn | 5/7/8 | open (planned) |
+| CEM-DOCLAYER | O | **P0** | all contract/acceptance/claim/payment evidence via Stage-3 trusted document objects (upload receipt) ‚Äî **hard dependency on `DOC-RECEIPT`/`S3-RECEIPT`** | 3 | open (blocked by S3-RECEIPT) |
+| CEM-PARENT | O | P1 | parent-request compatibility: non-final milestone does not close/force final receipt; close only when ¬ß4 (1‚Äì6) all hold; computed `portal_execution_status` view/RPC | 8/10 | open (planned) |
+| CEM-ROUTING | O | P1 | corrections/amendments via Stage-9 engine (CEM-RT-* routes), no ad-hoc return_to; history preserved | 9 | open (planned) |
+| CEM-DOSSIER | O | P1 | unified contract dossier + timeline + schedule + payment-monitor UI | 10 | open (planned) |
+| CEM-MIGRATE | O | P1 | additive-first; classify legacy rows (single/split/installments/framework) with **no** auto-conversion; disabled-by-default flag; safe rollback (disable-create, preserve history) | 7‚Äì8 | open (planned) |
+| CEM-TESTS | O | **P0** | 20-case regression+acceptance suite (¬ß12): 5 legacy-unchanged + 15 governance/financial/SoD/dossier/closure + full browser journey | 13 | open (planned) |
+
+### Stage 4 ‚Äî users / jobs / roles / departments / sectors
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S4-JOBVER | O | P2 | job catalog with versioned permission bundles | 4 | open |
+| S4-GRAN | O | P2 | granular capabilities (not overloaded permission keys) | 4 | open |
+| S4-ASSIGN | O | P2 | user assignment with effective date/expiry | 4 | open |
+| S4-SCOPE | O | P2 | sector/department + optional project/cost-center scope | 4 | open |
+| S4-HIER | O | P2 | manager hierarchy + eligible substitutes | 4 | open |
+| S4-AUTHTYPE | O | P1 | explicit collaboration vs ownership vs approval authority | 4 | open |
+| S4-SOD-CAT | O | P1 | role conflict/SoD rule catalog | 4 | open |
+| S4-SIM | O | P2 | permission impact preview + simulation | 4 | open |
+| S4-EXPLAIN | O | P3 | "why does this user have access?" | 4 | open |
+| S4-NOINACTIVE | O | P2 | no inactive dept/job/user in new assignments | 4 | open |
+| S4-REVIEW | O | P3 | periodic access review/export | 4 | open |
+| S4-ADAPTER | O | P1 | safe compatibility adapter from `portal_users.permissions` | 4 | open |
+| S4-MATRIX | O | P1 | exact positive+negative capability matrix per role (12 roles) | 4 | open (partial in PERMISSION_MATRIX) |
+
+### Stage 5 ‚Äî versioned workflow / approval-design engine
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S5-VER | O | P1 | draft/published/retired workflow versions + effective dates | 5 | open |
+| S5-SNAPSHOT | O | P1 | immutable workflow-version snapshot bound to each request | 5 | open |
+| S5-MATCH | O | P1 | server-side matching by type/sector/dept/project/value/exception | 5 | open |
+| S5-PARALLEL | O | P2 | sequential + parallel stages; all/any/quorum voting | 5 | open |
+| S5-RESOLVER | O | P2 | named user / job role / dept manager / committee / queue / dynamic resolver | 5 | open |
+| S5-FALLBACK | O | P2 | fallback + escalation rules; per-stage SLA | 5 | open |
+| S5-VALIDATE | O | P1 | validation: empty approvers, unreachable, loops, dup, requester-as-approver, missing high-value coverage | 5 | open |
+| S5-SIMPUB | O | P1 | simulation before publish (named resulting approvers) + impact preview + rollback | 5 | open |
+| S5-NO-CLEAR | O | P1 | do not delete/rewrite prior approvals on resubmission ‚Äî new revision/cycle (=HISTORY-PRESERVE) | 5 | open |
+| S5-BOUNDARY | O | P1 | boundary tests at 25k/**125k (owner-confirmed)**/250k/500k ¬±1; seed currently 150k ‚Üí change to 125k in Stage 5 | 5 | open |
+
+### Stage 6 ‚Äî committee engine
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S6-ENTITY | O | P1 | committee first-class versioned entity (type/purpose/rules) | 6 | open |
+| S6-ROLES | O | P1 | chair/secretary/members/alternates + effective dates | 6 | open |
+| S6-QUORUM | O | P1 | quorum + majority/unanimous/custom threshold | 6 | open |
+| S6-RECUSAL | O | P1 | conflict-of-interest declaration + recusal | 6 | open |
+| S6-SNAPSHOT | O | P1 | immutable membership snapshot per decision | 6 | open |
+| S6-SEATS | O | P1 | one person with multiple perms ‚â† multiple committee seats | 6 | open |
+| S6-WORKSPACE | O | P2 | dedicated committee workspace + decision record | 6 | open |
+| S6-TIMEOUT | O | P2 | timeout/escalation + incomplete-quorum handling | 6 | open |
+
+### Stage 7 ‚Äî procurement lifecycle
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S7-STARTPRICING | O | P1 | explicit "authorization to start pricing/RFQ" decision | 7 | open |
+| S7-RFQ | O | P1 | secure expiring supplier links + save/continue + confirmation ref + duplicate-submit protection | 7 | open (partial: `supplier-quote.html`) |
+| S7-COMPARE | O | P1 | interactive item-level comparison (price/tech/VAT/lead/warranty/lowest/variance) | 7 | open |
+| S7-NONLOWEST | O/C | P1 | mandatory reason when not choosing lowest (038 flags; UI reason field pending) | 7 | open |
+| S7-SPLIT | O | P2 | split-award support + reconciliation (024‚Äì026 backend exists) | 7 | implemented (backend, SQL) |
+| S7-HISTPRICE | O | P3 | historical price comparison | 7 | open |
+| S7-AWARD-RET | O/C | P1 | award: approve/reject/**return-for-correction**/clarification/material reopen (=ROUTE-AWARD-RETURN) | 7 | open |
+| S7-PO-RET | O/C | P1 | PO minor-correction vs reject/material-reopen; versioned PO/amendments (=ROUTE-PO-RETURN) | 7 | open |
+| S7-PO-QR | O | P3 | PO print/version/QR/authenticated link | 7 | open |
+
+### Stage 8 ‚Äî disbursement / payment / financial integrity
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S8-EXPENSE-EDIT | O/C | P1 | editable core fields on returned direct expense (scoped) (=RET-EXPENSE-EDIT) | 8 | open |
+| S8-PAY-ROLES | O/C | P1 | payment-preparer vs bank-executor capabilities (=PAY-ROLES) | 8 | open |
+| S8-PAY-EVID | O | P1 | mandatory evidence per configurable request type/state (=PAY-DOCS-COMPLETE) | 8 | open |
+| S8-BENEF | O/C | P1 | beneficiary status/IBAN refresh at submission/payment | 8 | implemented (submission; SQL DD-none yet for payment) |
+| S8-MANUAL-IBAN | O | accepted | manual IBAN warning/reason/audit/restricted visibility | 8 | implemented (SRC) |
+| S8-CAPS | O | P1 | cumulative caps / split caps / installment precision / idempotent + concurrent-safe execution | 8 | implemented (SQL 025‚Äì027/051; CONC pending) |
+| S8-VOID | O | P1 | payment request/approval/execution/void/reversal states | 8 | implemented (SQL 051) |
+| S8-3WAY | O | P2 | three-way match + contract controls OFF/advisory unless owner activates; honest labels | 8 | implemented (backend 033/037); labels pending |
+| S8-RECUR-BLOCK | O/C | P1 | recurring ‚Üí durable blocked work item, not silent skip (=RECUR-BLOCKED) | 8/9 | open |
+| S8-BUDGET-OFF | O | accepted | `budget_enforce=0`; no blocking; budget views labeled "ÿ∫Ÿäÿ± ŸÖŸÅÿπŸëŸÑÿ©/ŸÖÿπŸÑŸàŸÖÿßÿ™Ÿäÿ© ŸÅŸÇÿ∑"; retain activation tests | 8 | open (UI labeling) |
+| S8-FISCAL | O | P2 | document + freeze fiscal period at submit (=FISCAL-POLICY) | 8 | open |
+
+### Stage 10 ‚Äî UI/UX (U0‚ÄìU7)
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S10-SHELL | O | P1 | role-aware App Shell + nav | 10 | open |
+| S10-MYWORK | O | P1 | My Work / task inbox | 10 | open |
+| S10-DASH | O | P1 | role-specific dashboards | 10 | open |
+| S10-SEARCH | O | P2 | permission-aware global search + saved views | 10 | open |
+| S10-TXN | O | P1 | transaction workspace: sticky header + URL-addressable tabs | 10 | open |
+| S10-MODE | O | P1 | Work Mode vs Official Dossier/Print Mode | 10 | open |
+| S10-ACTIONBAR | O | P1 | approval workspace + sticky action bar + compact timeline | 10 | open |
+| S10-DOCCTR | O | P1 | Document Center (reusable) | 10 | implemented (expense only, SRC) |
+| S10-DIFF | O | P1 | returned-request correction mode + "what changed" diff | 10 | open |
+| S10-DOSSIER | O | P1 | unified procurement‚Üípayment dossier | 10 | open |
+| S10-QUEUE | O | P2 | exception/risk center + recurring-obligation queue | 10 | open |
+| S10-DESIGNERS | O | P1 | workflow/committee/permission designers (validation/simulation/impact/rollback) | 10 | open |
+| S10-STATES | O | P1 | loading/empty/offline/timeout/expired/denied/stale/partial/duplicate-click/fatal states | 10 | open (BOOT-STATES) |
+| S10-MOBILE | O | P1 | tables‚Üícards, mobile approval/viewer, sticky bar | 10 | open |
+| S10-A11Y | O | P1 | WCAG 2.2 AA; keyboard; RTL/LTR isolation; reduced motion; focus/live regions; contrast/targets | 10 | open |
+| S10-MODULAR | O | P2 | incremental modularization + design-system tokens + API client/state/error/formatters | 10 | open |
+
+### Stage 11 ‚Äî current email validation (legacy only)
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S11-CANARY | O | P1 | canary all events (submitted/stage/returned/rejected/award/committee/PO/payment states/receipt/invite/login/one-click token success+expiry+replay+stale-revision) | 11 | open |
+| S11-NODUP | O | P1 | no duplicate email from a single UI action | 11 | implemented (CDX4-NOTIFY-DUP, SRC) |
+| S11-NOROLLBACK | O | P1 | email failure does not roll back business transaction | 11 | implemented (SRC) |
+| S11-VISIBLE | O | P2 | failed-notification indication/logging where practical | 11 | open |
+
+### Stage 12 ‚Äî reliability / perf / observability / ops
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S12-PAGE | O | P1 | server-side pagination/filtering (no fixed broad dataset into one page) | 12 | open |
+| S12-PERF | O | P2 | performance budgets + load tests | 12 | open |
+| S12-CONC | O | P1 | concurrency tests (approvals/queue/supplier/payment/audit/uploads) | 12 | open |
+| S12-LOGS | O | P2 | structured logs + correlation IDs + redaction | 12 | open |
+| S12-HEALTH | O | P2 | health/readiness validating bindings without secrets | 12 | partial (portal-config readiness) |
+| S12-DR | O | P1 | backup/PITR status + restore rehearsal + RTO/RPO + runbooks | 12 | open |
+| S12-EXPORT | O | P2 | audit export/package for a transaction | 12 | open |
+| S12-SCHED | O | P1 | scheduler/business-job decoupling (=SCHED-DECOUPLE) | 12 | open |
+
+### Stage 13/14/15 ‚Äî acceptance / independent review / release
+| ID | Src | Sev | Requirement | Stage | Status |
+|---|---|---|---|---|---|
+| S13-SEED | O | P1 | realistic staging seed (roles/sectors/committees/values/cases/docs/installments/returns/voids/disputes/recurring) | 13 | open |
+| S13-REGRESS | O | P1 | full suite + clean-install + upgrade-from-baseline + rollback rehearsal + browser/mobile/keyboard E2E + visual regression + forged-auth + concurrency + perf + email canary + Systems 1/2 smoke | 13 | open |
+| S14-INDEP | O | P1 | independent adversarial review on final SHA + fresh Codex pinned once | 14 | open |
+| S15-MERGE | O | P1 | merge rehearsal + release manifest + backup checkpoint + owner sign-off | 15 | open |
+
+---
+
+## 8. Review-thread traceability (G0-08 / G0-R6)
+
+**The complete one-row-per-thread appendix (all 102 inline threads with thread ID, reviewed commit, file:line, severity, finding, GitHub state, canonical disposition) is `REVIEW_THREAD_TRACEABILITY.md`** ‚Äî generated from `get_review_comments`. Summary: all 102 threads captured; every CDX3/CDX4 finding fixed except the tracked open IDs (DOC-RECEIPT P0, SUPPLIER-ENV, PAGES-DEPLOY, SEC-06). (Threads were deliberately not mass-resolved on GitHub to avoid hiding genuinely-open items.) The theme-level table below remains as the summary map.
+
+| Thread (commit reviewed) | Canonical ID | Duplicate-of | State | Fixing commit / disposition |
+|---|---|---|---|---|
+| Codex `3b1bfc4` (baseline) | (pre-supporting-docs findings) | ‚Äî | addressed earlier in PR | 02d4b2a‚Ä¶135f5af |
+| Codex `135f5af` | round-2 set | ‚Äî | resolved | e6864fd (061) |
+| Owner `79f4e2c` review request | (directs Codex) | ‚Äî | n/a | ‚Äî |
+| Codex `79f4e2c` (stage-2) round-3 (√ó~20 inline) | CDX3-* (attach/key/replace/remove/resubmit/recurring/budget/config/URL/anon-key/readiness/pages/size) | collapsed | mostly resolved | 8cd7890/b3d949f; **DOC-RECEIPT open**, SUPPLIER-ENV/PAGES-DEPLOY open |
+| Codex `5975f2f` round-4 (√ó15 inline) | CDX4-* (submit-authz/phase/tokens/benef/fy/pay-evid/pay-role/concurrency/notify-dup/docs0) + DOC-RECEIPT | collapsed | resolved except DOC-RECEIPT | b43ae88 |
+| Owner senior review `b43ae88` | R1-CANONICAL + PAY-ROLES + DOC-RECEIPT(P0) + FISCAL-POLICY + RECUR-BLOCKED + HISTORY-PRESERVE + PR-body accuracy | ‚Äî | R1 fixed; rest open | 3861171; PR body updated |
+| Owner "@codex review" workflow-routing (`8cd7890`) | ROUTE-* (award/PO/pay-enum/email-parity) | ‚Äî | documented (R0) | Stage 7/9 |
+| Owner UX mandate v1/v2 | S10-* | ‚Äî | documented (R0/ledger) | Stage 10 |
+| Owner email mandate E0‚ÄìE6 | E0 (done) + E1‚ÄìE6 | ‚Äî | E0 implemented; rest deferred (OWN-EMAIL) | d103215 |
+| Owner MASTER PROGRAM | S0‚ÄìS15 | ‚Äî | S0 ‚úÖ Gate 0 PASSED (`9a62890`); Stage 1 open/HELD (Gate 1 in review) | 0316c68‚Ä¶this commit |
+| Owner Stage-0 review | G0-01‚Ä¶G0-09 | ‚Äî | this commit | (SHA below) |
+
+**No thread dropped:** any Codex inline not individually rowed above is subsumed by its CDX3-*/CDX4-* canonical ID; the `verified`-vs-`implemented` labeling (G0-09) applies.
+
+---
+
+## 9. G0-06 ‚Äî email-freeze compatibility clarification
+
+`RETURN_ROUTING_TARGET_MODEL.md` invariant "outbox-notified in the same transaction" is clarified (also patched in that file):
+- **Durable internal notification** (`portal_notifications` row via the 058 trigger / work-item events ‚Üí `portal_outbox`) **may be transactional** ‚Äî this is DB state, not email.
+- **No email delivery behavior changes:** `txn_notifications=0`, legacy `portal-notify` immediate path stays authoritative, **no outbox-authoritative email**, no Resend/Cloudflare binding change ‚Äî until separate authorization (E1‚ÄìE6).
+- **Stage-9 must not create duplicate emails:** correction/reassignment/delegation events notify users via the **existing legacy `pa_notify`/`portal-notify`** path while email remains legacy; the durable outbox intent stays unsent (`shadow`-equivalent) until cutover.
+
+---
+
+## 10. G0-01‚Ä¶G0-09 closure table
+
+| Gate item | Action taken (this commit) | Status |
+|---|---|---|
+| G0-01 migration history | `MIGRATION_HISTORY_RECONCILIATION.md` + corrected ¬ß1/¬ß2; **live `list_migrations` (2026-07-29) confirms 059/060/061 applied, 062 absent** ‚Äî no production change (read-only) | **CLOSED (live-verified)** |
+| G0-02 per-requirement rows | ¬ß7 requirements register (S4‚ÄìS15, one row per mandate) | **done** |
+| G0-03 complete artifact inventory | **`ARTIFACT_INVENTORY_APPENDIX.md`** (one row per artifact ‚Äî the actual enumeration; `ARTIFACT_INVENTORY.md` is the narrative companion) | **done** |
+| G0-04 phase-matrix contract | `RETURN_ROUTING_PHASE_MATRIX.md` expanded (all columns + committee/GM/payment-prep/approval/execution/partial-receipt/rejected-receipt/return-debit/cancellation/amendment rows) | **done** |
+| G0-05 DoA threshold conflict | **Owner confirmed authoritative = 125,000 (2026-07-29).** Recorded; seed change 150k‚Üí125k + boundary tests deferred to Stage 5 (owner chose hold-for-recheck) | **resolved (value confirmed; impl gated)** |
+| G0-06 email-freeze compat | ¬ß9 above + patch in `RETURN_ROUTING_TARGET_MODEL.md` | **done** |
+| G0-07 scheduler ‚â† email freeze | SCHED-DECOUPLE reclassified **open (not deferred)**, email-neutral split | **done** |
+| G0-08 thread traceability | ¬ß8 above | **done** |
+| G0-09 evidence labels | heading renamed + evidence-type legend + SEC-01 downgraded to implemented | **done** |
+
+**Gate 0 ‚úÖ PASSED (2026-07-30, SHA `9a62890`):** (a) ~~live `list_migrations` confirms G0-01~~ **‚úÖ DONE (059/060/061 applied, 062 absent)**; (b) ~~owner confirms the authoritative DoA matrix (G0-05)~~ **‚úÖ DONE (owner confirmed 125,000, 2026-07-29)**; (c) ~~owner independently rechecks the Stage-0 commits~~ **‚úÖ DONE ‚Äî owner independent recheck cleared G0-R/G0-F/G0-F2A/G0-F3A-C/G0-H1‚Ä¶H5 at `9a62890`, CI run 85 green.** **Stage 1 authorized repo-only** (see ¬ß6 restrictions). Documentation gate only ‚Äî product not certified; P0/P1 items stay open.
+
+---
+
+## 11. G0-R1‚Ä¶G0-R8 closure table (owner independent recheck)
+
+| Item | Action taken | Status |
+|---|---|---|
+| G0-R1 PR body contradicts DoA decision | PR body updated ‚Äî DoA no longer "awaiting confirmation"; records owner-confirmed 125,000 | done |
+| G0-R2 stale/contradictory ledger | Head ‚Üí `1b97cc4`; SEC-01 ‚Üí LIVE-verified-by-Claude; S0/R0 ‚Üí delivered; G5 & S5-BOUNDARY ‚Üí 125k; counts corrected (120 functions / 12 policies distinct) | done |
+| G0-R3 phase matrix superseded 150k | Head ‚Üí `1b97cc4`; labeled current-code 150k vs target-authoritative 125k; removed "unresolved" | done |
+| G0-R4 artifact inventory not one-row-per | **Generated `ARTIFACT_INVENTORY_APPENDIX.md`** (every page/API/table/function/trigger/policy/job/bucket); `ai.js` classified (shared Gemini proxy) | done |
+| G0-R5 per-requirement register incomplete | Added Stage-1/2/3/9 per-requirement sections to ¬ß7 (incl. SEC-06 sub-controls, upload-receipt invariants + negative tests, R0‚ÄìR8 items) | done |
+| G0-R6 thread traceability | **Generated `REVIEW_THREAD_TRACEABILITY.md`** ‚Äî all 102 threads (ID/commit/file:line/sev/finding/state/disposition) | done |
+| G0-R7 G0-01 independent-verification label | Reconciliation doc: **LIVE verified by Claude session; independent reviewer NOT re-executed** (needs Supabase read/export) ‚Äî no two-party claim | done |
+| G0-R8 closure mechanics | Gate checklist ‚Üí 125k; this single closure commit; closure table returned; PR draft; no Stage-1/063; no DB/config/storage change | done |
+
+**Remaining to clear Gate 0:** owner's independent recheck of this commit. G0-01/G0-05 resolved; all G0-R consistency items corrected. Implementation (Stage 1 / migration 063 / DoA seed 150‚Üí125) stays gated per owner "hold for recheck."
+
+## 12. G0-F1‚Ä¶G0-F4 closure table (owner recheck of `1e44e33`)
+
+Documentation-accuracy corrections from the owner's independent recheck of `1e44e33`. **The G0 gate/closure checklist is NOT flipped to passed ‚Äî per owner, it is updated only after this recheck is accepted.**
+
+| ID | Recheck note | Correction (this commit) | State |
+|---|---|---|---|
+| G0-F1 | Ledger head `1b97cc4`/"updated each commit" vs reviewed head `1e44e33`; G0-03 pointed at narrative not appendix | Head line ‚Üí **source snapshot `1e44e33`** (not auto-updated); ¬ß1 truth header ‚Üí `1e44e33`; appendix intro snapshot ‚Üí `1e44e33`; **G0-03 closure now points at `ARTIFACT_INVENTORY_APPENDIX.md`** (the one-row enumeration). Gate/closure table intentionally left un-flipped pending acceptance | corrected ‚Äî awaiting recheck |
+| G0-F2 | Appendix asserted the same "RLS on; SELECT scoped / writes deny-by-default via guards" for **every** table (false for server-only/service-role tables); functions got placeholder "authenticated (or per REVOKE/GRANT)" | **Source-derived** per-table access class (verified from RLS-enable loop `:1680`, auth_all loop `:1696`, each policy/REVOKE/GRANT): server-only no-policy (`portal_email_tokens`/`portal_idempotency`/`portal_supplier_tokens`), service-role-only (`portal_invitations`/`portal_outbox`), own-row (`portal_notifications`), append-only (`portal_audit`), scoped/perm-gated/auth_all for the rest ‚Äî guard claimed only where source confirms. **Per-function grant class** from `REVOKE ‚Ä¶ FROM ‚Ä¶`: service_role-only (14) / authenticated+service_role / trigger-only / PUBLIC-default. Exhaustive per-signature + Stage-2 least-privilege review kept explicitly open | corrected ‚Äî awaiting recheck |
+| G0-F3 | Thread appendix: commit blank on ~100/102, findings truncated, generic "CDX3/CDX4 fixed" bucket misclassified known-open items | Regenerated: **reviewed commit = `not returned by API`** (the review API does not return it ‚Äî honest, never blank); **findings preserved** (title + explanation, badge/markup stripped); **one stable canonical ID per thread** with owner-named opens carrying exact IDs (`S1-GUARD-COUPLE`, `BOOT-STATES/S10-STATES`, `PAY-DOCS-COMPLETE/S8-PAY-EVID`, `RECUR-BLOCKED/S8-RECUR-BLOCK`, `RET-EXPENSE-EDIT/S8-EXPENSE-EDIT`, `PAY-ROLES` ‚Üí **open**); `fixed @<sha>` carries the fixing commit; **0 untriaged**. Alias table added to ¬ß4 so every ID resolves | corrected ‚Äî awaiting recheck |
+| G0-F4 | `ai.js` classified too positively ("secure ‚Ä¶ NOT wired") | Reclassified: **System-1/2 OCR proxy** (`register.html` + `index/requests/rfq.html`), **not** System 3; **"key concealed, abuse controls incomplete"** (GET unauth; POST forgeable Origin/Referer; no JWT/Turnstile/rate-limit/quota/cost cap; 16 MiB; Content-Length-gated size check ‚Üí chunked bypass). New ledger risk item **`AI-PROXY-ABUSE` (Stage 2/12)** with actions: add auth/rate/quota + deployment ownership, disable/exclude where unused, and the owed tests (unauth GET/POST, forged Origin, body-limit-without-Content-Length, rate limit, deployment ownership) | corrected ‚Äî awaiting recheck |
+
+**Gate 0 remains HELD.** No Stage 1, no migration 063, no DoA seed change, no production/DB/config/storage change. One focused documents-only commit closes G0-F1‚Ä¶G0-F4; the gate flips only when the owner accepts this recheck.
+
+## 13. G0-F2A / G0-F3A‚ÄìC closure table (owner recheck of `7abc624`)
+
+Owner accepted **G0-F1** and **G0-F4** (documentation acceptance only for F4). Remaining factual corrections, one documents-only commit; **gate still HELD (not flipped)**.
+
+| ID | Note | Correction | State |
+|---|---|---|---|
+| G0-F2A | Table rows conflated SQL grants with effective RLS visibility (e.g. `portal_supplier_iban_changes`/`portal_recurring_expenses`/`portal_supplier_invoices`/`portal_returns`/`portal_beneficiaries` mislabeled "SELECT authenticated") | Every one of the 35 table rows now states **three separate facts**: (1) SQL `GRANT`/`REVOKE`; (2) RLS policy target + **exact effective predicate** (admin/finance/procurement(/stock)/can_create/request-scoped/own-row/server-only ‚Äî verbatim from source); (3) write path + guard/RPC. `GRANT SELECT TO authenticated` is **no longer** equated with unrestricted visibility. Function wording changed to **"PUBLIC/default execute; body authorization NOT independently verified in Gate 0; Stage-2 review required."** | corrected ‚Äî awaiting recheck |
+| G0-F3A | Thread IDs removed | **`Thread ID` column restored** (`PRRT_‚Ä¶`) + **comment URL** per row (resolves to full GitHub text) | corrected ‚Äî awaiting recheck |
+| G0-F3B | Findings truncated but labeled "preserved" | **Full comment body** now included per row (only the badge image + "Useful?" footer stripped); no truncation. Reviewed-commit column dropped (API does not return it) rather than left blank | corrected ‚Äî awaiting recheck |
+| G0-F3C | Several canonical dispositions wrong; "0 untriaged" unreliable | Rebuilt from a **79-title exact map** (no greedy keywords). Fixes: 059-regression ‚Üí `TEST-COVERAGE` (not SEC-06) ¬∑ manual-IBAN ‚Üí `OWN-IBAN-MANUAL` (not SEC-IBAN-EXPOSE) ¬∑ recurring beneficiary refresh ‚Üí `CDX-BENEF-RECUR (061)` (not SEC-IBAN-EXPOSE) ¬∑ admin SoD ‚Üí `OWN-ADMIN` (not PAY-ROLES) ¬∑ MOD-97 ‚Üí `OWN-MOD97` (not test coverage) ¬∑ Supabase URL parse & replacement-fork ‚Üí `CFG-ENV`/`CDX3-REPLACE` (not AI-PROXY-ABUSE) ¬∑ `CDX3-ATTACH-PAY` (fixed) separated from `PAY-DOCS-COMPLETE` (open) ¬∑ verified-branch `CFG-ENV` (fixed) separated from GitHub-Pages `PAGES-DEPLOY` (open). `SEC-IBAN-EXPOSE` now maps to **only** the "Disclose requester access to beneficiary IBANs" finding | corrected ‚Äî awaiting recheck |
+| G0-F3 (item 6) | validation/generation report | Added to the appendix header: **102 threads ¬∑ 102 unique thread IDs ¬∑ 0 blank IDs ¬∑ 0 unknown canonical IDs ¬∑ 102 dispositions**, GitHub-state counts, and the owner accepted-risk mapping list | corrected ‚Äî awaiting recheck |
+
+**Gate 0 remains HELD.** No Stage 1, no migration 063, no DoA seed change, no production/DB/config/storage change. PR body will note G0-F1‚Ä¶F4 as accepted **only after** this correction is independently accepted (owner instruction 7).
+
+## 14. G0-H1‚Ä¶G0-H5 closure table (owner recheck of `e6bfaf8`)
+
+Owner accepted G0-F2A and G0-F3A/B. Five traceability disposition corrections; one documents-only commit; **gate still HELD (not flipped)**.
+
+| ID | Note | Correction | State |
+|---|---|---|---|
+| G0-H1 | Threads #9/#12 "vetted/approved beneficiary for bank expenses" mapped to `BENEF-MASTER (053) implemented` ‚Äî conflicts with owner's manual-IBAN decision | Remapped to **`OWN-IBAN-MANUAL` / accepted-risk**: beneficiary master exists (053) **but manual non-master IBAN remains allowed** with required reason+badge+audit; the requested **exclusivity was deliberately NOT implemented** ‚Äî no longer described as fixed | corrected ‚Äî awaiting recheck |
+| G0-H2 | Thread #18 (allowlist mismatch) shown `SEC-06 open (P0)` as if unfixed | **Allowlist sub-item marked FIXED @e6864fd** (form‚Üîserver list reconciled); **parent `SEC-06` P0 kept OPEN** as separate items (caller auth ¬∑ signed registration-bound authz ¬∑ anon fallback removal ¬∑ rate/quota ¬∑ Storage-policy). Allowlist closure does **not** imply SEC-06 closure | corrected ‚Äî awaiting recheck |
+| G0-H3 | Thread #79 (department picker UI) marked only `implemented @135f5af` (backend) | Disposition now references **backend `135f5af` + UI `b3d949f`**, consistent with thread #89 | corrected ‚Äî awaiting recheck |
+| G0-H4 | Threads #101/#102 had blank Comment URL while header claims a URL per row | **URLs recovered** (`‚Ä¶#discussion_r3674479022` / `‚Ä¶_r3674479034`); validation report extended with **blank/`not returned by API` comment URLs = 0**; thread ID remains the primary stable key | corrected ‚Äî awaiting recheck |
+| G0-H5 | Thread #4 audit-tail disposition began "addressed via 057" (could read as closed) | Restated unambiguously: **middle-row mutation detection implemented (057); suffix/entire-chain deletion detection remains OPEN** until an external anchor/checkpoint is implemented + tested. New ledger item **`AUDIT-TAIL-ANCHOR`** (Stage 2/6, open) | corrected ‚Äî awaiting recheck |
+
+**Gate 0 remains HELD.** No Stage 1, no migration 063, no DoA seed change, no production/DB/config/storage change.
+
+
+## 15. Mandate-A permission work (owner Gate review of `6fdb581`) ‚Äî HOLD honored
+
+Owner Gate review (PR #74, 2026-08-07) placed two new repo-only commits under HOLD and named a
+material A3 defect. Recorded here for program sequencing; **no gate is flipped, Gate 1 remains HELD.**
+
+| ID | Item | Disposition | State |
+|---|---|---|---|
+| MA-A2 | `p0_1r` ‚Äî add `can_approve_disbursement` to `portal_save_job` allow-list + both sensitive-key guards (anti-escalation kept) | Repo only (standalone + `p0_1r-*.sql`); test `49` (D1‚ÄìD7). **Not applied to any DB.** | repo-complete ‚Äî awaiting gate |
+| MA-A3-DEFECT | Owner finding: `portal_save_job` cascade `UPDATE portal_users SET permissions=‚Ä¶` **destroys per-user overrides** on any job edit | **Fixed `p0_1s`:** precedence model defined (job baseline vs `perm_overrides` delta; `permissions` = baseline‚äïdelta, materialized, read path unchanged); job edit **preserves** overrides; new job assignment **resets** them; per-user edits via `portal_set_user_permission` (**full-admin only**); backfill for legacy divergence. Test `50` (OV1‚ÄìOV8, incl. OV3 override-survives-job-edit + OV7 anti-escalation). Repo only. | fixed in repo ‚Äî awaiting gate |
+| MA-A3A4-UI | 14-key per-user matrix + `can_see_finance` module (converter-only) | Built; **browser verification owed (owner point 4)** before A3/A4 marked complete ‚Äî status kept üü° in the mandate doc | built ‚Äî browser-verify owed |
+| MA-CI | Exact-head PR-triggered CI evidence | Local suite = **306 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Push of the fix re-triggers `portal-tests.yml`; local claims are not a substitute for exact-head CI (owner note acknowledged) | awaiting CI on new head |
+
+**Sequencing:** this is Mandate-A (functions/permissions) work on the audit branch; it does **not** advance Gate 1 or the MASTER OWNER-AUTHORIZED EXECUTION PROGRAM stages, and does not touch the open owner-decision/authorized-state blockers (p0_1o/p0_1p disposition, staging authorized state, service_role rotation, leaked-password protection, Gate-2 hosted Playwright). **No staging/production migration, config, email, or `budget_enforce`/enforcement-flag change. PR stays Draft/unmerged; no migration 063.**
+
+## 16. Gate remediation of `p0_1t` release-lock + C6 designer persistence (owner review of `332d3f6`)
+
+Owner Gate review (PR #74, 2026-08-07) verified repo progress and required a P0/P1 correction: the
+governance-settings card must not let an ordinary admin click flip the owner-locked launch decisions
+`budget_enforce` and `txn_notifications`. Remediation done repo-only; **Gate 1 remains HELD.**
+
+| ID | Item | Disposition | State |
+|---|---|---|---|
+| MA-C5-LOCK | `p0_1t` exposed toggles for owner-locked `budget_enforce`/`txn_notifications` | **Fixed:** server-side release lock in `portal_set_governance_flag` ‚Äî those two keys require `portal_is_privileged()` (service_role/owner-authorized path); an admin JWT is **rejected at the RPC** (not UI-only). UI shows them read-only üîí "requires owner authorization". Neither value changed (both stay 0). Test `51` extended: GF7/GF8 admin-rejected, GF9 unchanged, GF11 authorized-path positive (local CI only, never shared Staging). | fixed in repo ‚Äî awaiting gate |
+| MA-C6 | Workflow designer was a dead demo (no persistence) | **Built:** `portal_save_workflow`/`portal_delete_workflow` (admin-only, structural validation) + designer "save" button. Governance (SoD/deny-by-default) is independent of chain design ‚Äî enforced at each transition regardless. Repo only. Test `52` (WF1‚ÄìWF8). | built ‚Äî browser-verify owed |
+| MA-CI | Exact-head PR CI evidence | Still no PR-triggered runs on the branch head (owner-confirmed). Local suite = **326 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Local ‚â† exact-head CI (acknowledged). | awaiting CI/owner approval |
+
+**Owner-locked launch invariants restated:** `budget_enforce=0` and `txn_notifications=0` for the current
+release; System-3 email stays legacy immediate mode until separately authorized. No code path lets an
+ordinary admin change them. No staging/production migration, config, email, or enforcement-flag mutation
+performed. PR stays Draft/unmerged; no migration 063.
+
+## 17. `p0_1u` reclassified as transitional persistence (owner review of `74df291`)
+
+Owner Gate review confirmed the p0_1t release-lock remediation and required that `p0_1u` NOT be treated
+as Stage-5 completion. Corrected accordingly; **Gate 1 remains HELD.**
+
+- **MA-C6 classification:** `p0_1u` is **transitional persistence for the existing designer only** ‚Äî NOT
+  the Stage-5 versioned approval-design engine. The Stage-5 rows (draft/published/retired versions,
+  effective dating, immutable workflow-version snapshots bound to requests, server-side matching,
+  validation/simulation/impact preview, governed rollback) **remain OPEN and authoritative**. Building
+  `portal_save_workflow` does not advance any stage.
+- **Safe transitional contract (proved, test 52):** (a) editing/deleting a workflow **cannot rewrite the
+  chain of an already-submitted/in-flight request** ‚Äî the chain is snapshotted into `portal_approvals` at
+  submit and is never re-derived mid-flight (WF9, byte-equal snapshot + unchanged status/seq); (b)
+  **fail-closed before publication** ‚Äî a role stage with no possible approver (no active user holds the
+  effective permission) is rejected (WF10), and duplicate stage `seq` is rejected (WF11); plus resolver /
+  role-key-whitelist / existing-approver / ‚â•1-stage checks. Runtime SoD and deny-by-default remain
+  enforced at every transition regardless of chain design.
+- **Not applied:** `p0_1r`, `p0_1s`, `p0_1t`, `p0_1u` remain **repo-only, unapplied** to shared staging or
+  production under the current gate. A live apply would require the Stage-5 governed publish model or an
+  explicitly authorized publish action ‚Äî neither is authorized now.
+- **Evidence:** local suite = **329 SQL + 18 guard + 7 endpoint, exit 0**; UI contract 18/18. Exact-head
+  PR CI still not triggered (owner-confirmed) ‚Äî local ‚â† exact-head CI gate evidence.
+
+**budget_enforce=0 / txn_notifications=0 kept; no migration/config/production/email/enforcement mutation.
+PR stays Draft/unmerged; no migration 063.**
+
+## 18. 2026-08-09 live-state reconciliation (supersedes stale apply-status claims)
+
+Read-only staging inspection found that the section-17 statement saying all of `p0_1r‚Ä¶p0_1u` were
+unapplied is no longer current: `p0_1r` (`20260808010845`) and `p0_1s` (`20260808010943`) are present in
+the staging migration ledger; `p0_1t` and `p0_1u` are absent. Authorization evidence for the `r/s` apply
+was not found in the repository/conversation available to this run, so their status is **applied;
+authorization evidence unverified** pending an explicit owner record.
+
+The same read-only inspection found an explicit anonymous `EXECUTE` grant on the new `SECURITY DEFINER`
+RPC `portal_set_user_permission`, and the Security Advisor inventory increased to **98 (7 INFO / 91 WARN)**.
+Forward repair `p0_1v` revokes that exposure without rewriting the applied `p0_1s` file; the
+still-unapplied `p0_1t/p0_1u` sources are hardened directly. Following the owner's explicit delegation
+of the technical disposition, `p0_1v` was applied to staging as migration `20260809075255`. Catalog checks
+prove `anon` has no execute privilege on the admin RPC or its helpers, authenticated users cannot execute
+the helpers, and the Security Advisor inventory fell to **97 (7 INFO / 90 WARN)** with the specific
+anonymous admin-RPC finding absent. Full evidence and remaining actions:
+`audit-output/CURRENT_STATE_RECONCILIATION_2026-08-09.md`.
+
+Engineering disposition is to retain the live `p0_1r/p0_1s` fixes and the older `p0_1o/p0_1p` controls;
+the latter's release flags remain disabled. `p0_1t/p0_1u` remain unapplied. Gate 1 remains
+**HELD / NOT READY**. No Production, `main`, R2, config, or data write was performed; staging migration
+history changed only for `p0_1v`; no migration 063.
+
+## 19. 2026-08-09 executable follow-through ‚Äî browser runtime + deny-by-default future functions
+
+The owner instructed execution and testing based on engineering evidence. The previously skipped local
+Playwright suites were made environment-portable: an explicit Playwright/CI browser remains preferred,
+with an installed Chrome/Edge executable used only as a local fallback. All three formerly blocked suites
+then executed successfully. The complete Node/browser run is **158 passed / 0 failed** across 10 files;
+baseline generation/check is deterministic at
+`e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
+
+Forward migration `p0_1w_function_default_privileges_hardening` was applied and verified on staging as
+`20260809081015`. Future `postgres`-owned functions in `public` no longer auto-grant `EXECUTE` to
+`PUBLIC`, `anon`, `authenticated`, or `service_role`; existing reviewed ACLs were unchanged. Four SQL
+regressions raise the registered suite from 332 to **336** assertions. Live dummy-token probes also prove
+the two intentional anonymous supplier endpoints fail closed before writes. Security Advisor remains
+**97 (7 INFO / 90 WARN)** because the preventive default ACL changes no current function grants.
+
+Gate 1 remains **HELD / NOT READY**: no exact-head Actions run or credentialed hosted multi-role journey
+exists, remaining definer surfaces still need per-signature disposition/independent review, and leaked
+password protection/key rotation/QA-R2 classification remain external operational actions. Production,
+`main`, production R2, live data, and release flags were untouched; no migration 063.
+
+## 20. 2026-08-09 launch-preparation follow-through ‚Äî cleanup, definer inventory, key migration
+
+The staging-only QA cleanup removed 20 explicitly prefixed dummy requests and seven exact QA R2 objects;
+the R2 attestation object, 23 portal profiles, 22 active jobs, three settings rows, and Auth users were
+preserved. Post-cleanup operational counts are zero. The Security Advisor remains **97 (7 INFO / 90
+WARN)**.
+
+A live catalog regression now covers all portal `SECURITY DEFINER` functions with ten assertions: no
+mutable `search_path`, no PUBLIC execution, and no dynamic SQL were found; the remaining authenticated
+and anonymous surfaces have an explicit documented disposition and still require independent review.
+The registered PostgreSQL suite is now **346** assertions.
+
+Supabase's new `sb_secret_*` keys are not JWTs, so the portal server header builder was made dual-mode:
+new secret keys are sent only as `apikey`; legacy `service_role` JWTs retain the Bearer header during the
+cutover. Direct callers now reuse the same helper. The complete local Node/browser suite is **161 passed /
+0 failed / 0 skipped**. This repo-only follow-up is not yet published because GitHub CLI is not installed
+or authenticated in the current environment; no staging credential was rotated.
+
+Gate remains **HELD / NOT READY** pending publication and exact-head CI, credentialed hosted multirole
+E2E, leaked-password protection, coordinated Staging key rotation after Preview verification, and an
+independent security disposition. PR #74 remains Draft/open/unmerged. Production, `main`, production R2,
+release flags, and migration 063 remain untouched.

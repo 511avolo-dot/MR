@@ -1,15 +1,13 @@
 # Security Advisor — `SECURITY DEFINER` signature-by-signature disposition (System 3)
 
-> **Repo-side disposition. No credentials, no live mutation.** This document is the
-> code-derived authorization disposition for the Supabase Security Advisor
-> `SECURITY DEFINER` family of warnings on the portal (`portal_*`) schema. It is
-> produced by loading the deterministic clean baseline + the full `062` + P0-1b…P0-1n
-> chain on a fresh PostgreSQL 16 database and querying the catalog — it does **not**
-> read or change any live project. The **live re-scan against staging
-> `vpfnycxzqziltsnzxbpb` to confirm the exact advisor counts remains owner-gated.**
+> **Repository disposition plus read-only live Staging attestation.** This document
+> covers the Supabase Security Advisor `SECURITY DEFINER` family on `public.portal_*`.
+> On 2026-08-09 the catalog and advisor were queried read-only on the authorized
+> Staging project `vpfnycxzqziltsnzxbpb`; no function, data, Auth setting, R2 object,
+> Production resource, or migration was changed by that inspection.
 
-- **Code-under-test head:** `279f62d95dad` (branch `audit/enterprise-certification-2026-07-27`, PR #74 Draft).
-- **Method:** `bash db/portal-tests/run.sh` (clean PG16, chain applied once, **EXIT 0 / 273 SQL**), then `pg_proc`/`pg_class`/`has_function_privilege` catalog queries. Every figure below is reproducible from the built DB.
+- **Exact PR head inspected:** `d84392ca31f05204d9fab0970dbe5537a37d36eb` (branch `audit/enterprise-certification-2026-07-27`, PR #74 Draft/open/unmerged).
+- **Method:** live `pg_proc`/ACL/body-marker catalog queries plus the clean-build suite. `54_security_definer_inventory.sql` now makes the execution boundary and body classification build-failing instead of relying on a hand-maintained count.
 - **Scope:** `public.portal_*` objects only. Systems 1/2 are out of scope (isolation is a separate gate).
 
 ---
@@ -18,7 +16,7 @@
 
 | Invariant | Measured | Advisor relevance |
 |---|---|---|
-| Total `portal_*` `SECURITY DEFINER` functions | **134** | the population the advisor flags |
+| Total `portal_*` `SECURITY DEFINER` functions | **135** | current live Staging population |
 | …missing a pinned `search_path` | **0** | closes `function_search_path_mutable` (enforced by test `11_security.sql` S5) |
 | …executable by `PUBLIC` | **0** | no anonymous world-execute |
 | …executable by `anon` | **2** (intended, token-gated — category C) | closes the anonymous-execute concern for all but the documented supplier self-service |
@@ -30,7 +28,7 @@
 - `function_search_path_mutable` → **fully dispositioned (0 offenders).**
 - `security_definer_view` → **fully dispositioned (0 offenders).**
 
-The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor flags the *property*, not a defect). Each of the 134 is dispositioned below by execution boundary.
+The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor flags the *property*, not a defect). Each of the 135 is dispositioned below by execution boundary.
 
 ---
 
@@ -90,7 +88,7 @@ The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor 
 | 47 | `portal_users_guard()` |
 | 48 | `portal_validate_upload_receipt(p_storage_key text, p_request_id text, p_expected_uploader text, p_allowed_kinds text[], p_consume boolean)` |
 
-### Category B — authenticated RPC (84 functions): **INTENDED, safety by internal authorization**
+### Category B — authenticated RPC (85 functions): **INTENDED, safety by internal authorization**
 `EXECUTE` for `authenticated`. `SECURITY DEFINER` is **required** so a controlled, audited write can proceed past the deny-by-default RLS guards — that is the design. Safety does **not** rest on the SQL role; each function: (1) resolves the actor from the **JWT**, (2) enforces the specific **capability / role** and **segregation-of-duties** for the action, (3) pins `search_path=public`, and (4) writes through the append-only audit trail. These properties are exercised by the negative assertions across `10`–`45` (self-approval, non-approver, cross-department, duplicate-disbursement, cap, and privilege-escalation attempts all rejected). **Disposition: benign — DEFINER is the mechanism; authorization is enforced inside every body.**
 
 | # | Function signature |
@@ -179,6 +177,7 @@ The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor 
 | 82 | `portal_three_way_status(p_request_id text)` |
 | 83 | `portal_update_request(p_request_id text, p_title text, p_items jsonb, p_project text, p_priority text, p_need_by date, p_proc_type text, p_justification text, p_note text)` |
 | 84 | `portal_username()` |
+| 85 | `portal_set_user_permission(p_username text, p_key text, p_on boolean)` |
 
 ### Category C — supplier self-service (2 functions): **INTENDED & documented (migration 047)**
 `EXECUTE` for `anon`, by design: an external supplier has no account, so a **43-character random single-use token** is the identity. Both functions are `SECURITY DEFINER`, verify the token in-database, and expose **only that one request's line items** — never competitor offers, budgets, approvers, or bank data. **Disposition: accepted, documented; test `11_security.sql` S8 pins this to exactly these two names — any third anon-executable function fails the build.**
@@ -192,19 +191,19 @@ The remaining `SECURITY DEFINER` **function** warnings are generic (the advisor 
 
 ## 3. Residual / owner-gated
 
-- **Live advisor re-scan — DONE (2026-08-04).** `get_advisors(security)` against staging `vpfnycxzqziltsnzxbpb` returned **96 entries (7 INFO / 89 WARN)** and matches this disposition **exactly**: 86 `authenticated_security_definer_function_executable`, 2 `anon_security_definer_function_executable`, 7 `rls_enabled_no_policy` (INFO), 1 `auth_leaked_password_protection`, 0 `function_search_path_mutable`, 0 `security_definer_view`. Evidence: `audit-output/LIVE_STAGING_VERIFICATION_2026-08-04.md`.
+- **Live advisor re-scan — DONE (2026-08-09).** `get_advisors(security)` against staging `vpfnycxzqziltsnzxbpb` returned **97 entries (7 INFO / 90 WARN)**: 87 `authenticated_security_definer_function_executable`, 2 intentional `anon_security_definer_function_executable`, 7 `rls_enabled_no_policy` (INFO), 1 `auth_leaked_password_protection`, 0 `function_search_path_mutable`, and 0 `security_definer_view`.
 - **INFO items and `leaked-password protection`.** Separate owner decisions (Auth configuration), not part of the DEFINER disposition.
 
 ## 4. Closure bar — this table does NOT close the blocker by itself
 
 Per the owner Gate review, the Security Advisor blocker is **not** closed from the disposition table alone. What is done vs. what remains:
 
-- **Done:** every signature is enumerated against the **current** live SQL catalog (134 fns), each with a pinned `search_path` (0 offenders) and its exact caller boundary (48 server-only / 84 authenticated / 2 anon); the live re-scan matches; and **build-failing negative controls exist** — `11_security.sql` **S7** pins the exact server-only set and **S8** pins the exact anon-executable set (any drift fails CI), plus the live RLS/RPC negatives in `LIVE_STAGING_VERIFICATION_2026-08-04.md` (cross-department read denied, raw-vs-safe boundary, self/unauthorized approve denied, SoD triple).
+- **Done:** every signature is enumerated against the **current** live SQL catalog (135 functions), each with a pinned `search_path` (0 offenders) and its exact caller boundary (48 server-only / 85 authenticated-only / 2 anon+authenticated). Test `54_security_definer_inventory.sql` now inspects every signature and fails on PUBLIC/anon drift, unsafe owner/path, dynamic SQL, an unclassified mutation, a missing rejection path, or wrapper/token-gate drift. Existing live RLS/RPC negatives cover cross-department read denial, raw-vs-safe boundaries, unauthorized/self approval, and the SoD triple.
 - **Live per-signature attestation (2026-08-04, catalog-queried):**
-  - **Owner:** all 134 owned uniformly by **`postgres`** (no lower-privilege or unexpected owner).
-  - **`search_path`:** all fixed / non-mutable — **133 = `search_path=public`**, **1 = `search_path=public, extensions`** (the lone extension-using function); advisor `function_search_path_mutable = 0`.
-  - **Grants:** **48** `service_role`-only · **84** `authenticated`+`service_role` · **2** `anon`+`authenticated`+`service_role` (the token-gated supplier pair); `service_role` can execute all; `PUBLIC` executes none.
+  - **Owner:** all 135 owned uniformly by **`postgres`** (no lower-privilege or unexpected owner).
+  - **`search_path`:** all fixed / non-mutable — **134 = `search_path=public`**, **1 = `search_path=public, extensions`**; advisor `function_search_path_mutable = 0`.
+  - **Grants:** **48** `service_role`-only · **85** `authenticated`+`service_role` · **2** `anon`+`authenticated`+`service_role` (the token-gated supplier pair); `service_role` can execute all; `PUBLIC` executes none.
 - **Per-signature negative-execution tests (added):** `db/portal-tests/46_definer_authz_negatives.sql` (10 build-failing assertions) proves a **bare `authenticated` caller is rejected** by each security-critical DEFINER write RPC — `portal_save_job`, `portal_delete_user`, `portal_set_committee`, `portal_set_committee_policy`, `portal_budget_set`, `portal_currency_set`, `portal_beneficiary_save`, `portal_save_department`, `portal_recurring_save`, `portal_delete_department`. Verified locally in the full suite (EXIT 0).
-- **Remaining for closure:** extend negative-execution coverage to the rest of the authenticated write surface (the 10 above are the highest-risk admin/finance mutations; more can be added on the same pattern), and the **fresh independent adversarial review** (externally blocked — Codex usage limit). Until both land, this blocker stays **OPEN**.
+- **Remaining for closure:** the catalog/body review is now exhaustive and automated, but the 10 direct negative-execution cases do not exercise every authenticated write signature with a valid seeded target. A **fresh independent adversarial reviewer** must also sign off; this agent cannot honestly self-certify independence. Until both land, this blocker stays **OPEN**.
 
-**Gate 1 remains HELD; verdict NOT READY. No code/DB/production change was made to produce this document.**
+**Gate 1 remains HELD; verdict NOT READY FOR PRODUCTION. The 2026-08-09 live review was read-only.**

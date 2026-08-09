@@ -77,11 +77,15 @@ export const portalUrl = (env) => String((env && env.PORTAL_SUPABASE_URL) || '')
 export const portalKey = (env) => String((env && env.PORTAL_SUPABASE_SERVICE_ROLE_KEY) || '');
 export const portalConfigured = (env) => !!(portalUrl(env) && portalKey(env));
 
-export const svcHeaders = (env) => ({
-  apikey: portalKey(env),
-  Authorization: `Bearer ${portalKey(env)}`,
-  'Content-Type': 'application/json',
-});
+export const svcHeaders = (env) => {
+  const key = portalKey(env);
+  const headers = { apikey: key, 'Content-Type': 'application/json' };
+  // Supabase's new sb_secret_* keys are API keys, not JWTs. Sending one as a
+  // Bearer token makes PostgREST reject the request. Legacy service_role JWTs
+  // still require the Authorization header during the staged migration.
+  if (!key.startsWith('sb_secret_')) headers.Authorization = `Bearer ${key}`;
+  return headers;
+};
 
 // ── قراءة الطلب/الأقسام/سلاسل الاعتماد (بصلاحية الخادم) ──
 export async function loadRequest(env, base, id) {
