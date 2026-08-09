@@ -15,21 +15,12 @@
  * يتطلّب playwright + Chromium (/opt/pw-browsers). تشغيل: node scripts/e2e/portal-inline-smoke.test.mjs
  */
 import { createServer } from 'node:http';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-
-// حلّ مسار Chromium المُثبَّت مسبقاً (إصدار الحزمة قد لا يطابق مجلّد المتصفّح — نتفادى التنزيل).
-function resolveChromium() {
-  const bp = process.env.PLAYWRIGHT_BROWSERS_PATH || '/opt/pw-browsers';
-  try {
-    const dirs = readdirSync(bp).filter((d) => d.startsWith('chromium-'));
-    for (const d of dirs) { const p = join(bp, d, 'chrome-linux', 'chrome'); if (existsSync(p)) return p; }
-  } catch (e) { /* ignore */ }
-  return undefined; // دع playwright يحاول افتراضيّاً
-}
+import { resolveChromiumExecutable } from './chromium-path.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
@@ -74,7 +65,8 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 let ok = 0; const pass = (m) => { console.log('  ✓ ' + m); ok++; };
 const pageErrors = []; const consoleErrors = [];
-const browser = await chromium.launch({ args: ['--no-sandbox'], executablePath: resolveChromium() });
+const chromiumPath = resolveChromiumExecutable();
+const browser = await chromium.launch({ args: ['--no-sandbox'], ...(chromiumPath ? { executablePath: chromiumPath } : {}) });
 try {
   const page = await browser.newPage();
   page.on('pageerror', (e) => pageErrors.push(String(e && e.message || e)));

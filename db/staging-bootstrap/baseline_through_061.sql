@@ -7077,6 +7077,11 @@ END $fn$;
 REVOKE ALL ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint) TO authenticated;
 
+-- P0-1w: future application functions are private until their migration grants
+-- the exact API roles intentionally. Existing reviewed function ACLs are unchanged.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated, service_role;
+
 -- تحقّق:
 --   SELECT portal_beneficiary_save(NULL,'شركة نور','company','SA0000000000000000000001','حساب نور');
 --   SELECT has_function_privilege('anon','portal_create_expense(text,numeric,text,text,text,date,jsonb,text,bigint)','EXECUTE'); ⇒ false

@@ -12,6 +12,7 @@
  * الاختبار الحتميّ بلا staging خارجيّ: scripts/e2e/browser-fixture.test.mjs.
  */
 import { supabaseRefOfHost } from './net-allow.mjs';
+import { resolveChromiumExecutable } from './chromium-path.mjs';
 
 const PROD_REF = 'mwbjoysuybgbrvfrprex';
 function die(m) { console.error('❌ browser-run: ' + m); process.exit(2); }
@@ -41,7 +42,7 @@ function allowed(u) {
 }
 
 // المتصفّح: يُفضَّل مسار صريح (PW_CHROMIUM_PATH) لبيئات بمتصفّح مثبَّت مسبقاً؛ وإلّا حزمة playwright المُدارة.
-const execPath = process.env.PW_CHROMIUM_PATH || undefined;
+const execPath = resolveChromiumExecutable();
 // --no-sandbox لازم لبيئات الحاويات/CI (يعمل بجذر) وحميد في غيرها.
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], ...(execPath ? { executablePath: execPath } : {}) });
 // (F3) Service Workers محظورة على مستوى السياق.

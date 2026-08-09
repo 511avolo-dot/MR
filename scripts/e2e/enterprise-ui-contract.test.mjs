@@ -22,6 +22,7 @@ const finalRemediation = readFileSync('db/portal-migrations/p0_1l-final-independ
 const directExpenseBoundary = readFileSync('db/portal-migrations/p0_1n-direct-expense-raw-read-boundary.sql', 'utf8');
 const permissionOverrides = readFileSync('db/portal-migrations/p0_1s-per-user-permission-overrides.sql', 'utf8');
 const anonExecuteRevocation = readFileSync('db/portal-migrations/p0_1v-anon-execute-revocation.sql', 'utf8');
+const functionDefaultPrivileges = readFileSync('db/portal-migrations/p0_1w-function-default-privileges-hardening.sql', 'utf8');
 const governanceFlags = readFileSync('db/portal-migrations/p0_1t-governance-flags-rpc.sql', 'utf8');
 const workflowSave = readFileSync('db/portal-migrations/p0_1u-workflow-save-rpc.sql', 'utf8');
 const supabasePush = readFileSync('scripts/deploy/supabase-push.mjs', 'utf8');
@@ -159,6 +160,11 @@ assert.match(workflowSave, /portal_save_workflow\(text,text,int,text,numeric,num
 assert.match(workflowSave, /portal_delete_workflow\(text\) FROM PUBLIC, anon/);
 ok('P0-1s/P0-1t/P0-1u explicitly revoke anonymous execution from new privileged RPCs');
 
+assert.match(functionDefaultPrivileges, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public/);
+assert.match(functionDefaultPrivileges, /REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated, service_role/);
+assert.doesNotMatch(functionDefaultPrivileges, /\b063[_-]/);
+ok('future application functions fail closed until API roles are explicitly granted EXECUTE');
+
 assert.match(cleanup, /vpfnycxzqziltsnzxbpb/);
 assert.match(cleanup, /aldeyabi-quotes-staging/);
 assert.match(cleanup, /MAX_EXPIRED_RECEIPTS = 50/);
@@ -189,7 +195,7 @@ assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
 assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
 ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
 
-const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, governanceFlags, workflowSave, cleanup].join('\n');
+const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, functionDefaultPrivileges, governanceFlags, workflowSave, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);
 assert.doesNotMatch(combined, /eyJ[a-zA-Z0-9_-]{20,}\./);
 ok('changed runtime/security assets contain no production project reference or JWT-like secret');

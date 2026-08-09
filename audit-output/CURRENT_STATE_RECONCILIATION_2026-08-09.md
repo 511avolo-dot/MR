@@ -3,7 +3,7 @@
 > Reconciliation of PR #74 and Supabase staging `vpfnycxzqziltsnzxbpb`, followed by the
 > owner-authorized, forward-only `p0_1v` ACL repair on staging.
 > Production, `main`, R2, data rows, and configuration values were not mutated. Staging migration
-> history changed only by the recorded `p0_1v` migration described below.
+> history changed only by the recorded `p0_1v` and `p0_1w` security migrations described below.
 > Migration 063 was neither created nor applied. Gate 1 remains **HELD / NOT READY**.
 
 ## Repository and PR
@@ -23,6 +23,7 @@
 | `p0_1r_jobs_permission_whitelist_disbursement` | applied | `20260808010845` |
 | `p0_1s_per_user_permission_overrides` | applied | `20260808010943` |
 | `p0_1v_anon_execute_revocation` | applied and verified | `20260809075255` |
+| `p0_1w_function_default_privileges_hardening` | applied and verified | `20260809081015` |
 | `p0_1t_governance_flags_rpc` | not listed / not applied | — |
 | `p0_1u_workflow_save_rpc` | not listed / not applied | — |
 
@@ -68,6 +69,24 @@ After the owner delegated the technical disposition, `p0_1v` was applied to stag
   `portal_set_user_permission` is absent; the authenticated finding remains an intentional reviewed
   API surface and does not close the wider Security Advisor gate.
 
+## Preventive ACL hardening and executable tests
+
+`p0_1w` removes automatic `EXECUTE` grants on future `postgres`-owned functions in `public` from
+`PUBLIC`, `anon`, `authenticated`, and `service_role`. Existing reviewed function ACLs are unchanged;
+every future API function must grant its intended roles explicitly. Live catalog verification after
+migration `20260809081015` shows only the owner `postgres` in that default function ACL.
+
+The two intentional anonymous supplier endpoints were probed under the live `anon` role with a dummy,
+nonexistent token: `portal_supplier_rfq` returned `{ok:false, reason:"invalid"}`, and
+`portal_supplier_submit` raised `رابط غير صالح` before any write. The three P0-1s functions retained
+their expected post-`p0_1v` ACLs.
+
+The complete local Node/browser run now executes rather than skipping Chromium: **154 assertions passed,
+0 failed** across 10 test files. This includes 21 real-browser checks (fixture 6, inline portal 7,
+enterprise UI 8), plus deterministic baseline verification. The SQL suite is registered at **336**
+assertions; it still requires a disposable PostgreSQL test database for a complete `run.sh` execution.
+The new four default-ACL assertions were independently verified against live staging.
+
 ## Remaining owner/gate actions
 
 1. Retain the already-live `p0_1r` and `p0_1s`: rolling them back would restore the permission defects
@@ -75,7 +94,8 @@ After the owner delegated the technical disposition, `p0_1v` was applied to stag
    disposition is retain after ACL repair and verification.
 2. Keep `p0_1t/p0_1u` unapplied until their larger feature surfaces are separately gated; `p0_1u`
    remains transitional, not Stage 5.
-3. Run exact-head CI and the non-skipped credentialed hosted browser E2E.
+3. Run exact-head CI and the credentialed hosted multi-role browser E2E. Local real-browser tests now
+   run fully, but they do not replace authenticated hosted role identities.
 4. Complete the existing owner-only items: retain `p0_1o/p0_1p` with their flags disabled pending
    independent verification, staging key/password rotation,
    leaked-password protection or accepted risk, QA/R2 residue attestation/purge, and independent review.

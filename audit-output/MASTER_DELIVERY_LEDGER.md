@@ -776,3 +776,24 @@ Engineering disposition is to retain the live `p0_1r/p0_1s` fixes and the older 
 the latter's release flags remain disabled. `p0_1t/p0_1u` remain unapplied. Gate 1 remains
 **HELD / NOT READY**. No Production, `main`, R2, config, or data write was performed; staging migration
 history changed only for `p0_1v`; no migration 063.
+
+## 19. 2026-08-09 executable follow-through — browser runtime + deny-by-default future functions
+
+The owner instructed execution and testing based on engineering evidence. The previously skipped local
+Playwright suites were made environment-portable: an explicit Playwright/CI browser remains preferred,
+with an installed Chrome/Edge executable used only as a local fallback. All three formerly blocked suites
+then executed successfully. The complete Node/browser run is **154 passed / 0 failed** across 10 files;
+baseline generation/check is deterministic at
+`e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
+
+Forward migration `p0_1w_function_default_privileges_hardening` was applied and verified on staging as
+`20260809081015`. Future `postgres`-owned functions in `public` no longer auto-grant `EXECUTE` to
+`PUBLIC`, `anon`, `authenticated`, or `service_role`; existing reviewed ACLs were unchanged. Four SQL
+regressions raise the registered suite from 332 to **336** assertions. Live dummy-token probes also prove
+the two intentional anonymous supplier endpoints fail closed before writes. Security Advisor remains
+**97 (7 INFO / 90 WARN)** because the preventive default ACL changes no current function grants.
+
+Gate 1 remains **HELD / NOT READY**: no exact-head Actions run or credentialed hosted multi-role journey
+exists, remaining definer surfaces still need per-signature disposition/independent review, and leaked
+password protection/key rotation/QA-R2 classification remain external operational actions. Production,
+`main`, production R2, live data, and release flags were untouched; no migration 063.

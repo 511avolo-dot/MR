@@ -112,5 +112,8 @@ run_sql "اختبار p0_1t: تبديل الضوابط أدمن فقط + قائ�
 run_sql "p0_1u: حفظ مسار الاعتماد من المصمّم (تكليف المالك C6)" "$ROOT/db/portal-migrations/p0_1u-workflow-save-rpc.sql"
 run_sql "اختبار p0_1u: حفظ/حذف المسار أدمن فقط + تحقّق بنيوي" "$HERE/52_workflow_designer.sql"
 
+run_sql "p0_1w: منع منح EXECUTE تلقائياً لأي دالة تطبيق مستقبلية" "$ROOT/db/portal-migrations/p0_1w-function-default-privileges-hardening.sql"
+run_sql "اختبار p0_1w: الصلاحيات الافتراضية للدوال تفشل مغلقة" "$HERE/53_function_default_privileges.sql"
+
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (332 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (336 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."

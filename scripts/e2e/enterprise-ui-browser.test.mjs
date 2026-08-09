@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { resolveChromiumExecutable } from './chromium-path.mjs';
 
 const rootFiles = new Map([
   ['/assets/portal-functional-studios.css', ['text/css; charset=utf-8', readFileSync('assets/portal-functional-studios.css')]],
@@ -84,7 +85,8 @@ const address = server.address();
 const base = `http://127.0.0.1:${address.port}`;
 let browser;
 try {
-  browser = await chromium.launch({ headless: true });
+  const chromiumPath = resolveChromiumExecutable();
+  browser = await chromium.launch({ headless: true, ...(chromiumPath ? { executablePath: chromiumPath } : {}) });
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(base, { waitUntil: 'networkidle' });
