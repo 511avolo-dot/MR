@@ -81,7 +81,7 @@ nonexistent token: `portal_supplier_rfq` returned `{ok:false, reason:"invalid"}`
 `portal_supplier_submit` raised `رابط غير صالح` before any write. The three P0-1s functions retained
 their expected post-`p0_1v` ACLs.
 
-The complete local Node/browser run now executes rather than skipping Chromium: **157 assertions passed,
+The complete local Node/browser run now executes rather than skipping Chromium: **158 assertions passed,
 0 failed** across 10 test files. This includes 21 real-browser checks (fixture 6, inline portal 7,
 enterprise UI 8), plus deterministic baseline verification. The SQL suite is registered at **336**
 assertions; it still requires a disposable PostgreSQL test database for a complete `run.sh` execution.

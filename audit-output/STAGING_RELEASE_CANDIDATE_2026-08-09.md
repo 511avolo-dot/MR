@@ -15,7 +15,7 @@
 
 ## Executed evidence
 
-- Local Node/browser suite: **157 passed / 0 failed / 0 skipped** across 10 files.
+- Local Node/browser suite: **158 passed / 0 failed / 0 skipped** across 10 files.
 - Real-browser subset: **21 passed** (network boundary, inline portal, enterprise UI).
 - Baseline deterministic check passed at
   `e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
@@ -30,6 +30,8 @@
 ## Release gates changed to fail closed
 
 - `portal-tests.yml` now supports `workflow_dispatch` and normal pushes to the certification branch.
+- `hosted-preview-smoke.yml` now runs on certification-branch pushes, so a green gate is tied to the
+  exact branch head rather than depending on a PR path event or a manual run.
 - `authenticated-e2e.yml` no longer succeeds when `STAGING_E2E_USERS` is missing. A green run now means
   the credentialed journey executed rather than silently skipping.
 

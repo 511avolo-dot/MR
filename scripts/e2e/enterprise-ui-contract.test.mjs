@@ -198,10 +198,14 @@ ok('CI path filters include the shared API helper and hosted smoke is bound to t
 
 assert.match(portalWorkflow, /workflow_dispatch:/);
 assert.match(portalWorkflow, /branches: \[main, audit\/enterprise-certification-2026-07-27\]/);
+assert.match(portalWorkflow, /permissions:\s*\n\s*contents: read/);
+assert.match(portalWorkflow, /\.gitattributes/);
+assert.match(hostedWorkflow, /push:\s*\n\s*branches: \[audit\/enterprise-certification-2026-07-27\]/);
 assert.match(authenticatedWorkflow, /STAGING_E2E_USERS secret is not set — authenticated release gate cannot run/);
 assert.match(authenticatedWorkflow, /echo "::error::[^"]+"\s*\n\s*exit 1/);
 assert.doesNotMatch(authenticatedWorkflow, /authenticated E2E SKIPPED/);
 ok('release workflows are manually triggerable and missing authenticated credentials fail closed');
+ok('exact-head CI and hosted Preview gates run on certification-branch pushes with read-only contents access');
 
 const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, functionDefaultPrivileges, governanceFlags, workflowSave, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);

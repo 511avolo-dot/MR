@@ -1,6 +1,19 @@
 name: hosted-preview-smoke
 
 on:
+  push:
+    branches: [audit/enterprise-certification-2026-07-27]
+    paths:
+      - 'purchase-portal.html'
+      - 'assets/**'
+      - 'functions/_middleware.js'
+      - 'functions/api/portal-config.js'
+      - 'functions/api/portal-doc.js'
+      - 'functions/api/portal-quote.js'
+      - 'functions/api/portal-upload-cleanup.js'
+      - 'functions/api/_portal-shared.js'
+      - 'scripts/e2e/hosted-preview-smoke.mjs'
+      - '.github/workflows/hosted-preview-smoke.yml'
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]

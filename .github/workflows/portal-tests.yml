@@ -24,6 +24,7 @@ on:
       - 'deploy/**'
       - 'supplier-quote.html'
       - '.github/workflows/pages.yml'
+      - '.gitattributes'
   push:
     branches: [main, audit/enterprise-certification-2026-07-27]
     paths:
@@ -45,6 +46,10 @@ on:
       - 'deploy/**'
       - 'supplier-quote.html'
       - '.github/workflows/pages.yml'
+      - '.gitattributes'
+
+permissions:
+  contents: read
 
 jobs:
   test:
