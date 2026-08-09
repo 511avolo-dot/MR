@@ -30,6 +30,7 @@ const cleanup = readFileSync('functions/api/portal-upload-cleanup.js', 'utf8');
 const portal = readFileSync('purchase-portal.html', 'utf8');
 const portalWorkflow = readFileSync('.github/workflows/portal-tests.yml', 'utf8');
 const hostedWorkflow = readFileSync('.github/workflows/hosted-preview-smoke.yml', 'utf8');
+const authenticatedWorkflow = readFileSync('.github/workflows/authenticated-e2e.yml', 'utf8');
 const hostedSmoke = readFileSync('scripts/e2e/hosted-preview-smoke.mjs', 'utf8');
 const portalConfig = readFileSync('functions/api/portal-config.js', 'utf8');
 
@@ -194,6 +195,13 @@ assert.match(hostedWorkflow, /EXPECTED_COMMIT_SHA/);
 assert.match(hostedSmoke, /config\.commit !== expectedCommit/);
 assert.match(portalConfig, /CF_PAGES_COMMIT_SHA/);
 ok('CI path filters include the shared API helper and hosted smoke is bound to the exact commit');
+
+assert.match(portalWorkflow, /workflow_dispatch:/);
+assert.match(portalWorkflow, /branches: \[main, audit\/enterprise-certification-2026-07-27\]/);
+assert.match(authenticatedWorkflow, /STAGING_E2E_USERS secret is not set — authenticated release gate cannot run/);
+assert.match(authenticatedWorkflow, /echo "::error::[^"]+"\s*\n\s*exit 1/);
+assert.doesNotMatch(authenticatedWorkflow, /authenticated E2E SKIPPED/);
+ok('release workflows are manually triggerable and missing authenticated credentials fail closed');
 
 const combined = [middleware, functionalCss, generatedCss, quoteCss, accessCss, docs, generated, quotes, policies, access, paymentEvidence, portalDoc, hardening, remediation, independentRemediation, finalRemediation, directExpenseBoundary, permissionOverrides, anonExecuteRevocation, functionDefaultPrivileges, governanceFlags, workflowSave, cleanup].join('\n');
 assert.doesNotMatch(combined, /mwbjoysuybgbrvfrprex/);

@@ -2,8 +2,8 @@ name: authenticated-multirole-e2e
 
 # Runs the authenticated multi-role hosted Playwright journey against the isolated
 # staging Preview. It requires the STAGING_E2E_USERS repository secret (role login
-# credentials — set by the owner; never in code). Without that secret the job
-# no-ops: it does not install Chromium or run, so pushes stay cheap and green.
+# credentials — set by the owner; never in code). Without that secret the release
+# gate fails explicitly; a green workflow must mean the journey really executed.
 #
 # Triggers: push to the certification branch (dispatch API needs actions:write which
 # the bot lacks, and the workflow is not on the default branch, so push is the
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Owner-set Actions secret: JSON map of role -> test user. Empty ⇒ the job no-ops.
+      # Owner-set Actions secret: JSON map of role -> test user. Empty ⇒ fail closed.
       STAGING_E2E_USERS: ${{ secrets.STAGING_E2E_USERS }}
       PREVIEW_BASE_URL: https://audit-enterprise-certificati.aldeyabi-procurement.pages.dev
       EXPECTED_STAGING_REF: vpfnycxzqziltsnzxbpb
@@ -54,7 +54,8 @@ jobs:
             echo "STAGING_E2E_USERS present — will execute the authenticated journey."
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::STAGING_E2E_USERS secret is not set — authenticated E2E SKIPPED (no gate evidence)."
+            echo "::error::STAGING_E2E_USERS secret is not set — authenticated release gate cannot run."
+            exit 1
           fi
       - name: Install Chromium (pinned Playwright)
         if: steps.gate.outputs.run == 'true'

@@ -782,7 +782,7 @@ history changed only for `p0_1v`; no migration 063.
 The owner instructed execution and testing based on engineering evidence. The previously skipped local
 Playwright suites were made environment-portable: an explicit Playwright/CI browser remains preferred,
 with an installed Chrome/Edge executable used only as a local fallback. All three formerly blocked suites
-then executed successfully. The complete Node/browser run is **154 passed / 0 failed** across 10 files;
+then executed successfully. The complete Node/browser run is **155 passed / 0 failed** across 10 files;
 baseline generation/check is deterministic at
 `e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
 
