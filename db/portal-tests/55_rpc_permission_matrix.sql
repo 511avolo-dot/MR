@@ -186,12 +186,11 @@ BEGIN
   IF length(t1)<>43 OR t1=t2 OR t1 !~ '^[0-9A-Za-z]{43}$' THEN RAISE EXCEPTION 'M13 FAIL token contract'; END IF;
   PERFORM set_config('request.jwt.claims','{"email":"m55_fin@aldeyabi.com","role":"authenticated"}',true);
   IF NOT portal_has_perm('can_see_finance') OR portal_has_perm('can_manage_users') THEN RAISE EXCEPTION 'M14 FAIL finance permissions'; END IF;
-  IF portal_is_service() OR portal_is_privileged() IS NOT TRUE THEN
-    -- Test harness session_user is postgres, hence privileged=true is expected here.
-    RAISE EXCEPTION 'M15/M16 FAIL harness privilege/service identity';
+  IF portal_is_service() OR portal_is_privileged() THEN
+    RAISE EXCEPTION 'M15/M16 FAIL authenticated identity gained service privilege';
   END IF;
   PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
-  IF NOT portal_is_service() THEN RAISE EXCEPTION 'M16 FAIL service claim'; END IF;
+  IF NOT portal_is_service() OR NOT portal_is_privileged() THEN RAISE EXCEPTION 'M16 FAIL service claim'; END IF;
   PERFORM set_config('request.jwt.claims','{"email":"m55_req@aldeyabi.com","role":"authenticated"}',true);
   s := portal_my_scope();
   IF s <> 'sector' OR portal_my_sector() IS NULL THEN RAISE EXCEPTION 'M18/M19 FAIL scope=% sector=%',s,portal_my_sector(); END IF;
@@ -203,7 +202,7 @@ BEGIN
   THEN RAISE EXCEPTION 'M21 FAIL recurring schedule'; END IF;
   RAISE NOTICE 'PASS M13 portal_gen_token length, alphabet, uniqueness';
   RAISE NOTICE 'PASS M14 portal_has_perm true + false capability';
-  RAISE NOTICE 'PASS M15 portal_is_privileged harness boundary classified';
+  RAISE NOTICE 'PASS M15 portal_is_privileged rejects session_user and requires service claim';
   RAISE NOTICE 'PASS M16 portal_is_service auth + service claims';
   RAISE NOTICE 'PASS M18 portal_my_scope job-derived sector scope';
   RAISE NOTICE 'PASS M19 portal_my_sector resolves profile department sector';
