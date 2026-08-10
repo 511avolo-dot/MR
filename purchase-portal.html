@@ -2566,6 +2566,7 @@ try{document.documentElement.style.setProperty('--wm','url('+LOGO_COL+')');}catc
    وقت التشغيل من /api/portal-config الذي يُحدّده حسب بيئة Cloudflare (إنتاج/معاينة) ويرفض
    استخدام مشروع الإنتاج في المعاينة. عند فشل الإعداد لا نتّصل — نُظهر خطأ إعداد ظاهر. */
 let SUPABASE_URL=null, SUPABASE_ANON_KEY=null, SB=null;
+let PORTAL_CAPABILITIES=Object.freeze({workflowDesignerWrite:false});
 async function __bootConfig(){
   try{
     const r = await fetch('/api/portal-config', { cache:'no-store' });
@@ -2574,6 +2575,9 @@ async function __bootConfig(){
       throw new Error((c&&c.error) || 'تعذّر تحميل إعداد البيئة');
     }
     SUPABASE_URL=c.url; SUPABASE_ANON_KEY=c.anonKey;
+    PORTAL_CAPABILITIES=Object.freeze({
+      workflowDesignerWrite:!!(c.capabilities&&c.capabilities.workflowDesignerWrite===true)
+    });
     SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
     return true;
   }catch(e){
@@ -6551,8 +6555,12 @@ function pa_wfStageToDb(s,i){
   else { out.resolver='dept_manager'; }
   return out;
 }
+function pa_workflowWriteEnabled(){
+  return !!(PORTAL_CAPABILITIES&&PORTAL_CAPABILITIES.workflowDesignerWrite===true);
+}
 async function pa_saveWorkflow(){
   try{
+    if(!pa_workflowWriteEnabled()){ toast('حفظ المسارات غير مفعّل في هذه البيئة — المصمّم للقراءة فقط','info'); return; }
     var wf=(typeof getWF==='function')?getWF():null;
     if(!wf){ toast('لا مسار محدّد','err'); return; }
     if(wf.id==='award'){ toast('سلسلة التعميد تُدار من مصفوفة DoA لا من هنا','info'); return; }
@@ -6566,6 +6574,7 @@ async function pa_saveWorkflow(){
   }catch(e){ toast(String((e&&e.message)||'تعذّر الحفظ'),'err'); }
 }
 async function pa_deleteWorkflow(){
+  if(!pa_workflowWriteEnabled()){ toast('حذف المسارات غير مفعّل في هذه البيئة — المصمّم للقراءة فقط','info'); return; }
   var wf=(typeof getWF==='function')?getWF():null;
   if(!wf || wf.id==='award'){ toast('لا يمكن حذف هذا المسار من هنا','info'); return; }
   if(!window.confirm('حذف المسار «'+(wf.name||wf.id)+'»؟ (يُعطَّل تلقائياً إن كان مستخدَماً في طلبات قائمة)')) return;
@@ -6577,11 +6586,18 @@ async function pa_deleteWorkflow(){
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
   designerHTML=function(){ var h=_pa_refDesignerHTML();
     try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
+      var wfWrite=pa_workflowWriteEnabled();
+      var wfActions=wfWrite
+        ? '<button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button>'
+          +'<button class="btn btn-danger btn-sm" onclick="pa_deleteWorkflow()">'+ic('trash',14)+' حذف المسار</button>'
+        : '<button class="btn btn-gold" disabled aria-disabled="true">'+ic('check',15)+' حفظ المسار</button>'
+          +'<button class="btn btn-danger btn-sm" disabled aria-disabled="true">'+ic('trash',14)+' حذف المسار</button>';
       h+='<div class="card" style="margin-top:14px;border-color:var(--gold)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
         +'<div style="flex:1;min-width:200px"><div style="font-weight:800;color:var(--ink)">'+ic('route',15)+' حفظ المسار إلى القاعدة</div>'
-        +'<div class="muted" style="font-size:11.5px">التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.</div></div>'
-        +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button>'
-        +'<button class="btn btn-danger btn-sm" onclick="pa_deleteWorkflow()">'+ic('trash',14)+' حذف المسار</button></div></div></div>';
+        +'<div class="muted" style="font-size:11.5px">'+(wfWrite
+          ? 'التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.'
+          : '<b>وضع قراءة فقط:</b> حفظ وحذف المسارات غير مفعّلين في هذه البيئة حتى تُطبّق قدرة P0-1u وتُختبر مستقلاً.')+'</div></div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+wfActions+'</div></div></div>';
     } }catch(e){}
     return h; };
 }

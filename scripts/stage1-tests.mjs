@@ -259,6 +259,11 @@ async function cfg(env) { const res = await onRequestGet({ env }); return { stat
   r = await cfg(prev({}));
   assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, STAGING);
   assert.equal(r.body.commit, '1234567890abcdef1234567890abcdef12345678'); ok('معاينة على staging بمفتاح مربوط ⇒ ok + commit identity');
+  assert.equal(r.body.capabilities.workflowDesignerWrite, false);
+  ok('حفظ مصمّم المسارات معطّل افتراضياً (fail-closed)');
+  r = await cfg(prev({ PORTAL_WORKFLOW_DESIGNER_WRITE_ENABLED: 'true' }));
+  assert.equal(r.status, 200); assert.equal(r.body.capabilities.workflowDesignerWrite, true);
+  ok('قدرة حفظ المصمّم لا تُفتح إلا بقيمة بيئية صريحة');
   // main + مرجع الإنتاج + مفتاح مربوط للإنتاج ⇒ ok
   r = await cfg({ PORTAL_SUPABASE_URL: prodUrl, PORTAL_SUPABASE_ANON_KEY: anonProd, PORTAL_SUPABASE_SERVICE_ROLE_KEY: svcRole, QUOTES_BUCKET: bkt, CF_PAGES_BRANCH: 'main' });
   assert.equal(r.status, 200); assert.equal(r.body.ok, true); assert.equal(r.body.ref, PROD); ok('إنتاج على main بمفتاح مربوط ⇒ ok');

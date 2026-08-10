@@ -82,7 +82,7 @@ try {
 
   // (2) الدوال الجديدة موجودة في النطاق العامّ
   const expected = ['pa_actionBanner','pa_auditVerify','pa_deleteWorkflow','pa_disbFlow','pa_docPrint','pa_docView',
-    'pa_govCard','pa_permMatrixHTML','pa_saveWorkflow','pa_setGovFlag','togglePerm','userCard'];
+    'pa_govCard','pa_permMatrixHTML','pa_saveWorkflow','pa_setGovFlag','pa_workflowWriteEnabled','togglePerm','userCard'];
   const present = await page.evaluate((names) => names.filter((n) => typeof window[n] === 'function'), expected);
   assert.deepEqual(present.sort(), expected.slice().sort(),
     'missing converter functions: got ' + JSON.stringify(present));
@@ -115,6 +115,20 @@ try {
     else { assert.ok(r.ok, name + ' threw: ' + JSON.stringify(r));
       pass(name + ' executes in-browser without throwing'); }
   }
+
+  const designerGate = await page.evaluate(() => {
+    window.ME = 'admin';
+    window.USERS = { admin: { n:'مدير البوابة', r:'مدير', job:'gm', admin:true, perms:{} } };
+    window.isAdmin = () => true;
+    const html = window.designerHTML();
+    return {
+      enabled: window.pa_workflowWriteEnabled(),
+      disabledButtons: (html.match(/disabled aria-disabled="true"/g) || []).length,
+      readOnlyNotice: html.includes('وضع قراءة فقط'),
+    };
+  });
+  assert.deepEqual(designerGate, { enabled:false, disabledButtons:2, readOnlyNotice:true });
+  pass('workflow designer fails closed to visible read-only controls when capability is absent');
 
   // (4) لا أخطاء console حرجة من تنفيذنا (تحذيرات الشبكة للأصول المُكعَّبة مقبولة — نتحقّق من عدم رمي دوالنا فقط)
   assert.equal(pageErrors.length, 0, 'late uncaught pageerror(s): ' + JSON.stringify(pageErrors));

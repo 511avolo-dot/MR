@@ -193,6 +193,13 @@ assert.match(portal, /d\.verification==='verified'/);
 assert.match(portal, /pa_recoverLegacyEvidence/);
 ok('portal consumes job-aware direct permission, safe requester feeds and verified-document state');
 
+assert.match(portalConfig, /PORTAL_WORKFLOW_DESIGNER_WRITE_ENABLED/);
+assert.match(portalConfig, /capabilities: \{ workflowDesignerWrite \}/);
+assert.match(portal, /PORTAL_CAPABILITIES=Object\.freeze\(\{workflowDesignerWrite:false\}\)/);
+assert.match(portal, /function pa_workflowWriteEnabled\(\)/);
+assert.match(portal, /disabled aria-disabled="true"/);
+ok('workflow designer remains visibly read-only until its staging RPC capability is explicitly enabled');
+
 assert.match(portalWorkflow, /functions\/api\/_portal-shared\.js/);
 assert.match(hostedWorkflow, /functions\/api\/_portal-shared\.js/);
 assert.match(hostedWorkflow, /EXPECTED_COMMIT_SHA/);
