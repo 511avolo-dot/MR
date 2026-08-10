@@ -40,6 +40,7 @@ END $t$;
 DO $t$
 DECLARE ben bigint; sup bigint; bc bigint; sc bigint;
 BEGIN
+  PERFORM set_config('request.jwt.claims','{"email":"m55_admin@aldeyabi.com","role":"authenticated"}',true);
   INSERT INTO portal_beneficiaries(name,btype,iban,created_by)
     VALUES ('M55 beneficiary','company','SA0000000000000000000000','m55_fin') RETURNING id INTO ben;
   INSERT INTO portal_beneficiary_iban_changes(beneficiary_id,old_iban,new_iban,status,requested_by)
@@ -157,6 +158,7 @@ END $t$;
 DO $t$
 DECLARE sid bigint;
 BEGIN
+  PERFORM set_config('request.jwt.claims','{"email":"m55_admin@aldeyabi.com","role":"authenticated"}',true);
   INSERT INTO portal_currencies(code,name,rate_to_base,active) VALUES ('M55','Matrix',2,true) ON CONFLICT (code) DO UPDATE SET rate_to_base=2;
   INSERT INTO portal_jobs(key,title,category,scope,permissions,active) VALUES ('m55_delete','Delete me','qa','own','{}',true) ON CONFLICT (key) DO NOTHING;
   INSERT INTO portal_suppliers(name,created_by) VALUES ('M55 unlinked supplier','m55_admin') RETURNING id INTO sid;
