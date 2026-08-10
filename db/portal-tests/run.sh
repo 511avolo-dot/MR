@@ -115,6 +115,8 @@ run_sql "اختبار p0_1u: حفظ/حذف المسار أدمن فقط + تحق
 run_sql "p0_1w: منع منح EXECUTE تلقائياً لأي دالة تطبيق مستقبلية" "$ROOT/db/portal-migrations/p0_1w-function-default-privileges-hardening.sql"
 run_sql "اختبار p0_1w: الصلاحيات الافتراضية للدوال تفشل مغلقة" "$HERE/53_function_default_privileges.sql"
 run_sql "SECURITY DEFINER: exhaustive live-signature execution-boundary inventory" "$HERE/54_security_definer_inventory.sql"
+run_sql "Authenticated RPC permission matrix: direct coverage for previously implicit functions" "$HERE/55_rpc_permission_matrix.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (346 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (371 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+
