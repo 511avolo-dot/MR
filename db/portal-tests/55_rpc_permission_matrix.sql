@@ -228,7 +228,7 @@ BEGIN
   RAISE NOTICE 'PASS M22 portal_sla_tick bare no-op + procurement allow';
 END $t$;
 
--- Catalog closure: the current exact schema has 92 authenticated-executable
+-- Catalog closure: the current exact clean schema has 94 authenticated-executable
 -- signatures. A new signature must deliberately extend this matrix/suite.
 DO $t$
 DECLARE n int; names int;
@@ -237,8 +237,8 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace
   WHERE ns.nspname='public' AND p.proname LIKE 'portal\_%' ESCAPE '\'
     AND has_function_privilege('authenticated',p.oid,'EXECUTE');
-  IF n <> 92 OR names <> 91 THEN RAISE EXCEPTION 'M25 FAIL authenticated RPC inventory drift signatures=% names=%',n,names; END IF;
-  RAISE NOTICE 'PASS M25 authenticated RPC inventory closed at 92 signatures / 91 names';
+  IF n <> 94 OR names <> 93 THEN RAISE EXCEPTION 'M25 FAIL authenticated RPC inventory drift signatures=% names=%',n,names; END IF;
+  RAISE NOTICE 'PASS M25 authenticated RPC inventory closed at 94 signatures / 93 names';
 END $t$;
 
 SELECT 'RPC PERMISSION MATRIX: M1..M25 = 25/25 PASS' AS result;
