@@ -119,4 +119,3 @@ run_sql "Authenticated RPC permission matrix: direct coverage for previously imp
 
 echo ""
 echo "✅ كل اختبارات البوابة نجحت (371 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
-
