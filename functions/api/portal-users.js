@@ -19,6 +19,8 @@
  *     action: "create" | "setProfile" | "setActive" | "setPassword" | "delete"
  */
 
+import { svcHeaders } from './_portal-shared.js';
+
 const COMPANY_EMAIL_RE = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
 
 function json(obj, status = 200) {
@@ -42,7 +44,7 @@ const PORTAL_KEY = (env) => String((env && env.PORTAL_SUPABASE_SERVICE_ROLE_KEY)
 function sb(env) {
   const base = PORTAL_URL(env);
   const key = PORTAL_KEY(env);
-  const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const headers = svcHeaders(env);
   return {
     async verifyCaller(jwt) {
       const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${jwt}` } });

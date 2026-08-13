@@ -20,7 +20,7 @@ import {
   loadRequest, deptName, loadApprovals, loadAwardApprovals,
   notifyPending, notifyResult, notifyInfo, notifyProcurement, notifyDisbPending,
   resolveAwardStageApprovers, currentPendingStage, publicOrigin,
-  portalUrl, portalKey, portalConfigured,
+  portalUrl, portalKey, portalConfigured, svcHeaders,
 } from './_portal-shared.js';
 
 function json(obj, status = 200) {
@@ -43,7 +43,7 @@ async function verifyPortalStaff(env, base, jwt) {
     const u = await r.json();
     if (!u || !u.email) return { ok: false, reason: 'لا يوجد بريد في جلسة الدخول' };
     const email = String(u.email).toLowerCase();
-    const svc = { apikey: portalKey(env), Authorization: `Bearer ${portalKey(env)}` };
+    const svc = svcHeaders(env);
     const safe = email.replace(/[\\%_]/g, c => '\\' + c);
     const resp = await fetch(`${base}/rest/v1/portal_users?email=ilike.${encodeURIComponent(safe)}&select=username,active`, { headers: svc });
     if (!resp.ok) return { ok: false, reason: 'تعذّر التحقّق من قائمة المستخدمين' };

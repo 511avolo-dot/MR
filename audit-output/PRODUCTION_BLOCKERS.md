@@ -1,0 +1,51 @@
+# PRODUCTION BLOCKERS
+
+**Status (rev 3, 2026-08-03): `NOT READY`; do not promote or merge.**
+
+P0-1j closes the eight fresh exact-head review findings in code. Exact-head CI
+passed (256 SQL + 18 file-guard + 7 endpoint assertions), the Preview deployed,
+and the explicit cleanup path is configured; five proven staging R2 orphans
+were removed. The release remains blocked by authenticated hosted-browser E2E,
+one missing legacy quote object and pre-existing QA residue, advisor/password/
+credential-rotation gates, fresh independent review, and the unresolved owner/
+operational gates below. No Production Supabase resource was touched. See
+`P0_1J_EXACT_HEAD_REMEDIATION.md` for evidence and rollback.
+
+Rev 1 (after Codex) identified 2 HIGH code defects. Rev 2 (owner-directed) remediated them; the assertion suite now
+covers the fixes (tests AZ1–3, GOV1–2). Remaining items are **conditions**, not open blockers:
+
+- **AUTHZ-01 (HIGH) → FIXED** (migration `060`): `portal_create_expense` binds the department to the caller. Test 36.
+- **GOV-01 (MED) → FIXED** (`060`): budget enforced in `portal_recurring_run`. Test 36.
+- **SEC-06 (HIGH, System-1 registration) → OPEN go-live blocker.** Server path improved (`reg-doc.js`: destructive
+  cleanup removed, explicit allowlist; client-fallback destructive delete also removed). **But NOT inert (2nd Codex
+  pass, verified):** `register.html` falls back to a **direct anonymous Storage upload** on 503/404/network-error that
+  **bypasses the allowlist + `_file-guard`** — and that is the **live** path while `SUPABASE_SERVICE_ROLE_KEY` is unset.
+  Consolidated gate (**credential-first, atomic**): add+verify upload credential (SEC-06-R) → atomic cutover (deploy authenticated endpoint + set key + **remove the anon fallback** + **revoke anon Storage writes** `db/system1-storage-hardening.sql`)
+  → verify the live Storage policy denies anon writes (a credentialed upload succeeds; anon writes are denied).
+
+## Conditions before real (non-dummy) go-live
+1. **Apply migration `060` live** (after 059). ✅ done 2026-07-28.
+2. **SEC-06 consolidated gate** (above) before enabling supplier registration for real suppliers — this is a **blocker**, not merely a residual.
+3. SEC-02 leaked-password protection + MFA/SSO decision (owner dashboard).
+4. System-1 storage hardening Phase 1 (owner SQL) + confirm `/api/reg-doc` `{ok:true}`.
+5. Enterprise data setup (committee/GM/managers/jobs/users) — high-value PO chains need a configured committee.
+6. Decide/flip governance enforcement flags per launch plan.
+7. Supabase PITR tier + RTO/RPO; external audit-chain anchor (AUD-01).
+8. Browser E2E of the new converter panels.
+
+**Owner-accepted risks (documented, not blockers):** SEC-07 (admin superuser) and SEC-03 (manual IBAN retained).
+
+Portal migrations `022→059` are applied live; `060` **applied live 2026-07-28 + verified**. Suite green
+(EXIT 0, 178 SQL + 25 JS).
+
+## Conditions that MUST be satisfied before real (non-dummy) go-live
+These are **operational/owner** gates, not code blockers — but production onboarding of real users/money should not proceed until they are done:
+
+1. **SEC-02 — Enable leaked-password protection** (Supabase Auth) and decide MFA/SSO for finance/admin. (Owner dashboard.)
+2. **SEC-05 — Apply System-1 storage hardening** (`db/system1-storage-hardening.sql` Phase 1) and confirm `/api/reg-doc` returns `{ok:true}` before removing the anon INSERT fallback. (Owner SQL + Cloudflare env.)
+3. **Enterprise data setup** — real committee members, GA/LOG managers, jobs, and users. The live verification (documented in CLAUDE.md) showed `committee_members = []` and demo users only; **high-value PO chains (>250K) cannot complete without a configured committee/GM** — this is a configuration gap, not a code defect.
+4. **Enforcement decision** — flip the governance flags the business wants active (`budget_enforce`, `iban_change_control`, `three_way_enforce`, `contract_enforce`, `disb_gate_purchase`). Shipped dormant; currently NOT enforcing.
+5. **Backup/DR posture** — confirm Supabase PITR tier + documented RTO/RPO (not verifiable from repo).
+
+## Independent-verification gate
+This certification is based on static + database evidence and the automated assertion suite. It is **not** a substitute for the second (Codex) review, dynamic web pen-test, and a browser E2E pass of the new UI panels. Treat those as release gates.

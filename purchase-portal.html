@@ -2561,10 +2561,39 @@ try{document.documentElement.style.setProperty('--wm','url('+LOGO_COL+')');}catc
      يُعرّف الدوال بعد سكربت المرجع فيُلغيها (آخر تعريف يفوز) ويربط الواجهة بجداول portal_*.
      ══════════════════════════════════════════════════════════════════════════ -->
 <script>
-/* ── عميل Supabase (مشروع البوابة المستقل) ── */
-const SUPABASE_URL='https://mwbjoysuybgbrvfrprex.supabase.co';
-const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
-const SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+/* ── عميل Supabase الواعي بالبيئة (env-aware, fail-closed) ──
+   لم يعُد عنوان/مفتاح المشروع مُضمَّناً هنا (كان يُجبِر معاينة الفرع على الإنتاج). يُجلَب
+   وقت التشغيل من /api/portal-config الذي يُحدّده حسب بيئة Cloudflare (إنتاج/معاينة) ويرفض
+   استخدام مشروع الإنتاج في المعاينة. عند فشل الإعداد لا نتّصل — نُظهر خطأ إعداد ظاهر. */
+let SUPABASE_URL=null, SUPABASE_ANON_KEY=null, SB=null;
+let PORTAL_CAPABILITIES=Object.freeze({workflowDesignerWrite:false});
+async function __bootConfig(){
+  try{
+    const r = await fetch('/api/portal-config', { cache:'no-store' });
+    const c = await r.json().catch(()=>null);
+    if(!r.ok || !c || c.ok!==true || !c.url || !c.anonKey){
+      throw new Error((c&&c.error) || 'تعذّر تحميل إعداد البيئة');
+    }
+    SUPABASE_URL=c.url; SUPABASE_ANON_KEY=c.anonKey;
+    PORTAL_CAPABILITIES=Object.freeze({
+      workflowDesignerWrite:!!(c.capabilities&&c.capabilities.workflowDesignerWrite===true)
+    });
+    SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+    return true;
+  }catch(e){
+    try{
+      document.body.innerHTML =
+        '<div dir="rtl" style="max-width:640px;margin:16vh auto;padding:28px;border:1px solid #e11d48;'
+        +'border-radius:14px;background:#fff;color:#0f172a;font-family:system-ui,\'Segoe UI\',sans-serif;line-height:1.9">'
+        +'<h2 style="margin:0 0 10px;color:#e11d48">خطأ إعداد البيئة</h2>'
+        +'<p>لم يُضبَط مشروع Supabase لهذه البيئة، أو أنّ معاينة الفرع مُوجَّهة لمشروع الإنتاج (مرفوض).</p>'
+        +'<p style="font-size:14px;color:#475569">'+(e&&e.message?String(e.message):'')+'</p>'
+        +'<p style="font-size:13px;color:#64748b">اضبط <code>PORTAL_SUPABASE_URL</code> + <code>PORTAL_SUPABASE_ANON_KEY</code> '
+        +'في متغيّرات Cloudflare لهذه البيئة (بيئة Preview تستخدم مشروع staging منفصلاً).</p></div>';
+    }catch(_){}
+    return false;
+  }
+}
 
 /* ── لا شيء (no-op): طبقة التخزين المحلي وبذور العرض التوضيحي مُعطّلة تماماً ── */
 function saveState(){}
@@ -2583,19 +2612,24 @@ function pa_quotesRule(v){ return (+v||0)<500?1:3; }
 function pa_can(p){ p=p||{}; return {
   approveReq:!!p.can_approve_stage, approveAward:!!p.can_approve_award, issuePO:!!p.can_issue_po,
   manageRfq:!!p.can_manage_procurement, disburse:!!p.can_disburse, create:!!p.can_create,
+  createDirect:!!p.can_create_direct_expense,
   edit:!!p.can_edit, manageUsers:!!p.can_manage_users, approveDisb:!!p.can_approve_disbursement }; }
 function pa_see(p){ p=p||{}; const proc=!!(p.can_manage_procurement||p.can_approve_award||p.can_issue_po);
   return {requests:1, award:proc?1:0, comparison:proc?1:0, finance:(p.can_see_finance||p.can_disburse)?1:0}; }
 function pa_scope(p,jobScope,isAdm){ if(isAdm)return 'all'; if(jobScope)return jobScope; p=p||{};
   return (p.can_manage_procurement||p.can_disburse||p.can_verify_stock||p.can_see_finance)?'all':'own'; }
 function pa_acc(perms,jobScope,isAdm){ if(isAdm) return {scope:'all',see:{requests:1,award:1,comparison:1,finance:1},
-    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,edit:1,manageUsers:1,approveDisb:1}};
+    can:{approveReq:1,approveAward:1,issuePO:1,manageRfq:1,disburse:1,create:1,createDirect:1,edit:1,manageUsers:1,approveDisb:1}};
   return {scope:pa_scope(perms,jobScope,isAdm), see:pa_see(perms), can:pa_can(perms)}; }
+function pa_mergePerms(jobPerms,userPerms){ var out={};
+  [jobPerms||{},userPerms||{}].forEach(function(src){ Object.keys(src).forEach(function(k){ if(src[k]===true) out[k]=true; }); });
+  return out; }
 /* العكس: صلاحيات المرجع(camel) → مفاتيح Supabase(snake) لحفظ الوظائف */
 function pa_permsFromCan(can){ can=can||{}; const p={};
   if(can.approveReq)p.can_approve_stage=true; if(can.approveAward)p.can_approve_award=true;
   if(can.issuePO)p.can_issue_po=true; if(can.manageRfq)p.can_manage_procurement=true;
   if(can.disburse)p.can_disburse=true; if(can.create)p.can_create=true;
+  if(can.createDirect)p.can_create_direct_expense=true;
   if(can.edit)p.can_edit=true; if(can.manageUsers)p.can_manage_users=true;
   if(can.approveDisb)p.can_approve_disbursement=true; return p; }
 
@@ -2626,7 +2660,9 @@ const PA_EVREMAP={ stage_rejected:'rejected', stage_returned:'returned', payment
 function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pending_pay')?'pending':pay.status;
   const m={ _id:pay.id, no:'PV-DG26-'+String(pay.request_id||'').slice(-4), amount:Number(pay.amount)||0,
     createdAt:pa_ms(pay.created_at), type:pay.kind, status:st, reqBy:pay.requested_by,
-    approvedBy:pay.approved_by, approvedAt:pa_ms(pay.approved_at), disbursedBy:pay.disbursed_by, disbursedAt:pa_ms(pay.disbursed_at) };
+    approvedBy:pay.approved_by, approvedAt:pa_ms(pay.approved_at), disbursedBy:pay.disbursed_by, disbursedAt:pa_ms(pay.disbursed_at),
+    legacyEvidenceQuarantined:pay.legacy_evidence_quarantined===true,
+    legacyEvidenceReason:pay.legacy_evidence_reason||'' };
   if(pay.kind==='bank'){ m.kindLabel='تحويل بنكي'; m.bank={accName:d.account_name||'',iban:d.iban||'',bankName:d.bank_name||''}; }
   else if(pay.kind==='custody'){ m.kindLabel='عهدة نقدية — '+uName(pay.custody_to); m.custody={to:pay.custody_to}; }
   else { m.kindLabel='آجل'; m.credit={dueDate:d.due_date||'',terms:d.terms||''}; }
@@ -2654,12 +2690,13 @@ function pa_status(s){
 
 /* ══════ التحميل الشامل: يجلب كل جداول portal_* ويبني حالة المرجع بأشكالها الحرفية ══════ */
 var BUDGETS=[], IBANCHG=[], CURRENCIES=[], CONTRACTS=[], PA_BENEFS=[], PA_RECUR=[], PA_BEN_IBANCHG=[];   /* الميزانيات (031) + الآيبان (032) + العملات (035) + العقود (037) + المستفيدون (053) + المتكرّر (055) + تغييرات آيبان المستفيد */
+var DOCS_BY_REQ={};   /* المستندات الداعمة (062): request_id → [مستند] — يُملأ بتسامح قبل تطبيق الهجرة */
 async function loadAll(){
   window.__paReason='';
   const { data:{ session } }=await SB.auth.getSession();
   if(!session){ window.__paReason='لا توجد جلسة Auth بعد الدخول (مشكلة تخزين الجلسة/إعداد العميل)'; return false; }
 
-  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR,recR]=await Promise.all([
+  const [uR,dR,jR,doaR,wfR,supR,setR,reqR,itR,apR,ofR,oiR,alR,awR,aaR,payR,rcR,auR,poR,invR,retR,budR,ibcR,curR,ctrR,benR,recR,dirR]=await Promise.all([
     SB.from('portal_users').select('*'),
     SB.from('portal_departments').select('*'),
     SB.from('portal_jobs').select('*'),
@@ -2686,8 +2723,57 @@ async function loadAll(){
     SB.from('portal_currencies').select('*').order('code'),           /* العملات (هجرة 035) — يُتحمَّل غيابه */
     SB.from('portal_contracts').select('*').order('id'),              /* العقود الإطارية (هجرة 037) — يُتحمَّل غيابه */
     SB.from('portal_beneficiaries').select('*').order('name'),        /* سجلّ المستفيدين (هجرة 053) — يُتحمَّل غيابه قبل التطبيق */
-    SB.from('portal_recurring_expenses').select('*').order('next_run') /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_recurring_expenses').select('*').order('next_run'), /* الصرف المتكرّر (هجرة 055) — يُتحمَّل غيابه قبل التطبيق */
+    SB.from('portal_user_directory').select('*')  /* دليل المستخدمين الآمن (P0-1) — أعمدة توجيه/عرض فقط؛ يُتحمَّل غيابه قبل تطبيق تصليب أقلّ الامتياز */
   ]);
+  /* P0-1j: base RLS deliberately hides raw direct-expense/payment rows from
+     requesters.  Merge only missing rows from the two server-redacted feeds;
+     privileged base rows win so finance workflows retain their full contract. */
+  var safeReqR=await SB.rpc('portal_safe_visible_direct_expenses');
+  var safePayR=await SB.rpc('portal_safe_visible_payments');
+  var safePurchaseR=await SB.rpc('portal_my_purchase_dossiers');
+  function pa_mergeSafeRows(baseRows,safeRows){ var seen={},out=[];
+    (baseRows||[]).forEach(function(row){ seen[String(row.id)]=true; out.push(row); });
+    (safeRows||[]).forEach(function(row){ if(!seen[String(row.id)]){ seen[String(row.id)]=true; out.push(row); } });
+    return out; }
+  var PA_SAFE_PURCHASE_DOCS=[];
+  var PA_ITEM_ROWS=(itR.data||[]).slice(), PA_APPR_ROWS=(apR.data||[]).slice();
+  var PA_AWARD_APPR_ROWS=(aaR.data||[]).slice(), PA_RECEIPT_ROWS=(rcR.data||[]).slice(), PA_PO_ROWS=(poR.data||[]).slice();
+  var rawReqIds={}; (reqR.data||[]).forEach(function(r){ rawReqIds[String(r.id)]=true; });
+  var safePurchasePayload=(safePurchaseR&&!safePurchaseR.error&&safePurchaseR.data)||{};
+  var safePurchaseRequester=safePurchasePayload.requester||'';
+  var safePurchaseRows=[];
+  function pa_safePurchasePhase(d){ var g=((d.current_stage||{}).group)||'';
+    if(d.public_phase==='closed_delivered') return 'closed';
+    if(d.public_phase==='receipt') return 'receipt';
+    if(g==='po') return 'po_review'; if(g==='award') return 'award';
+    if(d.public_phase==='procurement') return 'pricing';
+    if(d.public_phase==='supply_preparation') return 'payment';
+    return 'need'; }
+  ((safePurchasePayload&&safePurchasePayload.requests)||[]).forEach(function(d){
+    if(rawReqIds[String(d.id)]) return;
+    safePurchaseRows.push({ id:d.id,title:d.title,department_id:d.department_id,requester:safePurchaseRequester,
+      requester_name:d.requester_name,priority:d.priority,status:d.status,phase:pa_safePurchasePhase(d),
+      project:d.project,need_by:d.need_by,proc_type:d.proc_type,justification:d.justification,note:d.note,
+      created_at:d.created_at,updated_at:d.updated_at,cancel_reason:d.cancel_reason,revision:d.revision,
+      req_type:'purchase',est_total:null,currency:null });
+    (d.items||[]).forEach(function(x){ PA_ITEM_ROWS.push({ id:x.id,request_id:d.id,seq:x.seq,description:x.description,
+      unit:x.unit,qty:x.qty,received_qty:x.received_qty,category:x.category,notes:x.notes,unit_price:null }); });
+    (d.need_approvals||[]).forEach(function(x){ PA_APPR_ROWS.push({ request_id:d.id,cycle:'need',seq:x.seq,
+      stage_label:x.stage_label,resolver:'user',approver:x.approver_name,decision:x.decision,
+      acted_at:x.acted_at,comment:x.requester_comment||null }); });
+    (d.award_approvals||[]).forEach(function(x){ PA_AWARD_APPR_ROWS.push({ request_id:d.id,seq:x.seq,
+      stage_label:x.stage_label,approver:x.approver_name,decision:x.decision,acted_at:x.acted_at,comment:null }); });
+    (d.po_approvals||[]).forEach(function(x){ PA_PO_ROWS.push({ request_id:d.id,seq:x.seq,
+      stage_label:x.stage_label,approver:x.approver_name,decision:x.decision,acted_at:x.acted_at,comment:null }); });
+    (d.receipts||[]).forEach(function(x){ PA_RECEIPT_ROWS.push({ id:x.id,request_id:d.id,
+      received_by:x.received_by_name,received_at:x.received_at,note:x.note,lines:x.lines||[],doc_key:null }); });
+    (d.documents||[]).forEach(function(x){ PA_SAFE_PURCHASE_DOCS.push(Object.assign({request_id:d.id,
+      storage_key:null,checksum:null,payment_id:null,active:true,uploaded_by:x.uploaded_by_name||''},x)); });
+  });
+  var PA_REQ_ROWS=pa_mergeSafeRows(reqR.data,(safeReqR&&!safeReqR.error)?safeReqR.data:[]);
+  PA_REQ_ROWS=pa_mergeSafeRows(PA_REQ_ROWS,safePurchaseRows);
+  var PA_PAY_ROWS=pa_mergeSafeRows(payR.data,(safePayR&&!safePayR.error)?safePayR.data:[]);
   /* سجلّ المستفيدين (هجرة 053). window.__paBenOK للتفعيل. */
   window.__paBenOK=!!(benR && !benR.error);
   PA_BENEFS=(benR && !benR.error)?(benR.data||[]).map(x=>({id:x.id, name:x.name||'', btype:x.btype||'company', iban:x.iban||'', accountName:x.account_name||'', taxNo:x.tax_no||'', contact:x.contact||'', active:x.active!==false})):[];
@@ -2696,6 +2782,13 @@ async function loadAll(){
   /* الصرف المتكرّر (هجرة 055). window.__paRecOK للتفعيل. */
   window.__paRecOK=!!(recR && !recR.error);
   PA_RECUR=(recR && !recR.error)?(recR.data||[]).map(x=>({id:x.id, title:x.title||'', dept:x.department_id||'', beneficiary:x.beneficiary||'', beneficiaryId:x.beneficiary_id||null, amount:Number(x.amount)||0, kind:x.kind||'bank', details:x.details||{}, frequency:x.frequency||'monthly', nextRun:x.next_run||null, active:x.active!==false, runsCount:Number(x.runs_count)||0, lastRunAt:x.last_run_at||null})):[];
+  /* المستندات الداعمة (062): تُحمَّل بتسامح (قد تفشل قبل تطبيق الهجرة). window.__paDocsOK للتفعيل. */
+  DOCS_BY_REQ={};
+  try{ var docsR=await SB.from('portal_request_documents').select('*').order('id');
+    window.__paDocsOK=!!(docsR && !docsR.error);
+    if(docsR && !docsR.error){ (docsR.data||[]).forEach(function(x){ (DOCS_BY_REQ[x.request_id]=DOCS_BY_REQ[x.request_id]||[]).push(pa_mapDoc(x)); }); }
+    PA_SAFE_PURCHASE_DOCS.forEach(function(x){ (DOCS_BY_REQ[x.request_id]=DOCS_BY_REQ[x.request_id]||[]).push(pa_mapDoc(x)); });
+  }catch(_e){ window.__paDocsOK=false; }
   /* العقود الإطارية (هجرة 037). window.__paCtrOK للتفعيل. */
   window.__paCtrOK=!!(ctrR && !ctrR.error);
   CONTRACTS=(ctrR && !ctrR.error)?(ctrR.data||[]).map(x=>({id:x.id, no:x.contract_no||'', title:x.title||'', supplier:x.supplier_name||'', ceiling:Number(x.ceiling)||0, currency:x.currency||'SAR', status:x.status||'active', start:x.start_date||null, end:x.end_date||null})):[];
@@ -2729,13 +2822,22 @@ async function loadAll(){
   /* الأقسام */
   DEPTS={}; (dR.data||[]).forEach(d=>{ DEPTS[d.id]={n:d.name_ar,sector:d.sector,mgr:d.manager_user,active:d.active!==false}; });
   /* الوظائف */
-  JOBS={}; (jR.data||[]).forEach(j=>{ JOBS[j.key]={title:j.title,cat:j.category,scope:j.scope,desc:j.description||'',acc:pa_acc(j.permissions,j.scope,false)}; });
+  JOBS={}; (jR.data||[]).forEach(j=>{ JOBS[j.key]={title:j.title,cat:j.category,scope:j.scope,desc:j.description||'',perms:j.permissions||{},acc:pa_acc(j.permissions,j.scope,false)}; });
   /* المستخدمون */
-  USERS={}; (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin';
-    USERS[u.username]={ n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
+  /* P0-1 أقلّ امتياز: الأساس من «دليل المستخدمين الآمن» (أعمدة توجيه/عرض فقط لكل المستخدمين)،
+     ثم نُراكِب الصفوف الكاملة التي تسمح بها RLS (صفّ المستخدم نفسه، أو كل الصفوف للأدمن) بحقولها
+     الحسّاسة (email/perms/role/job/delegation). قبل تطبيق التصليب حيّاً: portal_user_directory غائب
+     فنسقط بأمان إلى uR.data (التي كانت تعيد الكل عبر auth_all القديمة) — بلا انحدار. */
+  const PA_DIR=(dirR && !dirR.error && Array.isArray(dirR.data)) ? dirR.data : (uR.data||[]);
+  USERS={};
+  PA_DIR.forEach(u=>{ USERS[u.username]={ n:u.display_name, r:'مستخدم',
+    deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
+    suspended:u.active===false, active:u.active!==false }; });
+  (uR.data||[]).forEach(u=>{ const isAdm=u.role==='admin'; const effectivePerms=pa_mergePerms((JOBS[u.job_key]||{}).perms,u.permissions);
+    USERS[u.username]=Object.assign(USERS[u.username]||{}, { n:u.display_name, r:(JOBS[u.job_key]||{}).title||(isAdm?'مدير البوابة':'مستخدم'),
       job:u.job_key, admin:isAdm, deptId:u.department_id, sector:(DEPTS[u.department_id]||{}).sector||'',
       away:!!u.is_away, delegate:u.delegate_to||null, suspended:u.active===false, active:u.active!==false,
-      email:u.email, perms:u.permissions||{}, acc:pa_acc(u.permissions,(JOBS[u.job_key]||{}).scope,isAdm) }; });
+      email:u.email, perms:effectivePerms, ov:(u.perm_overrides||{}), acc:pa_acc(effectivePerms,(JOBS[u.job_key]||{}).scope,isAdm) }); });
   /* الموردون */
   SUPPLIERS={}; pa_supByName={}; (supR.data||[]).forEach(s=>{ const k=String(s.id);
     SUPPLIERS[k]={n:s.name,cr:s.cr||'',vat:s.vat||'',iban:s.iban||'',contact:s.contact||'',active:s.active!==false,_sid:s.id};
@@ -2763,13 +2865,13 @@ async function loadAll(){
 
   /* فهرسة صفوف التفاصيل حسب الطلب */
   const by=(rows,key)=>{ const m={}; (rows||[]).forEach(x=>{ (m[x[key]]=m[x[key]]||[]).push(x); }); return m; };
-  const itemsBy=by(itR.data,'request_id'), apprBy=by(apR.data,'request_id'), offBy=by(ofR.data,'request_id'),
-        awApBy=by(aaR.data,'request_id'), payBy=by(payR.data,'request_id'), rcBy=by(rcR.data,'request_id'), auBy=by(auR.data,'request_id'),
-        poBy=by(poR.data,'request_id');
+  const itemsBy=by(PA_ITEM_ROWS,'request_id'), apprBy=by(PA_APPR_ROWS,'request_id'), offBy=by(ofR.data,'request_id'),
+        awApBy=by(PA_AWARD_APPR_ROWS,'request_id'), payBy=by(PA_PAY_ROWS,'request_id'), rcBy=by(PA_RECEIPT_ROWS,'request_id'), auBy=by(auR.data,'request_id'),
+        poBy=by(PA_PO_ROWS,'request_id');
   const awardBy={}; (awR.data||[]).forEach(a=>{ awardBy[a.request_id]=a; });
   const slaH=(PSET.sla_days?PSET.sla_days*24:48);
 
-  REQS=(reqR.data||[]).map(r=>{
+  REQS=(PA_REQ_ROWS||[]).map(r=>{
     const items=(itemsBy[r.id]||[]).slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(it=>({
       seq:it.seq, desc:it.description, unit:it.unit||'حبة', qty:Number(it.qty)||0,
       price:Number(it.unit_price)||0, received:Number(it.received_qty)||0, _id:it.id }));
@@ -2802,6 +2904,7 @@ async function loadAll(){
       splitFlag:!!r.split_flag, holdReason:r.hold_reason||'', holdUntil:r.hold_until||null,
       cancelReason:r.cancel_reason||'', cancelledBy:r.cancelled_by||null, cancelledAt:pa_ms(r.cancelled_at),
       resubmitCount:0, _raw:r };
+    req.docs=DOCS_BY_REQ[r.id]||[];   /* المستندات الداعمة (062) */
 
     /* ── محرّك الصرف الموحّد (050): نوع الطلب + سلسلة اعتماد الصرف (cycle='disbursement') ── */
     req.reqType=r.req_type||'purchase';
@@ -4594,22 +4697,205 @@ function pa_docValidate(file){ if(!file) return true;
   var ok=/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type||'');
   if(!ok){ toast('المستند يجب أن يكون PDF أو صورة (JPG/PNG)','err'); return false; }
   if(file.size>10*1024*1024){ toast('حجم المستند يتجاوز 10 ميجابايت','err'); return false; } return true; }
-/* يفتح مستند صرف/استلام inline في نافذة النظام (blob، لا رابط R2 مكشوف) */
+/* ══════ معاينة مستندات بمستوى DMS (تكليف المالك D1) — عرض داخليّ (blob، لا رابط R2 مكشوف)
+   بشريط أدوات: تكبير/تصغير/ملاءمة/تدوير للصور + طباعة + تنزيل + إغلاق. بلا مكتبة خارجية
+   (آمن CSP). PDF عبر عارض المتصفّح الأصليّ داخل إطار، والصور بعارض تحويل CSS قابل للتصفّح. */
+var _paDocUrl=null, _paDvZoom=1, _paDvRot=0, _paDvKind='';
 async function pa_docView(key){
   var tok=await pa_sessionToken(); if(!tok){ toast('الجلسة غير صالحة','err'); return; }
-  try{ var resp=await fetch('/api/portal-doc?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
-    if(!resp.ok) throw 0; var url=URL.createObjectURL(await resp.blob());
+  try{
+    var resp=await fetch('/api/portal-doc?key='+encodeURIComponent(key), { headers:{ 'Authorization':'Bearer '+tok } });
+    if(!resp.ok) throw 0;
+    var blob=await resp.blob();
+    var ct=((resp.headers.get('content-type')||blob.type||'')+'').toLowerCase();
+    var url=URL.createObjectURL(blob);
+    _paDocUrl=url; _paDvZoom=1; _paDvRot=0;
+    var isImg=/image\//.test(ct) || /\.(png|jpe?g)$/i.test(key);
+    _paDvKind=isImg?'img':'pdf';
+    var imgCtrls=isImg?(
+        '<button class="pqv-mini" onclick="pa_dvZoom(-0.2)" title="تصغير">−</button>'
+      +'<span class="pqv-mini" id="pa-dv-zl" style="min-width:48px;cursor:default;justify-content:center">100%</span>'
+      +'<button class="pqv-mini" onclick="pa_dvZoom(0.2)" title="تكبير">+</button>'
+      +'<button class="pqv-mini" onclick="pa_dvFit()" title="ملاءمة العرض">⤢</button>'
+      +'<button class="pqv-mini" onclick="pa_dvRotate()" title="تدوير">⟳</button>'):'';
+    var pane=isImg
+      ? '<div class="pqv-pane" id="pa-dv-pane" style="overflow:auto;display:flex;align-items:flex-start;justify-content:center;background:#12151b"><img id="pa-dv-img" src="'+url+'" alt="مستند" style="transform-origin:top center;transform:scale(1);max-width:100%;height:auto;transition:transform .12s ease"></div>'
+      : '<div class="pqv-pane"><iframe class="pqv-frame" src="'+url+'"></iframe></div>';
     $('modal').classList.add('modal-wide');
-    $('modal').innerHTML='<div class="pqv"><div class="pqv-bar"><h3>مستند</h3><div style="flex:1"></div>'
-      +'<a class="pqv-mini" href="'+url+'" target="_blank" rel="noopener" title="فتح في تبويب">⤢</a>'
+    $('modal').innerHTML='<div class="pqv"><div class="pqv-bar"><h3>معاينة المستند</h3><div style="flex:1"></div>'
+      +imgCtrls
+      +'<button class="pqv-mini" onclick="pa_docPrint()" title="طباعة">🖨</button>'
       +'<a class="pqv-mini" href="'+url+'" download title="تنزيل">⬇</a>'
       +'<button class="pqv-mini" onclick="pa_docClose()" title="إغلاق">✕</button></div>'
-      +'<div class="pqv-canvas"><div class="pqv-grid single"><div class="pqv-pane"><iframe class="pqv-frame" src="'+url+'"></iframe></div></div></div></div>';
-    _paDocUrl=url; $('overlay').classList.add('show');
+      +'<div class="pqv-canvas"><div class="pqv-grid single">'+pane+'</div></div></div>';
+    $('overlay').classList.add('show');
   }catch(e){ toast('تعذّر فتح المستند','err'); }
 }
-var _paDocUrl=null;
-function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){} if(_paDocUrl){ try{ URL.revokeObjectURL(_paDocUrl); }catch(e){} _paDocUrl=null; } closeModal(); }
+function pa_dvApply(){ var im=$('pa-dv-img'); if(im){ im.style.transform='scale('+_paDvZoom+') rotate('+_paDvRot+'deg)'; }
+  var zl=$('pa-dv-zl'); if(zl) zl.textContent=Math.round(_paDvZoom*100)+'%'; }
+function pa_dvZoom(d){ _paDvZoom=Math.min(5,Math.max(0.2,Math.round((_paDvZoom+d)*100)/100)); pa_dvApply(); }
+function pa_dvFit(){ _paDvZoom=1; _paDvRot=0; pa_dvApply(); }
+function pa_dvRotate(){ _paDvRot=(_paDvRot+90)%360; pa_dvApply(); }
+/* طباعة داخليّة عبر إطار مخفيّ (بلا نافذة منبثقة): PDF بطباعة العارض الأصليّ، والصورة تُطبَع كما هي. */
+function pa_docPrint(){
+  try{ if(!_paDocUrl) return;
+    var old=document.getElementById('pa-dv-print'); if(old) old.remove();
+    var f=document.createElement('iframe'); f.id='pa-dv-print';
+    f.style.position='fixed'; f.style.right='-9999px'; f.style.width='0'; f.style.height='0'; f.style.border='0';
+    f.src=_paDocUrl;
+    f.onload=function(){ setTimeout(function(){ try{ f.contentWindow.focus(); f.contentWindow.print(); }
+      catch(e){ toast('تعذّرت الطباعة — استخدم التنزيل','err'); } }, 180); };
+    document.body.appendChild(f);
+  }catch(e){ toast('تعذّرت الطباعة','err'); }
+}
+function pa_docClose(){ try{ $('modal').classList.remove('modal-wide'); }catch(e){}
+  try{ var f=document.getElementById('pa-dv-print'); if(f) f.remove(); }catch(e){}
+  if(_paDocUrl){ try{ URL.revokeObjectURL(_paDocUrl); }catch(e){} _paDocUrl=null; }
+  _paDvZoom=1; _paDvRot=0; _paDvKind=''; closeModal(); }
+
+/* ══════ مركز المستندات الداعمة (062) — واجهة المُحوِّل فقط (أسماء _pa* فريدة) ══════
+   نموذج مُطبَّع: مسودّة→رفع مصنَّف→تقديم. عرض داخليّ بلا تبويب خارجي. سجلّ إصدارات (مُستبدَل مرئيّ). */
+function pa_mapDoc(x){ return { id:x.id, reqId:x.request_id, paymentId:x.payment_id||null, type:x.document_type,
+  title:x.title||'', desc:x.description||'', key:x.storage_key, fileName:x.original_file_name||'', mime:x.mime_type,
+  size:Number(x.size_bytes)||0, uploadedBy:x.uploaded_by||'', uploadedAt:pa_ms(x.uploaded_at), sourceStage:x.source_stage||'',
+  version:Number(x.version)||1, supersedesId:x.supersedes_id||null, active:x.active!==false,
+  verification:x.verification_status||'unverified', verifiedAt:pa_ms(x.verified_at) }; }
+var PA_DOC_TYPES={ quotation:'عرض سعر', supplier_invoice:'فاتورة مورد', progress_claim:'مستخلص',
+  purchase_order:'أمر شراء', contract:'عقد', advance_payment:'دفعة مقدّمة', receipt:'إيصال/سند',
+  beneficiary_bank:'تفاصيل بنكية للمستفيد', memo:'مذكّرة', other:'أخرى' };
+function pa_docTypeLabel(t){ return PA_DOC_TYPES[t]||t; }
+function pa_fileSize(n){ n=Number(n)||0; if(n<1024) return n+' ب'; if(n<1048576) return Math.round(n/1024)+' ك.ب'; return (n/1048576).toFixed(1)+' م.ب'; }
+function pa_docDate(ms){ try{ return new Date(ms).toLocaleDateString('en-GB'); }catch(e){ return ''; } }
+async function pa_reqdocUpload(reqId, file){ return await pa_docUpload('reqdoc', reqId, file); }
+async function pa_sha256(file){ try{ if(!(crypto&&crypto.subtle)) return null; var buf=await file.arrayBuffer();
+  var h=await crypto.subtle.digest('SHA-256',buf); return Array.from(new Uint8Array(h)).map(function(b){return b.toString(16).padStart(2,'0');}).join(''); }catch(e){ return null; } }
+/* عرض مستند داعم داخليّاً (blob، لا تبويب خارجي) — يعيد استخدام عارض pa_docView المحلّي. */
+function pa_reqdocView(reqId, docId){
+  var r=(REQS||[]).find(function(x){return x.id===reqId;}); if(!r) return;
+  var d=(r.docs||[]).find(function(x){return x.id===docId;}); if(!d){ toast('المستند غير موجود','err'); return; }
+  pa_docView(d.key);
+}
+/* حالة نموذج الرفع (مركز المستندات) */
+var PA_DOCUP={ type:'quotation', title:'', desc:'' };
+function pa_docUpSet(k,v){ PA_DOCUP[k]=v; if(k==='type'){ var w=$('pa-docup-desc'); if(w) w.style.display=(v==='other')?'block':'none'; } }
+function pa_docFilePick(){ var i=$('pa-docup-file'), n=$('pa-docup-filen'); if(i&&n){ var f=i.files&&i.files[0];
+  n.textContent=f?('✓ '+(f.name.length>24?f.name.slice(0,22)+'…':f.name)):'📎 اختر ملفاً (PDF/صورة)'; } }
+/* المستندات الداعمة: قسم قابل للطيّ يظهر قبل كل قرار اعتماد؛ editable=true في المسودّة/المُعاد. */
+function pa_docCenter(r, editable){
+  if(!window.__paDocsOK){ return editable
+    ? '<div class="card muted" style="font-size:12.5px">'+ic('info',13)+' مركز المستندات يتطلّب تطبيق الهجرة 062 على القاعدة.</div>' : ''; }
+  var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
+  var docs=(r.docs||[]).filter(function(d){return !d.paymentId;});
+  var active=docs.filter(function(d){return d.active;});
+  var verified=active.filter(function(d){return d.verification==='verified';});
+  var older =docs.filter(function(d){return !d.active;});
+  var canReplace = editable && (r._raw&&r._raw.status==='returned');
+  function rowFor(d, isOld){
+    return '<tr'+(isOld?' style="opacity:.6"':'')+'><td>'+esc(pa_docTypeLabel(d.type))
+      +(d.version>1?(' <span class="badge" style="font-size:9px">إصدار '+d.version+'</span>'):'')
+      +(isOld?' <span class="badge" style="font-size:9px">مُستبدَل</span>':'')
+      +(d.verification==='verified'
+        ?' <span class="badge ok" style="font-size:9px">موثّق</span>'
+        :' <span class="badge" style="font-size:9px;background:var(--danger-bg);color:var(--danger)">محجور — لا يُحتسب</span>')+'</td>'
+      +'<td>'+esc(d.title||d.fileName||'—')+(d.type==='other'&&d.desc?('<div class="muted" style="font-size:10px">'+esc(d.desc)+'</div>'):'')+'</td>'
+      +'<td>'+esc(uName(d.uploadedBy))+'</td>'
+      +'<td dir="ltr" class="mono" style="font-size:10.5px">'+pa_docDate(d.uploadedAt)+'</td>'
+      +'<td class="mono" style="font-size:10.5px">'+(d.size?pa_fileSize(d.size):'—')+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="pa_reqdocView(\''+esc(r.id)+'\','+d.id+')">'+ic('eye',12)+' عرض</button>'
+      +((editable && !isOld && !canReplace)?(' <button class="btn btn-ghost btn-sm" onclick="pa_docRemove('+d.id+',\''+esc(r.id)+'\')">'+ic('trash',12)+'</button>'):'')
+      +((canReplace && !isOld)?(' <button class="btn btn-ghost btn-sm" onclick="pa_docReplaceOpen('+d.id+',\''+esc(r.id)+'\')">'+ic('undo',12)+' استبدال</button>'):'')
+      +'</td></tr>';
+  }
+  var activeTbl = active.length
+    ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>النوع</th><th>العنوان</th><th>الرافع</th><th>التاريخ</th><th>الحجم</th><th></th></tr></thead><tbody>'
+      + active.map(function(d){return rowFor(d,false);}).join('') + '</tbody></table></div>'
+    : '<div class="muted" style="font-size:12px;padding:6px 0">لا مستندات داعمة بعد.'+(editable?' أرفِق مستنداً واحداً على الأقل قبل التقديم.':'')+'</div>';
+  var olderTbl = older.length
+    ? '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11.5px;color:var(--muted)">سجلّ الإصدارات السابقة ('+older.length+')</summary>'
+      +'<div class="tbl-wrap" style="margin-top:6px"><table class="tbl"><tbody>'+older.map(function(d){return rowFor(d,true);}).join('')+'</tbody></table></div></details>'
+    : '';
+  var uploader='';
+  if(editable){
+    var opts=Object.keys(PA_DOC_TYPES).map(function(k){return '<option value="'+k+'"'+(PA_DOCUP.type===k?' selected':'')+'>'+esc(PA_DOC_TYPES[k])+'</option>';}).join('');
+    uploader='<div style="border-top:1px dashed var(--line,#e2e6ee);margin-top:12px;padding-top:12px">'
+      +'<div class="muted" style="font-size:12px;font-weight:700;margin-bottom:8px">إرفاق مستند داعم</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+        +'<div style="flex:1;min-width:150px"><label '+L+'>التصنيف *</label><select class="select" onchange="pa_docUpSet(\'type\',this.value)">'+opts+'</select></div>'
+        +'<div style="flex:2;min-width:160px"><label '+L+'>العنوان</label><input class="input" value="'+esc(PA_DOCUP.title)+'" oninput="PA_DOCUP.title=this.value" placeholder="وصف مختصر"></div>'
+      +'</div>'
+      +'<div id="pa-docup-desc" style="display:'+(PA_DOCUP.type==='other'?'block':'none')+';margin-top:8px"><label '+L+'>الوصف (مطلوب عند «أخرى») *</label><input class="input" value="'+esc(PA_DOCUP.desc)+'" oninput="PA_DOCUP.desc=this.value"></div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">'
+        +'<label class="btn btn-ghost btn-sm" for="pa-docup-file" style="cursor:pointer"><span id="pa-docup-filen">📎 اختر ملفاً (PDF/صورة)</span></label>'
+        +'<input id="pa-docup-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_docFilePick()">'
+        +'<button class="btn btn-gold btn-sm" id="pa-docup-btn" onclick="pa_docAttach(\''+esc(r.id)+'\')">'+ic('plus',13)+' إرفاق</button>'
+      +'</div>'
+      +'<div class="muted" style="font-size:10.5px;margin-top:6px">'+ic('info',12)+' المدعوم للمعاينة الداخلية: PDF/JPEG/PNG (≤10 م.ب). المستندات ثابتة بعد التقديم؛ الإرجاع يتيح إصداراً جديداً.</div>'
+    +'</div>';
+  }
+  return '<div class="card" style="margin-bottom:16px"><div class="sec-title"><span class="ico">'+ic('file',16)+'</span>المستندات الداعمة'
+    +(verified.length?(' <span class="badge ok" style="font-size:10px">'+verified.length+' موثّق</span>'):(editable?' <span class="badge" style="font-size:10px;background:var(--danger-bg);color:var(--danger)">مستند موثّق مطلوب</span>':''))+'</div>'
+    + activeTbl + olderTbl + uploader + '</div>';
+}
+async function pa_docAttach(reqId){
+  var fEl=$('pa-docup-file'); var file=(fEl&&fEl.files&&fEl.files[0])||null;
+  if(!file){ toast('اختر ملفاً أولاً','err'); return; }
+  if(!pa_docValidate(file)) return;
+  if(PA_DOCUP.type==='other' && !((PA_DOCUP.desc||'').trim())){ toast('الوصف مطلوب عند «أخرى»','err'); return; }
+  var btn=$('pa-docup-btn'); if(btn) btn.disabled=true;
+  try{
+    var key=await pa_reqdocUpload(reqId, file);
+    var sum=await pa_sha256(file);
+    await pa_rpc('portal_attach_document',{ p_request_id:reqId, p_document_type:PA_DOCUP.type, p_storage_key:key,
+      p_mime_type:file.type, p_title:(PA_DOCUP.title||'').trim()||null, p_description:(PA_DOCUP.desc||'').trim()||null,
+      p_original_file_name:file.name||null, p_size_bytes:file.size||null, p_checksum:sum, p_payment_id:null,
+      p_source_stage:(((REQS||[]).find(function(x){return x.id===reqId;})||{}).reqType==='direct_expense'?'payment_request':null) });
+    PA_DOCUP={ type:'quotation', title:'', desc:'' };
+    toast('أُرفِق المستند','ok'); await loadAll(); render();
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر الإرفاق'),'err'); }
+}
+async function pa_docRemove(docId, reqId){
+  if(!window.confirm('إزالة هذا المستند من المسودّة؟')) return;
+  try{ await pa_rpc('portal_remove_document',{ p_doc_id:docId }); toast('أُزيل المستند','ok'); await loadAll(); render(); }
+  catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); }
+}
+/* استبدال مستند بإصدار جديد (للطلب المُعاد) — يفتح منتقي ملف ثم portal_replace_document */
+var PA_DOCREPL=null;
+function pa_docReplaceOpen(docId, reqId){
+  PA_DOCREPL={ docId:docId, reqId:reqId };
+  $('modal').innerHTML='<div class="modal-head"><div class="mi info">'+ic('undo',22)+'</div><div><h3>استبدال مستند بإصدار جديد</h3>'
+    +'<div class="ms">يبقى الإصدار القديم مرئيّاً في السجلّ.</div></div></div>'
+    +'<div class="modal-body"><label>الملف الجديد (PDF/صورة)</label>'
+    +'<label class="btn btn-ghost btn-sm" for="pa-docrepl-file" style="cursor:pointer;display:inline-block"><span id="pa-docrepl-filen">📎 اختر ملفاً</span></label>'
+    +'<input id="pa-docrepl-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="(function(){var i=document.getElementById(\'pa-docrepl-file\'),n=document.getElementById(\'pa-docrepl-filen\');var f=i.files&&i.files[0];if(n)n.textContent=f?(\'✓ \'+f.name):\'📎 اختر ملفاً\';})()">'
+    +'<div class="modal-foot"><button class="btn btn-gold" id="pa-docrepl-btn" onclick="pa_docReplaceDo()">'+ic('check',15)+' استبدال</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
+  $('overlay').classList.add('show');
+}
+async function pa_docReplaceDo(){
+  if(!PA_DOCREPL) return; var fEl=$('pa-docrepl-file'); var file=(fEl&&fEl.files&&fEl.files[0])||null;
+  if(!file){ toast('اختر ملفاً','err'); return; } if(!pa_docValidate(file)) return;
+  var btn=$('pa-docrepl-btn'); if(btn) btn.disabled=true;
+  try{
+    var key=await pa_reqdocUpload(PA_DOCREPL.reqId, file); var sum=await pa_sha256(file);
+    await pa_rpc('portal_replace_document',{ p_doc_id:PA_DOCREPL.docId, p_storage_key:key, p_mime_type:file.type,
+      p_title:null, p_description:null, p_original_file_name:file.name||null, p_size_bytes:file.size||null, p_checksum:sum });
+    closeModal(); PA_DOCREPL=null; toast('استُبدِل المستند بإصدار جديد','ok'); await loadAll(); render();
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر الاستبدال'),'err'); }
+}
+/* تقديم مسودّة الصرف بعد استيفاء المستندات — لا إشعار إلا بعد نجاح التقديم الفعلي */
+function pa_expDocsRequired(){ return true; }
+async function pa_submitExpenseDraft(id){
+  var r=(REQS||[]).find(function(x){return x.id===id;});
+  var nActive=r?((r.docs||[]).filter(function(d){return d.active&&!d.paymentId;}).length):0;
+  if(pa_expDocsRequired() && nActive<1){ toast('أرفِق مستنداً داعماً واحداً على الأقل قبل التقديم','err'); return; }
+  var btn=$('pa-exp-submit'); if(btn) btn.disabled=true;
+  try{
+    var res=await pa_rpc('portal_submit_expense',{ p_request_id:id });
+    toast('قُدِّم طلب الصرف للاعتماد','ok');
+    /* (Codex round-4) إشعار دورة الصرف فقط (واعٍ بالدورة) — لا نُرسل request/submitted (يصكّ رمزاً بدورة need خاطئة ويُكرِّر البريد). */
+    try{ pa_notify('disbursement',id,'pending'); }catch(_e){}
+    await loadAll(); CURRENT=id; VIEW='detail'; render();
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر التقديم'),'err'); }
+}
 function pa_money(n){ try{ return (Number(n)||0).toLocaleString('en-US'); }catch(e){ return String(n||0); } }
 var _pqv=null;
 function pa_qvBest(p,keys){ var m=Infinity; keys.forEach(function(k){ var t=Number((p.offers[k]||{}).total)||Infinity; if(t<m)m=t; }); return m; }
@@ -4947,32 +5233,76 @@ loadAll = async function(){
   var _ok=await _pa_loadAll_c();   /* لا بدّ من التقاط نتيجة الأصل وإرجاعها — وإلا رجعت undefined فيفشل الدخول */
   try{ var r=await SB.from('portal_settings').select('value').eq('key','committee_members').maybeSingle();
        PA_COMMITTEE=(r.data&&Array.isArray(r.data.value))?r.data.value:(PA_COMMITTEE||[]); }catch(e){}
-  /* م1c: أسماء عرض متوافقة — مربّعات PERM_DEFS المرجعية تقرأ مفاتيح قديمة؛ نضيف
-     مرايا قراءة فقط كي يظهر الوضع الصحيح (الكتابة تُترجَم في togglePerm وتُنظَّف). */
-  try{ Object.keys(USERS).forEach(function(u){ var p=USERS[u].perms||{};
-    p.can_approve_l1=!!p.can_approve_stage; p.can_approve_l2=!!p.can_manage_users;
-    p.can_manage_rfq=!!p.can_manage_procurement; USERS[u].perms=p; }); }catch(e){}
+  /* (أُزيلت مرايا مفاتيح العرض القديمة can_approve_l1/l2/manage_rfq — مصفوفة الصلاحيات
+     الكاملة (A2/A4) تعرض المفاتيح الحيّة الحقيقية مباشرةً؛ togglePerm يحفظها بلا وسائط.) */
   pa_slaTick();   /* م4: نبضة تصعيد SLA كسولة (لا تُعطّل التحميل — fire and forget) */
   return _ok;
 };
 
-/* م1c: تبديل صلاحية فردية يحفظ فعلياً في القاعدة (عبر خادم الأدمن) بالمفاتيح الحيّة */
-var PA_PERM_MAP={can_approve_l1:'can_approve_stage',can_approve_l2:'can_manage_users',can_manage_rfq:'can_manage_procurement'};
-var PA_PERM_ALIASES=Object.keys(PA_PERM_MAP);
-togglePerm = async function(k,pk,on){
-  var u=USERS[k]; if(!u) return;
-  var real=PA_PERM_MAP[pk]||pk;
-  var perms=Object.assign({},u.perms||{});
-  PA_PERM_ALIASES.forEach(function(a){ delete perms[a]; });   /* لا تُحفَظ مفاتيح العرض */
-  if(on) perms[real]=true; else delete perms[real];
-  var d=await pa_apiPost('/api/portal-users',{action:'setProfile',username:k,permissions:perms});
-  if(d){
-    u.perms=perms;
-    u.perms.can_approve_l1=!!perms.can_approve_stage; u.perms.can_approve_l2=!!perms.can_manage_users;
-    u.perms.can_manage_rfq=!!perms.can_manage_procurement;
-    delete u.acc; toast('حُفظت الصلاحية','ok');
-  }
-  render();
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك A2/A3/A4 — مصفوفة صلاحيات المستخدم الكاملة (كل مفاتيح المحرّك الـ14)
+   قابلة للتعديل الفردي بقرار مدير البوابة، ووحدة العرض المالي (can_see_finance)
+   تُمنَح كوحدة (module) لمستخدم بعينه. تعديل في المُحوِّل فقط (تغليف userCard/togglePerm
+   بأسماء ref فريدة). منطقة التصميم 1–2555 دون مساس. الحفظ عبر خادم الأدمن (setProfile،
+   المحروس بـ«أدمن نشط فقط»)؛ الحوكمة الخلفية (portal_users_guard/RLS) دون إضعاف.
+   ملاحظة النموذج: user.permissions في القاعدة نسخة كاملة قابلة للتحرير (تُبذَر من الوظيفة
+   عبر portal_apply_job ثم يحرّرها الأدمن)، فالتبديل يحرّر المجموعة الفعلية ويحفظها. */
+var PA_PERM_GROUPS=[
+  { t:'الإنشاء والمتابعة', keys:[['can_create','رفع الطلبات'],['can_edit','تعديل الطلبات']] },
+  { t:'اعتماد الحاجة', keys:[['can_approve_stage','اعتماد الحاجة (مدير القسم/القطاع)']] },
+  { t:'المشتريات والتعميد', keys:[['can_manage_procurement','إدارة المشتريات والتسعير'],['can_approve_award','اعتماد التعميد'],['can_issue_po','إصدار أمر الشراء'],['can_approve_committee','اعتماد اللجنة']] },
+  { t:'المالية والصرف', keys:[['can_approve_finance','الاعتماد المالي المسبق'],['can_approve_disbursement','اعتماد الصرف'],['can_disburse','تنفيذ الصرف (أمين الصندوق)']] },
+  { t:'الوحدات (Modules)', mod:true, keys:[['can_see_finance','وحدة العرض المالي — التكاليف والعروض والمبالغ'],['can_verify_stock','تدقيق واستلام المستودع']] },
+  { t:'إدارة البوابة', keys:[['can_manage_users','إدارة المستخدمين والبوابة'],['can_manage_company','إدارة إعدادات الشركة']] }
+];
+function pa_permMatrixHTML(k,u){
+  var isAdm=!!u.admin, pr=u.perms||{}, ov=u.ov||{};
+  return PA_PERM_GROUPS.map(function(g){
+    var boxes=g.keys.map(function(pair){
+      var pk=pair[0], pl=pair[1], on=isAdm||!!pr[pk];
+      var edited=Object.prototype.hasOwnProperty.call(ov,pk);
+      var badge=edited?' <span class="badge info" style="font-size:8.5px;padding:1px 5px">معدّل</span>':'';
+      return '<label style="'+_pchk+'" title="'+esc(pk)+(edited?' — قيمة مخصّصة تختلف عن الوظيفة':'')+'"><input type="checkbox" '+(on?'checked':'')+' '+(isAdm?'disabled':'')+' onchange="togglePerm(\''+k+'\',\''+pk+'\',this.checked)"> '+esc(pl)+badge+'</label>';
+    }).join('');
+    var modStyle=g.mod?'border:1px solid var(--gold);background:rgba(194,160,99,.06)':'border:1px solid var(--line-2)';
+    return '<div style="'+modStyle+';border-radius:10px;padding:9px 11px;margin-top:8px">'
+      +'<div class="muted" style="font-size:10.5px;font-weight:800;letter-spacing:.2px;margin-bottom:6px">'+(g.mod?ic('scale',12)+' ':'')+esc(g.t)+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:9px 16px">'+boxes+'</div></div>';
+  }).join('');
+}
+/* تغليف بطاقة المستخدم المرجعية: نُبقي كل بنيتها ونستبدل كتلة الصلاحيات الخماسية القديمة
+   بمصفوفة كاملة. أسماء ref فريدة (_pa_refUserCard) تفادياً للتكرار اللانهائي. */
+var _pa_refUserCard = userCard;
+userCard = function(k,u){
+  var pending=u.active===false;
+  var perms = pa_permMatrixHTML(k,u);
+  var delegOpt=['<option value="">— بلا —</option>'].concat(Object.keys(USERS).filter(function(x){return x!==k;}).map(function(x){return '<option value="'+x+'" '+(u.delegate===x?'selected':'')+'>'+esc(uName(x))+'</option>';})).join('');
+  var deptOpt=Object.entries(DEPTS).map(function(e){var dk=e[0],d=e[1];return '<option value="'+dk+'" '+(u.deptId===dk?'selected':'')+'>'+esc(d.n)+' — '+esc(d.sector)+'</option>';}).join('');
+  return '<div class="card" style="'+(pending?'border-color:var(--gold);box-shadow:0 0 0 3px rgba(194,160,99,.1),var(--sh-2)':'')+';margin-bottom:14px">'
+    +'<div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">'+avatar(u.n)
+    +'<div style="flex:1;min-width:160px"><div style="font-weight:700">'+esc(u.n)+' '+(u.admin?'<span class="badge gold">أدمن</span>':'')+' '+(pending?'<span class="badge warn">بانتظار التفعيل</span>':'')+' '+(u.away?'<span class="badge info">في إجازة</span>':'')+' '+(u.suspended?'<span class="badge danger">موقوف الدخول</span>':'')+'</div>'
+    +'<div class="muted" style="font-size:11.5px" dir="ltr">'+esc(u.email||'')+'</div></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+(pending?'<button class="btn btn-primary btn-sm" onclick="activateUser(\''+k+'\')">'+ic('check',14)+' تفعيل</button><button class="btn btn-danger btn-sm" onclick="rejectUser(\''+k+'\')">'+ic('x',14)+' رفض</button>':'<button class="btn btn-ghost btn-sm" onclick="toggleAway(\''+k+'\')">'+ic('clock',14)+' '+(u.away?'إنهاء الإجازة':'وضع في إجازة')+'</button>'+(u.admin?'':'<button class="btn btn-ghost btn-sm" onclick="toggleSuspend(\''+k+'\')">'+ic(u.suspended?'check':'lock',14)+' '+(u.suspended?'إعادة تفعيل الدخول':'إيقاف الدخول')+'</button><button class="btn btn-danger btn-sm" onclick="askDeleteUser(\''+k+'\')">'+ic('trash',14)+' حذف</button>'))+'</div>'
+    +'</div>'
+    +((pending&&(u.reqJob||u.reqRole))?'<div class="chip" style="margin-top:10px">'+ic('user',13)+' طلب الحساب: '+esc(u.reqJob&&JOBS[u.reqJob]?JOBS[u.reqJob].title:(u.reqRole==='approver'?'صلاحية اعتماد':'موظف'))+'</div>':'')
+    +'<div style="margin-top:13px;padding-top:12px;border-top:1px solid var(--line-2)">'
+    +'<div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:700">'+ic('shield',13)+' الوظيفة:</span>'
+    +'<select class="select" style="max-width:280px" onchange="setUserJob(\''+k+'\',this.value)" '+(u.admin?'disabled':'')+'>'+jobOptions(u.job)+'</select></div>'
+    +((u.job&&JOBS[u.job])?'<div class="muted" style="font-size:11.5px;margin-top:7px">'+esc(JOBS[u.job].desc)+'</div>'+jobPermChips(u.job):'')
+    +'</div>'
+    +'<div style="margin-top:12px"><div class="muted" style="font-size:12px;font-weight:700;margin-bottom:2px">'+ic('scale',13)+' صلاحيات المستخدم (قابلة للتعديل بقرارك)'+(u.admin?' — <span style="color:var(--gold)">الأدمن يملك كل الصلاحيات</span>':'')+'</div>'+perms+'</div>'
+    +'<div style="margin-top:12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:600">القطاع/القسم:</span><select class="select" style="max-width:240px" onchange="setUserDept(\''+k+'\',this.value)">'+deptOpt+'</select></div>'
+    +'<div style="margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span class="muted" style="font-size:12px;font-weight:600">المفوَّض عند الغياب:</span><select class="select" style="max-width:220px" onchange="setDelegate(\''+k+'\',this.value)">'+delegOpt+'</select></div>'
+    +'</div>';
+};
+/* التبديل الفردي (P0-1s): يسجّل دلتا المستخدم مقابل أساس الوظيفة عبر RPC ذرّية محروسة بأدمن،
+   فتبقى التخصيصات الفردية حتى لو عُدِّلت الوظيفة لاحقاً (إصلاح عيب مراجعة المالك A3). */
+togglePerm = async function(k,real,on){
+  var u=USERS[k]; if(!u||u.admin) return;
+  try{ await pa_rpc('portal_set_user_permission',{p_username:k,p_key:real,p_on:!!on}); }
+  catch(e){ return; }   /* pa_rpc يُظهر الخطأ */
+  toast('حُفظت الصلاحية','ok');
+  await loadAll(); render();
 };
 
 /* ══════ م2: طباعة مضغوطة — كل مستند في صفحة A4 واحدة (مقيسة بـChromium PDF) ══════
@@ -5379,7 +5709,7 @@ try{
 try{
   if(typeof TABS!=='undefined' && !TABS.some(function(t){return t[0]==='expense';})) TABS.push(['expense','صرف مباشر','money']);
   var _pa_expCanUse=function(){ var a=accessOf(ME)||{}; var c=a.can||{};
-    return isAdmin() || !!c.create || !!c.approveDisb || !!c.disburse || !!(a.see&&a.see.finance); };
+    return isAdmin() || !!c.createDirect || !!c.approveDisb || !!c.disburse || !!(a.see&&a.see.finance); };
   if(typeof navAllowed==='function'){ var _pa_refNavAllowed3=navAllowed;
     navAllowed=function(k){ if(k==='expense') return _pa_expCanUse(); return _pa_refNavAllowed3(k); }; }
   if(typeof render==='function'){ var _pa_refRender3=render;
@@ -5390,7 +5720,8 @@ try{
 
 /* ── شاشة التبويب: نموذج إنشاء (لمن يملك create) + قائمة طلبات الصرف المرئية ── */
 var EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'',
-               iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'' };
+               iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'', ibanReason:'' };
+function pa_expReset(){ EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'', ibanReason:'' }; }
 function pa_expSet(k,v){ EXP_META[k]=v; if(k==='method') pa_expenseRender(); }
 /* اختيار مستفيد من السجلّ (053): يملأ الاسم، وللبنكي يملأ ويقفل الآيبان/الحساب المُعتمَد. */
 function pa_expPickBenef(id){
@@ -5403,12 +5734,13 @@ function pa_expPickBenef(id){
 function pa_expenseRender(){ var v=$('view'); if(v && VIEW==='expense') v.innerHTML=pa_expenseHome(); }
 function pa_expenseHome(){
   var a=accessOf(ME)||{}, c=a.can||{};
-  var canCreate = isAdmin() || !!c.create;
+  var canCreate = isAdmin() || !!c.createDirect;
   var mine=(REQS||[]).filter(function(r){return r && r.kind==='expense';});
   var list = mine.length ? '<div class="card"><div class="sec-title"><span class="ico">'+ic('list',16)+'</span>طلبات الصرف ('+mine.length+')</div>'
       + '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>رقم</th><th>الجهة/المستفيد</th><th>القيمة</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>'
       + mine.map(function(r){
-          var stTxt=({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—';
+          var _rs=(r._raw&&r._raw.status)||'';
+          var stTxt=(_rs==='draft')?'مسودّة':(_rs==='returned')?'مُعاد للتعديل':(({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—');
           var stCls=(r.phase==='closed')?'ok':(r.phase==='pay'?'gold':'');
           return '<tr><td dir="ltr" class="mono">'+esc(r.id)+'</td><td>'+esc(r.beneficiary||'—')+'</td>'
             +'<td class="mono">'+money(r.estTotal)+'</td><td>'+({bank:'تحويل',custody:'عهدة',credit:'آجل'})[r.expenseMethod||'bank']+'</td>'
@@ -5562,7 +5894,21 @@ function pa_openExpense(id){ CURRENT=id; VIEW='detail'; render(); }
 function pa_expenseForm(){
   var L='style="font-size:11px;color:var(--muted,#7a8296);margin-bottom:3px;display:block;font-weight:700"';
   var m=EXP_META;
-  var depts=Object.keys(DEPTS||{}).map(function(k){return '<option value="'+esc(k)+'"'+(m.deptId===k?' selected':'')+'>'+esc((DEPTS[k]||{}).n||k)+'</option>';}).join('');
+  var isAdm=isAdmin();
+  var myDept=(USERS[ME]||{}).deptId||'';
+  /* غير الأدمن: القسم مقفل على قسم ملفه (الخادم يفرضه). الأدمن: منتقٍ بالأقسام النشطة فقط. */
+  if(!isAdm && myDept){ m.deptId=myDept; }
+  var deptField;
+  if(!isAdm){
+    var dn=(DEPTS[myDept]||{}).n||myDept||'—';
+    deptField='<div style="flex:1;min-width:130px"><label '+L+'>القسم</label>'
+      +'<input class="input" value="'+esc(dn)+'" readonly style="background:var(--panel2,#f2f4f8)">'
+      +'<div class="muted" style="font-size:10px;margin-top:2px">قسمك من ملفك (لا يمكن تغييره).</div></div>';
+  } else {
+    var depts=Object.keys(DEPTS||{}).filter(function(k){return (DEPTS[k]||{}).active!==false;})
+      .map(function(k){return '<option value="'+esc(k)+'"'+(m.deptId===k?' selected':'')+'>'+esc((DEPTS[k]||{}).n||k)+'</option>';}).join('');
+    deptField='<div style="flex:1;min-width:130px"><label '+L+'>القسم *</label><select class="select" id="ex-dept" onchange="EXP_META.deptId=this.value"><option value="">— اختر —</option>'+depts+'</select></div>';
+  }
   var users=Object.keys(USERS||{}).filter(function(u){return (USERS[u]||{}).active!==false;})
     .map(function(u){return '<option value="'+esc(u)+'"'+(m.custodyTo===u?' selected':'')+'>'+esc(uName(u))+'</option>';}).join('');
   var picked=!!m.beneficiaryId;
@@ -5581,7 +5927,11 @@ function pa_expenseForm(){
   var methodFields='';
   if(m.method==='bank'){
     methodFields='<div style="flex:2;min-width:200px"><label '+L+'>آيبان المستفيد (SA..) *</label><input class="input mono" id="ex-iban" dir="ltr" maxlength="24" placeholder="SA............" value="'+esc(m.iban)+'" oninput="EXP_META.iban=this.value"'+lockAttr+'></div>'
-      +'<div style="flex:2;min-width:160px"><label '+L+'>اسم الحساب *</label><input class="input" id="ex-accname" placeholder="اسم صاحب الحساب" value="'+esc(m.accName)+'" oninput="EXP_META.accName=this.value"'+lockAttr+'></div>';
+      +'<div style="flex:2;min-width:160px"><label '+L+'>اسم الحساب *</label><input class="input" id="ex-accname" placeholder="اسم صاحب الحساب" value="'+esc(m.accName)+'" oninput="EXP_META.accName=this.value"'+lockAttr+'></div>'
+      /* ضابط تعويضي (SEC-03): آيبان يدوي (بلا مستفيد معتمَد) يتطلّب سبباً مُوثّقاً + شارة استثناء ظاهرة. */
+      +(!picked?('<div style="flex:1 1 100%;min-width:200px;background:var(--danger-bg,#fdeceb);border:1px solid var(--danger,#c0392b);border-radius:8px;padding:8px 10px">'
+        +'<label '+L+' style="color:var(--danger,#c0392b)">'+ic('info',12)+' إدخال يدوي — غير مُختار من سجلّ المستفيدين · سبب التغيير *</label>'
+        +'<input class="input" id="ex-ibanreason" placeholder="لماذا لم يُختَر مستفيد معتمَد من السجلّ؟" value="'+esc(m.ibanReason||'')+'" oninput="EXP_META.ibanReason=this.value"></div>'):'');
   } else if(m.method==='custody'){
     methodFields='<div style="flex:2;min-width:200px"><label '+L+'>مسؤول العهدة *</label><select class="select" id="ex-custody" onchange="EXP_META.custodyTo=this.value"><option value="">— اختر —</option>'+users+'</select></div>';
   } else {
@@ -5595,7 +5945,7 @@ function pa_expenseForm(){
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">'
       +'<div style="flex:2;min-width:200px"><label '+L+'>الجهة/المستفيد *</label><input class="input" id="ex-benef" placeholder="اسم الجهة أو المستفيد" value="'+esc(m.beneficiary)+'" oninput="EXP_META.beneficiary=this.value"'+(picked?' readonly style="background:var(--panel2,#f2f4f8)"':'')+'></div>'
       +'<div style="flex:1;min-width:120px"><label '+L+'>المبلغ (ر.س) *</label><input class="input mono" id="ex-amt" type="number" min="1" step="any" placeholder="0" value="'+esc(m.amount)+'" oninput="EXP_META.amount=this.value"></div>'
-      +'<div style="flex:1;min-width:130px"><label '+L+'>القسم *</label><select class="select" id="ex-dept" onchange="EXP_META.deptId=this.value"><option value="">— اختر —</option>'+depts+'</select></div>'
+      +deptField
     +'</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px">'
       +'<div style="flex:1;min-width:150px"><label '+L+'>طريقة السداد *</label><select class="select" id="ex-method" onchange="pa_expSet(\'method\',this.value)">'
@@ -5607,34 +5957,37 @@ function pa_expenseForm(){
     +'</div>'
     +'<div style="margin-bottom:10px"><label '+L+'>الغرض *</label><input class="input" id="ex-purpose" placeholder="سبب الصرف" value="'+esc(m.purpose)+'" oninput="EXP_META.purpose=this.value"></div>'
     +'<div style="margin-bottom:10px"><label '+L+'>ملاحظات</label><textarea class="input" id="ex-note" rows="2" oninput="EXP_META.note=this.value">'+esc(m.note)+'</textarea></div>'
-    +'<div style="display:flex;justify-content:flex-end"><button class="btn btn-gold btn-sm" id="ex-save" onclick="submitExpense()">'+ic('check',14)+' إرسال طلب الصرف</button></div>'
+    +'<div class="muted" style="font-size:11.5px;margin-bottom:8px">'+ic('info',12)+' تُنشأ مسودّة أولاً — تُرفَق المستندات الداعمة ثم تُقدَّم للاعتماد (لا يُخطَر المعتمِدون قبل التقديم).</div>'
+    +'<div style="display:flex;justify-content:flex-end"><button class="btn btn-gold btn-sm" id="ex-save" onclick="submitExpense()">'+ic('check',14)+' إنشاء مسودّة وإرفاق المستندات</button></div>'
   +'</div>';
 }
+/* إنشاء مسودّة الصرف فقط — لا سلسلة ولا إشعار (يتبعها إرفاق المستندات ثم pa_submitExpenseDraft). */
 async function submitExpense(){
   var m=EXP_META;
   if(!m.beneficiary.trim()){ toast('اسم الجهة/المستفيد مطلوب','err'); return; }
   var amt=Number(m.amount); if(!(amt>0)){ toast('المبلغ غير صالح','err'); return; }
-  if(!m.deptId){ toast('اختر القسم','err'); return; }
+  if(!m.deptId){ toast('القسم مطلوب','err'); return; }
   if(!m.purpose.trim()){ toast('الغرض مطلوب','err'); return; }
   var benId=m.beneficiaryId?Number(m.beneficiaryId):null;
-  var det={};
+  var det={}, manualReason=null;
   if(m.method==='bank'){
-    /* عند الربط بالسجلّ يُفرَض الآيبان خادمياً؛ التحقّق اليدوي فقط في الإدخال الحرّ. */
+    /* عند الربط بالسجلّ يُفرَض الآيبان خادمياً؛ التحقّق اليدوي + السبب فقط في الإدخال الحرّ. */
     if(!benId){ if(!/^SA\d{22}$/.test((m.iban||'').replace(/\s/g,''))){ toast('آيبان غير صحيح (SA + 22 رقماً)','err'); return; }
-      if(!m.accName.trim()){ toast('اسم الحساب مطلوب','err'); return; } }
+      if(!m.accName.trim()){ toast('اسم الحساب مطلوب','err'); return; }
+      manualReason=(m.ibanReason||'').trim();
+      if(!manualReason){ toast('سبب الإدخال اليدوي للآيبان مطلوب (ضابط تعويضي)','err'); return; } }
     det={iban:(m.iban||'').replace(/\s/g,''),account_name:(m.accName||'').trim()}; }
   else if(m.method==='custody'){ if(!m.custodyTo){ toast('حدّد مسؤول العهدة','err'); return; } det={custody_to:m.custodyTo}; }
   else { if(!m.dueDate){ toast('تاريخ الاستحقاق مطلوب','err'); return; } det={due_date:m.dueDate}; }
   var btn=$('ex-save'); if(btn) btn.disabled=true;
   try{
-    var res=await pa_rpc('portal_create_expense',{ p_beneficiary:m.beneficiary.trim(), p_amount:amt, p_kind:m.method,
+    var res=await pa_rpc('portal_create_expense_draft',{ p_beneficiary:m.beneficiary.trim(), p_amount:amt, p_kind:m.method,
       p_purpose:m.purpose.trim(), p_department_id:m.deptId, p_need_by:m.needBy||null, p_details:det, p_note:m.note||null,
-      p_beneficiary_id:benId });
-    EXP_META={ beneficiary:'', amount:'', method:'bank', purpose:'', deptId:'', needBy:'', note:'', iban:'', accName:'', custodyTo:'', dueDate:'', beneficiaryId:'' };
-    toast('أُنشئ طلب الصرف','ok');
-    try{ pa_notify('request',res.id,'submitted'); pa_notify('disbursement',res.id,'pending'); }catch(_e){}
-    await loadAll(); CURRENT=res.id; VIEW='detail'; render();
-  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر إنشاء الطلب'),'err'); }
+      p_beneficiary_id:benId, p_iban_reason:manualReason });
+    pa_expReset();
+    toast('أُنشئت المسودّة — أرفِق المستندات الداعمة ثم قدِّم','ok');
+    await loadAll(); CURRENT=res.id; VIEW='detail'; render();   /* لا إشعار قبل التقديم الفعليّ */
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر إنشاء المسودّة'),'err'); }
 }
 
 /* ── تفصيل طلب الصرف المباشر: يحلّ محلّ رَفّ المشتريات (المُحوِّل) ── */
@@ -5648,57 +6001,116 @@ if(typeof detailHTML==='function'){ var _pa_refDetailHTML_exp=detailHTML;
 function pa_expenseDetail(r){
   var back='<button class="btn btn-ghost btn-sm" onclick="go(\'expense\')" style="margin-bottom:12px">'+ic('undo',14)+' رجوع</button>';
   var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[r.expenseMethod||'bank'];
+  var rawStatus=(r._raw&&r._raw.status)||'';
+  var isDraft=(rawStatus==='draft'), isReturned=(rawStatus==='returned');
+  var det=(r._raw&&r._raw.expense_details)||{};
+  var manualIban=(det.iban_source==='manual');
+  var badge = isDraft ? '<span class="badge">مسودّة</span>'
+    : isReturned ? '<span class="badge" style="background:var(--danger-bg);color:var(--danger)">مُعاد للتعديل</span>'
+    : '<span class="badge '+(r.phase==='closed'?'ok':(r.phase==='pay'?'gold':''))+'">'+(({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—')+'</span>';
   var head='<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:flex-start">'
     +'<div><div class="mono muted" style="font-size:12px" dir="ltr">'+esc(r.id)+'</div>'
       +'<h2 style="margin:2px 0 0;font-size:19px">'+esc(r.title||'طلب صرف')+'</h2></div>'
-    +'<span class="badge '+(r.phase==='closed'?'ok':(r.phase==='pay'?'gold':''))+'">'
-      +(({disb:'قيد الاعتماد',pay:'قيد التنفيذ',closed:'مكتمل'})[r.phase]||'—')+'</span></div>'
+    + badge + '</div>'
     +'<div class="meta-grid" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'
       +pa_metaCell('الجهة/المستفيد',esc(r.beneficiary||'—'))
       +pa_metaCell('المبلغ',money(r.estTotal)+' ر.س')
-      +pa_metaCell('طريقة السداد',methodTxt)
+      +pa_metaCell('طريقة السداد',methodTxt+(manualIban?' <span class="badge" style="font-size:9px;background:var(--danger-bg);color:var(--danger)">آيبان يدوي</span>':''))
       +pa_metaCell('القسم',esc(r.dept||'—'))
       +pa_metaCell('المقدّم',esc(uName(r.requester||'')))
       +(r.needBy?pa_metaCell('مطلوب بحلول',esc(r.needBy)):'')
-    +'</div></div>';
-  var body=head + pa_disbChainPanel(r) + pa_expenseExecPanel(r) + pa_expenseVoucher(r);
+    +'</div>'
+    +(manualIban?('<div class="muted" style="font-size:11.5px;margin-top:8px;color:var(--danger)">'+ic('info',12)+' آيبان مُدخَل يدويّاً (غير مُختار من سجلّ المستفيدين) — أدخله '+esc(uName(det.iban_entered_by||r.requester))+(det.iban_manual_reason?(' · السبب: '+esc(det.iban_manual_reason)):'')+'</div>'):'')
+    +'</div>';
+  var body;
+  var canSubmit=(isDraft||isReturned) && (r.requester===ME || isAdmin() || !!((accessOf(ME)||{}).can||{}).edit);
+  if(isDraft||isReturned){
+    var nActive=(r.docs||[]).filter(function(d){return d.active&&!d.paymentId&&d.verification==='verified';}).length;
+    var docsReq=(typeof pa_expDocsRequired==='function')?pa_expDocsRequired():true;   /* (Codex round-4) احترام إعداد الإلزام */
+    var blockSubmit=(docsReq && nActive<1);
+    var bannerTxt=isReturned
+      ? '<b>مُعاد للتعديل</b> — عدّل المستندات (يبقى القديم في السجلّ) ثم أعِد التقديم لسلسلة الاعتماد.'
+      : '<b>مسودّة</b> — أرفِق المستندات الداعمة ثم قدِّم الطلب لسلسلة الاعتماد. لن يُخطَر المعتمِدون قبل التقديم الفعليّ.';
+    var banner='<div class="card" style="border-color:var(--gold-soft)"><div style="font-size:13px">'+ic('info',14)+' '+bannerTxt+'</div></div>';
+    body = head + banner + pa_docCenter(r, true);
+    if(canSubmit){
+      body += '<div class="card"><div style="display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap">'
+        + (blockSubmit?'<span class="muted" style="font-size:12px">أرفِق مستنداً داعماً واحداً على الأقل لتفعيل التقديم.</span>':'')
+        + '<button class="btn btn-gold" id="pa-exp-submit" onclick="pa_submitExpenseDraft(\''+esc(r.id)+'\')"'+(blockSubmit?' disabled':'')+'>'+ic('check',15)+(isReturned?' إعادة التقديم للاعتماد':' تقديم الطلب للاعتماد')+'</button>'
+      +'</div></div>';
+    }
+    if(isReturned){ body += pa_disbChainPanel(r); }   /* عرض السلسلة/سبب الإرجاع */
+  } else {
+    body = head + pa_docCenter(r, false) + pa_disbChainPanel(r) + pa_expenseExecPanel(r) + pa_expenseVoucher(r);
+  }
   try{ if(typeof auditTimeline==='function') body += auditTimeline(r); }catch(_e){}
   return back + body;
 }
-/* سند صرف مباشر قابل للطباعة/PDF (المرحلة 4) — مستند رسميّ من بيانات الطلب وسلسلة اعتماده. */
+/* سند صرف مباشر قابل للطباعة/PDF — مستند رسميّ بنفس نموذج سند صرف دورة المشتريات (docPayHTML/paymentPreview).
+   يعيد استخدام قالب .doc المرجعيّ حرفيّاً (docHead/doc-body/doc-stamp/metaGrid/doc-sech/amount-box/doc-words/
+   doc-sign عبر signBlock/docFoot/doc-actions) مطبَّقاً على بيانات الصرف المباشر وسلسلة اعتماده الفعليّة. */
 function pa_expenseVoucher(r){
   var vat=(typeof PSET!=='undefined'&&PSET&&PSET.vat!=null)?Number(PSET.vat):15;
-  var net=Number(r.estTotal)||0, tot=Math.round(net*(1+vat/100));
-  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[r.expenseMethod||'bank'];
+  var net=Number(r.estTotal)||0, tot=Math.round(net*(1+vat/100)), vatAmt=tot-net;
+  var method=r.expenseMethod||'bank';
+  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[method]||'—';
   var det=(r._raw&&r._raw.expense_details)||{};
-  var sigs=(r.disbChain||[]).filter(function(s){return s.decision==='approved'&&s.actor;})
-    .map(function(s){return '<td style="border:1px solid #cfd6e0;padding:8px 10px;text-align:center;font-size:11px"><div style="color:#5b6472">'+esc(s.label||'اعتماد')+'</div><div style="font-weight:700;margin-top:14px">'+esc(uName(s.actor))+'</div></td>';}).join('');
-  var execRow='';
-  if(r.expensePay&&r.expensePay.status==='disbursed'){ execRow='<tr><td style="padding:7px 10px;color:#5b6472">نُفِّذ الصرف بواسطة</td><td style="padding:7px 10px;font-weight:700">'+esc(uName(r.expensePay.disbursedBy||''))+'</td></tr>'; }
-  function row(l,v){ return '<tr><td style="padding:7px 10px;color:#5b6472;width:38%">'+l+'</td><td style="padding:7px 10px;font-weight:700">'+v+'</td></tr>'; }
-  var voucher='<div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-    +'<div class="sec-title" style="margin:0"><span class="ico">'+ic('file',16)+'</span>سند الصرف</div>'
-    +'<button class="btn btn-primary btn-sm" onclick="printEl(\'exp-voucher-'+esc(r.id)+'\',\'سند صرف\',\''+esc(r.id)+'\')">'+ic('print',14)+' طباعة / PDF</button></div>'
-    +'<div id="exp-voucher-'+esc(r.id)+'" style="background:#fff;border:1px solid #cfd6e0;border-radius:10px;padding:20px;color:#1b2333" dir="rtl">'
-      +'<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1b2333;padding-bottom:10px;margin-bottom:14px">'
-        +'<div style="font-weight:800;font-size:16px">مجموعة الذيابي</div>'
-        +'<div style="text-align:end"><div style="font-weight:800;font-size:15px">سند صرف مباشر</div><div class="mono" style="font-size:11px;color:#5b6472" dir="ltr">'+esc(r.id)+'</div></div></div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:12.5px">'
-        +row('الجهة/المستفيد',esc(r.beneficiary||'—'))
-        +row('الغرض',esc(r.title||'—'))
-        +row('القسم',esc(r.dept||'—'))
-        +row('طريقة السداد',methodTxt)
-        +(det.iban?row('الآيبان','<span class="mono" dir="ltr">'+esc(det.iban)+'</span>'):'')
-        +(det.custody_to?row('مسؤول العهدة',esc(uName(det.custody_to))):'')
-        +row('المبلغ الصافي','<span class="mono">'+money(net)+'</span> ر.س')
-        +row('ضريبة القيمة المضافة ('+vat+'%)','<span class="mono">'+money(tot-net)+'</span> ر.س')
-        +row('الإجمالي المستحقّ','<span class="mono" style="font-size:14px">'+money(tot)+'</span> ر.س')
-        +execRow
-      +'</table>'
-      +(sigs?('<div style="margin-top:18px;font-size:11px;color:#5b6472;margin-bottom:6px">اعتمادات الصرف:</div><table style="width:100%;border-collapse:collapse"><tr>'+sigs+'</tr></table>'):'')
-      +'<div style="margin-top:16px;font-size:10.5px;color:#8b95a6;text-align:center">مستند آليّ من بوابة الذيابي — صالح للتدقيق. تاريخ الطباعة يُذيَّل تلقائياً.</div>'
-    +'</div></div>';
-  return voucher;
+  var pay=r.expensePay||null;
+  var voided=!!(pay&&pay.status==='voided');
+  var done=(!voided)&&((pay&&pay.status==='disbursed')||r.phase==='closed');
+  var no=(pay&&pay.no)||('EV-DG26-'+String(r.id||'').slice(-4));
+  var createdAt=(pay&&pay.createdAt)||Date.now();
+  /* بيانات الصرف حسب الطريقة (يقابل detRows في paymentPreview) */
+  var detRows;
+  if(method==='bank'){
+    detRows=[['الآيبان',det.iban?('<span dir=ltr>'+esc(det.iban)+'</span>'):'—'],
+      ['اسم الحساب',esc(det.account_name||det.acc_name||'—')],
+      ['البنك',esc(det.bank_name||'—')]];
+    if(det.iban_source==='manual') detRows.push(['ملاحظة الآيبان','مُدخَل يدويّاً'+(det.iban_manual_reason?(' — '+esc(det.iban_manual_reason)):'')]);
+  } else if(method==='custody'){
+    detRows=[['العهدة باسم',esc(uName(det.custody_to||''))],['الصفة',esc(uRole(det.custody_to||''))]];
+  } else {
+    detRows=[['تاريخ الاستحقاق',esc(det.due_date||'—')],['مدة الأجل',esc(det.terms||'—')]];
+  }
+  /* المعتمِدون الفعليّون من سلسلة اعتماد الصرف (cycle='disbursement') */
+  var appr=(r.disbChain||[]).filter(function(s){return s.decision==='approved'&&s.actor;});
+  var lastApprover=appr.length?uName(appr[appr.length-1].actor):'';
+  var lastApproverSub=appr.length?(appr[appr.length-1].label||'الإدارة المالية'):'الإدارة المالية';
+  /* سجل اعتمادات الصرف الموثّق (يقابل approvalLog في المشتريات) — يظهر عند تعدّد المعتمِدين */
+  var apprLog='';
+  if(appr.length){
+    var rows=appr.map(function(s,i){ return '<tr><td style="text-align:center;color:var(--muted)">'+(i+1)+'</td>'
+      +'<td>'+esc(s.label||'اعتماد الصرف')+'</td><td style="font-weight:700">'+esc(uName(s.actor))+'</td>'
+      +'<td style="text-align:center" dir="ltr">'+(s.actedAt?fmtDate(s.actedAt).slice(0,10):'—')+'</td>'
+      +'<td style="text-align:center"><span class="badge ok" style="font-size:9.5px">اعتماد صرف</span></td></tr>'; }).join('');
+    if(done&&pay&&pay.disbursedAt) rows+='<tr><td style="text-align:center;color:var(--muted)">'+(appr.length+1)+'</td>'
+      +'<td>تنفيذ الصرف</td><td style="font-weight:700">'+esc(uName(pay.disbursedBy))+'</td>'
+      +'<td style="text-align:center" dir="ltr">'+fmtDate(pay.disbursedAt).slice(0,10)+'</td>'
+      +'<td style="text-align:center"><span class="badge ok" style="font-size:9.5px">صرف</span></td></tr>';
+    apprLog='<div class="doc-sech" style="margin-top:18px">سجل اعتمادات الصرف الموثّق</div>'
+      +'<table><thead><tr><th style="width:30px">م</th><th>المرحلة</th><th>المعتمِد الفعلي</th>'
+      +'<th style="width:90px;text-align:center">التاريخ</th><th style="width:74px;text-align:center">النوع</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  var stamp=voided?'<div class="doc-stamp info">مُبطَل</div>'
+    :(done?'<div class="doc-stamp ok">مصروف</div>':'<div class="doc-stamp warn">بانتظار الصرف</div>');
+  var domId='doc-exp-'+r.id;
+  return `<div class="doc" id="${domId}">
+    ${docHead('سند صرف مباشر','DIRECT EXPENSE VOUCHER',no)}
+    <div class="doc-body">
+      ${stamp}
+      ${metaGrid([['المستفيد',esc(r.beneficiary||'—')],['طريقة الصرف',esc(methodTxt)],['القسم',esc(r.dept||'—')],['الموضوع',esc(r.title||'—')],['المرجع','<span dir=ltr>'+esc(r.id)+'</span>'],['التاريخ',fmtDate(createdAt).slice(0,10)]])}
+      <div class="doc-sech">بيانات الصرف</div>
+      ${metaGrid(detRows.length?detRows:[['—','—']])}
+      <div class="doc-sech">تفصيل المبلغ</div>
+      ${metaGrid([['الصافي',money(net)+' ر.س'],['ضريبة القيمة المضافة ('+vat+'%)',money(vatAmt)+' ر.س'],['الإجمالي (شامل الضريبة)',money(tot)+' ر.س']])}
+      <div style="background:linear-gradient(180deg,#eef6f1,var(--ok-bg));border:1.5px solid var(--ok-line);border-radius:12px;padding:16px;text-align:center;margin:16px 0 4px"><div class="muted" style="font-size:11px;font-weight:700;letter-spacing:.03em">المبلغ المطلوب صرفه (شامل الضريبة)</div><div style="font-size:28px;font-weight:800;color:#1c5a40;letter-spacing:-.02em;margin-top:3px">${money(tot)}</div><div style="font-size:11.5px;color:#4a7a63;margin-top:3px">${tafqit(tot)}</div></div>
+      <div class="doc-words" style="border-color:var(--gold)">${ic('alert',13)} صرف مباشر مستقلّ خاضع لسلسلة الاعتماد المالية وفصل المهام — يُرفق المستند الداعم (عرض/فاتورة/مستخلص) للتدقيق والأرشفة.</div>
+      <div class="doc-sign">${signBlock('معدّ الطلب',uName(r.requester||''),'الجهة الطالبة')}${signBlock('اعتماد الصرف',lastApprover,lastApproverSub)}${signBlock('تنفيذ الصرف',done&&pay?uName(pay.disbursedBy):'',done&&pay?('صُرف '+fmtDate(pay.disbursedAt).slice(0,10)):'عند الصرف',true)}</div>
+      ${apprLog}
+      ${docFoot(no)}
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${domId}','سند صرف مباشر','${esc(no)}')">${ic('print',14)} طباعة / PDF</button></div>
+  </div>`;
 }
 function pa_metaCell(l,v){ return '<div style="background:var(--surface-2,#f5f3ee);border:1px solid var(--line-2,#eee);border-radius:9px;padding:8px 11px">'
   +'<div style="font-size:10.5px;color:var(--muted,#7a8296)">'+l+'</div><div style="font-weight:700;font-size:13.5px;margin-top:2px">'+v+'</div></div>'; }
@@ -5723,10 +6135,45 @@ function pa_disbChainPanel(r){
     return '<div class="par-row"><div class="av sm" style="background:'+(done?'linear-gradient(155deg,#36916b,#2e7d5b)':active?'linear-gradient(155deg,#c2a063,#a37f43)':'#cdc4b2')+';color:#fff">'+(done?'✓':(s.seq||(i+1)))+'</div>'
       +'<div class="nm" style="flex:1">'+esc(s.label||'')+'<div class="rl muted" style="font-size:10.5px;font-weight:500">'+esc(uName(s.user||''))+(s.comment?(' · '+esc(s.comment)):'')+'</div></div>'+right+'</div>';
   }).join('');
+  var isDirect=(r.reqType==='direct_expense'||r.kind==='expense');
+  /* B1 — وضوح التسليم: من أين جاء الصرف (مباشر أم من اكتمال دورة الشراء) */
+  var handoff = isDirect
+    ? '<div class="chip" style="margin-bottom:10px">'+ic('user',13)+' صرف مباشر مستقلّ — بلا دورة شراء</div>'
+    : '<div class="chip" style="margin-bottom:10px;background:rgba(46,125,91,.12);color:var(--ok)">'+ic('cart',13)+' تسليم من دورة الشراء: اكتمل أمر الشراء ودخل الطلب دورة الصرف</div>';
   return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
     +'<div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>سلسلة اعتماد الصرف</div>'
-    +'<div class="muted" style="font-size:11.5px;margin-bottom:10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
+    + handoff
+    + pa_disbFlow(r)   /* B2 — تصوّر بصريّ لسلسلة موافقات الصرف (كدورة الحاجة) */
+    +'<div class="muted" style="font-size:11.5px;margin:12px 0 10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
     + rows + '</div>';
+}
+/* B2 — الجدول الزمنيّ البصريّ لسلسلة الصرف (يعيد استخدام أنماط .flow المرجعية، المُحوِّل فقط) */
+function pa_disbFlow(r){
+  var ch=r.disbChain||[]; if(!ch.length) return '';
+  var isDirect=(r.reqType==='direct_expense'||r.kind==='expense');
+  var startLbl=isDirect?(r.beneficiary||'المستفيد'):'من دورة الشراء';
+  var startSub=isDirect?'صرف مباشر':'اكتمل أمر الشراء';
+  var parts=['<div class="fl-start">'+ic(isDirect?'user':'cart',20)+'<span class="lab">'+esc(startLbl)+'</span><span class="muted" style="font-size:10.5px">'+esc(startSub)+'</span></div>'];
+  var curIdx=-1; for(var i=0;i<ch.length;i++){ if(ch[i].decision==='pending'){ curIdx=i; break; } }
+  ch.forEach(function(s,i){
+    var st=s.decision==='approved'?'done':s.decision==='rejected'?'rej':(i===curIdx?'active':'wait');
+    var connState=st==='done'?'done':st==='active'?'active':'';
+    parts.push('<div class="fl-conn '+connState+'"></div>');
+    var badge=st==='done'?ic('check',15):st==='rej'?ic('x',15):(s.seq||(i+1));
+    var who=s.user?('<div class="fl-who">'+avatar(uName(s.user),'sm')+'<div><div class="nm">'+esc(uName(s.user))+'</div><div class="rl">'+esc(uRole(s.user))+'</div></div></div>'):'';
+    var meta=st==='done'?('<div class="fl-meta"><span class="fl-done-line">'+ic('check',13)+' اعتُمد</span></div>')
+      :st==='active'?('<div class="fl-meta">'+ic('clock',14)+' <span>بانتظار الاعتماد</span></div>')
+      :st==='rej'?('<div class="fl-meta">'+(s.comment?('«'+esc(String(s.comment).slice(0,40))+'»'):'مرفوض')+'</div>')
+      :'<div class="fl-meta muted">بالانتظار</div>';
+    parts.push('<div class="fl-node '+st+'"><div class="fl-badge">'+badge+'</div><div class="fl-stage">'+esc(s.label||'')+'</div>'+who+meta+'</div>');
+  });
+  var pay=(r.proc&&r.proc.payment)||null;
+  var paid=(pay&&pay.status==='disbursed')||r.phase==='closed';
+  var allApproved=ch.every(function(x){return x.decision==='approved';});
+  var endTxt=paid?'تمّ الصرف':(allApproved?'جاهز للتنفيذ (البنك/الصندوق)':'بانتظار اكتمال الاعتماد');
+  parts.push('<div class="fl-conn '+(paid?'done':'')+'"></div>');
+  parts.push('<div class="fl-end '+(paid?'':'pending')+'">'+ic(paid?'flag':'money',20)+'<span class="lab">'+esc(endTxt)+'</span></div>');
+  return '<div class="flow-scroll"><div class="flow">'+parts.join('')+'</div></div>';
 }
 function pa_canApproveDisb(s){ var a=accessOf(ME)||{}; if(isAdmin()) return true; var perms=(USERS[ME]||{}).perms||{};
   var rk=s.roleKey; if(!rk) return !!(a.can&&a.can.approveDisb);
@@ -5789,6 +6236,16 @@ function pa_expenseExecPanel(r){
       +(canVoid?(' <button class="btn btn-danger btn-sm" onclick="pa_voidDisb(\''+r.id+'\','+pay._id+')">'+ic('undo',13)+' إبطال</button>'):'')
       +'</div></div>';
   }
+  if(pay.legacyEvidenceQuarantined){
+    return '<div class="card" style="border-color:var(--danger-line)"><div class="sec-title"><span class="ico">'+ic('alert',16)+'</span>دليل طلب الدفع القديم محجور</div>'
+      +'<div class="muted" style="font-size:12.5px;margin-bottom:10px">لا يمكن نقل حالة الدفعة حتى إرفاق دليل موثّق جديد.</div>'
+      +(canDisb?('<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
+        +'<label class="btn btn-ghost btn-sm" for="legacy-pay-proof" style="cursor:pointer"><span id="legacy-pay-proofn">📎 اختر دليل الدفع (PDF/صورة)</span></label>'
+        +'<input id="legacy-pay-proof" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_legacyProofPick()">'
+        +'<button class="btn btn-gold btn-sm" id="legacy-pay-recover" onclick="pa_recoverLegacyEvidence(\''+r.id+'\','+pay._id+')">'+ic('check',14)+' توثيق وإلغاء الحجر</button></div>')
+        :'<div class="muted" style="font-size:12px">يتطلّب الإجراء مسؤول صرف أو مديراً.</div>')
+      +'</div>';
+  }
   if(r.phase!=='pay' || !canDisb){
     return '<div class="card muted" style="font-size:12.5px">'+ic('info',13)+' التنفيذ متاح لمسؤول البنك بعد اكتمال سلسلة الاعتماد.</div>';
   }
@@ -5803,6 +6260,18 @@ function pa_expenseExecPanel(r){
         +'<button class="btn btn-gold btn-sm" id="disb-exec" onclick="pa_execDisb(\''+r.id+'\','+pay._id+')">'+ic('check',14)+' تأكيد تنفيذ الصرف</button>'
       +'</div>'))
   +'</div>';
+}
+function pa_legacyProofPick(){ var i=$('legacy-pay-proof'),n=$('legacy-pay-proofn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>24?f.name.slice(0,22)+'…':f.name)):'📎 اختر دليل الدفع (PDF/صورة)'; } }
+async function pa_recoverLegacyEvidence(reqId,payId){
+  var input=$('legacy-pay-proof'); var file=(input&&input.files&&input.files[0])||null;
+  if(!file){ toast('اختر دليل الدفع أولاً','err'); return; }
+  if(!/^(application\/pdf|image\/jpeg|image\/png)$/.test(file.type) || file.size>10*1024*1024){ toast('الملف يجب أن يكون PDF أو صورة وبحجم لا يتجاوز 10 ميجابايت','err'); return; }
+  var btn=$('legacy-pay-recover'); if(btn) btn.disabled=true;
+  try{
+    var key=await pa_docUpload('pay',reqId,file);
+    await pa_rpc('portal_recover_legacy_payment_evidence',{p_payment_id:payId,p_storage_key:key});
+    toast('وُثّق دليل الدفع وأُلغي الحجر','ok'); await pa_after(reqId);
+  }catch(e){ if(btn) btn.disabled=false; toast(String((e&&e.message)||'تعذّر توثيق الدليل'),'err'); }
 }
 function pa_disbProofPick(){ var i=$('disb-proof'),n=$('disb-proofn'); if(i&&n){ var f=i.files&&i.files[0]; n.textContent=f?('✓ '+(f.name.length>18?f.name.slice(0,16)+'…':f.name)):'📎 اختر ملفاً'; } }
 async function pa_execDisb(reqId,payId){
@@ -6014,8 +6483,179 @@ async function pa_supIbanRequest(){
 async function pa_supIbanApprove(cid){ try{ await pa_rpc('portal_supplier_iban_approve',{p_change_id:cid}); toast('اعتُمد تغيير الآيبان','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الاعتماد'),'err'); } }
 async function pa_supIbanReject(cid){ var n=window.prompt('سبب الرفض (اختياري):','')||null; try{ await pa_rpc('portal_supplier_iban_reject',{p_change_id:cid,p_note:n}); toast('رُفض الطلب','ok'); await loadAll(); render(); }catch(e){ toast(String((e&&e.message)||'تعذّر الرفض'),'err'); } }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C2/C3 (+B2) — الإرشاد لا الاستكشاف: لافتة «مطلوب منك الآن» أعلى تفاصيل
+   الطلب. تعيد استخدام myTasks() (المصدر الموحّد لكل الدورات: اعتماد الحاجة/التعميد/أمر
+   الشراء/الصرف/الاستلام) فتُخبر المستخدم فوراً بما هو متوقّف عليه وأين ينقر — دون بحث.
+   المُحوِّل فقط، اسم ref فريد، منطقة التصميم 1–2555 دون مساس. */
+function pa_actionBanner(id){
+  try{
+    var r=(typeof REQS!=='undefined')&&REQS.find(function(x){return x.id===id;}); if(!r) return '';
+    var mine=[]; try{ mine=(myTasks()||[]).filter(function(t){return t.r&&t.r.id===id;}); }catch(e){}
+    if(mine.length){
+      var t=mine[0], urgent=mine.some(function(x){return x.urgent;});
+      var extra=mine.length>1?(' <span class="badge '+(urgent?'danger':'gold')+'" style="font-size:10px">+'+(mine.length-1)+' أخرى</span>'):'';
+      return '<div class="card" style="margin-bottom:16px;border:1px solid '+(urgent?'var(--danger-line)':'var(--gold)')+';background:'+(urgent?'var(--danger-bg)':'rgba(194,160,99,.09)')+'">'
+        +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        +'<div style="width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;color:#fff;background:'+(urgent?'var(--danger)':'linear-gradient(155deg,var(--gold),var(--gold-2))')+'">'+ic(t.ic||'check',20)+'</div>'
+        +'<div style="flex:1;min-width:180px"><div style="font-weight:800;font-size:14.5px;color:var(--ink)">'+(urgent?'⚡ ':'')+'مطلوب منك الآن: '+esc(t.label)+extra+'</div>'
+        +(t.sub?'<div class="muted" style="font-size:12px;margin-top:3px">'+esc(t.sub)+'</div>':'')+'</div>'
+        +'<button class="btn '+(urgent?'btn-danger':'btn-gold')+'" onclick="pa_gotoAction()">'+ic('route',15)+' انتقل للإجراء</button>'
+        +'</div></div>';
+    }
+    if(r.status==='cancelled'||r.phase==='closed') return '';
+    var lbl=((typeof STATUSMETA!=='undefined')&&STATUSMETA[r.status]&&STATUSMETA[r.status].l)||'قيد المعالجة';
+    var whoTxt=''; try{ var cs=(typeof curStage==='function')&&curStage(r); if(cs){ whoTxt=' — بانتظار '+esc(uName(resolveWho(cs))); } }catch(e){}
+    return '<div class="card" style="margin-bottom:16px;background:var(--surface-2)"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<span style="color:var(--muted)">'+ic('eye',16)+'</span>'
+      +'<div style="font-size:12.5px;color:var(--ink)">لا إجراء مطلوب منك الآن — أنت متابع لهذا الطلب. الحالة: <b>'+esc(lbl)+'</b>'+whoTxt+'</div>'
+      +'</div></div>';
+  }catch(e){ return ''; }
+}
+function pa_gotoAction(){ try{ var el=document.getElementById('pa-action-anchor'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
+if(typeof detailHTML==='function'){ var _pa_refDetailHTML_c4=detailHTML;
+  detailHTML=function(id){
+    var html=_pa_refDetailHTML_c4(id);
+    try{
+      /* مرساة القفز = رأس بطاقة سلسلة الموافقات (حاضرة دائماً) */
+      html=html.replace('سلسلة الموافقات — التتبّع الحيّ','<span id="pa-action-anchor"></span>سلسلة الموافقات — التتبّع الحيّ');
+      var b=pa_actionBanner(id);
+      if(b){ var bi=html.indexOf('id="backbar"');
+        if(bi>=0){ var ce=html.indexOf('</div>',bi); if(ce>=0){ ce+=6; html=html.slice(0,ce)+b+html.slice(ce); } else html=b+html; }
+        else html=b+html; }
+    }catch(e){}
+    return html;
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C5 + مبدأ هـ.2 — ضوابط الحوكمة قابلة للتفعيل/الإقفال من الإعدادات.
+   كانت مفاتيح الإنفاذ (ميزانية/آيبان/مطابقة/عقد/مستند عرض/بوّابة صرف/إشعارات) تُذكَر
+   كتلميحات نصّية فقط بلا تبديل. الآن بطاقة تبديل مُحفَّظة عبر RPC أدمن محروس
+   (portal_set_governance_flag). المُحوِّل فقط، اسم ref فريد. */
+async function pa_setGovFlag(key,val){
+  try{ await pa_rpc('portal_set_governance_flag',{p_key:key,p_value:Number(val)}); toast('حُدّث الضبط','ok'); await loadAll(); render(); }
+  catch(e){ /* pa_rpc يُظهر الخطأ */ }
+}
+function pa_govCard(){
+  try{ if(typeof isAdmin==='function' && !isAdmin()) return ''; }catch(e){ return ''; }
+  var P=(typeof PSET!=='undefined'&&PSET)||{};
+  /* locked=true: قرار إطلاق مُلزِم للمالك — معروض كقراءة فقط، والخادم يرفض تغييره بضغطة أدمن (P0-1t). */
+  var flags=[
+    ['budget_enforce','منع تجاوز الميزانية','يمنع تعميداً/صرفاً يتجاوز ميزانية القسم المعتمَدة (يتطلّب تعريف ميزانية للقسم/السنة).',true],
+    ['contract_enforce','منع تجاوز سقف العقد الإطاري','يمنع أمر سحب يتجاوز سقف العقد أو على عقد منتهٍ.',false],
+    ['iban_change_control','ضبط تغيير الآيبان (مورد/مستفيد)','يفرض مسار طلب + اعتماد مزدوج لتغيير أي آيبان بنكي — وقاية احتيال.',false],
+    ['three_way_enforce','المطابقة الثلاثية (الصرف الآجل)','يمنع صرفاً آجلاً بلا مطابقة أمر الشراء ↔ الاستلام ↔ الفاتورة.',false],
+    ['quote_doc_required','إلزام مستند عرض المورد','يمنع تسجيل عرض سعر بلا إرفاق مستند العرض الرسمي.',false],
+    ['disb_gate_purchase','بوّابة صرف متدرّجة على مسار الشراء','عند اكتمال أمر الشراء تُبنى سلسلة اعتماد صرف متدرّجة بدل الاعتماد المسطّح.',false],
+    ['txn_notifications','إشعارات معامَلاتية للاعتماد','التقاط إشعار المعتمِد التالي داخل معاملة الانتقال (تسليم مضمون عبر الصادر).',true]
+  ];
+  var rows=flags.map(function(f){ var on=Number(P[f[0]]||0)>=1, locked=!!f[3];
+    var state=locked?'<span class="badge gold" style="font-size:9px">🔒 قرار المالك — يتطلّب تفويضاً</span>'
+      :(on?'<span class="badge ok" style="font-size:9px">مُفعَّل</span>':'<span class="badge" style="font-size:9px;opacity:.7">مُعطَّل</span>');
+    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)'+(locked?';opacity:.72':'')+'">'
+      +'<input type="checkbox" style="margin-top:3px;width:16px;height:16px;cursor:'+(locked?'not-allowed':'pointer')+'" '+(on?'checked':'')+' '+(locked?'disabled':('onchange="pa_setGovFlag(\''+f[0]+'\',this.checked?1:0)"'))+'>'
+      +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(f[1])+' '+state+'</div>'
+      +'<div class="muted" style="font-size:11.5px;margin-top:2px">'+esc(f[2])+(locked?' <b>مقفل لحالة الإطلاق الحالية — لا يُفعَّل من الإعدادات.</b>':'')+'</div></div></div>';
+  }).join('');
+  var tol=Number(P.three_way_tolerance_pct||0);
+  var tolRow='<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line-2)">'
+    +'<div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--ink)">نسبة تسامح المطابقة الثلاثية %</div>'
+    +'<div class="muted" style="font-size:11.5px;margin-top:2px">الفارق المسموح بين أمر الشراء والفاتورة قبل المنع (يعمل عند تفعيل المطابقة).</div></div>'
+    +'<input class="input num" type="number" min="0" max="100" style="max-width:90px" value="'+tol+'" onchange="pa_setGovFlag(\'three_way_tolerance_pct\',+this.value)"></div>';
+  return '<div class="card" style="margin-top:16px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>ضوابط الحوكمة — تفعيل/إقفال من الإعدادات</div>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:4px">الضوابط القابلة للضبط تُفعَّل/تُقفَل بقرارك؛ إطفاؤها <b>لا يُضعف</b> فصل المهام ولا الرفض الافتراضي ولا التدقيق. الضابطان الموسومان 🔒 <b>مقفلان بقرار المالك لحالة الإطلاق الحالية</b> — لا يُفعَّلان من الإعدادات ويرفض الخادم تغييرهما بضغطة أدمن.</div>'
+    +rows+tolRow+'</div>';
+}
+if(typeof adminSettings==='function'){ var _pa_refAdminSettings=adminSettings;
+  adminSettings=function(){ var h=_pa_refAdminSettings(); try{ h+=pa_govCard(); }catch(e){} return h; };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C6 — تفعيل مصمّم سير العمل: كان يحرّر WORKFLOWS في الذاكرة فقط بلا
+   حفظ (يُفقَد عند إعادة التحميل — عنصر ميّت). الآن زرّ «حفظ المسار» يُسلسِل مراحل
+   المسار الحالي ويحفظها عبر RPC أدمن محروس (portal_save_workflow). المُحوِّل فقط. */
+function pa_wfStageToDb(s,i){
+  var t=s.type;
+  if(t==='parallel'){ throw new Error('المرحلة «'+(s.label||'')+'» متوازية (عدّة معتمِدين) — غير مدعومة في المحرّك: اجعل لكل معتمِد مرحلة مستقلّة.'); }
+  var out={seq:i+1, label:(s.label||('مرحلة '+(i+1)))};
+  if(t==='dept'){ out.resolver='dept_manager'; }
+  else if(t==='finance'){ out.resolver='role'; out.role_key='can_approve_finance'; }
+  else if(t==='role' && s.role){ out.resolver='role'; out.role_key=s.role; }
+  else if(t==='user' && s.approver){ out.resolver='user'; out.approver=s.approver; }
+  else { out.resolver='dept_manager'; }
+  return out;
+}
+function pa_workflowWriteEnabled(){
+  return !!(PORTAL_CAPABILITIES&&PORTAL_CAPABILITIES.workflowDesignerWrite===true);
+}
+async function pa_saveWorkflow(){
+  try{
+    if(!pa_workflowWriteEnabled()){ toast('حفظ المسارات غير مفعّل في هذه البيئة — المصمّم للقراءة فقط','info'); return; }
+    var wf=(typeof getWF==='function')?getWF():null;
+    if(!wf){ toast('لا مسار محدّد','err'); return; }
+    if(wf.id==='award'){ toast('سلسلة التعميد تُدار من مصفوفة DoA لا من هنا','info'); return; }
+    var stages=(wf.stages||[]).map(pa_wfStageToDb);
+    if(!stages.length){ toast('أضف مرحلة واحدة على الأقل','err'); return; }
+    var cond=wf.cond||{};
+    await pa_rpc('portal_save_workflow',{ p_id:wf.id, p_name:wf.name, p_priority:wf.priority||100,
+      p_sector:(cond.sector||wf.sector||null), p_min_total:(cond.minTotal!=null?cond.minTotal:0),
+      p_max_total:(cond.maxTotal!=null?cond.maxTotal:null), p_stages:stages, p_cycle:'need' });
+    toast('حُفظ المسار إلى القاعدة ✦','ok'); await loadAll(); render();
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الحفظ'),'err'); }
+}
+async function pa_deleteWorkflow(){
+  if(!pa_workflowWriteEnabled()){ toast('حذف المسارات غير مفعّل في هذه البيئة — المصمّم للقراءة فقط','info'); return; }
+  var wf=(typeof getWF==='function')?getWF():null;
+  if(!wf || wf.id==='award'){ toast('لا يمكن حذف هذا المسار من هنا','info'); return; }
+  if(!window.confirm('حذف المسار «'+(wf.name||wf.id)+'»؟ (يُعطَّل تلقائياً إن كان مستخدَماً في طلبات قائمة)')) return;
+  try{ var r=await pa_rpc('portal_delete_workflow',{p_id:wf.id});
+    toast((r&&r.mode==='deactivated')?'عُطِّل المسار (مستخدَم في طلبات — حُفظ للتدقيق)':'حُذف المسار','ok');
+    await loadAll(); render();
+  }catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); }
+}
+if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
+  designerHTML=function(){ var h=_pa_refDesignerHTML();
+    try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
+      var wfWrite=pa_workflowWriteEnabled();
+      var wfActions=wfWrite
+        ? '<button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button>'
+          +'<button class="btn btn-danger btn-sm" onclick="pa_deleteWorkflow()">'+ic('trash',14)+' حذف المسار</button>'
+        : '<button class="btn btn-gold" disabled aria-disabled="true">'+ic('check',15)+' حفظ المسار</button>'
+          +'<button class="btn btn-danger btn-sm" disabled aria-disabled="true">'+ic('trash',14)+' حذف المسار</button>';
+      h+='<div class="card" style="margin-top:14px;border-color:var(--gold)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+        +'<div style="flex:1;min-width:200px"><div style="font-weight:800;color:var(--ink)">'+ic('route',15)+' حفظ المسار إلى القاعدة</div>'
+        +'<div class="muted" style="font-size:11.5px">'+(wfWrite
+          ? 'التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.'
+          : '<b>وضع قراءة فقط:</b> حفظ وحذف المسارات غير مفعّلين في هذه البيئة حتى تُطبّق قدرة P0-1u وتُختبر مستقلاً.')+'</div></div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+wfActions+'</div></div></div>';
+    } }catch(e){}
+    return h; };
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   تكليف المالك C1 (تغطية الواجهات) — زرّ التحقّق من سلامة سجلّ التدقيق (WORM بسلسلة تجزئة،
+   الهجرة 057) كان بلا واجهة. الآن في تبويب «سجل التدقيق». المُحوِّل فقط، اسم ref فريد. */
+async function pa_auditVerify(){
+  var el=document.getElementById('pa-audit-vr'); if(el) el.innerHTML='<span class="muted" style="font-size:12px">⏳ جارٍ التحقّق…</span>';
+  try{ var r=await pa_rpc('portal_audit_verify',{});
+    if(r&&r.ok){ if(el) el.innerHTML='<span class="badge ok">'+ic('check',12)+' سليم — فُحِص '+(r.checked||0)+' سجلّاً، السلسلة غير معبوث بها</span>'; toast('سجلّ التدقيق سليم ✦','ok'); }
+    else{ if(el) el.innerHTML='<span class="badge" style="background:var(--danger-bg);color:var(--danger)">'+ic('x',12)+' تحذير: كسر محتمل عند السجلّ #'+((r&&r.broken_at)||'?')+'</span>'; toast('تحذير: كسر في سلسلة التدقيق','err'); }
+  }catch(e){ if(el) el.innerHTML=''; }
+}
+if(typeof adminAudit==='function'){ var _pa_refAdminAudit=adminAudit;
+  adminAudit=function(){ var h=_pa_refAdminAudit();
+    try{ if(typeof isAdmin==='function' && isAdmin()){
+      h='<div class="card" style="margin-bottom:14px"><div class="sec-title"><span class="ico">'+ic('shield',16)+'</span>سلامة سجلّ التدقيق (WORM بسلسلة تجزئة)</div>'
+        +'<div class="muted" style="font-size:12px;margin-bottom:8px">التدقيق مقاوم للعبث تشفيريّاً (SHA-256 متسلسل). اضغط للتحقّق من ترابط السلسلة كاملةً وكشف أيّ تعديل/حذف.</div>'
+        +'<button class="btn btn-gold btn-sm" onclick="pa_auditVerify()">'+ic('check',14)+' تحقّق من السلامة</button> <span id="pa-audit-vr"></span></div>'+h;
+    } }catch(e){}
+    return h; };
+}
+
 /* الإقلاع الفعلي */
-boot();
+/* بوابة الإقلاع الواعية بالبيئة: لا يبدأ التطبيق إلا بعد جلب إعداد Supabase بنجاح (fail-closed). */
+(async()=>{ if(await __bootConfig()) boot(); })();
 </script>
 
 </body>

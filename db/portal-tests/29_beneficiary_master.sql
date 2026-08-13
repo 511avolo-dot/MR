@@ -12,6 +12,12 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $docsoff$ BEGIN
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_settings SET value = value || '{"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
+  PERFORM set_config('app.portal_transition','0',true);
+END $docsoff$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
@@ -89,7 +95,7 @@ BEGIN
   -- BM5: الصرف المباشر بربط السجلّ يفرض آيبان المستفيد المُعتمَد (يتجاوز آيبان العميل الخاطئ)
   PERFORM set_config('request.jwt.claims','{"email":"bm_acc@aldeyabi.com","role":"authenticated"}',true);
   v_r := portal_create_expense('اسم مُتجاهَل', 5000, 'bank', 'شراء لوازم', 'GA', (now()+interval '5 day')::date,
-           '{"iban":"SA0000000000000000000000","account_name":"خاطئ"}'::jsonb, NULL, v_bid);
+           '{"iban":"SA0000000000000000000000","account_name":"خاطئ","iban_manual_reason":"اختبار"}'::jsonb, NULL, v_bid);
   v_req := v_r->>'id';
   SELECT (expense_details->>'iban') INTO v_iban FROM portal_requests WHERE id = v_req;
   IF v_iban <> 'SA7700000000000000000077' THEN RAISE EXCEPTION 'BM5 fail: لم يُفرَض آيبان السجلّ (%)', v_iban; END IF;

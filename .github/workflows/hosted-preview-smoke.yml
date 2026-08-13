@@ -1,0 +1,58 @@
+name: hosted-preview-smoke
+
+on:
+  push:
+    branches: [audit/enterprise-certification-2026-07-27]
+    paths:
+      - 'purchase-portal.html'
+      - 'assets/**'
+      - 'functions/_middleware.js'
+      - 'functions/api/portal-config.js'
+      - 'functions/api/portal-doc.js'
+      - 'functions/api/portal-quote.js'
+      - 'functions/api/portal-upload-cleanup.js'
+      - 'functions/api/_portal-shared.js'
+      - 'scripts/e2e/hosted-preview-smoke.mjs'
+      - '.github/workflows/hosted-preview-smoke.yml'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'purchase-portal.html'
+      - 'assets/**'
+      - 'functions/_middleware.js'
+      - 'functions/api/portal-config.js'
+      - 'functions/api/portal-doc.js'
+      - 'functions/api/portal-quote.js'
+      - 'functions/api/portal-upload-cleanup.js'
+      - 'functions/api/_portal-shared.js'
+      - 'scripts/e2e/hosted-preview-smoke.mjs'
+      - '.github/workflows/hosted-preview-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview-smoke:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'audit/enterprise-certification-2026-07-27' || github.ref_name == 'audit/enterprise-certification-2026-07-27'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify hosted Preview and isolated staging binding
+        env:
+          PREVIEW_BASE_URL: https://audit-enterprise-certificati.aldeyabi-procurement.pages.dev
+          EXPECTED_STAGING_REF: vpfnycxzqziltsnzxbpb
+          EXPECTED_PREVIEW_BRANCH: audit/enterprise-certification-2026-07-27
+          EXPECTED_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MAX_ATTEMPTS: '90'
+          DELAY_MS: '5000'
+        run: node scripts/e2e/hosted-preview-smoke.mjs

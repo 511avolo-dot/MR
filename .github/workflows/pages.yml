@@ -23,6 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # (Stage 1, البند 5) سلامة GitHub Pages: صفحات النظام 3 (وكل صفحة تعتمد /api/*)
+      # تُكسَر على GitHub Pages لعدم وجود Cloudflare Functions. نستبدلها بكعب إعادة توجيه
+      # للنشر القانوني قبل الرفع، فلا تُنشَر صفحة مكسورة. المصدر: deploy/system3-manifest.json.
+      - name: Exclude Function-dependent pages (System-3 safety)
+        run: |
+          node scripts/pages-exclude.mjs --check
+          node scripts/pages-exclude.mjs --dir .
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

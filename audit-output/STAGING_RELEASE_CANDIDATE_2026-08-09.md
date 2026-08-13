@@ -1,0 +1,61 @@
+# Staging release candidate — 2026-08-09
+
+> Candidate scope: PR #74 and Supabase staging `vpfnycxzqziltsnzxbpb` only.
+> Production, `main`, production R2, and migration 063 remain prohibited.
+
+## Candidate identity
+
+- Current published PR head: `d84392ca31f05204d9fab0970dbe5537a37d36eb` (Draft/open/unmerged).
+- Cloudflare Preview `/api/portal-config` reports the published head, branch
+  `audit/enterprise-certification-2026-07-27`, environment `preview`, and the exact staging ref.
+- Applied preventive ACL migration: `p0_1w_function_default_privileges_hardening`
+  (`20260809081015`).
+- Effective release flags remain disabled: `budget_enforce=0`, `txn_notifications=0`,
+  `disb_gate_purchase=0`.
+
+## Executed evidence
+
+- Local Node/browser suite after the server-key compatibility follow-up:
+  **161 passed / 0 failed / 0 skipped** across 10 files.
+- Real-browser subset: **21 passed** (network boundary, inline portal, enterprise UI).
+- Baseline deterministic check passed at
+  `e1fe223d02d402b1bbc1bec0f9061541cb036cd46a16e57e11b9a3afa5779106`.
+- Live default-function ACL test: four assertions passed; future API roles receive no automatic
+  `EXECUTE` grant.
+- Live supplier dummy-token negatives fail before writes.
+- Security Advisor: **97 notices (7 INFO / 90 WARN)**; no regression from `p0_1w`.
+- Live SECURITY DEFINER catalog regression: **10 passed / 0 failed**. The inventory found no
+  mutable `search_path`, no PUBLIC execution, and no dynamic SQL in the portal definer set.
+- Exact-head `portal-tests` run `31306917894` proved the PostgreSQL 16 service, browser job, and
+  Supabase CLI contract were healthy, but the SQL launcher stopped before execution because its remote
+  blob used CRLF. The published follow-up forces LF for every shell launcher and added a 62nd Stage-1
+  regression; the unpublished server-key compatibility follow-up adds assertions 63–64.
+
+## Release gates changed to fail closed
+
+- `portal-tests.yml` now supports `workflow_dispatch` and normal pushes to the certification branch.
+- `hosted-preview-smoke.yml` now runs on certification-branch pushes, so a green gate is tied to the
+  exact branch head rather than depending on a PR path event or a manual run.
+- `authenticated-e2e.yml` no longer succeeds when `STAGING_E2E_USERS` is missing. A green run now means
+  the credentialed journey executed rather than silently skipping.
+- Server-side Supabase calls now distinguish legacy JWT `service_role` keys from `sb_secret_*` API
+  keys. New secret keys are sent only as `apikey`, while the legacy JWT retains its Bearer header.
+  This compatibility change must be published and pass exact-head CI before rotating Staging.
+
+## Gates still required before Production
+
+1. Publish the repo-only follow-up, then obtain exact-head `portal-tests` green: disposable PostgreSQL
+   **346 SQL assertions**, baseline proof,
+   browser fixture, inline portal, enterprise UI, and pinned Supabase CLI contract.
+2. Exact-head `hosted-preview-smoke` green against the matching Cloudflare deployment.
+3. Exact-head `authenticated-multirole-e2e` green with owner-managed staging-only dummy accounts.
+4. Enable leaked-password protection or record a formally accepted risk.
+5. After the compatibility change is deployed to Preview, rotate the Staging portal server key in a
+   coordinated Supabase/Cloudflare window; verify first, revoke the old key last.
+6. Independently review and accept/challenge the documented SECURITY DEFINER dispositions.
+7. ~~Classify and remove only confirmed dummy QA/R2 residue.~~ **DONE 2026-08-09** — 20 guarded
+   dummy requests and seven exact QA R2 objects removed; the `_system/` attestation and all
+   Auth users/master configuration were preserved. Evidence:
+   `audit-output/STAGING_QA_CLEANUP_2026-08-09.md`.
+
+Verdict: **STAGING RELEASE CANDIDATE — PRODUCTION GATE HELD**.

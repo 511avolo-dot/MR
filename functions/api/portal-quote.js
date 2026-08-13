@@ -9,8 +9,8 @@
  *   - يُرجِع { ok, key }. ثم تمرّر الواجهة key إلى portal_submit_offer(p_quote_pdf_key).
  *
  * GET  /api/portal-quote?key=quotes/REQ-.../....pdf
- *   - same-origin + مستخدم بوابة نشط (+ تحقّق رؤية الطلب دفاعاً في العمق).
- *   - يبثّ الملف inline (لا رابط R2 مكشوف). الواجهة تجلبه بجلستها وتعرضه عبر object URL في iframe.
+ *   - same-origin + مستخدم نشط + رؤية الطلب + صلاحية مشاهدة العروض السرية.
+ *   - يبثّ الملف inline (لا رابط R2 مكشوف). الواجهة تجلبه بجلستها وتعرضه عبر object URL.
  */
 import { portalUrl, portalKey, portalConfigured, svcHeaders } from './_portal-shared.js';
 import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
@@ -58,6 +58,18 @@ async function hasPerm(env, base, jwt, perm) {
     return (await r.json()) === true;
   } catch (_) { return false; }
 }
+// P0-1d: رؤية الطلب لا تعني رؤية عروض الموردين. هذا الفحص يفشل مغلقاً عند
+// غياب RPC أو فشل القاعدة، ويستخدم الصلاحية الفعلية من المستخدم أو وظيفته.
+async function canViewQuotes(env, base, jwt, reqId) {
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/portal_can_view_quotes`, {
+      method: 'POST',
+      headers: { apikey: portalKey(env), Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_request_id: reqId }),
+    });
+    return r.ok && (await r.json()) === true;
+  } catch (_) { return false; }
+}
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'origin غير مصرّح' }, 403);
@@ -100,7 +112,7 @@ export async function onRequestGet({ request, env }) {
   const key = String(new URL(request.url).searchParams.get('key') || '').trim();
   if (!KEY_RE.test(key)) return new Response('bad key', { status: 400 });
 
-  // تحقّق أن المستخدم يرى الطلب صاحب الملف — **يفشل مغلقاً** (لا يُبَثّ إلا بتأكيد رؤية صريح).
+  // تحقّق أن المستخدم يرى الطلب صاحب الملف — يفشل مغلقاً.
   const reqId = key.split('/')[1];
   let canSee = false;
   try {
@@ -112,6 +124,9 @@ export async function onRequestGet({ request, env }) {
     if (r.ok) canSee = (await r.json()) === true;
   } catch (_) { canSee = false; }
   if (!canSee) return new Response('forbidden', { status: 403 });
+
+  // الحاجز الحاسم: لا يكفي أن يرى المستخدم طلبه؛ يجب أن يملك صلاحية العروض.
+  if (!(await canViewQuotes(env, base, jwt, reqId))) return new Response('forbidden', { status: 403 });
 
   const obj = await env.QUOTES_BUCKET.get(key);
   if (!obj) return new Response('not found', { status: 404 });

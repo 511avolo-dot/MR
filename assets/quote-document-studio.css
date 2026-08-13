@@ -1,0 +1,59 @@
+/* Quote Document Studio — layered on the shared enterprise document surface. */
+.qds-root .eds-sidebar { display: flex; flex-direction: column; }
+.qds-summary {
+  margin-bottom: 12px;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+}
+.qds-summary__label { color: #8fa0b1; font-size: 9px; font-weight: 800; }
+.qds-summary__value { margin-top: 3px; color: #f3e4c2; font-size: 14px; font-weight: 800; }
+.qds-card { position: relative; }
+.qds-card[data-selected="true"]::after {
+  content: "ضمن المقارنة";
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #9b793e;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+}
+.qds-card__amount { margin-top: 5px; color: #d8c39b; font: 700 11px/1.3 ui-monospace, Menlo, monospace; }
+.qds-hint { margin-top: auto; padding-top: 12px; color: #8695a5; font-size: 9px; line-height: 1.7; }
+.qds-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr); }
+.qds-pane__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #182434;
+  color: #edf2f7;
+}
+.qds-pane__supplier { overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.qds-pane__amount { color: #d8c39b; font: 700 10px/1.2 ui-monospace, Menlo, monospace; white-space: nowrap; }
+.qds-pane .eds-frame,
+.qds-pane .eds-image { border-radius: 0 0 5px 5px; }
+.qds-single .eds-stage { grid-template-columns: minmax(0,1fr) !important; }
+.qds-single .qds-pane { width: min(1120px, 100%); }
+.qds-loading-card {
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+  color: #aab6c3;
+  font-size: 11px;
+}
+@media (max-width: 900px) {
+  .qds-root.eds-compare .eds-stage { grid-template-columns: 1fr; }
+  .qds-root .qds-pane { min-height: 72vh; }
+}

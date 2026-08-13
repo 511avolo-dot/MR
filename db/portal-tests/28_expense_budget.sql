@@ -15,12 +15,15 @@ DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
   DELETE FROM portal_users WHERE username LIKE 'b8_%';
-  DELETE FROM portal_budgets WHERE department_id='GA' AND fiscal_year = EXTRACT(YEAR FROM now())::int;
+  DELETE FROM portal_budgets WHERE department_id IN ('GA','OPS') AND fiscal_year = EXTRACT(YEAR FROM now())::int;
   INSERT INTO portal_users(username,email,display_name,role,permissions,department_id) VALUES
     ('b8_acc','b8_acc@aldeyabi.com','محاسب','user','{"can_create":true,"can_see_finance":true}','GA'),
-    ('b8_fin','b8_fin@aldeyabi.com','مالية','user','{"can_see_finance":true}','GA');
+    ('b8_fin','b8_fin@aldeyabi.com','مالية','user','{"can_see_finance":true}','GA'),
+    -- b8_ops في OPS: لاختبار «بلا ميزانية» ضمن قسمه (بعد AUTHZ-01: الصرف مقيَّد بقسم المُنشئ)
+    ('b8_ops','b8_ops@aldeyabi.com','محاسب OPS','user','{"can_create":true}','OPS');
   -- صفّ الإعدادات موجود؛ نضبط vat=15 (افتراضي) ونُطفئ الإنفاذ ابتداءً
-  UPDATE portal_settings SET value = value || '{"budget_enforce":0}'::jsonb WHERE key='portal_settings';
+  -- هذا الاختبار يفحص الميزانية/الصلاحية عبر المسار الذرّي؛ نُطفئ إلزام المستندات (062) هنا.
+  UPDATE portal_settings SET value = value || '{"budget_enforce":0,"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
 
@@ -58,8 +61,9 @@ BEGIN
   END;
   RAISE NOTICE 'PASS B3 إنفاذ (enforce=1): التجاوز مُنِع';
 
-  -- بلا ميزانية معرّفة: لا إنفاذ (قسم آخر بلا ميزانية)
-  v_r := portal_create_expense('جهة د', 999999, 'custody', 'غرض د', 'OPS', (now()+interval '5 day')::date, '{"custody_to":"b8_acc"}'::jsonb, NULL);
+  -- بلا ميزانية معرّفة: لا إنفاذ (قسم OPS بلا ميزانية، بهوية موظّف OPS — يحترم AUTHZ-01)
+  PERFORM set_config('request.jwt.claims','{"email":"b8_ops@aldeyabi.com","role":"authenticated"}',true);
+  v_r := portal_create_expense('جهة د', 999999, 'custody', 'غرض د', 'OPS', (now()+interval '5 day')::date, '{"custody_to":"b8_ops"}'::jsonb, NULL);
   IF (v_r->>'ok') <> 'true' THEN RAISE EXCEPTION 'B4 fail: مُنِع قسم بلا ميزانية'; END IF;
   RAISE NOTICE 'PASS B4 بلا ميزانية معرّفة ⇒ لا إنفاذ';
 

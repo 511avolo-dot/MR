@@ -10,6 +10,12 @@ CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claims', true), '')::jsonb;
 $$;
 
+DO $docsoff$ BEGIN
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_settings SET value = value || '{"expense_docs_required":0}'::jsonb WHERE key='portal_settings';
+  PERFORM set_config('app.portal_transition','0',true);
+END $docsoff$;
+
 DO $seed$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
@@ -29,7 +35,7 @@ DECLARE v_id text; v_r jsonb; v_pid bigint;
 BEGIN
   PERFORM set_config('request.jwt.claims','{"email":"v51_acc@aldeyabi.com","role":"authenticated"}',true);
   v_r := portal_create_expense('مستفيد', p_amt, 'bank', 'غرض', 'GA', (now()+interval '5 day')::date,
-           '{"iban":"SA1234567890123456789012","account_name":"مستفيد"}'::jsonb, NULL);
+           '{"iban":"SA1234567890123456789012","account_name":"مستفيد","iban_manual_reason":"اختبار"}'::jsonb, NULL);
   v_id := v_r->>'id';
   PERFORM set_config('request.jwt.claims','{"email":"v51_amgr@aldeyabi.com","role":"authenticated"}',true);
   PERFORM portal_pr_transition(v_id,'approve','ok');
