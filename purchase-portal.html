@@ -6046,40 +6046,71 @@ function pa_expenseDetail(r){
   try{ if(typeof auditTimeline==='function') body += auditTimeline(r); }catch(_e){}
   return back + body;
 }
-/* سند صرف مباشر قابل للطباعة/PDF (المرحلة 4) — مستند رسميّ من بيانات الطلب وسلسلة اعتماده. */
+/* سند صرف مباشر قابل للطباعة/PDF — مستند رسميّ بنفس نموذج سند صرف دورة المشتريات (docPayHTML/paymentPreview).
+   يعيد استخدام قالب .doc المرجعيّ حرفيّاً (docHead/doc-body/doc-stamp/metaGrid/doc-sech/amount-box/doc-words/
+   doc-sign عبر signBlock/docFoot/doc-actions) مطبَّقاً على بيانات الصرف المباشر وسلسلة اعتماده الفعليّة. */
 function pa_expenseVoucher(r){
   var vat=(typeof PSET!=='undefined'&&PSET&&PSET.vat!=null)?Number(PSET.vat):15;
-  var net=Number(r.estTotal)||0, tot=Math.round(net*(1+vat/100));
-  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[r.expenseMethod||'bank'];
+  var net=Number(r.estTotal)||0, tot=Math.round(net*(1+vat/100)), vatAmt=tot-net;
+  var method=r.expenseMethod||'bank';
+  var methodTxt=({bank:'تحويل بنكي',custody:'عهدة نقدية',credit:'آجل'})[method]||'—';
   var det=(r._raw&&r._raw.expense_details)||{};
-  var sigs=(r.disbChain||[]).filter(function(s){return s.decision==='approved'&&s.actor;})
-    .map(function(s){return '<td style="border:1px solid #cfd6e0;padding:8px 10px;text-align:center;font-size:11px"><div style="color:#5b6472">'+esc(s.label||'اعتماد')+'</div><div style="font-weight:700;margin-top:14px">'+esc(uName(s.actor))+'</div></td>';}).join('');
-  var execRow='';
-  if(r.expensePay&&r.expensePay.status==='disbursed'){ execRow='<tr><td style="padding:7px 10px;color:#5b6472">نُفِّذ الصرف بواسطة</td><td style="padding:7px 10px;font-weight:700">'+esc(uName(r.expensePay.disbursedBy||''))+'</td></tr>'; }
-  function row(l,v){ return '<tr><td style="padding:7px 10px;color:#5b6472;width:38%">'+l+'</td><td style="padding:7px 10px;font-weight:700">'+v+'</td></tr>'; }
-  var voucher='<div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'
-    +'<div class="sec-title" style="margin:0"><span class="ico">'+ic('file',16)+'</span>سند الصرف</div>'
-    +'<button class="btn btn-primary btn-sm" onclick="printEl(\'exp-voucher-'+esc(r.id)+'\',\'سند صرف\',\''+esc(r.id)+'\')">'+ic('print',14)+' طباعة / PDF</button></div>'
-    +'<div id="exp-voucher-'+esc(r.id)+'" style="background:#fff;border:1px solid #cfd6e0;border-radius:10px;padding:20px;color:#1b2333" dir="rtl">'
-      +'<div style="display:flex;justify-content:space-between;border-bottom:2px solid #1b2333;padding-bottom:10px;margin-bottom:14px">'
-        +'<div style="font-weight:800;font-size:16px">مجموعة الذيابي</div>'
-        +'<div style="text-align:end"><div style="font-weight:800;font-size:15px">سند صرف مباشر</div><div class="mono" style="font-size:11px;color:#5b6472" dir="ltr">'+esc(r.id)+'</div></div></div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:12.5px">'
-        +row('الجهة/المستفيد',esc(r.beneficiary||'—'))
-        +row('الغرض',esc(r.title||'—'))
-        +row('القسم',esc(r.dept||'—'))
-        +row('طريقة السداد',methodTxt)
-        +(det.iban?row('الآيبان','<span class="mono" dir="ltr">'+esc(det.iban)+'</span>'):'')
-        +(det.custody_to?row('مسؤول العهدة',esc(uName(det.custody_to))):'')
-        +row('المبلغ الصافي','<span class="mono">'+money(net)+'</span> ر.س')
-        +row('ضريبة القيمة المضافة ('+vat+'%)','<span class="mono">'+money(tot-net)+'</span> ر.س')
-        +row('الإجمالي المستحقّ','<span class="mono" style="font-size:14px">'+money(tot)+'</span> ر.س')
-        +execRow
-      +'</table>'
-      +(sigs?('<div style="margin-top:18px;font-size:11px;color:#5b6472;margin-bottom:6px">اعتمادات الصرف:</div><table style="width:100%;border-collapse:collapse"><tr>'+sigs+'</tr></table>'):'')
-      +'<div style="margin-top:16px;font-size:10.5px;color:#8b95a6;text-align:center">مستند آليّ من بوابة الذيابي — صالح للتدقيق. تاريخ الطباعة يُذيَّل تلقائياً.</div>'
-    +'</div></div>';
-  return voucher;
+  var pay=r.expensePay||null;
+  var voided=!!(pay&&pay.status==='voided');
+  var done=(!voided)&&((pay&&pay.status==='disbursed')||r.phase==='closed');
+  var no=(pay&&pay.no)||('EV-DG26-'+String(r.id||'').slice(-4));
+  var createdAt=(pay&&pay.createdAt)||Date.now();
+  /* بيانات الصرف حسب الطريقة (يقابل detRows في paymentPreview) */
+  var detRows;
+  if(method==='bank'){
+    detRows=[['الآيبان',det.iban?('<span dir=ltr>'+esc(det.iban)+'</span>'):'—'],
+      ['اسم الحساب',esc(det.account_name||det.acc_name||'—')],
+      ['البنك',esc(det.bank_name||'—')]];
+    if(det.iban_source==='manual') detRows.push(['ملاحظة الآيبان','مُدخَل يدويّاً'+(det.iban_manual_reason?(' — '+esc(det.iban_manual_reason)):'')]);
+  } else if(method==='custody'){
+    detRows=[['العهدة باسم',esc(uName(det.custody_to||''))],['الصفة',esc(uRole(det.custody_to||''))]];
+  } else {
+    detRows=[['تاريخ الاستحقاق',esc(det.due_date||'—')],['مدة الأجل',esc(det.terms||'—')]];
+  }
+  /* المعتمِدون الفعليّون من سلسلة اعتماد الصرف (cycle='disbursement') */
+  var appr=(r.disbChain||[]).filter(function(s){return s.decision==='approved'&&s.actor;});
+  var lastApprover=appr.length?uName(appr[appr.length-1].actor):'';
+  var lastApproverSub=appr.length?(appr[appr.length-1].label||'الإدارة المالية'):'الإدارة المالية';
+  /* سجل اعتمادات الصرف الموثّق (يقابل approvalLog في المشتريات) — يظهر عند تعدّد المعتمِدين */
+  var apprLog='';
+  if(appr.length){
+    var rows=appr.map(function(s,i){ return '<tr><td style="text-align:center;color:var(--muted)">'+(i+1)+'</td>'
+      +'<td>'+esc(s.label||'اعتماد الصرف')+'</td><td style="font-weight:700">'+esc(uName(s.actor))+'</td>'
+      +'<td style="text-align:center" dir="ltr">'+(s.actedAt?fmtDate(s.actedAt).slice(0,10):'—')+'</td>'
+      +'<td style="text-align:center"><span class="badge ok" style="font-size:9.5px">اعتماد صرف</span></td></tr>'; }).join('');
+    if(done&&pay&&pay.disbursedAt) rows+='<tr><td style="text-align:center;color:var(--muted)">'+(appr.length+1)+'</td>'
+      +'<td>تنفيذ الصرف</td><td style="font-weight:700">'+esc(uName(pay.disbursedBy))+'</td>'
+      +'<td style="text-align:center" dir="ltr">'+fmtDate(pay.disbursedAt).slice(0,10)+'</td>'
+      +'<td style="text-align:center"><span class="badge ok" style="font-size:9.5px">صرف</span></td></tr>';
+    apprLog='<div class="doc-sech" style="margin-top:18px">سجل اعتمادات الصرف الموثّق</div>'
+      +'<table><thead><tr><th style="width:30px">م</th><th>المرحلة</th><th>المعتمِد الفعلي</th>'
+      +'<th style="width:90px;text-align:center">التاريخ</th><th style="width:74px;text-align:center">النوع</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  var stamp=voided?'<div class="doc-stamp info">مُبطَل</div>'
+    :(done?'<div class="doc-stamp ok">مصروف</div>':'<div class="doc-stamp warn">بانتظار الصرف</div>');
+  var domId='doc-exp-'+r.id;
+  return `<div class="doc" id="${domId}">
+    ${docHead('سند صرف مباشر','DIRECT EXPENSE VOUCHER',no)}
+    <div class="doc-body">
+      ${stamp}
+      ${metaGrid([['المستفيد',esc(r.beneficiary||'—')],['طريقة الصرف',esc(methodTxt)],['القسم',esc(r.dept||'—')],['الموضوع',esc(r.title||'—')],['المرجع','<span dir=ltr>'+esc(r.id)+'</span>'],['التاريخ',fmtDate(createdAt).slice(0,10)]])}
+      <div class="doc-sech">بيانات الصرف</div>
+      ${metaGrid(detRows.length?detRows:[['—','—']])}
+      <div class="doc-sech">تفصيل المبلغ</div>
+      ${metaGrid([['الصافي',money(net)+' ر.س'],['ضريبة القيمة المضافة ('+vat+'%)',money(vatAmt)+' ر.س'],['الإجمالي (شامل الضريبة)',money(tot)+' ر.س']])}
+      <div style="background:linear-gradient(180deg,#eef6f1,var(--ok-bg));border:1.5px solid var(--ok-line);border-radius:12px;padding:16px;text-align:center;margin:16px 0 4px"><div class="muted" style="font-size:11px;font-weight:700;letter-spacing:.03em">المبلغ المطلوب صرفه (شامل الضريبة)</div><div style="font-size:28px;font-weight:800;color:#1c5a40;letter-spacing:-.02em;margin-top:3px">${money(tot)}</div><div style="font-size:11.5px;color:#4a7a63;margin-top:3px">${tafqit(tot)}</div></div>
+      <div class="doc-words" style="border-color:var(--gold)">${ic('alert',13)} صرف مباشر مستقلّ خاضع لسلسلة الاعتماد المالية وفصل المهام — يُرفق المستند الداعم (عرض/فاتورة/مستخلص) للتدقيق والأرشفة.</div>
+      <div class="doc-sign">${signBlock('معدّ الطلب',uName(r.requester||''),'الجهة الطالبة')}${signBlock('اعتماد الصرف',lastApprover,lastApproverSub)}${signBlock('تنفيذ الصرف',done&&pay?uName(pay.disbursedBy):'',done&&pay?('صُرف '+fmtDate(pay.disbursedAt).slice(0,10)):'عند الصرف',true)}</div>
+      ${apprLog}
+      ${docFoot(no)}
+    </div>
+    <div class="doc-actions"><button class="btn btn-primary btn-sm" onclick="printEl('${domId}','سند صرف مباشر','${esc(no)}')">${ic('print',14)} طباعة / PDF</button></div>
+  </div>`;
 }
 function pa_metaCell(l,v){ return '<div style="background:var(--surface-2,#f5f3ee);border:1px solid var(--line-2,#eee);border-radius:9px;padding:8px 11px">'
   +'<div style="font-size:10.5px;color:var(--muted,#7a8296)">'+l+'</div><div style="font-weight:700;font-size:13.5px;margin-top:2px">'+v+'</div></div>'; }

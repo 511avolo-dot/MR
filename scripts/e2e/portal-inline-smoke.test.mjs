@@ -103,12 +103,20 @@ try {
     out.disbFlow = cap(() => window.pa_disbFlow({ reqType:'direct_expense', beneficiary:'مستفيد',
       disbChain:[ { label:'اعتماد أول', user:'admin', decision:'approved', seq:1 },
                   { label:'تنفيذ', user:'admin', decision:'pending', seq:2 } ] }));
+    // سند الصرف المباشر — نموذج .doc المرجعيّ (يعتمد docHead/metaGrid/signBlock/docFoot/tafqit)
+    out.expenseVoucher = cap(() => window.pa_expenseVoucher({ id:'DG26-EXP-0007', beneficiary:'مؤسسة التوريد',
+      title:'صيانة مكيّفات المكتب', dept:'الشؤون العامّة', estTotal:12000, expenseMethod:'bank', requester:'admin',
+      phase:'closed',
+      _raw:{ expense_details:{ iban:'SA0000000000000000000000', account_name:'مؤسسة التوريد', bank_name:'الأهلي' } },
+      disbChain:[ { label:'محاسب', actor:'admin', decision:'approved', seq:1, actedAt:Date.now() },
+                  { label:'مدير مالي', actor:'admin', decision:'approved', seq:2, actedAt:Date.now() } ],
+      expensePay:{ no:'PV-DG26-0007', amount:13800, status:'disbursed', disbursedBy:'admin', disbursedAt:Date.now(), createdAt:Date.now() } }));
     // ملاحظة: REQS مُعرَّف بـlet (ليس خاصيّة window) فلا يمكن حقنه من evaluate؛ نكتفي بأنّ
     // pa_actionBanner يُنفَّذ بلا رمي (يُعيد '' لطلب غير موجود = سلوك صحيح).
     out.actionBanner = cap(() => window.pa_actionBanner('nonexistent'));
     return out;
   });
-  const mustRender = { govCard:1, permMatrix:1, disbFlow:1 };
+  const mustRender = { govCard:1, permMatrix:1, disbFlow:1, expenseVoucher:1 };
   for (const [name, r] of Object.entries(results)) {
     if (mustRender[name]) { assert.ok(r.ok && r.len > 0, name + ' failed: ' + JSON.stringify(r));
       pass(name + ' renders HTML in-browser (' + r.len + ' chars)'); }
