@@ -119,19 +119,33 @@ export function currentPendingStage(approvals) {
   return (approvals || []).filter((a) => a.decision === 'pending').sort((a, b) => (a.seq || 0) - (b.seq || 0))[0] || null;
 }
 
-// عند غياب المُعتمِد (is_away) يُوجَّه إلى مفوَّضه (delegate_to) — portal_users فقط.
+// حلّ مستلِمي الإشعار الفعليّين — يمنع وصول البريد لحسابات مُعطّلة/مُجازة/محذوفة
+// (سيناريو حساب المدير العام التجريبي في إجازة الذي ظلّ يتلقّى التنبيهات):
+//   • مستخدم غير موجود/محذوف ⇒ يُسقَط.
+//   • غير نشط (active=false) ⇒ يُسقَط.
+//   • في إجازة (is_away) ⇒ يُوجَّه إلى مفوَّضه إن وُجد (ويُعاد تقييم المفوَّض بنفس القواعد:
+//     نشط وغير مُجاز)، وإلّا يُسقَط — لا يُراسَل المُجاز نفسه أبداً.
+// fail-closed: عند تعذّر التحقّق من حالة مستخدم لا نراسله (البريد «أفضل جهد»؛ مركز المهام
+// داخل البوابة يبقى القناة الموثوقة لمن يسجّل الدخول).
 async function applyDelegation(env, base, names) {
   const out = [];
-  for (const n of names) {
-    if (!n) continue;
+  const seen = new Set();                       // يمنع التكرار وحلقات التفويض
+  async function resolve(name, depth) {
+    if (!name || depth > 3) return;
+    const key = String(name).toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
     try {
-      const safe = String(n).replace(/[\\%_,]/g, '');
-      const r = await fetch(`${base}/rest/v1/portal_users?username=ilike.${encodeURIComponent(safe)}&select=username,is_away,delegate_to`, { headers: svcHeaders(env) });
+      const safe = String(name).replace(/[\\%_,]/g, '');
+      const r = await fetch(`${base}/rest/v1/portal_users?username=ilike.${encodeURIComponent(safe)}&select=username,active,is_away,delegate_to`, { headers: svcHeaders(env) });
       const rows = await r.json();
-      const u = (rows || []).find((x) => String(x.username).toLowerCase() === String(n).toLowerCase());
-      out.push(u && u.is_away && u.delegate_to ? u.delegate_to : n);
-    } catch (_) { out.push(n); }
+      const u = (rows || []).find((x) => String(x.username).toLowerCase() === key);
+      if (!u || u.active !== true) return;                                   // محذوف/غير نشط ⇒ لا بريد
+      if (u.is_away) { if (u.delegate_to) await resolve(u.delegate_to, depth + 1); return; }  // مُجاز ⇒ مفوَّضه النشط أو لا أحد
+      out.push(u.username);
+    } catch (_) { /* تعذّر التحقّق ⇒ لا نراسل حساباً غير مؤكَّد الحالة */ }
   }
+  for (const n of [...new Set((names || []).filter(Boolean).map(String))]) await resolve(n, 0);
   return [...new Set(out.filter(Boolean))];
 }
 
