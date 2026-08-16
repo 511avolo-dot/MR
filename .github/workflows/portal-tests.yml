@@ -92,18 +92,7 @@ jobs:
           PGPORT: '5432'
           PGUSER: postgres
           PGPASSWORD: postgres
-        run: |
-          set +e
-          bash db/portal-tests/run.sh > /tmp/portal-tests.log 2>&1
-          status=$?
-          cat /tmp/portal-tests.log
-          if [ "$status" -ne 0 ]; then
-            error_msg="$(grep -E 'ERROR:|FATAL:| fail:' /tmp/portal-tests.log | tail -12 | tr '\n' '|' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
-            tail_msg="$(tail -10 /tmp/portal-tests.log | tr '\n' '|' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
-            echo "::error title=portal-tests errors::$error_msg"
-            echo "::error title=portal-tests final lines::$tail_msg"
-            exit "$status"
-          fi
+        run: bash db/portal-tests/run.sh
 
       - name: F1 proof — قاعدة فارغة → أساس(061) → 062 → الحزمة (verify-baseline.sh)
         env:
