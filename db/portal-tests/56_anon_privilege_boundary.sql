@@ -27,7 +27,9 @@ BEGIN
     EXECUTE format('GRANT ALL PRIVILEGES ON SEQUENCE %I.%I TO anon', r.nspname, r.relname);
   END LOOP;
 
-  GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO PUBLIC, anon, authenticated;
+  IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+    GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO PUBLIC, anon, authenticated;
+  END IF;
   RAISE NOTICE 'PASS AP0 seeded legacy broad grants before applying the real migration';
 END
 $seed$;
@@ -75,10 +77,16 @@ BEGIN
   END IF;
   RAISE NOTICE 'PASS AP2 anon has no direct privilege on any portal sequence';
 
-  IF has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE') THEN
-    RAISE EXCEPTION 'AP3 fail: rls_auto_enable remains public';
+  IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+    IF has_function_privilege(
+      'anon',
+      to_regprocedure('public.rls_auto_enable()'),
+      'EXECUTE'
+    ) THEN
+      RAISE EXCEPTION 'AP3 fail: rls_auto_enable remains public';
+    END IF;
   END IF;
-  RAISE NOTICE 'PASS AP3 rls_auto_enable is server-only';
+  RAISE NOTICE 'PASS AP3 legacy rls_auto_enable is absent or server-only';
 
   IF NOT has_function_privilege('anon', 'public.portal_supplier_rfq(text)', 'EXECUTE')
      OR NOT has_function_privilege(
