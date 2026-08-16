@@ -46,8 +46,15 @@ BEGIN
 END
 $migration$;
 
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+DO $rls_auto$
+BEGIN
+  -- هذه دالة صيانة قديمة موجودة في بعض بيئات الإنتاج وليست جزءاً من التثبيت النظيف.
+  IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+  END IF;
+END
+$rls_auto$;
 
 -- واجهة المورد ذات الرمز فقط — منح مقصود ومختبَر.
 GRANT EXECUTE ON FUNCTION public.portal_supplier_rfq(text)
@@ -107,8 +114,14 @@ BEGIN
     RAISE EXCEPTION 'anon still has direct portal sequence privileges: %', leaked_sequences;
   END IF;
 
-  IF has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE') THEN
-    RAISE EXCEPTION 'anon must not execute rls_auto_enable';
+  IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+    IF has_function_privilege(
+      'anon',
+      to_regprocedure('public.rls_auto_enable()'),
+      'EXECUTE'
+    ) THEN
+      RAISE EXCEPTION 'anon must not execute rls_auto_enable';
+    END IF;
   END IF;
 
   IF NOT has_function_privilege('anon', 'public.portal_supplier_rfq(text)', 'EXECUTE') THEN
