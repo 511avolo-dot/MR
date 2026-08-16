@@ -78,6 +78,7 @@ function keyKind(key) {
 export function onRequestGet({ env }) {
   let url       = env.PORTAL_SUPABASE_URL || '';
   let anonKey   = env.PORTAL_SUPABASE_ANON_KEY || '';
+  const anonFromEnv = !!anonKey;   // (تشخيص مؤقّت) مصدر anon: متغيّر البيئة أم الاحتياطيّ؟
   const commit  = String(env.CF_PAGES_COMMIT_SHA || '').toLowerCase();
   // Transitional workflow persistence (P0-1u) remains disabled until the
   // target database has been independently migrated and verified. Absence or
@@ -156,6 +157,7 @@ export function onRequestGet({ env }) {
 
   return json({
     ok: true, url, anonKey, ref: parsed.ref, env: mode, branch, commit,
+    anon_src: anonFromEnv ? 'env' : 'fallback',   // (تشخيص مؤقّت — يُزال بعد تأكيد المصدر)
     capabilities: { workflowDesignerWrite },
   });
 }
