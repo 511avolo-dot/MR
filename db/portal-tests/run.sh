@@ -120,4 +120,4 @@ run_sql "Authenticated RPC permission matrix: direct coverage for previously imp
 run_sql "p0_2c: إغلاق منح anon المباشرة على علاقات وتسلسلات البوابة" "$HERE/56_anon_privilege_boundary.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (378 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (379 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
