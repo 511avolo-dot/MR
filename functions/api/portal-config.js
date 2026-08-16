@@ -18,6 +18,12 @@
  * لا يُطبَع أي سرّ سوى anon (عام بطبيعته). service_role لا يُعاد أبداً.
  */
 const PROD_REF = 'mwbjoysuybgbrvfrprex';   // مرجع مشروع الإنتاج — يُرفض في المعاينة
+// احتياطيّ الإنتاج فقط: عنوان المشروع + مفتاح anon **العامّ** (يُشحن في العميل بطبيعته، وكان
+// مضمَّناً في التطبيق شهوراً). يُستخدم حصراً على فرع الإنتاج (main) حين يغيب متغيّر البيئة، كي
+// لا يتعطّل الدخول لسبب إعداد Cloudflare. المعاينة لا تستخدمه إطلاقاً (تتطلّب متغيّرها أو تفشل
+// مغلقةً) فيبقى عزل المعاينة عن الإنتاج سليماً. متغيّر البيئة — إن ضُبِط — له الأسبقية.
+const PROD_URL_FALLBACK  = 'https://mwbjoysuybgbrvfrprex.supabase.co';
+const PROD_ANON_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13YmpveXN1eWJnYnJ2ZnJwcmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjcxOTksImV4cCI6MjA5ODUwMzE5OX0.MGaA9WP-tAEicyZAAbVk7sGiNzj3nW6NVkuZCeq4vME';
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -70,8 +76,8 @@ function keyKind(key) {
 }
 
 export function onRequestGet({ env }) {
-  const url     = env.PORTAL_SUPABASE_URL || '';
-  const anonKey = env.PORTAL_SUPABASE_ANON_KEY || '';
+  let url       = env.PORTAL_SUPABASE_URL || '';
+  let anonKey   = env.PORTAL_SUPABASE_ANON_KEY || '';
   const commit  = String(env.CF_PAGES_COMMIT_SHA || '').toLowerCase();
   // Transitional workflow persistence (P0-1u) remains disabled until the
   // target database has been independently migrated and verified. Absence or
@@ -89,6 +95,14 @@ export function onRequestGet({ env }) {
   }
   const mode = branch === PROD_BRANCH ? 'production' : 'preview';
   const isPreview = mode === 'preview';
+
+  // احتياطيّ الإنتاج فقط (main): إن غاب متغيّر البيئة العامّ نستعمل عنوان/مفتاح anon الإنتاجيّ
+  // المضمَّن (كلاهما عامّ) كي يُقلِع الدخول بموثوقية دون تعطّل بسبب إعداد Cloudflare. المعاينة لا
+  // تلمسه (تبقى معزولة عبر متغيّرها أو تفشل مغلقةً). المتغيّر إن ضُبِط له الأسبقية.
+  if (mode === 'production') {
+    if (!url)     url     = PROD_URL_FALLBACK;
+    if (!anonKey) anonKey = PROD_ANON_FALLBACK;
+  }
 
   // (5) جاهزية الخادم لازمة لتدفّق المستندات (مفتاح الخدمة + تخزين الملفات) — بوليانات فقط.
   const hasService = !!env.PORTAL_SUPABASE_SERVICE_ROLE_KEY;
