@@ -228,7 +228,32 @@ BEGIN
   RAISE NOTICE 'PASS M22 portal_sla_tick bare no-op + procurement allow';
 END $t$;
 
--- Catalog closure: the current exact clean schema has 94 authenticated-executable
+-- M25: only an existing administrator may grant/revoke administrator status.
+DO $t$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"email":"m55_req@aldeyabi.com","role":"authenticated"}',true);
+  BEGIN
+    PERFORM portal_set_admin('m55_other',true);
+    RAISE EXCEPTION 'M25 FAIL non-admin granted administrator role';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'M25 FAIL%' THEN RAISE; END IF;
+  END;
+
+  PERFORM set_config('request.jwt.claims','{"email":"m55_admin@aldeyabi.com","role":"authenticated"}',true);
+  r := portal_set_admin('m55_other',true);
+  IF (SELECT role FROM portal_users WHERE username='m55_other') <> 'admin'
+     OR coalesce((r->>'admin')::boolean,false) IS NOT TRUE
+  THEN RAISE EXCEPTION 'M25 FAIL administrator grant result %',r; END IF;
+
+  r := portal_set_admin('m55_other',false);
+  IF (SELECT role FROM portal_users WHERE username='m55_other') <> 'user'
+     OR coalesce((r->>'admin')::boolean,true) IS NOT FALSE
+  THEN RAISE EXCEPTION 'M25 FAIL administrator revoke result %',r; END IF;
+  RAISE NOTICE 'PASS M25 portal_set_admin rejects escalation + admin grant/revoke';
+END $t$;
+
+-- Catalog closure: the current exact clean schema has 95 authenticated-executable
 -- signatures. A new signature must deliberately extend this matrix/suite.
 DO $t$
 DECLARE n int; names int;
@@ -237,8 +262,8 @@ BEGIN
   FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace
   WHERE ns.nspname='public' AND p.proname LIKE 'portal\_%' ESCAPE '\'
     AND has_function_privilege('authenticated',p.oid,'EXECUTE');
-  IF n <> 94 OR names <> 93 THEN RAISE EXCEPTION 'M25 FAIL authenticated RPC inventory drift signatures=% names=%',n,names; END IF;
-  RAISE NOTICE 'PASS M25 authenticated RPC inventory closed at 94 signatures / 93 names';
+  IF n <> 95 OR names <> 94 THEN RAISE EXCEPTION 'M26 FAIL authenticated RPC inventory drift signatures=% names=%',n,names; END IF;
+  RAISE NOTICE 'PASS M26 authenticated RPC inventory closed at 95 signatures / 94 names';
 END $t$;
 
-SELECT 'RPC PERMISSION MATRIX: M1..M25 = 25/25 PASS' AS result;
+SELECT 'RPC PERMISSION MATRIX: M1..M26 = 26/26 PASS' AS result;
