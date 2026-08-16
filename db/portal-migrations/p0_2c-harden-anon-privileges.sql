@@ -56,6 +56,21 @@ BEGIN
 END
 $rls_auto$;
 
+-- مهام الخلفية خادمية فقط. التصريح الصريح مهم أيضاً للتثبيت النظيف، حيث
+-- لا نعتمد على منح Supabase الافتراضية التي قد تختلف عن الإنتاج.
+REVOKE EXECUTE ON FUNCTION public.portal_run_sla()
+  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.portal_recurring_run()
+  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.portal_outbox_claim(integer)
+  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.portal_outbox_mark(bigint, boolean, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.portal_run_sla() TO service_role;
+GRANT EXECUTE ON FUNCTION public.portal_recurring_run() TO service_role;
+GRANT EXECUTE ON FUNCTION public.portal_outbox_claim(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.portal_outbox_mark(bigint, boolean, text) TO service_role;
+
 -- واجهة المورد ذات الرمز فقط — منح مقصود ومختبَر.
 GRANT EXECUTE ON FUNCTION public.portal_supplier_rfq(text)
   TO anon, authenticated, service_role;
