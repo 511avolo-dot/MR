@@ -1616,7 +1616,8 @@ BEGIN
         SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.username,
                u.username, 'system', 'تذكير: طلب متأخّر بانتظار اعتماد مرحلتك ('||coalesce(v_stage.stage_label,'')||')', v_req.title, 'inbox'
         FROM portal_users u
-        WHERE u.active AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
+        WHERE u.active AND NOT coalesce(u.is_away, false)
+          AND coalesce((u.permissions ->> v_stage.role_key)::boolean, false)
         ON CONFLICT (id) DO NOTHING;
       INSERT INTO portal_notifications(id, recipient, type, title, body, link)
         SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||u.delegate_to,
@@ -1635,7 +1636,7 @@ BEGIN
     INSERT INTO portal_notifications(id, recipient, type, title, body, link)
       SELECT 'ntf_'||extract(epoch from now())::bigint||'_'||substr(md5(random()::text),1,6)||'_'||username,
              username, 'system', 'تصعيد SLA: طلب متأخّر', v_req.title, 'inbox'
-      FROM portal_users WHERE role = 'admin' AND active = true
+      FROM portal_users WHERE role = 'admin' AND active = true AND NOT coalesce(is_away, false)
       ON CONFLICT (id) DO NOTHING;
 
     PERFORM set_config('app.portal_transition', '1', true);
@@ -2168,7 +2169,7 @@ BEGIN
   SELECT * INTO v_user FROM portal_users WHERE username = p_username FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
 
-  v_new_role := CASE WHEN p_job_key = 'gm' THEN 'admin' ELSE 'user' END;
+  v_new_role := 'user';   -- (p0_2a) الوظائف لا تصكّ سوبر-يوزر (بما فيها gm) — الأدمن عبر portal_set_admin
   IF v_user.role = 'admin' AND v_new_role <> 'admin' THEN
     -- قفل استشاري يمنع سباق تجريد آخر أدمن (TOCTOU) بين عمليتين متزامنتين
     PERFORM pg_advisory_xact_lock(hashtext('portal_admin_guard'));
@@ -2744,7 +2745,7 @@ BEGIN
   SELECT * INTO v_user FROM portal_users WHERE username = p_username FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
 
-  v_new_role := CASE WHEN p_job_key = 'gm' THEN 'admin' ELSE 'user' END;
+  v_new_role := 'user';   -- (p0_2a) الوظائف لا تصكّ سوبر-يوزر (بما فيها gm) — الأدمن عبر portal_set_admin
   IF v_user.role = 'admin' AND v_new_role <> 'admin' THEN
     PERFORM pg_advisory_xact_lock(hashtext('portal_admin_guard'));
     SELECT count(*) INTO v_other_admins FROM portal_users
@@ -2809,6 +2810,37 @@ REVOKE ALL ON FUNCTION portal_apply_perm_overrides(jsonb,jsonb) FROM PUBLIC, ano
 REVOKE ALL ON FUNCTION portal_perm_overrides_delta(jsonb,jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION portal_set_user_permission(text,text,boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION portal_set_user_permission(text,text,boolean) TO authenticated, service_role;
+
+-- ── (p0_2a) منح/سحب السوبر-يوزر (مدير البوابة) — القناة المقصودة لتعيين الأدمن بدل ربط وظيفة gm ──
+CREATE OR REPLACE FUNCTION portal_set_admin(p_username text, p_on boolean)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_me text := portal_username(); v_user portal_users%ROWTYPE; v_other int;
+BEGIN
+  IF NOT (portal_is_admin() OR portal_is_privileged()) THEN
+    RAISE EXCEPTION 'منح/سحب صلاحية السوبر-يوزر متاح لمدير البوابة (الأدمن) فقط';
+  END IF;
+  SELECT * INTO v_user FROM portal_users WHERE username = p_username FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'المستخدم غير موجود'; END IF;
+  IF p_on THEN
+    IF NOT v_user.active THEN RAISE EXCEPTION 'لا يُمنَح السوبر-يوزر لمستخدم غير نشط'; END IF;
+    IF v_user.role = 'admin' THEN RETURN jsonb_build_object('ok', true, 'user', p_username, 'admin', true, 'noop', true); END IF;
+    PERFORM set_config('app.portal_transition','1',true);
+    UPDATE portal_users SET role = 'admin' WHERE username = p_username;
+    PERFORM set_config('app.portal_transition','0',true);
+  ELSE
+    IF v_user.role <> 'admin' THEN RETURN jsonb_build_object('ok', true, 'user', p_username, 'admin', false, 'noop', true); END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('portal_admin_guard'));
+    SELECT count(*) INTO v_other FROM portal_users WHERE role = 'admin' AND active AND username <> p_username;
+    IF v_other = 0 THEN RAISE EXCEPTION 'لا يمكن سحب صلاحية آخر سوبر-يوزر نشط — عيّن غيره أولاً'; END IF;
+    PERFORM set_config('app.portal_transition','1',true);
+    UPDATE portal_users SET role = 'user' WHERE username = p_username;
+    PERFORM set_config('app.portal_transition','0',true);
+  END IF;
+  PERFORM portal_audit_write(NULL, 'admin_role_set', v_me, 'portal', jsonb_build_object('user', p_username, 'admin', p_on));
+  RETURN jsonb_build_object('ok', true, 'user', p_username, 'admin', p_on);
+END $fn$;
+REVOKE ALL ON FUNCTION portal_set_admin(text,boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION portal_set_admin(text,boolean) TO authenticated, service_role;
 
 -- ── (P0-1t) ضبط مفاتيح الحوكمة من الإعدادات — أدمن فقط، قائمة بيضاء، مدقّق (تكليف هـ.2) ──
 CREATE OR REPLACE FUNCTION portal_set_governance_flag(p_key text, p_value numeric)

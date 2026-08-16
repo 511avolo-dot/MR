@@ -117,5 +117,7 @@ run_sql "اختبار p0_1w: الصلاحيات الافتراضية للدوا�
 run_sql "SECURITY DEFINER: exhaustive live-signature execution-boundary inventory" "$HERE/54_security_definer_inventory.sql"
 run_sql "Authenticated RPC permission matrix: direct coverage for previously implicit functions" "$HERE/55_rpc_permission_matrix.sql"
 
+run_sql "p0_2c: إغلاق منح anon المباشرة على علاقات وتسلسلات البوابة" "$HERE/56_anon_privilege_boundary.sql"
+
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (371 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (379 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
