@@ -2657,6 +2657,55 @@ const PA_EVREMAP={ stage_rejected:'rejected', stage_returned:'returned', payment
   payment_approved_pay:'pay_approved', payment_disbursed:'disbursed', payment_rejected:'pay_rejected',
   award_rejected:'rejected', receipt_recorded:'received' };
 
+/* (تعريب سجلّ الأحداث — المُحوِّل فقط) تجاوز auditTimeline المرجعيّ بخريطة عربية شاملة تغطّي أحداث
+   البوابة (الصرف/المستندات/التصعيد) التي كانت تظهر بمفتاحها الإنجليزيّ الخام. منطقة التصميم كما هي؛
+   هذا التعريف (المتأخّر) يتجاوز تعريف 1428. أي حدث غير معروف يظهر بعبارة عربية محايدة لا إنجليزيّة. */
+const PA_AUDIT_LABELS={
+  created:['file','أُنشئ الطلب','done'], submitted:['send','أُرسل للاعتماد','active'],
+  stage_approved:['check','اعتماد مرحلة','done'], approved:['flag','اعتُمدت الحاجة','done'],
+  rejected:['x','رُفض الطلب','rej'], returned:['undo','أُعيد للتعديل','ret'],
+  resubmitted:['send','أُعيد التقديم','active'], deferred:['clock','أُجّل مالياً','ret'],
+  resumed:['play','استُؤنف بعد السيولة','done'], split_flag:['alert','تنبيه تجزئة','rej'],
+  proc_type:['flag','نوع شراء استثنائي','active'], pricing:['cart','بدأ التسعير','done'],
+  awarded:['award','تم التعميد','done'], award_approved:['check','اعتماد مرحلة تعميد','done'],
+  po_issued:['clipboard','صدر أمر الشراء','done'], payment_req:['money','طلب صرف','done'],
+  pay_approved:['check','اعتماد الصرف','done'], pay_returned:['undo','إرجاع طلب الصرف','ret'],
+  pay_rejected:['x','رفض طلب الصرف','rej'], received:['box','استلام المواد','done'],
+  receipt_req:['send','طلب تأكيد استلام','active'], closed:['check','إغلاق وأرشفة','done'],
+  disbursed:['money','تم الصرف','done'], cancelled:['x','أُلغي الطلب','rej'],
+  transferred:['user','نقل ملكية','active'],
+  expense_draft_created:['file','أُنشئت مسودّة صرف','active'],
+  expense_created:['file','أُنشئ طلب الصرف','done'],
+  expense_submitted:['send','قُدِّم طلب الصرف للاعتماد','active'],
+  manual_iban_entered:['alert','إدخال آيبان يدويّ','ret'],
+  document_uploaded:['clipboard','رُفِع مستند داعم','done'],
+  document_removed:['undo','حُذِف مستند','ret'],
+  document_replaced:['clipboard','استُبدِل مستند بإصدار أحدث','active'],
+  expense_evidence_reconciliation_returned:['undo','أُعيد — يلزم مستند صرف موثّق','ret'],
+  payment_evidence_attached:['clipboard','أُرفِق سند الصرف','done'],
+  legacy_payment_evidence_recovered:['check','توثيق سند دفعة','done'],
+  recurring_expense_awaiting_docs:['file','صرف متكرّر بانتظار المستندات','active'],
+  request_edited:['undo','عُدِّل محتوى الطلب','active'],
+  escalated:['clock','تصعيد — تأخّر عن المهلة','ret']
+};
+function auditTimeline(r){
+  return `<div class="tl">${(r.events||[]).slice().sort((a,b)=>a.at-b.at).map(e=>{
+    const m=PA_AUDIT_LABELS[e.event]||['clock','تحديث على الطلب','done'];
+    return `<div class="tl-step ${m[2]}"><div class="tl-dot">${ic(m[0],15)}</div><div><div class="tl-lbl">${m[1]}${e.stage?' — '+esc(e.stage):''}</div><div class="tl-sub">${esc(e.actor||'')} · ${fmtDate(e.at)}</div>${e.comment?`<div class="tl-note">${esc(e.comment)}</div>`:''}</div></div>`;
+  }).join('')}</div>`;
+}
+
+/* (تصحيح اتجاه سهم دورة الحياة في RTL — المُحوِّل فقط، تجاوز CSS دون لمس منطقة التصميم)
+   كان رأس السهم في .fl-conn::after عند inset-inline-start ملوّناً من inline-end ⇒ يشير يميناً
+   (للخطوة السابقة). نعكسه ليشير للخطوة التالية (يساراً في RTL). يشمل أيضاً سلسلة الصرف. */
+(function(){ try{
+  var s=document.createElement('style');
+  s.textContent='.fl-conn::after{inset-inline-start:auto !important;inset-inline-end:-1px !important;'
+    +'border-inline-end-color:transparent !important;border-inline-start-color:var(--line) !important}'
+    +'.fl-conn.done::after{border-inline-start-color:var(--ok) !important;border-inline-end-color:transparent !important}';
+  (document.head||document.documentElement).appendChild(s);
+}catch(_e){} })();
+
 function pa_mapPayment(pay){ const d=pay.details||{}; const st=(pay.status==='pending_pay')?'pending':pay.status;
   const m={ _id:pay.id, no:'PV-DG26-'+String(pay.request_id||'').slice(-4), amount:Number(pay.amount)||0,
     createdAt:pa_ms(pay.created_at), type:pay.kind, status:st, reqBy:pay.requested_by,
@@ -3965,6 +4014,34 @@ async function closeReq(id){
   await loadAll(); const r=REQS.find(x=>x.id===id);
   if(r && r.phase==='closed'){ toast('أُغلقت المعاملة وأُرشفت ✦','ok'); VIEW='archive'; CURRENT=null; render(); }
   else { CURRENT=id; VIEW='detail'; render(); }
+}
+/* (p0_2c — المُحوِّل) توسيع صلاحية الإلغاء لتشمل مدير القسم/القطاع ضمن نافذة ما قبل الالتزام،
+   مطابقةً لحارس portal_cancel_request. الأسماء فريدة (_pa_ref*) والتعريف المتأخّر يتجاوز المرجع. */
+function pa_reqStatus(r){ return (r&&r._raw&&r._raw.status)||(r&&r.status)||''; }
+function pa_isReqManager(r,u){
+  var did=r.deptId||r.dept_id||(r._raw&&r._raw.department_id); if(!did)return false;
+  var d=DEPTS[did]||{}; if(d.mgr===u)return true;
+  var sec=d.sector; if(!sec)return false;
+  return Object.keys(DEPTS).some(function(k){ return DEPTS[k].sector===sec && DEPTS[k].mgr===u; });
+}
+function pa_cancelPreCommit(r){
+  var st=pa_reqStatus(r);
+  var isExpense=(r.reqType==='direct_expense'||r.kind==='expense');
+  if(isExpense){
+    var disbursed=!!(r.expensePay&&r.expensePay.status==='disbursed');
+    return ['draft','in_review','returned','payment_pending'].indexOf(st)>=0 && !disbursed;
+  }
+  return ['draft','in_review','returned','approved','pricing','award_review'].indexOf(st)>=0;
+}
+function canCancel(r,u){
+  u=u||ME; if(!r)return false;
+  if(isAdmin(u))return true;
+  var can=((accessOf(u)||{}).can)||{};
+  if(can.approveAward||can.issuePO||can.manageRfq)return true;   /* المشتريات (can_manage_procurement) */
+  var st=pa_reqStatus(r);
+  if(r.requester===u && (st==='draft'||st==='in_review'||st==='returned'))return true;
+  if(pa_isReqManager(r,u) && pa_cancelPreCommit(r))return true;
+  return false;
 }
 async function confirmCancel(id){
   const reason=($('cancel-reason')||{}).value||''; if(!reason.trim()){ toast('سبب الإلغاء مطلوب','err'); return; }
@@ -6022,6 +6099,13 @@ function pa_expenseDetail(r){
     +'</div>'
     +(manualIban?('<div class="muted" style="font-size:11.5px;margin-top:8px;color:var(--danger)">'+ic('info',12)+' آيبان مُدخَل يدويّاً (غير مُختار من سجلّ المستفيدين) — أدخله '+esc(uName(det.iban_entered_by||r.requester))+(det.iban_manual_reason?(' · السبب: '+esc(det.iban_manual_reason)):'')+'</div>'):'')
     +'</div>';
+  /* (p0_2c) شريط إلغاء الطلب — يظهر للمخوَّلين (المُقدّم/مدير القسم-القطاع/المشتريات/الأدمن) قبل تنفيذ الصرف. */
+  var _canX = canCancel(r,ME) && r.phase!=='closed' && rawStatus!=='cancelled' && rawStatus!=='closed';
+  var cancelBar = _canX ? ('<div class="card" style="border-color:var(--danger-line);padding:12px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<span class="muted" style="font-size:12px">'+ic('info',12)+' يمكنك إلغاء هذا الطلب قبل تنفيذ الصرف — يوقف الدورة نهائياً ويوثّق السبب.</span>'
+      +'<button class="btn btn-danger btn-sm" onclick="askCancel(\''+esc(r.id)+'\')">'+ic('x',14)+' إلغاء الطلب</button>'
+      +'</div></div>') : '';
   var body;
   var canSubmit=(isDraft||isReturned) && (r.requester===ME || isAdmin() || !!((accessOf(ME)||{}).can||{}).edit);
   if(isDraft||isReturned){
@@ -6032,7 +6116,7 @@ function pa_expenseDetail(r){
       ? '<b>مُعاد للتعديل</b> — عدّل المستندات (يبقى القديم في السجلّ) ثم أعِد التقديم لسلسلة الاعتماد.'
       : '<b>مسودّة</b> — أرفِق المستندات الداعمة ثم قدِّم الطلب لسلسلة الاعتماد. لن يُخطَر المعتمِدون قبل التقديم الفعليّ.';
     var banner='<div class="card" style="border-color:var(--gold-soft)"><div style="font-size:13px">'+ic('info',14)+' '+bannerTxt+'</div></div>';
-    body = head + banner + pa_docCenter(r, true);
+    body = head + cancelBar + banner + pa_docCenter(r, true);
     if(canSubmit){
       body += '<div class="card"><div style="display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap">'
         + (blockSubmit?'<span class="muted" style="font-size:12px">أرفِق مستنداً داعماً واحداً على الأقل لتفعيل التقديم.</span>':'')
@@ -6041,7 +6125,7 @@ function pa_expenseDetail(r){
     }
     if(isReturned){ body += pa_disbChainPanel(r); }   /* عرض السلسلة/سبب الإرجاع */
   } else {
-    body = head + pa_docCenter(r, false) + pa_disbChainPanel(r) + pa_expenseExecPanel(r) + pa_expenseVoucher(r);
+    body = head + cancelBar + pa_docCenter(r, false) + pa_disbChainPanel(r) + pa_expenseExecPanel(r) + pa_expenseVoucher(r);
   }
   try{ if(typeof auditTimeline==='function') body += auditTimeline(r); }catch(_e){}
   return back + body;
