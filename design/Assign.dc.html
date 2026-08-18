@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+  <style>
+    :root{
+      --ink:#231F20;--muted:#6E6459;--faint:#9C9287;
+      --gold:#C4A265;--gold-2:#9A7A45;--gold-3:#7A5E33;--gold-soft:#F0E5CF;
+      --surface:#FFFFFF;--surface-2:#FAF8F5;--line:#E6E0D7;--line-2:#F1ECE4;
+      --ok:#2C6E52;--ok-bg:#E9F1EC;--ok-line:#C4DCCF;
+      --danger:#A8382F;--danger-bg:#F8ECEA;--danger-line:#EBC8C3;
+      --info:#44536B;--info-bg:#EEF0F4;--info-line:#D5DAE3;
+    }
+    body{margin:0;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;color:var(--ink);
+      line-height:1.6;letter-spacing:0;background:linear-gradient(180deg,#f7f3ea,#efe9dd);}
+    a{color:var(--gold-2);} a:hover{color:var(--gold-3);}
+    .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div dir="rtl" style="width:720px;min-height:820px;padding:26px 28px;box-sizing:border-box">
+
+  <div style="margin-bottom:6px;font-size:11.5px;color:var(--faint);font-weight:600">المرحلة ٢ من مسار الشراء</div>
+  <h1 style="margin:0 0 4px;font-size:21px;font-weight:700">مَن يعتمد هذه المرحلة؟</h1>
+  <div style="color:var(--muted);font-size:12.5px;margin-bottom:18px">اختر <b>قاعدة</b> لا شخصاً — القاعدة تصمد عند التوظيف والاستقالة وإعادة الهيكلة.</div>
+
+  <div style="background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17)">
+
+    <sc-for list="{{options}}" as="o" hint-placeholder-count="5">
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:13px;border:1.5px solid {{o.border}};background:{{o.bg}};border-radius:11px;margin-bottom:9px">
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid {{o.dot}};background:{{o.dotFill}};flex-shrink:0;margin-top:2px"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:14px">{{o.title}}</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:600;background:{{o.tagBg}};color:{{o.tagFg}};border:1px solid {{o.tagLine}}">{{o.tag}}</span>
+          </div>
+          <div style="color:var(--muted);font-size:12px;margin-top:2px">{{o.desc}}</div>
+          <sc-if value="{{o.who}}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{o.people}}" as="p" hint-placeholder-count="3">
+                <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:8px;background:var(--surface);border:1px solid var(--line);color:var(--muted)">{{p}}</span>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-for>
+
+    <!-- the warning that only appears for the last-resort option -->
+    <div style="display:flex;gap:10px;align-items:flex-start;background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:11px;padding:12px 13px;margin-top:4px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;color:var(--danger);flex-shrink:0;margin-top:2px"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <div style="font-size:12px;color:var(--ink)">
+        <b>لماذا «شخص محدَّد» آخر خيار؟</b>
+        <div style="color:var(--muted);margin-top:2px">إن غادر الموظّف أو تغيّر دوره تنكسر السلسلة صامتةً ويتوقّف كل طلب عندها. القاعدة تُحدَّث تلقائيّاً؛ الاسم لا.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- eligibility preview -->
+  <div style="background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:18px 20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17);margin-top:16px">
+    <div style="font-size:13.5px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:var(--ok)"><path d="M20 6L9 17l-5-5"/></svg>
+      مَن سيصله الطلب فعليّاً الآن
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <sc-for list="{{resolved}}" as="r" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:7px 11px">
+          <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(155deg,#cbab6f,#a37f43);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:700">{{r.ini}}</div>
+          <div>
+            <div style="font-size:12px;font-weight:600;line-height:1.25">{{r.name}}</div>
+            <div style="font-size:10.5px;color:var(--faint);line-height:1.25">{{r.role}}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:11px;font-size:11.5px;color:var(--faint)">التفويض عند الإجازة والتصعيد عند التأخّر يُطبَّقان تلقائيّاً على هؤلاء.</div>
+  </div>
+
+  <div style="display:flex;gap:9px;justify-content:flex-start;margin-top:16px">
+    <button style="border:1px solid transparent;background:linear-gradient(180deg,#cbab6f,#a37f43);color:#fff;border-radius:11px;padding:10px 20px;font-size:13.5px;font-weight:600;font-family:inherit">اعتماد الإسناد</button>
+    <button style="border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:11px;padding:10px 18px;font-size:13.5px;font-weight:600;font-family:inherit">تراجع</button>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":720,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sel = { border:'#C4A265', bg:'#FDFBF7', dot:'#9A7A45', dotFill:'#C4A265' };
+    const off = { border:'#F1ECE4', bg:'#FFFFFF', dot:'#E6E0D7', dotFill:'transparent' };
+    const tagBest = { tag:'الأمتن',        tagBg:'#E9F1EC', tagFg:'#2C6E52', tagLine:'#C4DCCF' };
+    const tagOk   = { tag:'موصى به',       tagBg:'#EEF0F4', tagFg:'#44536B', tagLine:'#D5DAE3' };
+    const tagLast = { tag:'آخر خيار',      tagBg:'#F8ECEA', tagFg:'#A8382F', tagLine:'#EBC8C3' };
+
+    return {
+      options: [
+        { ...sel, ...tagBest, title:'مدير قسم الطالب',  desc:'يُحدَّد تلقائيّاً من قسم مُقدّم الطلب — يتغيّر معه بلا تعديل.',
+          who:true, people:['خالد العتيبي — الصيانة','فيصل الدوسري — الإنشاءات','+٢ آخرون'] },
+        { ...off, ...tagOk,   title:'دور وظيفيّ',        desc:'كل مَن يحمل صلاحية «اعتماد الحاجة» — أيّ واحد منهم يكفي.', who:false, people:[] },
+        { ...off, ...tagOk,   title:'مدير القطاع',       desc:'مدير القطاع الذي ينتمي إليه قسم الطالب.', who:false, people:[] },
+        { ...off, ...tagOk,   title:'لجنة',              desc:'مجموعة مسمّاة — تختار: الكل يوافق أم أيّ واحد.', who:false, people:[] },
+        { ...off, ...tagLast, title:'شخص محدَّد',        desc:'اسم واحد ثابت مهما تغيّر التنظيم.', who:false, people:[] },
+      ],
+      resolved: [
+        { ini:'خع', name:'خالد العتيبي',  role:'مدير الصيانة والتشغيل' },
+        { ini:'فد', name:'فيصل الدوسري',  role:'مدير الإنشاءات · في إجازة → عمر' },
+        { ini:'عأ', name:'عبدالله الذيابي', role:'مدير المشتريات' },
+        { ini:'نم', name:'نوّاف المطيري',  role:'مدير النقليات' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

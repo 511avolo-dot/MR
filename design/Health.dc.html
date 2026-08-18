@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+  <style>
+    :root{
+      --ink:#231F20;--muted:#6E6459;--faint:#9C9287;
+      --gold:#C4A265;--gold-2:#9A7A45;--gold-3:#7A5E33;--gold-soft:#F0E5CF;
+      --surface:#FFFFFF;--surface-2:#FAF8F5;--line:#E6E0D7;--line-2:#F1ECE4;
+      --ok:#2C6E52;--ok-bg:#E9F1EC;--ok-line:#C4DCCF;
+      --danger:#A8382F;--danger-bg:#F8ECEA;--danger-line:#EBC8C3;
+      --warn:#8A6212;--warn-bg:#F8EFDA;--warn-line:#E7D4A8;
+      --info:#44536B;--info-bg:#EEF0F4;--info-line:#D5DAE3;
+    }
+    body{margin:0;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;color:var(--ink);
+      line-height:1.6;letter-spacing:0;background:linear-gradient(180deg,#f7f3ea,#efe9dd);}
+    a{color:var(--gold-2);} a:hover{color:var(--gold-3);}
+    .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div dir="rtl" style="width:760px;min-height:700px;padding:26px 28px;box-sizing:border-box">
+
+  <h1 style="margin:0 0 4px;font-size:21px;font-weight:700">الحفظ يفشل مغلقاً</h1>
+  <div style="color:var(--muted);font-size:12.5px;margin-bottom:18px">المسار المعطوب لا يُحفَظ — يُكتشف الخلل وقت الإعداد، لا حين يتوقّف طلب حقيقيّ.</div>
+
+  <!-- blocked save -->
+  <div style="background:var(--surface);border:1.5px solid var(--danger-line);border-radius:12px;padding:20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17)">
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div style="width:36px;height:36px;border-radius:10px;background:var(--danger-bg);color:var(--danger);display:grid;place-items:center;flex-shrink:0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700">لا يمكن حفظ هذا المسار — مرحلتان بلا معتمِد</div>
+        <div style="color:var(--muted);font-size:12.5px;margin-top:2px">لو حُفِظ كما هو، لتوقّف كل طلب يمرّ بهما بلا إشعار لأحد.</div>
+
+        <div style="margin-top:14px">
+          <sc-for list="{{broken}}" as="b" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:11px;background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:10px;padding:11px 13px;margin-bottom:8px">
+              <span class="mono" style="width:25px;height:25px;border-radius:7px;background:var(--surface);border:1px solid var(--danger-line);color:var(--danger);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex-shrink:0">{{b.no}}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:600">{{b.stage}}</div>
+                <div style="font-size:11.5px;color:var(--muted)">{{b.why}}</div>
+              </div>
+              <button style="border:1px solid var(--danger-line);background:var(--surface);color:var(--danger);border-radius:9px;padding:6px 12px;font-size:11.5px;font-weight:600;font-family:inherit;flex-shrink:0">{{b.fix}}</button>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;gap:9px;margin-top:12px;align-items:center;flex-wrap:wrap">
+          <button style="border:1px solid var(--line);background:var(--surface-2);color:var(--faint);border-radius:11px;padding:10px 18px;font-size:13.5px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:7px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M20 6L9 17l-5-5"/></svg>
+            حفظ المسار
+          </button>
+          <span style="font-size:11.5px;color:var(--faint)">يُفعَّل الحفظ تلقائيّاً بعد إصلاح المرحلتين.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- healthy state, for contrast -->
+  <div style="background:var(--surface);border:1px solid var(--ok-line);border-radius:12px;padding:18px 20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17);margin-top:16px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:34px;height:34px;border-radius:10px;background:var(--ok-bg);color:var(--ok);display:grid;place-items:center;flex-shrink:0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700">المسار سليم — ٩ خطوات، كلّها مُسنَدة</div>
+        <div style="color:var(--muted);font-size:12px">آخر حفظ: عبدالله الذيابي · اليوم <span class="mono" dir="ltr">14:22</span></div>
+      </div>
+      <span style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:600;background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)">جاهز للحفظ</span>
+    </div>
+  </div>
+
+  <!-- why this matters -->
+  <div style="background:var(--surface-2);border:1px dashed var(--line);border-radius:12px;padding:16px 18px;margin-top:16px">
+    <div style="font-size:12.5px;font-weight:700;margin-bottom:6px">لماذا هذا مهمّ لنا تحديداً</div>
+    <div style="font-size:12px;color:var(--muted)">
+      في اختبارنا الحيّ وقعت هذه الحالة بالضبط: شريحة أمر الشراء فوق ٢٥ ألفاً كانت تطلب «اعتماد اللجنة» و<b style="color:var(--ink)">لا أحد يحملها</b> —
+      فتعطّلت الطلبات الكبيرة، ولم يُنبّه النظام أحداً. هذا الفحص كان سيمنعها وقت الإعداد.
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":760,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      broken: [
+        { no:'4', stage:'اعتماد اللجنة المصغّرة', why:'لا أحد يحمل صلاحية «اعتماد اللجنة»', fix:'أسنِد أعضاء' },
+        { no:'7', stage:'اعتماد الصرف',           why:'حامل واحد فقط — فصل المهام يتطلّب اثنين', fix:'أضِف حاملاً' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

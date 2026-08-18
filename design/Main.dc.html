@@ -1,0 +1,200 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+  <style>
+    :root{
+      --navy:#231F20;--ink:#231F20;--muted:#6E6459;--faint:#9C9287;
+      --gold:#C4A265;--gold-2:#9A7A45;--gold-3:#7A5E33;--gold-soft:#F0E5CF;
+      --surface:#FFFFFF;--surface-2:#FAF8F5;--line:#E6E0D7;--line-2:#F1ECE4;
+      --ok:#2C6E52;--ok-bg:#E9F1EC;--ok-line:#C4DCCF;
+      --danger:#A8382F;--danger-bg:#F8ECEA;--danger-line:#EBC8C3;
+      --warn:#8A6212;--warn-bg:#F8EFDA;--warn-line:#E7D4A8;
+      --info:#44536B;--info-bg:#EEF0F4;--info-line:#D5DAE3;
+    }
+    body{margin:0;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;color:var(--ink);
+      line-height:1.6;letter-spacing:0;
+      background:linear-gradient(180deg,#f7f3ea,#efe9dd);}
+    a{color:var(--gold-2);} a:hover{color:var(--gold-3);}
+    table{border-collapse:collapse;width:100%;}
+    .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div dir="rtl" style="width:1280px;min-height:900px;padding:26px 28px;box-sizing:border-box">
+
+  <!-- page head -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px">
+    <div>
+      <h1 style="margin:0;font-size:24px;font-weight:700;letter-spacing:-.01em">مصمّم سير العمل</h1>
+      <div style="color:var(--muted);font-size:13px;margin-top:2px">دورة الطلب كاملة — من الإنشاء إلى الأرشفة. عدّل الترتيب والمُسنَد إليه، ثم احفظ.</div>
+    </div>
+    <div style="display:flex;gap:9px;align-items:center">
+      <button style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:11px;padding:10px 16px;font-size:13.5px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:7px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M5 3l14 9-14 9z"/></svg>
+        محاكاة
+      </button>
+      <button style="border:1px solid transparent;background:linear-gradient(180deg,#cbab6f,#a37f43);color:#fff;border-radius:11px;padding:10px 18px;font-size:13.5px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:7px;box-shadow:0 10px 22px -10px rgba(163,127,67,.6)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M20 6L9 17l-5-5"/></svg>
+        حفظ المسار
+      </button>
+    </div>
+  </div>
+
+  <!-- template tabs -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+    <div style="background:var(--navy);color:#F0E5CF;border:1px solid transparent;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600">مسار الشراء</div>
+    <div style="background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600">الصرف المباشر</div>
+    <div style="background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600">الصرف المتكرّر</div>
+    <div style="background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600">العقود الإطارية</div>
+    <div style="margin-inline-start:auto;display:flex;gap:8px">
+      <div style="background:var(--surface);color:var(--gold-3);border:1px dashed var(--gold-soft);border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M8 8h12v12H8z"/><path d="M4 16V4h12"/></svg>
+        نسخ مسار قائم
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:18px;align-items:flex-start">
+
+    <!-- ═══ authoring surface: the step table ═══ -->
+    <div style="flex:1 1 auto;min-width:0;background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17)">
+      <div style="font-size:14px;font-weight:700;margin:0 0 14px;padding-bottom:11px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:9px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:var(--gold-2)"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+        خطوات دورة الطلب
+        <span style="margin-inline-start:auto;font-weight:500;font-size:11.5px;color:var(--faint)">الترتيب من الأعلى للأسفل = تسلسل التنفيذ</span>
+      </div>
+
+      <table style="font-size:13px">
+        <thead>
+          <tr style="color:var(--muted);font-size:11.5px;text-align:right">
+            <th style="width:46px;padding:0 0 9px;font-weight:600">#</th>
+            <th style="padding:0 0 9px;font-weight:600">الخطوة</th>
+            <th style="width:172px;padding:0 0 9px;font-weight:600">المُسنَد إليه</th>
+            <th style="width:112px;padding:0 0 9px;font-weight:600">القاعدة</th>
+            <th style="width:74px;padding:0 0 9px;font-weight:600">المهلة</th>
+            <th style="width:62px;padding:0 0 9px;font-weight:600"></th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <sc-for list="{{steps}}" as="s" hint-placeholder-count="9">
+            <tr style="border-top:1px solid var(--line-2)">
+              <td style="padding:11px 0;vertical-align:top">
+                <span class="mono" style="display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--muted)">{{s.no}}</span>
+              </td>
+              <td style="padding:11px 0;vertical-align:top">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-weight:600">{{s.name}}</span>
+                  <sc-if value="{{s.fixed}}" hint-placeholder-val="{{ false }}">
+                    <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:var(--info-bg);color:var(--info);border:1px solid var(--info-line)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+                      ثابتة
+                    </span>
+                  </sc-if>
+                </div>
+                <div style="color:var(--faint);font-size:11.5px">{{s.hint}}</div>
+              </td>
+              <td style="padding:11px 0;vertical-align:top">
+                <div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:5px 10px;font-size:12px;font-weight:600;max-width:100%">
+                  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{s.who}}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;color:var(--faint);flex-shrink:0"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                <div style="margin-top:5px">
+                  <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:{{s.cntBg}};color:{{s.cntFg}};border:1px solid {{s.cntLine}}">{{s.cnt}}</span>
+                </div>
+              </td>
+              <td style="padding:11px 0;vertical-align:top;color:var(--muted);font-size:11.5px">{{s.rule}}</td>
+              <td style="padding:11px 0;vertical-align:top">
+                <span class="mono" style="font-size:12px;color:var(--muted)">{{s.sla}}</span>
+              </td>
+              <td style="padding:11px 0;vertical-align:top">
+                <div style="display:flex;gap:3px;justify-content:flex-end;color:var(--faint)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+                </div>
+              </td>
+            </tr>
+          </sc-for>
+
+        </tbody>
+      </table>
+
+      <div style="margin-top:14px;padding-top:13px;border-top:1px dashed var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button style="border:1px dashed var(--gold-soft);background:var(--surface);color:var(--gold-3);border-radius:11px;padding:9px 15px;font-size:13px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:7px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          إضافة مرحلة اعتماد
+        </button>
+        <span style="font-size:11.5px;color:var(--faint)">تُضاف بين الخطوات القابلة للتعديل فقط — الخطوات الثابتة يفرضها النظام.</span>
+      </div>
+    </div>
+
+    <!-- ═══ read-only generated diagram ═══ -->
+    <div style="flex:0 0 292px;background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17)">
+      <div style="font-size:14px;font-weight:700;margin:0 0 6px;display:flex;align-items:center;gap:8px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:var(--gold-2)"><path d="M12 3v18"/><circle cx="12" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/></svg>
+        المخطّط
+      </div>
+      <div style="font-size:11px;color:var(--faint);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line-2)">يُولَّد من الجدول — للقراءة فقط</div>
+
+      <sc-for list="{{flow}}" as="f" hint-placeholder-count="6">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+            <div style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:{{f.dotBg}};border:1.5px solid {{f.dotLine}};color:{{f.dotFg}};font-size:10.5px;font-weight:700" class="mono">{{f.no}}</div>
+            <sc-if value="{{f.more}}" hint-placeholder-val="{{ true }}">
+              <div style="width:2px;height:26px;background:var(--line)"></div>
+            </sc-if>
+          </div>
+          <div style="padding-bottom:12px;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;line-height:1.35">{{f.name}}</div>
+            <div style="font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{f.who}}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const OK   = { cntBg:'#E9F1EC', cntFg:'#2C6E52', cntLine:'#C4DCCF' };
+    const BAD  = { cntBg:'#F8ECEA', cntFg:'#A8382F', cntLine:'#EBC8C3' };
+    const NEU  = { cntBg:'#FAF8F5', cntFg:'#6E6459', cntLine:'#E6E0D7' };
+
+    const steps = [
+      { no:'1', name:'رفع الطلب',            hint:'الموظّف يُنشئ الطلب ويرفق مستنداته', fixed:true,  who:'كل موظّف',                   rule:'—',                cnt:'متاح للجميع', ...NEU },
+      { no:'2', name:'اعتماد مدير القسم',     hint:'أوّل حلقة في سلسلة الحاجة',          fixed:false, who:'مدير قسم الطالب',            rule:'أيّ واحد',          cnt:'٤ مؤهَّلين',   ...OK  },
+      { no:'3', name:'التحقّق المالي المسبق', hint:'توفّر الميزانية قبل التسعير',         fixed:false, who:'دور: اعتماد مالي',            rule:'أيّ واحد',          cnt:'٢ مؤهَّلان',   ...OK  },
+      { no:'4', name:'التسعير وطلب العروض',   hint:'جمع عروض الموردين ومقارنتها',        fixed:true,  who:'دور: إدارة التسعير',          rule:'—',                cnt:'٣ مؤهَّلين',   ...OK  },
+      { no:'5', name:'اعتماد التعميد',        hint:'سلسلته تكبر حسب مبلغ الطلب',         fixed:true,  who:'حسب مصفوفة الصلاحيات',        rule:'بالقيمة',          cnt:'مصفوفة DoA',  ...NEU },
+      { no:'6', name:'اعتماد أمر الشراء',     hint:'لجنة / مالية / مدير عام حسب الشريحة', fixed:true,  who:'حسب مصفوفة الصلاحيات',        rule:'بالقيمة',          cnt:'٠ مؤهَّلين',   ...BAD },
+      { no:'7', name:'اعتماد الصرف',          hint:'سلسلة مالية متدرّجة',                fixed:false, who:'دور: اعتماد الصرف',           rule:'الكل يوافق',        cnt:'٣ مؤهَّلين',   ...OK  },
+      { no:'8', name:'تنفيذ الصرف',           hint:'أمين الصندوق / مسؤول البنوك',        fixed:true,  who:'دور: تنفيذ الصرف',            rule:'أيّ واحد',          cnt:'٢ مؤهَّلان',   ...OK  },
+      { no:'9', name:'الاستلام ثم الإقفال',   hint:'المُقدّم أو المستودع — ثم أرشفة',     fixed:true,  who:'المُقدّم أو المستودع',        rule:'—',                cnt:'٥ مؤهَّلين',   ...OK  },
+    ];
+
+    const flow = steps.map((s, i) => {
+      const bad = s.cnt === '٠ مؤهَّلين';
+      return {
+        no: s.no, name: s.name, who: s.who, more: i < steps.length - 1,
+        dotBg:  bad ? '#F8ECEA' : (s.fixed ? '#EEF0F4' : '#FAF8F5'),
+        dotLine:bad ? '#A8382F' : (s.fixed ? '#D5DAE3' : '#C4A265'),
+        dotFg:  bad ? '#A8382F' : (s.fixed ? '#44536B' : '#7A5E33'),
+      };
+    });
+
+    return { steps, flow };
+  }
+}
+</script>
+</body>
+</html>

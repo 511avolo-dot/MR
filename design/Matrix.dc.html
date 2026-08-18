@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+  <style>
+    :root{
+      --ink:#231F20;--muted:#6E6459;--faint:#9C9287;
+      --gold:#C4A265;--gold-2:#9A7A45;--gold-3:#7A5E33;--gold-soft:#F0E5CF;
+      --surface:#FFFFFF;--surface-2:#FAF8F5;--line:#E6E0D7;--line-2:#F1ECE4;
+      --ok:#2C6E52;--ok-bg:#E9F1EC;--ok-line:#C4DCCF;
+      --danger:#A8382F;--danger-bg:#F8ECEA;--danger-line:#EBC8C3;
+      --warn:#8A6212;--warn-bg:#F8EFDA;--warn-line:#E7D4A8;
+      --info:#44536B;--info-bg:#EEF0F4;--info-line:#D5DAE3;
+    }
+    body{margin:0;font-family:'IBM Plex Sans Arabic','Segoe UI',Tahoma,sans-serif;color:var(--ink);
+      line-height:1.6;letter-spacing:0;background:linear-gradient(180deg,#f7f3ea,#efe9dd);}
+    a{color:var(--gold-2);} a:hover{color:var(--gold-3);}
+    table{border-collapse:collapse;width:100%;}
+    .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+  </style>
+</helmet>
+
+<div dir="rtl" style="width:900px;min-height:760px;padding:26px 28px;box-sizing:border-box">
+
+  <h1 style="margin:0 0 4px;font-size:21px;font-weight:700">مصفوفة حدود الصلاحية (DoA)</h1>
+  <div style="color:var(--muted);font-size:12.5px;margin-bottom:18px">شرائح المبالغ تُحدّد مَن يعتمد التعميد وأمر الشراء. الشرائح تُقرأ كجدول واحد — لا مخطّط ولا تفريعات.</div>
+
+  <div style="background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17)">
+    <table style="font-size:13px">
+      <thead>
+        <tr style="color:var(--muted);font-size:11.5px;text-align:right">
+          <th style="width:196px;padding:0 0 10px;font-weight:600">الشريحة (ر.س)</th>
+          <th style="width:150px;padding:0 0 10px;font-weight:600">اعتماد التعميد</th>
+          <th style="padding:0 0 10px;font-weight:600">سلسلة اعتماد أمر الشراء</th>
+          <th style="width:96px;padding:0 0 10px;font-weight:600">الحالة</th>
+        </tr>
+      </thead>
+      <tbody>
+        <sc-for list="{{tiers}}" as="t" hint-placeholder-count="5">
+          <tr style="border-top:1px solid var(--line-2);background:{{t.rowBg}}">
+            <td style="padding:12px 0;vertical-align:top">
+              <div class="mono" style="font-size:13px;font-weight:600" dir="ltr">{{t.band}}</div>
+              <div style="font-size:11px;color:var(--faint)">{{t.label}}</div>
+            </td>
+            <td style="padding:12px 0;vertical-align:top;font-size:12.5px">{{t.award}}</td>
+            <td style="padding:12px 0;vertical-align:top">
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <sc-for list="{{t.chain}}" as="c" hint-placeholder-count="3">
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:8px;background:{{c.bg}};border:1px solid {{c.line}};color:{{c.fg}}">{{c.name}}</span>
+                </sc-for>
+              </div>
+            </td>
+            <td style="padding:12px 0;vertical-align:top">
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:600;background:{{t.stBg}};color:{{t.stFg}};border:1px solid {{t.stLine}}">{{t.status}}</span>
+            </td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- contiguity validation -->
+  <div style="display:flex;gap:10px;align-items:flex-start;background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:11px;padding:13px 14px;margin-top:14px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;color:var(--warn);flex-shrink:0;margin-top:2px"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+    <div style="font-size:12.5px">
+      <b>فحص اتّصال الشرائح</b>
+      <div style="color:var(--muted);margin-top:2px">
+        لا فجوات ولا تداخل بين الشرائح — كل مبلغ من <span class="mono" dir="ltr">0</span> إلى <span class="mono" dir="ltr">∞</span> تغطّيه شريحة واحدة بالضبط.
+        <b style="color:var(--warn)">هذا الفحص هو ما يمنع طلباً من السقوط بلا معتمِد.</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- ultimate approver -->
+  <div style="background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:18px 20px;box-shadow:0 8px 20px -10px rgba(35,31,32,.17);margin-top:14px">
+    <div style="font-size:13.5px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:var(--gold-2)"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>
+      المعتمِد الأخير (شبكة الأمان)
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:9px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:8px 12px">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(155deg,#cbab6f,#a37f43);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700">عأ</div>
+        <div>
+          <div style="font-size:12.5px;font-weight:600;line-height:1.25">عبدالله الذيابي</div>
+          <div style="font-size:10.5px;color:var(--faint);line-height:1.25">مدير البوابة</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:220px;font-size:12px;color:var(--muted)">
+        يستقبل أيّ طلب لم تغطّه شريحة، أو تعطّلت سلسلته.
+        <b style="color:var(--ink)">دوره أن يُصلح الإعداد — لا أن يوقّع.</b>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":900,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = { bg:'#FAF8F5', line:'#E6E0D7', fg:'#6E6459' };            // عادي
+    const G = { bg:'#F0E5CF', line:'#C4A265', fg:'#7A5E33' };            // مرحلة حاكمة
+    const R = { bg:'#F8ECEA', line:'#EBC8C3', fg:'#A8382F' };            // معطّلة
+    const okSt  = { status:'سليمة', stBg:'#E9F1EC', stFg:'#2C6E52', stLine:'#C4DCCF', rowBg:'transparent' };
+    const badSt = { status:'٠ مؤهَّلين', stBg:'#F8ECEA', stFg:'#A8382F', stLine:'#EBC8C3', rowBg:'#FEF8F7' };
+
+    const M = (n, s) => ({ name:n, ...s });
+
+    return {
+      tiers: [
+        { band:'0 – 25,000',        label:'إصدار مباشر',   award:'مدير المشتريات', chain:[M('مدير المشتريات',P)], ...okSt },
+        { band:'25,001 – 150,000',  label:'+ اللجنة',      award:'مدير المشتريات', chain:[M('مدير المشتريات',P), M('اللجنة المصغّرة',R)], ...badSt },
+        { band:'150,001 – 250,000', label:'+ المالية',     award:'مدير المشتريات', chain:[M('مدير المشتريات',P), M('اللجنة',P), M('المدير المالي',G)], ...okSt },
+        { band:'250,001 – 500,000', label:'+ المدير العام', award:'مدير المشتريات', chain:[M('اللجنة',P), M('المالية',P), M('المدير العام',G)], ...okSt },
+        { band:'> 500,000',         label:'مناقصة رسمية',   award:'مدير المشتريات', chain:[M('الكل',P), M('المدير العام',G)], ...okSt },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
