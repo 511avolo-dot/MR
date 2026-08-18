@@ -6870,9 +6870,68 @@ function pa_designerGuide(){
       +'</div>';
   }catch(_e){ return ''; }
 }
+/* (المُحوِّل — ملاحظة المالك) إسناد ذكيّ واعٍ بالصلاحية: صلاحية المرحلة تُشتقّ من المسار الحالي؛
+   يُرفض إسناد مستخدم لا يملكها، ويُقترَح المؤهَّلون بناءً على الوظائف والصلاحيات. أسماء ref فريدة. */
+function pa_stageReqPerm(){
+  var tab=(typeof WF_TAB!=='undefined')?WF_TAB:'';
+  if(tab==='award') return {canKey:'approveAward', label:'اعتماد التعميد', perm:'can_approve_award'};
+  if(tab==='payment'||tab==='disbursement') return {canKey:'approveDisb', label:'اعتماد الصرف', perm:'can_approve_disbursement'};
+  return {canKey:'approveReq', label:'اعتماد الحاجة', perm:'can_approve_stage'};
+}
+function pa_isEligible(u,rp){ try{ if(typeof isAdmin==='function'&&isAdmin(u))return true; var can=((accessOf(u)||{}).can)||{}; return !!can[rp.canKey]; }catch(_e){ return false; } }
+function pa_eligibleUsers(rp){ try{ return Object.keys(USERS||{}).filter(function(u){ return USERS[u] && USERS[u].active!==false && pa_isEligible(u,rp); }); }catch(_e){ return []; } }
+function pa_eligibleSuggest(){
+  try{
+    var rp=pa_stageReqPerm(); var elig=pa_eligibleUsers(rp);
+    var names=elig.slice(0,12).map(function(u){ return (typeof approverName==='function')?approverName(u):u; });
+    var body = names.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+names.map(function(n){ return '<span class="badge ok" style="font-size:10px">'+ic('user',10)+' '+esc(n)+'</span>'; }).join('')+'</div>'
+      : '<div class="chip" style="margin-top:8px;background:var(--danger-bg);color:var(--danger)">'+ic('alert',12)+' لا يوجد مستخدم يملك صلاحية «'+esc(rp.label)+'» — امنحها لأحدهم من «الوظائف والصلاحيات» أولاً</div>';
+    return '<div class="card" style="margin-bottom:14px;border-color:var(--ok-line);background:var(--ok-bg)">'
+      +'<div class="sec-title" style="display:flex;align-items:center;gap:8px"><span class="ico">'+ic('users',16)+'</span>المؤهَّلون لإسناد مراحل هذا المسار'
+      +'<button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="pa_designAssign(\'jobs\')">'+ic('gear',13)+' إدارة الصلاحيات</button></div>'
+      +'<div class="muted" style="font-size:12px">هذا المسار يتطلّب صلاحية «<b>'+esc(rp.label)+'</b>». اسحب فقط أحد المؤهَّلين أدناه؛ إسناد غير المؤهَّل يُرفَض تلقائيّاً.</div>'
+      +body+'</div>';
+  }catch(_e){ return ''; }
+}
+/* حارس الإسناد الذكيّ: يعترض addApprover ويرفض المستخدم غير المؤهَّل مع اقتراح البدائل. */
+if(typeof addApprover==='function'){ var _pa_refAddApprover=addApprover;
+  addApprover=function(wfId,stageId,u){
+    try{
+      if(u && !(typeof SPECIAL!=='undefined'&&SPECIAL[u])){
+        var rp=pa_stageReqPerm();
+        if(!pa_isEligible(u,rp)){
+          var elig=pa_eligibleUsers(rp).slice(0,4).map(function(x){ return (typeof approverName==='function')?approverName(x):x; });
+          var tip=elig.length?('المؤهَّلون: '+elig.join('، ')):'لا مؤهَّل — امنح الصلاحية أولاً';
+          if(typeof toast==='function') toast((typeof approverName==='function'?approverName(u):u)+' لا يملك صلاحية «'+rp.label+'» — لا يُسنَد. '+tip,'err');
+          return;   /* رفض الإسناد غير المؤهَّل */
+        }
+      }
+    }catch(_e){}
+    return _pa_refAddApprover(wfId,stageId,u);
+  };
+}
+/* نفس الحارس على إنشاء مرحلة جديدة بإفلات مستخدم (addStage2). */
+if(typeof addStage2==='function'){ var _pa_refAddStage2=addStage2;
+  addStage2=function(wfId,u){
+    try{
+      if(u && !(typeof SPECIAL!=='undefined'&&SPECIAL[u])){
+        var rp=pa_stageReqPerm();
+        if(!pa_isEligible(u,rp)){
+          var elig=pa_eligibleUsers(rp).slice(0,4).map(function(x){ return (typeof approverName==='function')?approverName(x):x; });
+          var tip=elig.length?('المؤهَّلون: '+elig.join('، ')):'لا مؤهَّل — امنح الصلاحية أولاً';
+          if(typeof toast==='function') toast((typeof approverName==='function'?approverName(u):u)+' لا يملك صلاحية «'+rp.label+'» — لا يُسنَد. '+tip,'err');
+          return;
+        }
+      }
+    }catch(_e){}
+    return _pa_refAddStage2(wfId,u);
+  };
+}
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
   designerHTML=function(){ var h=_pa_refDesignerHTML();
-    try{ h = pa_lifecycleMap() + pa_designerGuide() + h; }catch(_e){}
+    var _sug=''; try{ _sug=pa_eligibleSuggest(); }catch(_e){ _sug=''; }
+    try{ h = pa_lifecycleMap() + pa_designerGuide() + _sug + h; }catch(_e){}
     try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
       var wfWrite=pa_workflowWriteEnabled();
       var wfActions=wfWrite
