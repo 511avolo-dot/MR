@@ -6794,7 +6794,7 @@ function pa_lifecycleMap(){
     var firstNeed=((typeof WORKFLOWS!=='undefined'&&WORKFLOWS[0])||{}).name||'سلسلة اعتماد الحاجة';
     /* nature: config=قابل للتخصيص بالسحب · role=يُسنَد بمنح الوظيفة/الصلاحية · gov=محكوم بالقيمة (DoA) · system=تلقائيّ */
     var P=[
-      ['file','1','الإنشاء ورفع الطلب','الموظّف المُقدّم (صلاحية «رفع الطلبات»)','role','jobs','أسنِد مَن يرفع'],
+      ['file','1','الإنشاء ورفع الطلب','<b>كل موظّف</b> في النظام يستطيع رفع طلب — لا يحتاج إسناد','open','',''],
       ['check','2','اعتماد الحاجة','سلسلة معتمِدين قابلة للتخصيص — '+esc(firstNeed),'config','need','عدّل وأسنِد المعتمِدين'],
       ['cart','3','التسعير وطلب عروض الأسعار','المشتريات (صلاحية «إدارة التسعير»)','role','jobs','أسنِد المشتريات'],
       ['scale','4','المقارنة والتعميد','المشتريات — تقارن وترسي على الأنسب','role','jobs','أسنِد المشتريات'],
@@ -6802,13 +6802,14 @@ function pa_lifecycleMap(){
       ['clipboard','6','أمر الشراء واعتماده','محكوم بالقيمة: اللجنة / المالية / المدير العام','gov','matrix','أسنِد اللجنة والصلاحيات'],
       ['money','7','طلب الصرف واعتماده','سلسلة صرف مالية — حاملو «اعتماد الصرف»','role','jobs','أسنِد معتمِدي الصرف'],
       ['bank','8','تنفيذ الصرف','أمين الصندوق / مسؤول البنوك (صلاحية «تنفيذ الصرف»)','role','jobs','أسنِد المنفّذ'],
-      ['box','9','الاستلام','المستودع / الجودة (صلاحية «تأكيد الاستلام»)','role','jobs','أسنِد المستلِم'],
+      ['box','9','الاستلام','<b>مُقدّم الطلب نفسه</b> يؤكّد استلام طلبه · أو المستودع/الجودة (صلاحية «تأكيد الاستلام»)','open','jobs','أسنِد المستودع/الجودة'],
       ['flag','10','الإقفال والأرشفة','تلقائيّ — يُقفل الطلب ويُؤرشف بسجلّ تدقيق دائم','system','','']
     ];
     var natBadge={ config:'<span class="badge gold" style="font-size:9px">قابل للتخصيص</span>',
       role:'<span class="badge info" style="font-size:9px">يُسنَد بالوظيفة/الصلاحية</span>',
       gov:'<span class="badge" style="font-size:9px;background:var(--info-bg);color:var(--info)">محكوم بالقيمة (DoA)</span>',
-      system:'<span class="badge neutral" style="font-size:9px">تلقائيّ</span>' };
+      system:'<span class="badge neutral" style="font-size:9px">تلقائيّ</span>',
+      open:'<span class="badge ok" style="font-size:9px">متاح لكل موظّف</span>' };
     var rows=P.map(function(p){
       var icn=p[0],no=p[1],title=p[2],who=p[3],nat=p[4],tgt=p[5],btn=p[6];
       var action=tgt?('<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pa_designAssign(\''+tgt+'\')">'+ic('user',13)+' '+esc(btn)+'</button>')
@@ -6825,7 +6826,8 @@ function pa_lifecycleMap(){
       +'<div class="muted" style="font-size:12px;margin-bottom:10px">كل خطوات المعاملة كاملةً. لكلّ خطوة زرّ <b>«أسنِد»</b> يأخذك مباشرةً لمكان تعيين المستخدم/المعتمِد لها: '
       +'<span class="badge gold" style="font-size:9px">قابل للتخصيص</span> يُحرَّر بالسحب هنا · '
       +'<span class="badge info" style="font-size:9px">يُسنَد بالوظيفة/الصلاحية</span> بمنح الوظيفة للمستخدم · '
-      +'<span class="badge" style="font-size:9px;background:var(--info-bg);color:var(--info)">محكوم بالقيمة</span> سلسلته تكبر حسب مبلغ الطلب (حوكمة DoA).</div>'
+      +'<span class="badge" style="font-size:9px;background:var(--info-bg);color:var(--info)">محكوم بالقيمة</span> سلسلته تكبر حسب مبلغ الطلب (حوكمة DoA) · '
+      +'<span class="badge ok" style="font-size:9px">متاح لكل موظّف</span> بلا إسناد.</div>'
       +rows
       +'<div class="muted" style="font-size:11px;margin-top:9px">'+ic('shield',12)+' فصل المهام والرفض الافتراضي وبوّابات الأدلّة مفروضة في كل خطوة — الإسناد لا يُضعِف الحوكمة.</div>'
       +'</div>';

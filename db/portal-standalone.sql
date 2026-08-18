@@ -3294,9 +3294,13 @@ DECLARE
   v_line jsonb;
   v_remaining numeric;
 BEGIN
-  IF v_me IS NULL OR NOT portal_has_perm('can_verify_stock') THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
+  IF v_me IS NULL THEN RAISE EXCEPTION 'غير مصرّح'; END IF;
   SELECT * INTO v_req FROM portal_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
+  -- (p0_2e) المستلِم: حامل صلاحية تأكيد الاستلام (المستودع/الجودة) **أو مُقدّم الطلب نفسه**.
+  IF NOT (portal_has_perm('can_verify_stock') OR v_req.requester = v_me) THEN
+    RAISE EXCEPTION 'غير مصرّح';
+  END IF;
   IF v_req.phase <> 'receipt' THEN RAISE EXCEPTION 'الطلب ليس بانتظار استلام'; END IF;
 
   PERFORM set_config('app.portal_transition', '1', true);
@@ -3322,7 +3326,8 @@ BEGIN
   PERFORM set_config('app.portal_transition', '0', true);
 
   PERFORM portal_audit_write(p_request_id, 'receipt_recorded', v_me, 'portal',
-    jsonb_build_object('note', p_note, 'remaining', v_remaining, 'has_doc', (nullif(trim(coalesce(p_doc_key,'')),'') IS NOT NULL)));
+    jsonb_build_object('note', p_note, 'remaining', v_remaining, 'has_doc', (nullif(trim(coalesce(p_doc_key,'')),'') IS NOT NULL),
+                       'by_role', CASE WHEN portal_has_perm('can_verify_stock') THEN 'stock' ELSE 'requester' END));
   RETURN jsonb_build_object('ok', true, 'remaining', coalesce(v_remaining,0));
 END $fn$;
 GRANT EXECUTE ON FUNCTION portal_record_receipt(text, jsonb, text, text) TO authenticated;
@@ -8138,6 +8143,21 @@ BEGIN
   END LOOP;
 END $p0$;
 
+
+-- ── (p0_2e) رفع الطلب متاح لكل موظّف: can_create لكل وظيفة نشطة (تكليف المالك) ──
+DO $p0_2e_grant$
+BEGIN
+  PERFORM set_config('app.portal_transition','1',true);
+  UPDATE portal_jobs
+     SET permissions = coalesce(permissions,'{}'::jsonb) || '{"can_create":true}'::jsonb
+   WHERE active AND coalesce((permissions->>'can_create')::boolean,false) = false;
+  UPDATE portal_users u
+     SET permissions = coalesce(u.permissions,'{}'::jsonb) || '{"can_create":true}'::jsonb
+    FROM portal_jobs j
+   WHERE u.job_key = j.key AND j.active AND u.role <> 'admin'
+     AND coalesce((u.permissions->>'can_create')::boolean,false) = false;
+  PERFORM set_config('app.portal_transition','0',true);
+END $p0_2e_grant$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 --  دمج الهجرة 062 (المستندات الداعمة للصرف المباشر: نموذج مُطبَّع + مسودّة→رفع→تقديم)

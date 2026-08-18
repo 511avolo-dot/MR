@@ -119,6 +119,7 @@ run_sql "Authenticated RPC permission matrix: direct coverage for previously imp
 
 run_sql "p0_2c: إغلاق منح anon المباشرة على علاقات وتسلسلات البوابة" "$HERE/56_anon_privilege_boundary.sql"
 run_sql "p0_2d: إلغاء الطلب لمدير القسم/القطاع ضمن نافذة ما قبل الالتزام (تكليف المالك)" "$HERE/57_cancel_by_managers.sql"
+run_sql "p0_2e: رفع الطلب لكل موظّف + استلام المُقدّم لطلبه (تكليف المالك)" "$HERE/58_open_create_requester_receipt.sql"
 
 echo ""
-echo "✅ كل اختبارات البوابة نجحت (385 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
+echo "✅ كل اختبارات البوابة نجحت (389 تأكيد SQL) + 18 تأكيد حارس ملفات + 7 تأكيدات نقطة رفع وثائق التسجيل."
