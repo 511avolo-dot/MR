@@ -6420,6 +6420,40 @@ try{ if(typeof openTasksSheet==='function'){ var _pa_refTasksSheet=openTasksShee
     }catch(_e){}
   };
 }}catch(_e){}
+/* (المُحوِّل — ملاحظة المالك #6) لوحة «ما ينتظر إجراءك الآن» بارزة أعلى الصفحة الرئيسية عند الدخول:
+   الموظّف يرى فوراً المعاملات المُحالة إليه وماذا عليه أن يفعل وأين — بلا بحث. تعتمد myTasks()
+   المُثراة (الاعتماد/الإرجاع/الصرف/الاستلام لدورتَي الحاجة والصرف). تجاوز غير مُخرِّب: تُلحَق فوق
+   overviewHTML المرجعيّ. اسم ref فريد. */
+function pa_myTasksPanel(){
+  var tasks=(typeof myTasks==='function')?(myTasks()||[]):[];
+  if(!tasks.length){
+    return '<div class="card" style="border:1.5px solid var(--ok-line);background:var(--ok-bg);margin-bottom:16px">'
+      +'<div style="display:flex;align-items:center;gap:12px">'
+      +'<span style="display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:#fff;color:var(--ok);flex-shrink:0">'+ic('check',20)+'</span>'
+      +'<div><div style="font-weight:800;font-size:15px;color:var(--ink)">لا مهام معلّقة عليك</div>'
+      +'<div class="muted" style="font-size:12.5px">كل ما هو محال إليك مُنجز — لا حاجة لأي إجراء الآن ✦</div></div>'
+      +'</div></div>';
+  }
+  var urgent=tasks.filter(function(t){return t&&t.urgent;}).length;
+  var rows=tasks.map(function(t){
+    var u=!!t.urgent;
+    return '<button class="btn btn-ghost" style="justify-content:flex-start;width:100%;margin-bottom:8px;padding:13px 14px;text-align:start;border:1px solid '+(u?'var(--danger-line)':'var(--line)')+'" onclick="openDetail(\''+esc(t.r.id)+'\')">'
+      +'<span style="display:grid;place-items:center;width:34px;height:34px;border-radius:9px;flex-shrink:0;background:'+(u?'var(--danger-bg)':'var(--surface-2)')+';color:'+(u?'var(--danger)':'var(--gold-2)')+'">'+ic(t.ic||'flag',16)+'</span>'
+      +'<span style="flex:1;min-width:0"><b style="font-size:13.5px">'+esc(t.label)+'</b> '+(u?'<span class="badge danger" style="font-size:9px">عاجل</span>':'')
+      +'<br><span class="muted" style="font-size:11.5px" dir="auto"><b dir="ltr">'+esc(t.r.id)+'</b> · '+esc(t.r.title||'')+(t.sub?' · '+esc(t.sub):'')+'</span></span>'
+      +'<span class="chip" style="flex-shrink:0">'+ic('eye',13)+' افتح وأجرِ</span>'
+      +'</button>';
+  }).join('');
+  return '<div class="card" style="border:1.5px solid var(--gold);background:rgba(194,160,99,.06);margin-bottom:16px">'
+    +'<div class="sec-title" style="display:flex;align-items:center;gap:8px"><span class="ico">'+ic('flag',16)+'</span>'
+    +'ما ينتظر إجراءك الآن <span class="badge gold" style="margin-inline-start:6px">'+tasks.length+'</span>'
+    +(urgent?'<span class="badge danger" style="margin-inline-start:auto">'+urgent+' عاجل</span>':'')+'</div>'
+    +'<div class="muted" style="font-size:12px;margin:-4px 0 12px">انقر أيّ بند للانتقال مباشرةً إلى مكان الإجراء (اعتماد/تعديل/صرف/استلام).</div>'
+    +'<div style="max-height:340px;overflow-y:auto">'+rows+'</div></div>';
+}
+if(typeof overviewHTML==='function'){ var _pa_refOverviewHTML=overviewHTML;
+  overviewHTML=function(){ var base=''; try{ base=pa_myTasksPanel(); }catch(_e){ base=''; }
+    return base + _pa_refOverviewHTML.apply(this,arguments); }; }
 async function pa_bulkApproveTasks(){
   var tasks=(typeof myTasks==='function')?myTasks():[];
   var need=[], disb=[];
