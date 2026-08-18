@@ -6777,8 +6777,48 @@ async function pa_deleteWorkflow(){
     await loadAll(); render();
   }catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); }
 }
+/* (المُحوِّل — ملاحظة المالك #5) توضيح مصمّم سير العمل بلغة بسيطة + معاينة «كيف سيسير الطلب فعليّاً».
+   يعالج «الإسناد والتصميم غير واضحين» دون لمس آليّة السحب/الإفلات. اسم ref فريد. */
+function pa_designerGuide(){
+  try{
+    var wf=(typeof getWF==='function')?getWF():null; if(!wf) return '';
+    var tab=(typeof WF_TAB!=='undefined')?WF_TAB:'';
+    var isAward=(tab==='award'), isPay=(tab==='payment');
+    var startTxt=isPay?'صدور أمر الشراء (استحقاق الدفع)':isAward?'العرض الفائز بعد المقارنة':'مُقدّم الطلب يرفع الطلب';
+    var endTxt=isPay?'تنفيذ الصرف للمورد ثم الاستلام':isAward?'اعتماد التعميد النهائي وإصدار أمر الشراء':'معتمَد نهائياً — يبدأ التسعير';
+    var applies=(typeof wfCondText==='function')?wfCondText(wf):'';
+    var step=function(no,title,sub,tone){
+      var bg=tone==='start'?'var(--navy)':tone==='end'?'var(--ok)':'var(--gold-2)';
+      return '<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px dashed var(--line)">'
+        +'<span style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:'+bg+';color:#fff;font-weight:800;font-size:12px;flex-shrink:0">'+no+'</span>'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(title)+'</div>'
+        +(sub?'<div class="muted" style="font-size:11.5px">'+sub+'</div>':'')+'</div></div>';
+    };
+    var rows=step('▶','يبدأ: '+startTxt,'','start');
+    (wf.stages||[]).forEach(function(s,i){
+      var appr=(typeof stageApprovers==='function')?stageApprovers(s):[];
+      var names=appr.map(function(u){ return (typeof approverName==='function')?approverName(u):u; });
+      var parallel=appr.length>=2;
+      var who=names.length?names.join(parallel?' + ':'، '):'— لم يُسنَد بعد —';
+      var sub=(parallel?'<b>موافقة متوازية</b> — يجب أن يوافق الجميع · ':'')+'المعتمِد: '+esc(who);
+      rows+=step(i+1, esc(s.label||('مرحلة '+(i+1))), sub,'mid');
+    });
+    rows+=step('✓','ينتهي: '+endTxt,'','end');
+    return '<div class="card" style="margin-bottom:14px;border-color:var(--gold-soft);background:rgba(194,160,99,.04)">'
+      +'<div class="sec-title"><span class="ico">'+ic('route',16)+'</span>كيف يعمل هذا المسار — بلغة واضحة</div>'
+      +'<div class="muted" style="font-size:12px;margin-bottom:10px">هذا المسار يُحدّد <b>مَن يعتمد الطلب وبأيّ ترتيب</b>. '
+      +'لإضافة معتمِد اسحبه من اللوحة وأفلِته على المرحلة · أفلِت شخصين أو أكثر على مرحلة ليصبح اعتمادها <b>متوازياً</b> (الكل يوافق) · '
+      +'الترتيب من الأعلى للأسفل = تسلسل الاعتماد · ثم <b>احفظ</b> ليَسري على الطلبات الجديدة.</div>'
+      +(applies?'<div class="chip" style="margin-bottom:10px">'+ic('filter',13)+' متى يُطبَّق هذا المسار: '+esc(applies)+'</div>':'')
+      +'<div style="font-weight:800;font-size:12.5px;color:var(--gold-3);margin:6px 0 4px">'+ic('eye',13)+' معاينة: كيف سيسير الطلب فعليّاً خطوةً بخطوة</div>'
+      +rows
+      +'<div class="muted" style="font-size:11px;margin-top:9px">'+ic('shield',12)+' الحوكمة (فصل المهام · الرفض الافتراضي) مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.</div>'
+      +'</div>';
+  }catch(_e){ return ''; }
+}
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
   designerHTML=function(){ var h=_pa_refDesignerHTML();
+    try{ h = pa_designerGuide() + h; }catch(_e){}
     try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
       var wfWrite=pa_workflowWriteEnabled();
       var wfActions=wfWrite
