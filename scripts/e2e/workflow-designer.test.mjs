@@ -63,10 +63,35 @@ const tail = `
   wf.stages[2].type="role"; wf.stages[2].role="can_approve_stage";
   var h2=pa_wfHealth(wf); out.afterFix_ok=h2.ok;
   out.afterFix_saveEnabled = pa_wfHealthPanel(wf).indexOf('onclick="pa_saveWorkflow()"')>=0;
+  // ── (٥-ج) معالج الإعداد ──
+  var st = pa_setupSteps();
+  out.wizSteps = st.length;
+  out.wizKeys  = st.map(function(x){return x.go;});
+  out.wizDeptFail = st.filter(function(x){return x.t.indexOf('الأقسام')>=0;})[0].ok;      // فيصل مدير CON، خالد OPS ⇒ سليم
+  out.wizDisbFail = st.filter(function(x){return x.t.indexOf('فصل مهام')>=0;})[0].ok;     // لا حامل can_disburse ⇒ false
+  out.wizCommFail = st.filter(function(x){return x.t.indexOf('اللجنة')>=0;})[0].ok;       // الحامل غير نشط ⇒ false
+  out.wizHtmlOk = pa_setupWizard().indexOf('معالج الإعداد')>=0;
+  // ── (٥-ب) ملخّص القدرات بلغة بسيطة ──
+  out.capsAdmin = pa_capSummary({admin:true}).length;
+  out.capsPlain = pa_capSummary({perms:{can_create:true,can_approve_stage:true}}).map(function(c){return c[0];});
+  out.capsEmpty = pa_capSummary({perms:{}})[0][0];
   return out;
 `;
 
-const fn = new Function(env + block + tail);
+// كتلة ثانية: معالج الإعداد (٥-ج) + طيّ مصفوفة الصلاحيات (٥-ب)
+const S2 = 'function pa_setupSteps(){';
+const E2 = 'function pa_adminExtraBtns(activeCtx){';
+const s2 = src.indexOf(S2), e2 = src.indexOf(E2, s2);
+if (s2 < 0 || e2 < 0) { console.error('wizard markers not found'); process.exit(2); }
+const wizard = src.slice(s2, e2);
+
+const S3 = 'function pa_capSummary(u){';
+const E3 = 'pa_permMatrixHTML = function(k,u){';
+const s3 = src.indexOf(S3), e3 = src.indexOf(E3, s3);
+if (s3 < 0 || e3 < 0) { console.error('capSummary markers not found'); process.exit(2); }
+const caps = src.slice(s3, e3);
+
+const fn = new Function(env + block + wizard + caps + tail);
 const r = fn();
 console.log(JSON.stringify(r, null, 1));
 
@@ -88,5 +113,14 @@ all &= expect('diagram renders', r.diagOk, true);
 all &= expect('simulation renders', r.simOk, true);
 all &= expect('healthy after fixing committee stage', r.afterFix_ok, true);
 all &= expect('save enabled after fix', r.afterFix_saveEnabled, true);
+all &= expect('wizard has 6 ordered steps', r.wizSteps, 6);
+all &= expect('wizard targets are routable', r.wizKeys, ['depts','accounts','jobs','matrix','designer','matrix']);
+all &= expect('wizard: departments step passes when all have managers', r.wizDeptFail, true);
+all &= expect('wizard: disbursement SoD fails with 0 holders', r.wizDisbFail, false);
+all &= expect('wizard: committee fails (holder inactive)', r.wizCommFail, false);
+all &= expect('wizard renders', r.wizHtmlOk, true);
+all &= expect('admin capability summary is single gold chip', r.capsAdmin, 1);
+all &= expect('plain-language capabilities, no raw keys', r.capsPlain, ['يرفع الطلبات','يعتمد الحاجة']);
+all &= expect('no permissions reads as view-only', r.capsEmpty, 'اطّلاع فقط — لا يعتمد شيئاً');
 console.log(all ? '\n✅ ALL PASS' : '\n❌ FAILURES');
 process.exit(all ? 0 : 1);
