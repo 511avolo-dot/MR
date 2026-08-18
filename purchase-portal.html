@@ -6225,11 +6225,41 @@ function pa_disbChainPanel(r){
     ? '<div class="chip" style="margin-bottom:10px">'+ic('user',13)+' صرف مباشر مستقلّ — بلا دورة شراء</div>'
     : '<div class="chip" style="margin-bottom:10px;background:rgba(46,125,91,.12);color:var(--ok)">'+ic('cart',13)+' تسليم من دورة الشراء: اكتمل أمر الشراء ودخل الطلب دورة الصرف</div>';
   return '<div class="card" style="margin-bottom:16px;border-color:var(--gold-soft)">'
-    +'<div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>سلسلة اعتماد الصرف</div>'
+    +'<div class="sec-title"><span class="ico">'+ic('clipboard',16)+'</span>سلسلة اعتماد وتنفيذ الصرف</div>'
+    + pa_disbWhereNow(r)   /* #4 — أين الطلب الآن ومع مَن وكم له */
     + handoff
-    + pa_disbFlow(r)   /* B2 — تصوّر بصريّ لسلسلة موافقات الصرف (كدورة الحاجة) */
+    + pa_disbFlow(r)   /* B2 — تصوّر بصريّ لكامل سلسلة الصرف (الاعتماد + التنفيذ) */
     +'<div class="muted" style="font-size:11.5px;margin:12px 0 10px">'+ic('info',13)+' موافقات مالية متدرّجة قابلة للضبط — يمكن إرجاع الطلب لمرحلة سابقة عند الحاجة.</div>'
     + rows + '</div>';
+}
+/* الدفعة الفعليّة للطلب (صرف مباشر=expensePay، أو من دورة الشراء=proc.payment). */
+function pa_disbPay(r){ return (r&&r.expensePay)||(r&&r.proc&&r.proc.payment)||null; }
+/* «أين الطلب الآن ومع مَن وكم له» — بند ملاحظة المالك #4: بانر ملخّص فوق سلسلة الصرف. */
+function pa_disbWhereNow(r){
+  var ch=r.disbChain||[]; var pay=pa_disbPay(r);
+  var paid=(pay&&pay.status==='disbursed')||r.phase==='closed';
+  var amt=money((r.estTotal!=null?r.estTotal:(pay&&pay.amount))||0)+' ر.س';
+  var whoLbl, whoSub, since=null, tone='gold', icn='clock';
+  if(paid){ whoLbl='تمّ الصرف والإقفال'; whoSub=(pay&&pay.disbursedBy)?('نفّذه '+uName(pay.disbursedBy)):'مكتمل'; tone='ok'; icn='check';
+    since=(pay&&pay.disbursedAt)||null; }
+  else {
+    var curIdx=-1; for(var i=0;i<ch.length;i++){ if(ch[i].decision==='pending'){ curIdx=i; break; } }
+    var allApproved=ch.length&&ch.every(function(x){return x.decision==='approved';});
+    if(curIdx>=0){ var s=ch[curIdx]; whoLbl='بانتظار: '+esc(s.label||'اعتماد الصرف'); whoSub=s.user?('مع '+uName(s.user)+' · '+uRole(s.user)):'مع حامل الصلاحية';
+      var prevAt=null; for(var j=curIdx-1;j>=0;j--){ if(ch[j].actedAt){ prevAt=ch[j].actedAt; break; } }
+      since=prevAt||pa_ms(r._raw&&r._raw.updated_at)||null; }
+    else if(allApproved){ whoLbl='بانتظار تنفيذ الصرف'; whoSub='أمين الصندوق / مسؤول البنوك (حامل صلاحية الصرف)'; icn='money';
+      var lastAt=null; ch.forEach(function(x){ if(x.actedAt&&(!lastAt||x.actedAt>lastAt))lastAt=x.actedAt; }); since=lastAt; }
+    else { whoLbl='بانتظار بدء سلسلة الصرف'; whoSub='—'; }
+  }
+  var sinceTxt=since?(' · منذ '+fmtDur(Date.now()-since)):'';
+  var bg=tone==='ok'?'rgba(46,125,91,.10)':'rgba(194,160,99,.10)', col=tone==='ok'?'var(--ok)':'var(--gold-3)', bd=tone==='ok'?'var(--ok-line)':'var(--gold-soft)';
+  return '<div style="display:flex;align-items:center;gap:11px;background:'+bg+';border:1px solid '+bd+';border-radius:12px;padding:11px 13px;margin-bottom:12px">'
+    +'<span style="display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:#fff;color:'+col+';flex-shrink:0">'+ic(icn,17)+'</span>'
+    +'<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13.5px;color:var(--ink)">'+whoLbl+'</div>'
+    +'<div class="muted" style="font-size:11.5px">'+whoSub+sinceTxt+'</div></div>'
+    +'<div style="text-align:end;flex-shrink:0"><div class="muted" style="font-size:10px">المبلغ</div><div style="font-weight:800;font-size:13.5px;font-family:var(--mono,monospace)" dir="ltr">'+amt+'</div></div>'
+    +'</div>';
 }
 /* B2 — الجدول الزمنيّ البصريّ لسلسلة الصرف (يعيد استخدام أنماط .flow المرجعية، المُحوِّل فقط) */
 function pa_disbFlow(r){
@@ -6245,18 +6275,33 @@ function pa_disbFlow(r){
     parts.push('<div class="fl-conn '+connState+'"></div>');
     var badge=st==='done'?ic('check',15):st==='rej'?ic('x',15):(s.seq||(i+1));
     var who=s.user?('<div class="fl-who">'+avatar(uName(s.user),'sm')+'<div><div class="nm">'+esc(uName(s.user))+'</div><div class="rl">'+esc(uRole(s.user))+'</div></div></div>'):'';
-    var meta=st==='done'?('<div class="fl-meta"><span class="fl-done-line">'+ic('check',13)+' اعتُمد</span></div>')
-      :st==='active'?('<div class="fl-meta">'+ic('clock',14)+' <span>بانتظار الاعتماد</span></div>')
+    /* منذ متى في هذه المرحلة (بند #4: كم له) */
+    var arrivedAt=null; for(var k=i-1;k>=0;k--){ if(ch[k].actedAt){ arrivedAt=ch[k].actedAt; break; } }
+    if(i===0) arrivedAt=arrivedAt||pa_ms(r._raw&&r._raw.updated_at);
+    var elapsed=(st==='active'&&arrivedAt)?(' · منذ '+fmtDur(Date.now()-arrivedAt)):'';
+    var meta=st==='done'?('<div class="fl-meta"><span class="fl-done-line">'+ic('check',13)+' اعتُمد'+(s.actedAt?(' · '+fmtDate(s.actedAt).slice(0,10)):'')+'</span></div>')
+      :st==='active'?('<div class="fl-meta">'+ic('clock',14)+' <span>بانتظار الاعتماد'+elapsed+'</span></div>')
       :st==='rej'?('<div class="fl-meta">'+(s.comment?('«'+esc(String(s.comment).slice(0,40))+'»'):'مرفوض')+'</div>')
       :'<div class="fl-meta muted">بالانتظار</div>';
     parts.push('<div class="fl-node '+st+'"><div class="fl-badge">'+badge+'</div><div class="fl-stage">'+esc(s.label||'')+'</div>'+who+meta+'</div>');
   });
-  var pay=(r.proc&&r.proc.payment)||null;
+  /* خطوة تنفيذ الصرف الصريحة (أمين الصندوق/مسؤول البنوك) — بند #4: الخطوات من البداية للنهاية ظاهرة */
+  var pay=pa_disbPay(r);
   var paid=(pay&&pay.status==='disbursed')||r.phase==='closed';
   var allApproved=ch.every(function(x){return x.decision==='approved';});
-  var endTxt=paid?'تمّ الصرف':(allApproved?'جاهز للتنفيذ (البنك/الصندوق)':'بانتظار اكتمال الاعتماد');
-  parts.push('<div class="fl-conn '+(paid?'done':'')+'"></div>');
-  parts.push('<div class="fl-end '+(paid?'':'pending')+'">'+ic(paid?'flag':'money',20)+'<span class="lab">'+esc(endTxt)+'</span></div>');
+  var exSt=paid?'done':(allApproved?'active':'wait');
+  var exWho=(paid&&pay&&pay.disbursedBy)?('<div class="fl-who">'+avatar(uName(pay.disbursedBy),'sm')+'<div><div class="nm">'+esc(uName(pay.disbursedBy))+'</div><div class="rl">'+esc(uRole(pay.disbursedBy))+'</div></div></div>'):'';
+  var exMeta=paid?('<div class="fl-meta"><span class="fl-done-line">'+ic('check',13)+' صُرف'+(pay&&pay.disbursedAt?(' · '+fmtDate(pay.disbursedAt).slice(0,10)):'')+'</span></div>')
+    :allApproved?('<div class="fl-meta">'+ic('money',14)+' <span>جاهز للتنفيذ الآن</span></div>')
+    :'<div class="fl-meta muted">بعد اكتمال الاعتماد</div>';
+  parts.push('<div class="fl-conn '+(exSt==='done'?'done':exSt==='active'?'active':'')+'"></div>');
+  parts.push('<div class="fl-node '+exSt+'"><div class="fl-badge">'+(paid?ic('check',15):ic('bank',14))+'</div><div class="fl-stage">تنفيذ الصرف</div>'
+    +'<div class="rl muted" style="font-size:10.5px;font-weight:500;margin-top:2px">أمين الصندوق / مسؤول البنوك</div>'+exWho+exMeta+'</div>');
+  /* عقدة النهاية */
+  var closed=(r.phase==='closed');
+  var endTxt=closed?'مكتمل ومؤرشف':(paid?'تمّ الصرف':'بانتظار الإتمام');
+  parts.push('<div class="fl-conn '+(closed||paid?'done':'')+'"></div>');
+  parts.push('<div class="fl-end '+(closed||paid?'':'pending')+'">'+ic(closed||paid?'flag':'money',20)+'<span class="lab">'+esc(endTxt)+'</span></div>');
   return '<div class="flow-scroll"><div class="flow">'+parts.join('')+'</div></div>';
 }
 function pa_canApproveDisb(s){ var a=accessOf(ME)||{}; if(isAdmin()) return true; var perms=(USERS[ME]||{}).perms||{};
