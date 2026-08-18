@@ -6930,25 +6930,279 @@ if(typeof addStage2==='function'){ var _pa_refAddStage2=addStage2;
     return _pa_refAddStage2(wfId,u);
   };
 }
+/* ════════════════════════════════════════════════════════════════════════════
+   مصمّم سير العمل — إعادة بناء بسياسات أكبر الأنظمة (كوبا/ووركداي/أريبا).
+   المبدأ: **الجدول المرتّب هو سطح التحرير، والمخطّط مُولَّد للقراءة فقط** — عكس لوحة
+   السحب السابقة. الإسناد بالقاعدة (مدير القسم / صلاحية) قبل الاسم الصريح، مع عدّاد
+   المؤهَّلين، ومحاكاة قبل الحفظ، وحفظ يفشل مغلقاً. المُحوِّل فقط، أسماء ref فريدة.
+   ملاحظة مهمّة: المحرّك **لا يدعم المراحل المتوازية** (pa_wfStageToDb يرفضها) —
+   فلا نعرض خيار «الكل يوافق»؛ كل مرحلة معتمِد واحد مُحلَّل.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* مفاتيح الأدوار المسموح بها خادميّاً (قائمة portal_save_workflow البيضاء حرفيّاً). */
+var PA_WF_ROLES=[
+  ['can_approve_stage','اعتماد الحاجة'],
+  ['can_approve_finance','التحقّق المالي'],
+  ['can_manage_procurement','إدارة المشتريات والتسعير'],
+  ['can_approve_award','اعتماد التعميد'],
+  ['can_issue_po','إصدار أمر الشراء'],
+  ['can_approve_committee','اعتماد اللجنة'],
+  ['can_approve_disbursement','اعتماد الصرف'],
+  ['can_disburse','تنفيذ الصرف'],
+  ['can_verify_stock','تأكيد الاستلام'],
+  ['can_manage_users','إدارة البوابة']
+];
+function pa_roleLabel(k){ for(var i=0;i<PA_WF_ROLES.length;i++){ if(PA_WF_ROLES[i][0]===k) return PA_WF_ROLES[i][1]; } return k||''; }
+function pa_activeUsers(){ return Object.keys(USERS||{}).filter(function(u){ return USERS[u] && USERS[u].active!==false; }); }
+/* عدد حاملي صلاحية ما (كما يحسبها الخادم: مستخدم نشط بالمفتاح=true). */
+function pa_roleHolders(key){
+  return pa_activeUsers().filter(function(u){
+    var p=(USERS[u]||{}).perms||{}; if(p[key]===true) return true;
+    var can=((accessOf(u)||{}).can)||{};
+    var m={can_approve_stage:'approveReq',can_approve_award:'approveAward',can_issue_po:'issuePO',
+      can_manage_procurement:'manageRfq',can_disburse:'disburse',can_verify_stock:'verifyStock',
+      can_manage_users:'manageUsers',can_approve_disbursement:'approveDisb'};
+    return !!(m[key] && can[m[key]]);
+  });
+}
+/* مديرو الأقسام (مُحلّل dept_manager) — أي مستخدم مُسنَد مديراً لقسم. */
+function pa_deptManagers(){
+  var out={}; Object.keys(DEPTS||{}).forEach(function(k){ var m=(DEPTS[k]||{}).mgr; if(m && (USERS[m]||{}).active!==false) out[m]=1; });
+  return Object.keys(out);
+}
+/* المؤهَّلون لمرحلة بحسب مُحلّلها — يقابل تحقّق الخادم fail-closed. */
+function pa_stageEligible(s){
+  if(!s) return [];
+  if(s.type==='dept') return pa_deptManagers();
+  if(s.type==='finance') return pa_roleHolders('can_approve_finance');
+  if(s.type==='role' && s.role) return pa_roleHolders(s.role);
+  if(s.type==='user' && s.approver) return ((USERS[s.approver]||{}).active!==false)?[s.approver]:[];
+  if(s.type==='parallel') return (s.approvers||[]).filter(function(u){ return (USERS[u]||{}).active!==false; });
+  return pa_deptManagers();
+}
+function pa_stageWhoLabel(s){
+  if(!s) return '';
+  if(s.type==='dept') return 'مدير قسم الطالب';
+  if(s.type==='finance') return 'صلاحية: التحقّق المالي';
+  if(s.type==='role') return 'صلاحية: '+pa_roleLabel(s.role);
+  if(s.type==='user') return uName(s.approver||'');
+  if(s.type==='parallel') return 'متوازية (غير مدعومة)';
+  return 'مدير قسم الطالب';
+}
+/* قيمة مُنتقي الإسناد الموحّدة: dept | role:<key> | user:<username> */
+function pa_stageAssignValue(s){
+  if(!s) return 'dept';
+  if(s.type==='finance') return 'role:can_approve_finance';
+  if(s.type==='role') return 'role:'+(s.role||'');
+  if(s.type==='user') return 'user:'+(s.approver||'');
+  return 'dept';
+}
+function pa_setStageAssign(wfId,stageId,val){
+  var wf=findWF(wfId); if(!wf) return; var s=(wf.stages||[]).filter(function(x){return x.id===stageId;})[0]; if(!s) return;
+  if(val==='dept'){ s.type='dept'; delete s.role; delete s.approver; }
+  else if(val.indexOf('role:')===0){ s.type='role'; s.role=val.slice(5); delete s.approver; }
+  else if(val.indexOf('user:')===0){ s.type='user'; s.approver=val.slice(5); delete s.role; }
+  s.dndApprovers=null;   /* تُعاد اشتقاقها من النوع */
+  render();
+}
+function pa_moveStage(wfId,stageId,dir){
+  var wf=findWF(wfId); if(!wf) return; var a=wf.stages||[];
+  var i=-1; for(var k=0;k<a.length;k++){ if(a[k].id===stageId){ i=k; break; } }
+  var j=i+dir; if(i<0||j<0||j>=a.length) return;
+  var m=a.splice(i,1)[0]; a.splice(j,0,m); render();
+}
+function pa_wfHealth(wf){
+  var bad=[], warn=[];
+  (wf&&wf.stages||[]).forEach(function(s,i){
+    var n=pa_stageEligible(s).length;
+    if(s.type==='parallel') bad.push({i:i+1,label:s.label||'',why:'مرحلة متوازية — المحرّك لا يدعمها'});
+    else if(n===0) bad.push({i:i+1,label:s.label||'',why:'لا أحد يحمل «'+pa_stageWhoLabel(s)+'»'});
+    else if(n===1 && s.type!=='user') warn.push({i:i+1,label:s.label||'',why:'حامل واحد فقط — لا بديل عند الغياب'});
+  });
+  return {bad:bad,warn:warn,ok:!bad.length};
+}
+
+/* ── جدول الخطوات: سطح التحرير ── */
+function pa_wfStepTable(wf){
+  var write=pa_workflowWriteEnabled(), dis=write?'':' disabled aria-disabled="true"';
+  var rows=(wf.stages||[]).map(function(s,i){
+    var elig=pa_stageEligible(s), n=elig.length;
+    var tone = n===0 ? ['var(--danger-bg)','var(--danger)','var(--danger-line)']
+             : (n===1 && s.type!=='user') ? ['var(--warn-bg)','var(--warn)','var(--warn-line)']
+             : ['var(--ok-bg)','var(--ok)','var(--ok-line)'];
+    var cnt = n===0 ? '٠ مؤهَّلين' : (n===1?'مؤهَّل واحد':n+' مؤهَّلين');
+    var opts='<option value="dept"'+(pa_stageAssignValue(s)==='dept'?' selected':'')+'>مدير قسم الطالب — يُحدَّد تلقائياً</option>'
+      +'<optgroup label="صلاحية (دور وظيفيّ)">'
+      +PA_WF_ROLES.map(function(r){ var v='role:'+r[0]; var h=pa_roleHolders(r[0]).length;
+          return '<option value="'+v+'"'+(pa_stageAssignValue(s)===v?' selected':'')+'>'+esc(r[1])+' — '+(h?h+' مؤهَّلين':'٠ مؤهَّلين')+'</option>'; }).join('')
+      +'</optgroup>'
+      +'<optgroup label="شخص محدَّد (آخر خيار — يكسر السلسلة عند مغادرته)">'
+      +pa_activeUsers().map(function(u){ var v='user:'+u;
+          return '<option value="'+v+'"'+(pa_stageAssignValue(s)===v?' selected':'')+'>'+esc(uName(u))+'</option>'; }).join('')
+      +'</optgroup>';
+    var names=elig.slice(0,3).map(function(u){ return esc(uName(u)); }).join('، ')+(n>3?(' +'+(n-3)):'');
+    return '<tr style="border-top:1px solid var(--line-2)">'
+      +'<td style="padding:10px 6px 10px 0;vertical-align:top"><span class="mono" style="display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);font-size:12px;font-weight:600;color:var(--muted)">'+(i+1)+'</span></td>'
+      +'<td style="padding:10px 8px 10px 0;vertical-align:top">'
+        +'<input class="input" value="'+esc(s.label||'')+'" oninput="setStageLabel(\''+wf.id+'\',\''+s.id+'\',this.value)" style="width:100%;font-weight:600;font-size:13px;padding:6px 9px"'+dis+'>'
+      +'</td>'
+      +'<td style="padding:10px 8px 10px 0;vertical-align:top">'
+        +'<select class="select" onchange="pa_setStageAssign(\''+wf.id+'\',\''+s.id+'\',this.value)" style="width:100%;font-size:12.5px;padding:6px 9px"'+dis+'>'+opts+'</select>'
+        +'<div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+          +'<span class="badge" style="font-size:9.5px;background:'+tone[0]+';color:'+tone[1]+';border-color:'+tone[2]+'">'+cnt+'</span>'
+          +(n?('<span class="muted" style="font-size:10.5px">'+names+'</span>'):'')
+        +'</div>'
+      +'</td>'
+      +'<td style="padding:10px 8px 10px 0;vertical-align:top"><input class="input num" type="number" min="1" value="'+(s.sla||24)+'" oninput="setStageSla(\''+wf.id+'\',\''+s.id+'\',this.value)" style="width:64px;font-size:12.5px;padding:6px 8px" dir="ltr"'+dis+'></td>'
+      +'<td style="padding:10px 0;vertical-align:top"><div style="display:flex;gap:4px;justify-content:flex-end">'
+        +'<button class="btn btn-ghost btn-sm" title="لأعلى" onclick="pa_moveStage(\''+wf.id+'\',\''+s.id+'\',-1)" style="padding:5px 8px"'+dis+'>'+ic('up',13)+'</button>'
+        +'<button class="btn btn-ghost btn-sm" title="لأسفل" onclick="pa_moveStage(\''+wf.id+'\',\''+s.id+'\',1)" style="padding:5px 8px"'+dis+'>'+ic('down',13)+'</button>'
+        +'<button class="btn btn-ghost btn-sm" title="حذف" onclick="delStage2(\''+wf.id+'\',\''+s.id+'\')" style="padding:5px 8px;color:var(--danger)"'+dis+'>'+ic('trash',13)+'</button>'
+      +'</div></td></tr>';
+  }).join('');
+
+  return '<div class="card" style="flex:1;min-width:0">'
+    +'<div class="sec-title"><span class="ico">'+ic('list',16)+'</span>مراحل الاعتماد — سطح التحرير'
+      +'<span class="muted" style="margin-inline-start:auto;font-weight:500;font-size:11.5px">الترتيب من الأعلى إلى الأسفل = تسلسل الاعتماد</span></div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+      +'<thead><tr class="muted" style="font-size:11.5px">'
+        +'<th style="width:42px;padding:0 6px 9px 0;text-align:start;font-weight:600">#</th>'
+        +'<th style="padding:0 8px 9px 0;text-align:start;font-weight:600">اسم المرحلة</th>'
+        +'<th style="width:300px;padding:0 8px 9px 0;text-align:start;font-weight:600">مَن يعتمدها</th>'
+        +'<th style="width:76px;padding:0 8px 9px 0;text-align:start;font-weight:600">المهلة (س)</th>'
+        +'<th style="width:118px;padding:0 0 9px;text-align:start;font-weight:600"></th>'
+      +'</tr></thead><tbody>'+(rows||'<tr><td colspan="5" class="muted" style="padding:14px 0">لا مراحل — أضِف مرحلة.</td></tr>')+'</tbody></table></div>'
+    +'<div style="margin-top:13px;padding-top:12px;border-top:1px dashed var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<button class="btn btn-sm" onclick="addStage2(\''+wf.id+'\',null);render()" style="border-style:dashed;color:var(--gold-3)"'+dis+'>'+ic('plus',14)+' إضافة مرحلة اعتماد</button>'
+      +'<span class="muted" style="font-size:11.5px">الإسناد بالقاعدة (مدير القسم/صلاحية) يصمد عند تغيّر الموظّفين — الاسم الصريح لا.</span>'
+    +'</div></div>';
+}
+
+/* ── المخطّط المُولَّد (قراءة فقط، رأسيّ = محايد تجاه الاتجاه) ── */
+function pa_wfDiagram(wf){
+  var parts=(wf.stages||[]).map(function(s,i){
+    var n=pa_stageEligible(s).length;
+    var c = n===0 ? ['var(--danger-bg)','var(--danger)','var(--danger)']
+          : (n===1 && s.type!=='user') ? ['var(--warn-bg)','var(--warn-line)','var(--warn)']
+          : ['var(--ok-bg)','var(--ok-line)','var(--ok)'];
+    return '<div style="display:flex;gap:10px;align-items:flex-start">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">'
+        +'<div class="mono" style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:'+c[0]+';border:1.5px solid '+c[1]+';color:'+c[2]+';font-size:10.5px;font-weight:700">'+(i+1)+'</div>'
+        +((i<wf.stages.length-1)?'<div style="width:2px;height:22px;background:var(--line)"></div>':'')
+      +'</div>'
+      +'<div style="padding-bottom:10px;min-width:0">'
+        +'<div style="font-size:12.5px;font-weight:600;line-height:1.35">'+esc(s.label||'')+'</div>'
+        +'<div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(pa_stageWhoLabel(s))+'</div>'
+      +'</div></div>';
+  }).join('');
+  return '<div class="card" style="flex:0 0 246px">'
+    +'<div style="font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px">'+ic('route',16)+' المخطّط</div>'
+    +'<div class="muted" style="font-size:11px;margin:4px 0 13px;padding-bottom:11px;border-bottom:1px solid var(--line-2)">يُولَّد من الجدول — للقراءة فقط</div>'
+    +'<div class="chip" style="margin-bottom:11px">'+ic('user',12)+' يبدأ: مُقدّم الطلب</div>'
+    +parts
+    +'<div class="chip" style="background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)">'+ic('flag',12)+' معتمَد — يبدأ التسعير</div>'
+  +'</div>';
+}
+
+/* ── لوحة الصحّة + الحفظ (يفشل مغلقاً) ── */
+function pa_wfHealthPanel(wf){
+  var h=pa_wfHealth(wf), write=pa_workflowWriteEnabled();
+  var canSave = write && h.ok;
+  var body='';
+  if(h.bad.length){
+    body='<div style="font-weight:800;color:var(--danger);font-size:14px">'+ic('alert',15)+' لا يمكن حفظ هذا المسار — '+h.bad.length+' مرحلة بلا معتمِد</div>'
+      +'<div class="muted" style="font-size:12px;margin:2px 0 10px">لو حُفِظ كما هو لتوقّف كل طلب يمرّ بها بلا إشعار لأحد. الخادم يرفضه أيضاً.</div>'
+      +h.bad.map(function(b){ return '<div style="display:flex;align-items:center;gap:10px;background:var(--danger-bg);border:1px solid var(--danger-line);border-radius:10px;padding:9px 11px;margin-bottom:7px">'
+        +'<span class="mono" style="width:24px;height:24px;border-radius:7px;background:var(--surface);border:1px solid var(--danger-line);color:var(--danger);display:grid;place-items:center;font-size:11.5px;font-weight:700;flex-shrink:0">'+b.i+'</span>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600">'+esc(b.label)+'</div><div class="muted" style="font-size:11.5px">'+esc(b.why)+'</div></div>'
+        +'<button class="btn btn-ghost btn-sm" onclick="pa_designAssign(\'jobs\')" style="flex-shrink:0">'+ic('user',12)+' أسنِد الصلاحية</button></div>'; }).join('');
+  } else {
+    body='<div style="font-weight:800;color:var(--ok);font-size:14px">'+ic('check',15)+' المسار سليم — '+((wf.stages||[]).length)+' مراحل، كلّها مُسنَدة</div>'
+      +'<div class="muted" style="font-size:12px;margin-top:2px">كل مرحلة لها معتمِد مؤهَّل واحد على الأقل.</div>';
+  }
+  if(h.warn.length){
+    body+='<div style="margin-top:9px">'+h.warn.map(function(w){ return '<div class="chip" style="background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line);margin:0 0 6px">'+ic('alert',12)+' المرحلة '+w.i+' «'+esc(w.label)+'» — '+esc(w.why)+'</div>'; }).join(' ')+'</div>';
+  }
+  return '<div class="card" style="margin-top:14px;border-color:'+(h.ok?'var(--ok-line)':'var(--danger-line)')+'">'
+    +body
+    +'<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:13px;padding-top:12px;border-top:1px solid var(--line-2)">'
+      +'<button class="btn btn-gold" '+(canSave?'onclick="pa_saveWorkflow()"':'disabled aria-disabled="true"')+'>'+ic('check',15)+' حفظ المسار</button>'
+      +'<button class="btn btn-danger btn-sm" '+(write?'onclick="pa_deleteWorkflow()"':'disabled aria-disabled="true"')+'>'+ic('trash',14)+' حذف المسار</button>'
+      +'<span class="muted" style="font-size:11.5px">'+(!write
+        ? '<b>وضع قراءة فقط</b> — الحفظ غير مفعّل في هذه البيئة.'
+        : (h.ok ? 'التعديلات لا تسري حتى تحفظ — وتنطبق على الطلبات الجديدة فقط.'
+                : 'الحفظ مُعطَّل حتى تُصلَح المراحل أعلاه.'))+'</span>'
+    +'</div></div>';
+}
+
+/* ── المحاكاة: أيّ مسار ينطبق ومَن يعتمده فعليّاً اليوم (بلا أثر على البيانات) ── */
+function pa_wfSimulate(){
+  var v=Number((document.getElementById('pa-sim-amt')||{}).value)||0;
+  var d=((document.getElementById('pa-sim-dept')||{}).value)||Object.keys(DEPTS||{})[0];
+  var out=document.getElementById('pa-sim-out'); if(!out) return;
+  var wf=null, doa=null;
+  try{ wf=pickWF({estTotal:v,deptId:d,totalQty:0}); }catch(_e){}
+  try{ doa=doaFor(v); }catch(_e){}
+  if(!wf){ out.innerHTML='<div class="muted" style="font-size:12px">تعذّر تحديد المسار.</div>'; return; }
+  var rows=(wf.stages||[]).map(function(s,i){
+    var elig=pa_stageEligible(s), n=elig.length;
+    var c = n===0 ? ['var(--danger-bg)','var(--danger)','var(--danger)'] : ['var(--ok-bg)','var(--ok-line)','var(--ok)'];
+    var who = n ? elig.slice(0,3).map(function(u){
+        var away=(USERS[u]||{}).away, dele=(USERS[u]||{}).delegate;
+        return esc(uName(u))+(away&&dele?(' <span class="muted">(في إجازة → '+esc(uName(dele))+')</span>'):'');
+      }).join('، ')+(n>3?(' +'+(n-3)):'') : '<b style="color:var(--danger)">لا أحد مؤهَّل — سيتوقّف الطلب هنا</b>';
+    return '<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line-2)">'
+      +'<span class="mono" style="width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:'+c[0]+';border:1.5px solid '+c[1]+';color:'+c[2]+';font-size:10.5px;font-weight:700;flex-shrink:0">'+(i+1)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600">'+esc(s.label||'')+'</div>'
+      +'<div class="muted" style="font-size:11.5px">'+who+'</div></div></div>';
+  }).join('');
+  var tier = doa ? ('<span class="badge info" style="font-size:10px">شريحة الاعتماد: '+esc(doa.label||('حتى '+money(doa.max)))+'</span>') : '';
+  out.innerHTML='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+      +'<span class="badge gold" style="font-size:10px">المسار: '+esc(wf.name)+'</span>'+tier
+      +'<span class="chip" style="margin-inline-start:auto">'+ic('shield',12)+' لا يُحفَظ شيء</span></div>'
+    +rows;
+}
+function pa_wfSimPanel(){
+  var depts=Object.keys(DEPTS||{}).map(function(k){ return '<option value="'+k+'">'+esc((DEPTS[k]||{}).n||k)+'</option>'; }).join('');
+  return '<div class="card" style="margin-top:14px">'
+    +'<div class="sec-title"><span class="ico">'+ic('play',16)+'</span>محاكاة قبل الحفظ</div>'
+    +'<div class="muted" style="font-size:12px;margin:-6px 0 12px">جرّب طلباً افتراضيّاً وشاهد أيّ مسار ينطبق ومَن سيعتمده فعليّاً اليوم — بلا أيّ أثر على البيانات.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><div class="muted" style="font-size:11.5px;font-weight:600;margin-bottom:4px">قيمة الطلب (ر.س)</div>'
+        +'<input class="input num" id="pa-sim-amt" type="number" value="180000" style="width:140px" dir="ltr"></div>'
+      +'<div><div class="muted" style="font-size:11.5px;font-weight:600;margin-bottom:4px">القسم</div>'
+        +'<select class="select" id="pa-sim-dept" style="min-width:170px">'+depts+'</select></div>'
+      +'<button class="btn btn-gold" onclick="pa_wfSimulate()">'+ic('play',15)+' شغّل المحاكاة</button>'
+    +'</div><div id="pa-sim-out" style="margin-top:13px"></div></div>';
+}
+
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
-  designerHTML=function(){ var h=_pa_refDesignerHTML();
-    var _sug=''; try{ _sug=pa_eligibleSuggest(); }catch(_e){ _sug=''; }
-    try{ h = pa_lifecycleMap() + pa_designerGuide() + _sug + h; }catch(_e){}
-    try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
-      var wfWrite=pa_workflowWriteEnabled();
-      var wfActions=wfWrite
-        ? '<button class="btn btn-gold" onclick="pa_saveWorkflow()">'+ic('check',15)+' حفظ المسار</button>'
-          +'<button class="btn btn-danger btn-sm" onclick="pa_deleteWorkflow()">'+ic('trash',14)+' حذف المسار</button>'
-        : '<button class="btn btn-gold" disabled aria-disabled="true">'+ic('check',15)+' حفظ المسار</button>'
-          +'<button class="btn btn-danger btn-sm" disabled aria-disabled="true">'+ic('trash',14)+' حذف المسار</button>';
-      h+='<div class="card" style="margin-top:14px;border-color:var(--gold)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
-        +'<div style="flex:1;min-width:200px"><div style="font-weight:800;color:var(--ink)">'+ic('route',15)+' حفظ المسار إلى القاعدة</div>'
-        +'<div class="muted" style="font-size:11.5px">'+(wfWrite
-          ? 'التعديلات (المراحل/المعتمِدون) <b>لا تُطبَّق فعليّاً حتى تحفظ</b> — تُخزَّن في المحرّك وتَسري على الطلبات الجديدة. الحوكمة (فصل المهام/الرفض الافتراضي) تبقى مفروضة وقت كل اعتماد أيّاً كان تصميم المسار.'
-          : '<b>وضع قراءة فقط:</b> حفظ وحذف المسارات غير مفعّلين في هذه البيئة حتى تُطبّق قدرة P0-1u وتُختبر مستقلاً.')+'</div></div>'
-        +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+wfActions+'</div></div></div>';
-    } }catch(e){}
-    return h; };
+  designerHTML=function(){
+    try{
+      if(typeof isAdmin!=='function' || !isAdmin()) return _pa_refDesignerHTML();
+      var wf=(typeof getWF==='function')?getWF():null;
+      /* سلسلة التعميد تُدار من مصفوفة DoA — نُبقي العرض المرجعيّ لها. */
+      if(!wf || (typeof WF_TAB!=='undefined' && WF_TAB==='award')) return pa_lifecycleMap()+_pa_refDesignerHTML();
+
+      var tabs=(WORKFLOWS||[]).concat([AWARD_WF]).map(function(w){
+        return '<button class="fbtn '+(WF_TAB===w.id?'active':'')+'" onclick="WF_TAB=\''+w.id+'\';render()">'
+          +ic(w.id==='award'?'award':'route',14)+' '+esc(w.name)+'</button>'; }).join('');
+
+      return pa_lifecycleMap()
+        +'<div class="pagehead"><div><h1>مصمّم سير العمل</h1>'
+          +'<div class="sub">دورة الطلب كاملة. حرِّر المراحل في الجدول — المخطّط يُولَّد منه للقراءة فقط.</div></div></div>'
+        +'<div class="filters">'+tabs+'</div>'
+        +(wf.cond&&(typeof wfCondText==='function')?('<div class="chip" style="margin-bottom:12px">'+ic('filter',13)+' متى يُطبَّق: '+esc(wfCondText(wf))+'</div>'):'')
+        +'<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">'
+          +pa_wfStepTable(wf)+pa_wfDiagram(wf)
+        +'</div>'
+        +pa_wfHealthPanel(wf)
+        +pa_wfSimPanel();
+    }catch(e){
+      /* أيّ خلل ⇒ ارجع للمصمّم المرجعيّ بدل شاشة فارغة */
+      try{ return pa_lifecycleMap()+_pa_refDesignerHTML(); }catch(_e2){ return _pa_refDesignerHTML(); }
+    }
+  };
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

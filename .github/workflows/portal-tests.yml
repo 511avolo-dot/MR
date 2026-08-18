@@ -77,6 +77,9 @@ jobs:
       - name: عقد صلاحية ملفات عروض الأسعار السرية
         run: node scripts/e2e/portal-quote-authz.test.mjs
 
+      - name: عقد مصمّم سير العمل (إسناد بالقاعدة + حفظ يفشل مغلقاً)
+        run: node scripts/e2e/workflow-designer.test.mjs
+
       - name: تحقّق قطعة الأساس staging (F1 drift guard)
         run: node scripts/deploy/build-baseline.mjs --check
 
