@@ -6777,6 +6777,60 @@ async function pa_deleteWorkflow(){
     await loadAll(); render();
   }catch(e){ toast(String((e&&e.message)||'تعذّر الحذف'),'err'); }
 }
+/* (المُحوِّل — ملاحظة المالك #5) الخريطة الشاملة لدورة الطلب: كل الخطوات من الإنشاء إلى الأرشفة،
+   وكلّ خطوة لها زرّ «أسنِد» يقود مباشرةً إلى مكان إسناد المستخدم/المعتمِد لها. اسم ref فريد. */
+function pa_designAssign(target){
+  try{
+    if(target==='need'){ if(typeof WORKFLOWS!=='undefined'&&WORKFLOWS[0]){ WF_TAB=WORKFLOWS[0].id; SEL_WF=WORKFLOWS[0].id; } if(typeof render==='function')render(); return; }
+    if(target==='award'){ WF_TAB='award'; if(typeof render==='function')render(); return; }
+    VIEW='admin';
+    if(typeof setAdminTab==='function'){ setAdminTab(target); }
+    else { if(typeof ADMIN_TAB!=='undefined')ADMIN_TAB=target; if(typeof render==='function')render(); }
+    try{ window.scrollTo(0,0); }catch(_e){}
+  }catch(_e){}
+}
+function pa_lifecycleMap(){
+  try{
+    var firstNeed=((typeof WORKFLOWS!=='undefined'&&WORKFLOWS[0])||{}).name||'سلسلة اعتماد الحاجة';
+    /* nature: config=قابل للتخصيص بالسحب · role=يُسنَد بمنح الوظيفة/الصلاحية · gov=محكوم بالقيمة (DoA) · system=تلقائيّ */
+    var P=[
+      ['file','1','الإنشاء ورفع الطلب','الموظّف المُقدّم (صلاحية «رفع الطلبات»)','role','jobs','أسنِد مَن يرفع'],
+      ['check','2','اعتماد الحاجة','سلسلة معتمِدين قابلة للتخصيص — '+esc(firstNeed),'config','need','عدّل وأسنِد المعتمِدين'],
+      ['cart','3','التسعير وطلب عروض الأسعار','المشتريات (صلاحية «إدارة التسعير»)','role','jobs','أسنِد المشتريات'],
+      ['scale','4','المقارنة والتعميد','المشتريات — تقارن وترسي على الأنسب','role','jobs','أسنِد المشتريات'],
+      ['award','5','اعتماد التعميد','محكوم بحدود الصلاحية (DoA) حسب القيمة','gov','award','عدّل سلسلة التعميد'],
+      ['clipboard','6','أمر الشراء واعتماده','محكوم بالقيمة: اللجنة / المالية / المدير العام','gov','matrix','أسنِد اللجنة والصلاحيات'],
+      ['money','7','طلب الصرف واعتماده','سلسلة صرف مالية — حاملو «اعتماد الصرف»','role','jobs','أسنِد معتمِدي الصرف'],
+      ['bank','8','تنفيذ الصرف','أمين الصندوق / مسؤول البنوك (صلاحية «تنفيذ الصرف»)','role','jobs','أسنِد المنفّذ'],
+      ['box','9','الاستلام','المستودع / الجودة (صلاحية «تأكيد الاستلام»)','role','jobs','أسنِد المستلِم'],
+      ['flag','10','الإقفال والأرشفة','تلقائيّ — يُقفل الطلب ويُؤرشف بسجلّ تدقيق دائم','system','','']
+    ];
+    var natBadge={ config:'<span class="badge gold" style="font-size:9px">قابل للتخصيص</span>',
+      role:'<span class="badge info" style="font-size:9px">يُسنَد بالوظيفة/الصلاحية</span>',
+      gov:'<span class="badge" style="font-size:9px;background:var(--info-bg);color:var(--info)">محكوم بالقيمة (DoA)</span>',
+      system:'<span class="badge neutral" style="font-size:9px">تلقائيّ</span>' };
+    var rows=P.map(function(p){
+      var icn=p[0],no=p[1],title=p[2],who=p[3],nat=p[4],tgt=p[5],btn=p[6];
+      var action=tgt?('<button class="btn btn-ghost btn-sm" style="flex-shrink:0" onclick="pa_designAssign(\''+tgt+'\')">'+ic('user',13)+' '+esc(btn)+'</button>')
+        :'<span class="chip" style="flex-shrink:0">'+ic('check',12)+' بلا إسناد</span>';
+      return '<div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px dashed var(--line)">'
+        +'<span style="display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--surface-2);color:var(--gold-2);flex-shrink:0;font-weight:800;font-size:12px">'+no+'</span>'
+        +'<span style="display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#fff;border:1px solid var(--line);color:var(--gold-2);flex-shrink:0">'+ic(icn,15)+'</span>'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;color:var(--ink)">'+esc(title)+' '+(natBadge[nat]||'')+'</div>'
+        +'<div class="muted" style="font-size:11.5px">'+who+'</div></div>'
+        +action+'</div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:14px;border-color:var(--gold)">'
+      +'<div class="sec-title" style="display:flex;align-items:center;gap:8px"><span class="ico">'+ic('layers',16)+'</span>الخريطة الشاملة لدورة الطلب — من الإنشاء إلى الأرشفة</div>'
+      +'<div class="muted" style="font-size:12px;margin-bottom:10px">كل خطوات المعاملة كاملةً. لكلّ خطوة زرّ <b>«أسنِد»</b> يأخذك مباشرةً لمكان تعيين المستخدم/المعتمِد لها: '
+      +'<span class="badge gold" style="font-size:9px">قابل للتخصيص</span> يُحرَّر بالسحب هنا · '
+      +'<span class="badge info" style="font-size:9px">يُسنَد بالوظيفة/الصلاحية</span> بمنح الوظيفة للمستخدم · '
+      +'<span class="badge" style="font-size:9px;background:var(--info-bg);color:var(--info)">محكوم بالقيمة</span> سلسلته تكبر حسب مبلغ الطلب (حوكمة DoA).</div>'
+      +rows
+      +'<div class="muted" style="font-size:11px;margin-top:9px">'+ic('shield',12)+' فصل المهام والرفض الافتراضي وبوّابات الأدلّة مفروضة في كل خطوة — الإسناد لا يُضعِف الحوكمة.</div>'
+      +'</div>';
+  }catch(_e){ return ''; }
+}
 /* (المُحوِّل — ملاحظة المالك #5) توضيح مصمّم سير العمل بلغة بسيطة + معاينة «كيف سيسير الطلب فعليّاً».
    يعالج «الإسناد والتصميم غير واضحين» دون لمس آليّة السحب/الإفلات. اسم ref فريد. */
 function pa_designerGuide(){
@@ -6818,7 +6872,7 @@ function pa_designerGuide(){
 }
 if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;
   designerHTML=function(){ var h=_pa_refDesignerHTML();
-    try{ h = pa_designerGuide() + h; }catch(_e){}
+    try{ h = pa_lifecycleMap() + pa_designerGuide() + h; }catch(_e){}
     try{ if(typeof isAdmin==='function' && isAdmin() && (typeof WF_TAB==='undefined' || WF_TAB!=='award')){
       var wfWrite=pa_workflowWriteEnabled();
       var wfActions=wfWrite
