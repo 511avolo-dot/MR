@@ -3,7 +3,7 @@
 // تشغيليّ كان سيُفرِغ الشاشة، ويثبت أنّ مرحلة بلا معتمِد تمنع الحفظ.
 import { readFileSync } from 'node:fs';
 
-const src = readFileSync('/home/user/MR/purchase-portal.html', 'utf8');
+const src = readFileSync(new URL('../../purchase-portal.html', import.meta.url), 'utf8');
 const START = 'var PA_WF_ROLES=[';
 const END = "if(typeof designerHTML==='function'){ var _pa_refDesignerHTML=designerHTML;";
 const s = src.indexOf(START);
@@ -75,6 +75,7 @@ const tail = `
   out.capsAdmin = pa_capSummary({admin:true}).length;
   out.capsPlain = pa_capSummary({perms:{can_create:true,can_approve_stage:true}}).map(function(c){return c[0];});
   out.capsEmpty = pa_capSummary({perms:{}})[0][0];
+  out.capsOperational = pa_capSummary({perms:{can_edit:true,can_manage_company:true}});
   return out;
 `;
 
@@ -122,5 +123,7 @@ all &= expect('wizard renders', r.wizHtmlOk, true);
 all &= expect('admin capability summary is single gold chip', r.capsAdmin, 1);
 all &= expect('plain-language capabilities, no raw keys', r.capsPlain, ['يرفع الطلبات','يعتمد الحاجة']);
 all &= expect('no permissions reads as view-only', r.capsEmpty, 'اطّلاع فقط — لا يعتمد شيئاً');
+all &= expect('edit and company management capabilities are visible', r.capsOperational.length, 2);
+all &= expect('operational capabilities are not labelled view-only', r.capsOperational.some(function(c){return c[1]==='neutral';}), false);
 console.log(all ? '\n✅ ALL PASS' : '\n❌ FAILURES');
 process.exit(all ? 0 : 1);

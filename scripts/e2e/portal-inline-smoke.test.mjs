@@ -129,13 +129,29 @@ try {
     window.USERS = { admin: { n:'مدير البوابة', r:'مدير', job:'gm', admin:true, perms:{} } };
     window.isAdmin = () => true;
     const html = window.designerHTML();
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const writeControls = template.content.querySelectorAll([
+      'input[oninput*="setStage"]',
+      'select[onchange*="pa_setStageAssign"]',
+      'button[onclick*="pa_moveStage"]',
+      'button[onclick*="delStage2"]',
+      'button[onclick*="addStage2"]',
+      'button[onclick*="pa_saveWorkflow"]',
+      'button[onclick*="pa_deleteWorkflow"]',
+    ].join(','));
     return {
       enabled: window.pa_workflowWriteEnabled(),
       disabledButtons: (html.match(/disabled aria-disabled="true"/g) || []).length,
       readOnlyNotice: html.includes('وضع قراءة فقط'),
+      unsafeEnabledWriteControls: Array.from(writeControls).filter((el) =>
+        !el.disabled && el.getAttribute('aria-disabled') !== 'true').length,
     };
   });
-  assert.deepEqual(designerGate, { enabled:false, disabledButtons:2, readOnlyNotice:true });
+  assert.equal(designerGate.enabled, false);
+  assert.ok(designerGate.disabledButtons >= 2, 'expected visible disabled controls');
+  assert.equal(designerGate.readOnlyNotice, true);
+  assert.equal(designerGate.unsafeEnabledWriteControls, 0);
   pass('workflow designer fails closed to visible read-only controls when capability is absent');
 
   // (4) لا أخطاء console حرجة من تنفيذنا (تحذيرات الشبكة للأصول المُكعَّبة مقبولة — نتحقّق من عدم رمي دوالنا فقط)

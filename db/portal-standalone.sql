@@ -1293,7 +1293,10 @@ BEGIN
         OR portal_has_perm('can_manage_procurement')
         OR portal_has_perm('can_approve_award')
         OR portal_has_perm('can_issue_po')
-        OR (v_req.requester = v_me AND v_req.status IN ('draft','in_review','returned'))
+        OR (v_req.requester = v_me AND (
+              v_req.status IN ('draft','in_review','returned')
+              OR (v_req.req_type = 'direct_expense' AND v_req.status = 'payment_pending' AND NOT v_disbursed)
+           ))
         OR (v_is_mgr AND v_pre_commit)
      ) THEN
     RAISE EXCEPTION 'غير مصرّح بإلغاء هذا الطلب في حالته الحالية';
@@ -8144,18 +8147,17 @@ BEGIN
 END $p0$;
 
 
--- ── (p0_2e) رفع الطلب متاح لكل موظّف: can_create لكل وظيفة نشطة (تكليف المالك) ──
+-- ── (p0_2e) رفع الطلب متاح لكل موظّف نشط، بما في ذلك من لم تُسند له وظيفة ──
 DO $p0_2e_grant$
 BEGIN
   PERFORM set_config('app.portal_transition','1',true);
   UPDATE portal_jobs
      SET permissions = coalesce(permissions,'{}'::jsonb) || '{"can_create":true}'::jsonb
    WHERE active AND coalesce((permissions->>'can_create')::boolean,false) = false;
-  UPDATE portal_users u
-     SET permissions = coalesce(u.permissions,'{}'::jsonb) || '{"can_create":true}'::jsonb
-    FROM portal_jobs j
-   WHERE u.job_key = j.key AND j.active AND u.role <> 'admin'
-     AND coalesce((u.permissions->>'can_create')::boolean,false) = false;
+  UPDATE portal_users
+     SET permissions = coalesce(permissions,'{}'::jsonb) || '{"can_create":true}'::jsonb
+   WHERE active AND role <> 'admin'
+     AND coalesce((permissions->>'can_create')::boolean,false) = false;
   PERFORM set_config('app.portal_transition','0',true);
 END $p0_2e_grant$;
 

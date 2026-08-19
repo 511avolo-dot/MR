@@ -4139,7 +4139,9 @@ function canCancel(r,u){
   var can=((accessOf(u)||{}).can)||{};
   if(can.approveAward||can.issuePO||can.manageRfq)return true;   /* المشتريات (can_manage_procurement) */
   var st=pa_reqStatus(r);
-  if(r.requester===u && (st==='draft'||st==='in_review'||st==='returned'))return true;
+  var isExpense=(r.reqType==='direct_expense'||r.kind==='expense');
+  if(r.requester===u && ((st==='draft'||st==='in_review'||st==='returned') ||
+      (isExpense && st==='payment_pending' && pa_cancelPreCommit(r))))return true;
   if(pa_isReqManager(r,u) && pa_cancelPreCommit(r))return true;
   return false;
 }
@@ -5459,12 +5461,13 @@ function pa_capSummary(u){
   u=u||{};
   if(u.admin) return [['مدير البوابة — كل الصلاحيات','gold']];
   var p=u.perms||{}, out=[];
-  var M=[['can_create','يرفع الطلبات'],['can_approve_stage','يعتمد الحاجة'],
+  var M=[['can_create','يرفع الطلبات'],['can_edit','يعدّل الطلبات'],['can_approve_stage','يعتمد الحاجة'],
     ['can_approve_finance','التحقّق المالي'],['can_manage_procurement','يدير التسعير'],
     ['can_approve_award','يعتمد التعميد'],['can_issue_po','يصدر أمر الشراء'],
     ['can_approve_committee','عضو اللجنة'],['can_approve_disbursement','يعتمد الصرف'],
     ['can_disburse','ينفّذ الصرف'],['can_verify_stock','يؤكّد الاستلام'],
-    ['can_see_finance','يرى المالية'],['can_manage_users','يدير المستخدمين']];
+    ['can_see_finance','يرى المالية'],['can_manage_users','يدير المستخدمين'],
+    ['can_manage_company','يدير إعدادات الشركة']];
   M.forEach(function(m){ if(p[m[0]]===true) out.push([m[1],'ok']); });
   if(!out.length) out.push(['اطّلاع فقط — لا يعتمد شيئاً','neutral']);
   return out;

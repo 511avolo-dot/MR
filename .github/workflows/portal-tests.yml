@@ -8,6 +8,7 @@ on:
     paths:
       - 'db/portal-standalone.sql'
       - 'db/portal-migrations/**'
+      - 'supabase/migrations/**'
       - 'db/portal-tests/**'
       - 'db/staging-bootstrap/**'
       - 'package.json'
@@ -30,6 +31,7 @@ on:
     paths:
       - 'db/portal-standalone.sql'
       - 'db/portal-migrations/**'
+      - 'supabase/migrations/**'
       - 'db/portal-tests/**'
       - 'db/staging-bootstrap/**'
       - 'package.json'
