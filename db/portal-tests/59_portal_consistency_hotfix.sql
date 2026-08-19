@@ -19,7 +19,7 @@ BEGIN
   PERFORM set_config('app.portal_transition','0',true);
 END $seed$;
 
-\ir ../../supabase/migrations/20260819084945_p0_2f_portal_consistency_hotfix.sql
+\ir ../../supabase/migrations/20260819093117_p0_2f_portal_consistency_hotfix.sql
 
 CREATE OR REPLACE FUNCTION _p2f_mkreq(p_id text, p_type text, p_status text) RETURNS void
 LANGUAGE plpgsql AS $$
