@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  اختبار الهجرة 039 — تكامل المرتجع (كمية ≤ المستلَم) + إلزام اسم مورد الفاتورة.
+--  اختبار تكامل المرتجع (كمية ≤ المستلَم) + مرجعية مورد الفاتورة المعتمد.
 --  تأكيدات خفيفة (حارس انحدار CI): وجود المنطق في مصدر الدالة + ثبات التوقيع/الصلاحية.
 -- ════════════════════════════════════════════════════════════════════════════
 \set ON_ERROR_STOP on
@@ -14,13 +14,15 @@ BEGIN
   ) THEN RAISE EXCEPTION 'K1 fail: portal_return_record لا يتحقّق من المستلَم (039 غير مطبَّقة)'; END IF;
   RAISE NOTICE 'PASS K1 039: المرتجع يتحقّق من المستلَم';
 
-  -- K2: portal_invoice_record يُلزِم اسم المورد
+  -- K2: portal_invoice_record لا يثق باسم المورد المدخل؛ يشتقه من الترسية المعتمدة.
   IF NOT EXISTS (
     SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname='public' AND p.proname='portal_invoice_record'
-      AND p.prosrc LIKE '%اسم المورد مطلوب%'
-  ) THEN RAISE EXCEPTION 'K2 fail: portal_invoice_record لا يُلزِم اسم المورد'; END IF;
-  RAISE NOTICE 'PASS K2 039: الفاتورة تُلزِم اسم المورد';
+      AND p.prosrc LIKE '%portal_award%'
+      AND p.prosrc LIKE '%v_supplier%'
+      AND p.prosrc LIKE '%v_award_amount%'
+  ) THEN RAISE EXCEPTION 'K2 fail: portal_invoice_record لا يشتق المورد والمبلغ من الترسية'; END IF;
+  RAISE NOTICE 'PASS K2 p0_2g: الفاتورة تشتق المورد والمبلغ من الترسية';
 
   -- K3: التواقيع ثابتة (إضافة غير كاسرة) + الصلاحية للمستخدم المسجَّل باقية
   IF NOT has_function_privilege('authenticated', 'portal_return_record(text,jsonb,text,text,text)', 'EXECUTE')
