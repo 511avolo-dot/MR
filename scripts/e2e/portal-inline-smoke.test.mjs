@@ -82,11 +82,15 @@ try {
 
   // (2) الدوال الجديدة موجودة في النطاق العامّ
   const expected = ['pa_actionBanner','pa_auditVerify','pa_deleteWorkflow','pa_disbFlow','pa_docPrint','pa_docView',
+    'pa_invoiceAwardOptions','pa_recordInvoice','pa_syncInvoiceAward','pa_confirmInvoice',
     'pa_govCard','pa_permMatrixHTML','pa_saveWorkflow','pa_setGovFlag','pa_workflowWriteEnabled','togglePerm','userCard'];
   const present = await page.evaluate((names) => names.filter((n) => typeof window[n] === 'function'), expected);
   assert.deepEqual(present.sort(), expected.slice().sort(),
     'missing converter functions: got ' + JSON.stringify(present));
   pass('all new converter functions are defined on window');
+
+  assert.equal(await page.evaluate(() => !!(window.SB && window.SB.auth && window.SB.auth.getSession)), true);
+  pass('Supabase client is exposed to authenticated document studios after environment boot');
 
   // (3) تنفيذ دوال العرض الجديدة ببيانات وهميّة داخل المتصفّح — تُعيد HTML بلا رمي
   const results = await page.evaluate(() => {
@@ -153,6 +157,29 @@ try {
   assert.equal(designerGate.readOnlyNotice, true);
   assert.equal(designerGate.unsafeEnabledWriteControls, 0);
   pass('workflow designer fails closed to visible read-only controls when capability is absent');
+
+  const invoiceAuthority = await page.evaluate(async () => {
+    window.eval("REQS=[{id:'REQ-INV-1',proc:{winner:'approved_supplier',winnerTotal:1000,invoices:[]}}];SUPPLIERS={approved_supplier:{n:'المورد المعتمد'}};ME='admin';PSET.vat=15;");
+    window.pa_recordInvoice('REQ-INV-1');
+    const before = {
+      supplier: document.getElementById('iv-sup')?.value,
+      supplierReadonly: document.getElementById('iv-sup')?.readOnly,
+      amount: document.getElementById('iv-amt')?.value,
+      amountReadonly: document.getElementById('iv-amt')?.readOnly,
+    };
+    document.getElementById('iv-no').value = 'INV-AUTO-1';
+    document.getElementById('iv-amt').value = '1';
+    window.__invoiceRpc = null;
+    window.pa_rpc = async (name,args) => { window.__invoiceRpc={name,args}; return {ok:true}; };
+    window.pa_after = async () => {};
+    await window.pa_confirmInvoice('REQ-INV-1');
+    return { before, rpc: window.__invoiceRpc };
+  });
+  assert.deepEqual(invoiceAuthority.before, { supplier:'المورد المعتمد', supplierReadonly:true, amount:'1150', amountReadonly:true });
+  assert.equal(invoiceAuthority.rpc.name, 'portal_invoice_record');
+  assert.equal(invoiceAuthority.rpc.args.p_supplier_name, 'المورد المعتمد');
+  assert.equal(invoiceAuthority.rpc.args.p_amount, 1150);
+  pass('invoice form locks supplier and amount to the approved award and ignores DOM tampering');
 
   // (4) لا أخطاء console حرجة من تنفيذنا (تحذيرات الشبكة للأصول المُكعَّبة مقبولة — نتحقّق من عدم رمي دوالنا فقط)
   assert.equal(pageErrors.length, 0, 'late uncaught pageerror(s): ' + JSON.stringify(pageErrors));

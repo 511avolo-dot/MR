@@ -37,6 +37,7 @@ const portalConfig = readFileSync('functions/api/portal-config.js', 'utf8');
 const portalShared = readFileSync('functions/api/_portal-shared.js', 'utf8');
 const portalUsers = readFileSync('functions/api/portal-users.js', 'utf8');
 const portalNotify = readFileSync('functions/api/portal-notify.js', 'utf8');
+const invoiceAuthority = readFileSync('db/portal-migrations/p0_2g-invoice-award-authority.sql', 'utf8');
 
 let passed = 0;
 function ok(message){ passed += 1; console.log('  ✓ ' + message); }
@@ -72,8 +73,18 @@ assert.match(generated, /window\.printEl = function/);
 assert.match(generated, /privacySanitize/);
 assert.match(generated, /طباعة \/ حفظ PDF/);
 assert.match(generated, /iframe\.srcdoc/);
+assert.match(generated, /body>\.gds-document\{display:block!important\}/);
 assert.doesNotMatch(generated, /window\.open\(/);
 ok('generated documents remain in-portal and privacy-sanitized');
+
+assert.match(portal, /window\.SB=SB/);
+assert.match(portal, /function pa_invoiceAwardOptions/);
+assert.match(portal, /readonly aria-readonly="true"/);
+assert.match(invoiceAuthority, /status = 'approved'/);
+assert.match(invoiceAuthority, /amount_source', 'approved_award'/);
+assert.doesNotMatch(invoiceAuthority, /VALUES \(p_request_id, p_supplier_name/);
+assert.match(invoiceAuthority, /REVOKE ALL ON FUNCTION public\.portal_invoice_record[\s\S]*FROM PUBLIC, anon/);
+ok('document auth and invoice capture use the live session plus authoritative award data');
 
 assert.match(quotes, /\/api\/portal-quote\?key=/);
 assert.match(quotes, /window\.openQuoteViewer = open/);

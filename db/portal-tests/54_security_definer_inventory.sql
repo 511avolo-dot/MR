@@ -27,9 +27,12 @@ BEGIN
   WHERE n.nspname = 'public' AND p.prosecdef
     AND p.proname LIKE 'portal\_%' ESCAPE '\'
     AND (pg_get_userbyid(p.proowner) <> 'postgres'
-      OR coalesce(array_to_string(p.proconfig, ','), '') NOT LIKE '%search_path=public%');
+      OR NOT (
+        coalesce(array_to_string(p.proconfig, ','), '') LIKE '%search_path=public%'
+        OR coalesce(array_to_string(p.proconfig, ','), '') LIKE '%search_path=""%'
+      ));
   IF v_n <> 0 THEN RAISE EXCEPTION 'SDI2 FAIL: % portal definers have unsafe owner/search_path', v_n; END IF;
-  RAISE NOTICE 'PASS SDI2 every portal definer is postgres-owned with pinned public search_path';
+  RAISE NOTICE 'PASS SDI2 every portal definer is postgres-owned with a pinned safe search_path';
 END $t$;
 
 DO $t$

@@ -2579,6 +2579,8 @@ async function __bootConfig(){
       workflowDesignerWrite:!!(c.capabilities&&c.capabilities.workflowDesignerWrite===true)
     });
     SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+    /* الأصول المنفصلة (عارض المستندات/العروض والسياسات) لا ترى ربط let العام عبر window تلقائياً. */
+    window.SB=SB;
     return true;
   }catch(e){
     try{
@@ -4069,31 +4071,72 @@ function pa_invoicePanel(r){
     +'<div class="muted" style="font-size:12px;margin-bottom:10px">أصل الفاتورة (PDF/صورة) يُخزَّن ويُفتح داخل النظام. المطابقة الثلاثية تُقارن أمر الشراء ↔ الاستلام ↔ الفاتورة (تُفرَض على الصرف الآجل عند تفعيلها).</div>'
     +status+(rows||'<div class="muted" style="font-size:12px;margin-bottom:8px">لا فواتير مسجّلة بعد.</div>')+addBtn+'</div>';
 }
+function pa_invoiceAwardOptions(r){
+  var p=r&&r.proc; if(!p) return [];
+  var vat=1+pa_vat()/100, invs=p.invoices||[], out=[];
+  function norm(v){ return String(v||'').trim().toLocaleLowerCase('ar'); }
+  function usedFor(name){ var key=norm(name); return invs.reduce(function(sum,x){ return sum+(norm(x.supplierName)===key?(Number(x.amount)||0):0); },0); }
+  if(p.isSplit && (p.slices||[]).length){
+    var grouped={};
+    (p.slices||[]).forEach(function(s){
+      var name=String(s.supplierName||((SUPPLIERS[s.sid]||{}).n)||s.sid||'').trim(); if(!name)return;
+      var key=norm(name), row=grouped[key]||(grouped[key]={supplierName:name,net:0}); row.net+=Number(s.sliceTotal)||0;
+    });
+    Object.keys(grouped).forEach(function(key){ var row=grouped[key]; var approved=Math.round(row.net*vat*100)/100;
+      var remaining=Math.max(0,Math.round((approved-usedFor(row.supplierName))*100)/100);
+      if(remaining>0) out.push({supplierName:row.supplierName,approved:approved,remaining:remaining});
+    });
+  }else{
+    var name=String(((SUPPLIERS[p.winner]||{}).n)||p.winner||'').trim();
+    var approved=pa_awardTotalOf(r), used=invs.reduce(function(sum,x){return sum+(Number(x.amount)||0);},0);
+    var remaining=Math.max(0,Math.round((approved-used)*100)/100);
+    if(name&&remaining>0) out.push({supplierName:name,approved:approved,remaining:remaining});
+  }
+  return out;
+}
+var _paInvoiceAwardContext=null;
+function pa_syncInvoiceAward(){
+  var ctx=_paInvoiceAwardContext, supEl=$('iv-sup'), amtEl=$('iv-amt'), note=$('iv-award-note'); if(!ctx||!supEl||!amtEl)return;
+  var name=String(supEl.value||'').trim().toLocaleLowerCase('ar');
+  var row=ctx.options.find(function(x){return x.supplierName.toLocaleLowerCase('ar')===name;});
+  amtEl.value=row?String(row.remaining):'';
+  if(note) note.textContent=row?('القيمة المتبقية من التعميد المعتمد: '+money(row.remaining)):'اختر مورداً من التعميد المعتمد';
+}
 function pa_recordInvoice(reqId){
   var r=(REQS||[]).find(function(x){return x.id===reqId;}); if(!r){ return; }
+  var options=pa_invoiceAwardOptions(r);
+  if(!options.length){ toast('لا توجد قيمة متبقية للفوترة على هذا التعميد','err'); return; }
+  _paInvoiceAwardContext={requestId:reqId,options:options};
+  var supplierField=options.length===1
+    ? '<input class="input" id="iv-sup" value="'+esc(options[0].supplierName)+'" readonly aria-readonly="true">'
+    : '<select class="input" id="iv-sup" onchange="pa_syncInvoiceAward()">'+options.map(function(x){return '<option value="'+esc(x.supplierName)+'">'+esc(x.supplierName)+'</option>';}).join('')+'</select>';
   $('modal').innerHTML='<div class="modal-head"><div class="mi info" style="background:var(--gold-soft);color:var(--gold-3)">'+ic('scale',22)+'</div><div><h3>تسجيل فاتورة مورد</h3><div class="ms">أرفِق أصل الفاتورة (PDF أو صورة) — يُخزَّن ويُفتح داخل النظام</div></div></div>'
     +'<div class="modal-body">'
     +'<label>رقم الفاتورة</label><input class="input" id="iv-no" placeholder="INV-...">'
-    +'<label style="margin-top:10px">المبلغ (ر.س، شامل الضريبة)</label><input class="input num" id="iv-amt" type="number" min="1">'
-    +'<label style="margin-top:10px">اسم المورد <span class="muted" style="font-weight:400">(لكشف التكرار)</span></label><input class="input" id="iv-sup" placeholder="اسم المورد">'
+    +'<label style="margin-top:10px">المورد المعتمد</label>'+supplierField
+    +'<label style="margin-top:10px">المبلغ المعتمد (ر.س، شامل الضريبة)</label><input class="input num" id="iv-amt" type="number" readonly aria-readonly="true">'
+    +'<div id="iv-award-note" class="muted" style="font-size:11px;margin-top:4px">تُجلب القيمة تلقائياً من التعميد ولا يمكن تعديلها يدوياً.</div>'
     +'<label style="margin-top:10px">تاريخ الفاتورة <span class="muted" style="font-weight:400">(اختياري)</span></label><input class="input" id="iv-date" type="date">'
     +'<label style="margin-top:10px">أصل الفاتورة <span class="muted" style="font-weight:400">(PDF أو صورة)</span></label>'
     +'<label id="iv-drop" for="iv-file" style="display:flex;align-items:center;gap:11px;border:1.5px dashed var(--gold,#c2a063);background:var(--gold-soft,#f0e3c6);color:var(--gold-3,#8a6a30);border-radius:12px;padding:13px 15px;cursor:pointer;margin-bottom:6px;font-weight:700;font-size:13px"><span style="font-size:20px">📎</span><span id="iv-fn">اضغط لاختيار ملف الفاتورة</span></label>'
     +'<input id="iv-file" type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="pa_ivFile()">'
     +'<div class="modal-foot"><button class="btn btn-gold" id="iv-btn" onclick="pa_confirmInvoice(\''+reqId+'\')">'+ic('check',15)+' تسجيل الفاتورة</button><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button></div></div>';
   $('overlay').classList.add('show');
+  pa_syncInvoiceAward();
 }
 function pa_ivFile(){ var i=$('iv-file'),n=$('iv-fn'),d=$('iv-drop'); var f=i&&i.files&&i.files[0];
   if(f){ if(!pa_docValidate(f)){ i.value=''; return; } n.textContent='✓ '+f.name; if(d){ d.style.borderStyle='solid'; d.style.background='rgba(46,125,91,.12)'; d.style.borderColor='var(--ok,#2e7d5b)'; d.style.color='var(--ok,#2e7d5b)'; } } else { n.textContent='اضغط لاختيار ملف الفاتورة'; } }
 async function pa_confirmInvoice(reqId){
   var no=(($('iv-no')||{}).value||'').trim();
-  var amt=Number(($('iv-amt')||{}).value||0);
   var sup=(($('iv-sup')||{}).value||'').trim();
+  var ctx=_paInvoiceAwardContext;
+  var award=ctx&&ctx.requestId===reqId&&ctx.options.find(function(x){return x.supplierName.toLocaleLowerCase('ar')===sup.toLocaleLowerCase('ar');});
+  var amt=award?Number(award.remaining):0;
   var dt=(($('iv-date')||{}).value||'').trim()||null;
   var fileEl=$('iv-file'); var file=(fileEl&&fileEl.files&&fileEl.files[0])||null;
   if(!no){ toast('رقم الفاتورة مطلوب','err'); return; }
-  if(!(amt>0)){ toast('مبلغ الفاتورة مطلوب','err'); return; }
-  if(!sup){ toast('اسم المورد مطلوب (لكشف الفاتورة المكرّرة)','err'); return; }
+  if(!sup||!award){ toast('اختر مورداً من التعميد المعتمد','err'); return; }
+  if(!(amt>0)){ toast('لا توجد قيمة متبقية للفوترة','err'); return; }
   if(file&&!pa_docValidate(file)) return;
   var btn=$('iv-btn'); if(btn) btn.disabled=true; var docKey=null;
   try{ if(file){ docKey=await pa_docUpload('inv',reqId,file); }

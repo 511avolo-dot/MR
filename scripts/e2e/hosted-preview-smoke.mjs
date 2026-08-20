@@ -73,7 +73,7 @@ async function probeOnce() {
     '/assets/quote-document-studio.css?v=1',
     '/assets/access-inspector.css?v=1',
     '/assets/document-studio.js?v=2',
-    '/assets/generated-document-studio.js?v=1',
+    '/assets/generated-document-studio.js?v=2',
     '/assets/quote-document-studio.js?v=1',
     '/assets/policy-studio.js?v=1',
     '/assets/access-inspector.js?v=1',
@@ -89,7 +89,7 @@ async function probeOnce() {
   for (const asset of [
     '/assets/portal-functional-studios.css?v=1',
     '/assets/document-studio.js?v=2',
-    '/assets/generated-document-studio.js?v=1',
+    '/assets/generated-document-studio.js?v=2',
     '/assets/quote-document-studio.js?v=1',
     '/assets/policy-studio.js?v=1',
     '/assets/access-inspector.js?v=1',

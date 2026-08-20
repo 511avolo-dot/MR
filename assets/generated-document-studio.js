@@ -81,7 +81,7 @@
       + '.gds-document>.doc-sheet,.gds-document>.print-sheet,.gds-document>.document{box-shadow:none!important;margin:0!important;max-width:none!important;width:100%!important}'
       + '.doc-actions,button{display:none!important}'
       + '@page{size:A4;margin:12mm}'
-      + '@media print{html,body{background:#fff;padding:0}.gds-document{width:100%;min-height:auto;box-shadow:none}.card{box-shadow:none!important}}'
+      + '@media print{html,body{background:#fff;padding:0}body>.gds-document{display:block!important}.gds-document{width:100%;min-height:auto;box-shadow:none}.card{box-shadow:none!important}}'
       + '</style>';
   }
 
