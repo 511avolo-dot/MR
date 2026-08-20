@@ -6,7 +6,7 @@
 
 const PORTAL_ASSETS = `
 <script src="/assets/document-studio.js?v=2" data-portal-asset="document-studio"></script>
-<script src="/assets/generated-document-studio.js?v=1" data-portal-asset="generated-document-studio"></script>
+<script src="/assets/generated-document-studio.js?v=2" data-portal-asset="generated-document-studio"></script>
 <script src="/assets/quote-document-studio.js?v=1" data-portal-asset="quote-document-studio"></script>
 <script src="/assets/policy-studio.js?v=1" data-portal-asset="policy-studio"></script>
 <script src="/assets/access-inspector.js?v=1" data-portal-asset="access-inspector"></script>

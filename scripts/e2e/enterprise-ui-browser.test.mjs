@@ -22,7 +22,7 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 const html = `<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/portal-functional-studios.css"><link rel="stylesheet" href="/assets/generated-document-studio.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"></head><body>
+<link rel="stylesheet" href="/assets/portal-functional-studios.css"><link rel="stylesheet" href="/assets/generated-document-studio.css"><link rel="stylesheet" href="/assets/quote-document-studio.css"><link rel="stylesheet" href="/assets/access-inspector.css"><style>@media print{body>*{display:none!important}#print-root{display:block!important}}</style></head><body>
 <header class="topbar" data-legacy-shell="true"><div class="ttl">بوابة المشتريات</div><nav class="nav"><button class="active">الرئيسية</button></nav></header>
 <div class="wrap"><div class="pagehead"><div><h1>مركز العمل</h1><div class="sub">اختبار متصفح معزول</div></div></div><div class="card"><div class="sec-title">طلبات تحتاج إجراء</div><table><thead><tr><th>الطلب</th><th>الحالة</th></tr></thead><tbody><tr><td>REQ-1</td><td>قيد الإجراء</td></tr></tbody></table></div>
 <div id="generated-purchase-request" class="doc-sheet" style="margin-top:20px"><div class="doc-body"><h2>طلب شراء تجريبي</h2><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody><tr><td>مادة اختبار</td><td>2</td><td>500</td><td>1000</td></tr></tbody></table><div class="doc-words">الإجمالي كتابةً: ألف ريال</div><div class="doc-actions"><button>طباعة</button></div></div></div></div>
@@ -125,8 +125,12 @@ try {
   const frame = page.locator('.gds-frame');
   await frame.waitFor({ state: 'visible' });
   await page.waitForFunction(() => document.querySelector('.gds-frame')?.contentDocument?.body?.innerText.includes('طلب شراء تجريبي'));
+  await page.emulateMedia({ media: 'print' });
+  assert.notEqual(await frame.contentFrame().locator('.gds-document').evaluate((node) => getComputedStyle(node).display), 'none');
+  assert.match(await frame.contentFrame().locator('.gds-document').innerText(), /طلب شراء تجريبي/);
+  await page.emulateMedia({ media: 'screen' });
   assert.equal(await page.evaluate(() => document.body.dataset.legacyPrint || ''), '');
-  console.log('  ✓ legacy print action opens the in-portal generated-document preview');
+  console.log('  ✓ generated-document print media keeps the complete document visible');
   await page.keyboard.press('Escape');
   await page.locator('.gds-root').waitFor({ state: 'detached' });
 
