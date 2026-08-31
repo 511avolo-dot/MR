@@ -2742,7 +2742,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
       </button>
       <div class="search">
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4-4"/></svg>
-        <input type="text" id="global-search" placeholder="بحث سريع... (اضغط Ctrl+K للأوامر)" autocomplete="off">
+        <input type="text" id="global-search" placeholder="بحث سريع: رقم أمر / مورد / مشروع / صنف... (Ctrl+K)" autocomplete="off">
       </div>
       <div class="topbar-actions">
         <div class="cloud-pill" id="cloud-pill" title="حالة الاتصال السحابي" style="display:none">
@@ -4809,7 +4809,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
   <div class="cmd-box">
     <div class="cmd-input-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="cmd-input" class="cmd-input" placeholder="ابحث عن صنف، مورد، أو إجراء... (Ctrl+K)" autocomplete="off">
+      <input type="text" id="cmd-input" class="cmd-input" placeholder="ابحث عن أمر شراء، مشروع/جهة، صنف، مورد، أو إجراء... (Ctrl+K)" autocomplete="off">
       <span class="cmd-kbd">ESC</span>
     </div>
     <div class="cmd-results" id="cmd-results"></div>
@@ -8882,11 +8882,13 @@ function openCompareModal(){
 /* ============================================================ */
 let CMD_FOCUS = 0;
 let CMD_FILTERED = [];
-function openCmdPalette(){
+// prefill: نصّ بحث اختياري (يُستدعى أيضاً كمستمع حدث فيصل Event — لذا نقبل النصّ فقط)
+function openCmdPalette(prefill){
+  const q = (typeof prefill==='string') ? prefill : '';
   document.getElementById('cmd-overlay').classList.add('active');
   setTimeout(()=>{
     const inp = document.getElementById('cmd-input');
-    inp.value=''; inp.focus(); renderCmdResults('');
+    inp.value=q; inp.focus(); renderCmdResults(q);
   }, 50);
 }
 function closeCmdPalette(){
@@ -8905,6 +8907,8 @@ function renderCmdResults(q){
     {type:'action', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>', title:'تنزيل نسخة احتياطية', sub:'حفظ كل البيانات كملف JSON', do:()=>downloadBackup()},
   ];
   const items = STATE.items.map(i=>({type:'item', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10"/></svg>', title:i.name||i.code, sub:`${i.code} · ${i.category||''} · ${fmtPrice(i.last_price)} ر.س`, do:()=>{closeCmdPalette();openItemDetail(i.code)}, _hay:(i.code+' '+i.name+' '+i.category+' '+(SI_ALIASES_BY_CODE[i.code]||[]).join(' ')).toLowerCase()}));
+  // أوامر الشراء — بحث برقم الأمر أو المورد أو المشروع/الجهة أو القطاع
+  const pos = (STATE.purchaseOrders||[]).map(o=>({type:'po', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>', title:o.po_number, sub:`${o.supplier||'—'} · 🏗 ${poProjectText(o)} · ${fmtPrice(o.total)} ر.س · ${o.status||'—'}`, do:()=>{closeCmdPalette();navigate('purchase-orders');openPODrawer(o.po_number)}, _hay:((o.po_number||'')+' '+(o.supplier||'')+' '+(o.project||'')+' '+(o.sector||'')+' '+(o.status||'')).toLowerCase()}));
   const sups = STATE.suppliers.map(s=>({type:'supplier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>', title:s.name, sub:`${s.specialty||'—'} · ${s.offers_count||0} عرض`, do:()=>{closeCmdPalette();openSupplierDetail(s.name)}, _hay:(s.name+' '+s.specialty+' '+s.contact).toLowerCase()}));
   let all;
   if(!q){
@@ -8914,9 +8918,11 @@ function renderCmdResults(q){
   } else {
     const filteredItems = items.filter(it=>it._hay.includes(q)).slice(0,8);
     const filteredSups = sups.filter(s=>s._hay.includes(q)).slice(0,5);
+    const filteredPOs = pos.filter(o=>o._hay.includes(q)).slice(0,8);
     const filteredActions = actions.filter(a=>(a.title+' '+a.sub).toLowerCase().includes(q)).slice(0,5);
     all = [
       ...(filteredActions.length?[{section:'إجراءات', items:filteredActions}]:[]),
+      ...(filteredPOs.length?[{section:'أوامر الشراء', items:filteredPOs}]:[]),
       ...(filteredItems.length?[{section:'الأصناف', items:filteredItems}]:[]),
       ...(filteredSups.length?[{section:'الموردون', items:filteredSups}]:[]),
     ];
@@ -11164,6 +11170,7 @@ async function buildPRReport(opts){
     return `<tr>
       <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
       <td>${escapeHtml(p.title||'—')}</td>
+      <td>${escapeHtml(poProjectText(p))}</td>
       <td>${escapeHtml(p.department||p.department_id||'—')}</td>
       <td>${escapeHtml(p.requester||'—')}</td>
       <td class="num price">${fmtPrice(p.est_total)}</td>
@@ -11171,7 +11178,7 @@ async function buildPRReport(opts){
       <td>${stage?escapeHtml(stage.stage_label):'—'}</td>
       <td class="center">${escapeHtml(String(p.request_date||p.created_at||'').slice(0,10))}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#888">لا توجد طلبات مطابقة</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="center" style="padding:16px;color:#888">لا توجد طلبات مطابقة</td></tr>';
   const summary=Object.entries(byStatus).map(([k,v])=>`<div class="print-stat-card"><span class="label">${escapeHtml(lbl(k))}</span><span class="value">${v}</span></div>`).join('');
   const body=`
     <div class="print-grid-stats">
@@ -11181,7 +11188,7 @@ async function buildPRReport(opts){
     </div>
     <div class="print-section">
       <div class="print-section-title">طلبات الشراء</div>
-      <table class="print-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th>المرحلة</th><th class="center">التاريخ</th></tr></thead><tbody>${rows}</tbody></table>
+      <table class="print-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>المشروع / الجهة</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th>المرحلة</th><th class="center">التاريخ</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PURCHASE REQUESTS', title:'تقرير طلبات الشراء', subtitle:'حالة الطلبات عبر سلسلة الاعتماد'}, body);
 }
@@ -11821,6 +11828,18 @@ function buildPOCycleReport(){
     <td class="center">${s.count}</td>
     <td class="num">${escapeHtml(poFmtDuration(s.avg))}</td>
   </tr>`).join('') || '<tr><td colspan="3" class="center" style="padding:14px;color:#888">لا توجد بيانات مراحل</td></tr>';
+  // الأوامر المتعثّرة في مرحلتها الحالية — كل أمر بجهته كي تُعرف الجهة المتأثّرة
+  const stuck=list.filter(o=>!PO_TERMINAL.includes(o.status))
+    .map(o=>({o,age:poCurrentStageAge(o)}))
+    .sort((a,b)=>b.age-a.age).slice(0,15);
+  const stuckRows=stuck.map(({o,age})=>`<tr>
+    <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+    <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(poProjectText(o))}</td>
+    <td class="center"><span class="print-badge ${poStatusBadgeClass(o.status)}">${escapeHtml(o.status||'—')}</span></td>
+    <td class="center"><span class="print-badge ${age>14?'danger':age>7?'warn':'neutral'}">${age} يوم</span></td>
+    <td class="num price">${fmtPrice(o.total)}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="center" style="padding:14px;color:#1f7a55">لا توجد أوامر عالقة</td></tr>';
   const body=`
     <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
       <div class="print-stat-card accent"><span class="label">متوسط زمن الدورة</span><span class="value" style="font-size:11.5px">${st.avgCycle!=null?escapeHtml(poFmtDuration(st.avgCycle)):'—'}</span><span class="sub">${st.cycleN} أمر مكتمل</span></div>
@@ -11831,6 +11850,13 @@ function buildPOCycleReport(){
     <div class="print-section">
       <div class="print-section-title">متوسط زمن كل مرحلة (الأبطأ أولاً)</div>
       <table class="print-table"><thead><tr><th>المرحلة</th><th class="center">عدد المرّات</th><th class="num">متوسط المدة</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">الأوامر الأطول بقاءً في مرحلتها الحالية</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>المشروع / الجهة</th><th class="center">المرحلة الحالية</th><th class="center">عمر المرحلة</th><th class="num">القيمة</th></tr></thead>
+        <tbody>${stuckRows}</tbody>
+      </table>
     </div>`;
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · CYCLE TIME', title:'تقرير زمن الدورة والاختناقات', subtitle:'تحليل مدة مراحل أوامر الشراء'}, body);
 }
@@ -15219,7 +15245,20 @@ function poStateSnapshot(){
     awaiting_finance:all.filter(o=>o.status==='تسليم للإدارة المالية'||o.status==='تم التحويل').length,
     near_due:all.filter(o=>{const d=poParseDate(o.expected_delivery);if(!d||PO_TERMINAL.includes(o.status))return false;const diff=Math.round((d-poParseDate(new Date()))/86400000);return diff>=0&&diff<=3;}).length,
     health:Math.round(poHealthScore()*100),
+    no_project:active.filter(o=>!String(o.project||'').trim()).length,
   };
+}
+// تجميع الأوامر النشطة حسب الجهة/المشروع (يغذّي التقرير الإداري الذكي)
+function poProjectStats(){
+  const m={};
+  (STATE.purchaseOrders||[]).filter(o=>o.status!=='ملغى').forEach(o=>{
+    const k=poProjectText(o);
+    (m[k]=m[k]||{count:0,value:0,late:0});
+    m[k].count++; m[k].value+=Number(o.total)||0;
+    if(!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0) m[k].late++;
+  });
+  return Object.entries(m).sort((a,b)=>b[1].value-a[1].value)
+    .map(([project,x])=>({project,count:x.count,value:Math.round(x.value),late:x.late}));
 }
 async function poLoadAISummary(){
   const box=document.getElementById('po-ai-summary'); if(!box) return;
@@ -15236,7 +15275,8 @@ async function poGenerateAIReport(){
   try{
     const snap=poStateSnapshot();
     const sectors=PO_ENUMS.sector.map(s=>({s,v:STATE.purchaseOrders.filter(o=>o.sector===s&&o.status!=='ملغى').reduce((a,o)=>a+(Number(o.total)||0),0)})).filter(x=>x.v>0);
-    const text=await aiComplete({feature:'po_report',system:'أنت مدير مشتريات. اكتب تقريراً إدارياً احترافياً بالعربية بصيغة Markdown: استخدم ## للعناوين الرئيسية. أقسام: ملخص تنفيذي، تحليل التأخير وجذوره، توصيات. منسّق بعناوين قصيرة.',prompt:'المؤشرات: '+JSON.stringify(snap)+'\nالقطاعات: '+JSON.stringify(sectors),maxTokens:1200,temperature:0.5});
+    const projects=poProjectStats().slice(0,12);
+    const text=await aiComplete({feature:'po_report',system:'أنت مدير مشتريات. اكتب تقريراً إدارياً احترافياً بالعربية بصيغة Markdown: استخدم ## للعناوين الرئيسية. أقسام: ملخص تنفيذي، الأداء حسب الجهة/المشروع، تحليل التأخير وجذوره، توصيات. منسّق بعناوين قصيرة.',prompt:'المؤشرات: '+JSON.stringify(snap)+'\nالقطاعات: '+JSON.stringify(sectors)+'\nالجهات/المشاريع (القيمة والمتأخر لكل جهة): '+JSON.stringify(projects),maxTokens:1200,temperature:0.5});
     printAIReport({title:'التقرير الإداري للمشتريات', subtitle:'تحليل تنفيذي لحالة أوامر الشراء'}, text);
   }catch(e){ toast('error','تعذّر',e.message||'الذكاء الاصطناعي غير مُعدّ'); }
 }
@@ -15524,10 +15564,18 @@ function init(){
     clearTimeout(globalSearchTimer);
     if(!q)return;
     globalSearchTimer = setTimeout(()=>{
-      STATE.itemsFilter.q = q;
-      document.getElementById('items-search').value = q;
-      navigate('items');
+      // نتائج موحّدة: أوامر الشراء (بالرقم/المورد/المشروع/القطاع/الحالة) + الأصناف + الموردون + الإجراءات
+      openCmdPalette(q);
     }, 300);
+  });
+  // Enter يفتح قائمة الأصناف مُصفّاة (السلوك القديم محفوظ)
+  document.getElementById('global-search').addEventListener('keydown',e=>{
+    if(e.key!=='Enter') return;
+    const q = e.target.value.trim(); if(!q) return;
+    clearTimeout(globalSearchTimer);
+    STATE.itemsFilter.q = q;
+    const s=document.getElementById('items-search'); if(s) s.value = q;
+    navigate('items');
   });
   document.getElementById('global-search').addEventListener('focus',e=>{
     // Optional: show cmd palette on focus
