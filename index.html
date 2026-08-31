@@ -1265,6 +1265,9 @@ body.print-preview-active .print-document{display:block}
 .print-party-name{font-size:13px;font-weight:700;color:#231F20;margin-bottom:3px;font-family:'NeoSansArabic','Cairo',sans-serif}
 .print-party-meta{font-size:10px;color:#555;line-height:1.7}
 .print-party-meta strong{color:#231F20;font-weight:600}
+/* جهة/موقع المشروع — يجب أن تبين في كل مستند مطبوع */
+.print-party-proj{font-size:11.5px;font-weight:700;color:#231F20;background:#f7f2e6;border:1px solid #e6dcc4;border-radius:6px;padding:5px 8px;margin-bottom:6px;line-height:1.5}
+.print-party-proj .lbl{display:block;font-size:9px;font-weight:700;color:#9A7A45;letter-spacing:.05em;margin-bottom:1px}
 /* Total in words */
 .print-total-words{
   margin-top:8px;padding:9px 13px;background:#fbf9f3;border:1px dashed #c5b994;border-radius:6px;
@@ -2434,6 +2437,19 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-card-sup{font-size:12px;color:var(--ink-2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .po-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:11px;color:var(--muted)}
 .po-card-total{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--ink)}
+/* جهة / موقع المشروع */
+.po-project{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-weight:600;color:var(--ink-2)}
+.po-noproject{display:inline-block;padding:2px 9px;border-radius:8px;font-size:10.5px;font-weight:700;background:rgba(196,162,101,0.16);color:#8a6a30}
+.po-card-proj{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-drawer-proj{font-size:12.5px;color:#8a6a30;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.po-linkbtn{background:transparent;border:1px dashed var(--accent);color:#8a6a30;border-radius:7px;padding:2px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.po-linkbtn:hover{background:rgba(196,162,101,0.12)}
+/* مسار المراحل التفاعلي */
+.po-step.clickable{cursor:pointer}
+.po-step.clickable:hover .dot{border-color:var(--accent);box-shadow:0 0 0 3px rgba(196,162,101,0.18)}
+.po-step.next .dot{border-color:var(--accent);border-style:dashed;color:var(--accent)}
+.po-stage-next{margin-top:10px;font-size:11.5px;color:var(--muted)}
+.po-stage-next b{color:#8a6a30}
 /* Drawer */
 .po-drawer-overlay{position:fixed;inset:0;background:rgba(20,16,12,0.45);opacity:0;visibility:hidden;transition:all .25s;z-index:1400}
 .po-drawer-overlay.active{opacity:1;visibility:visible}
@@ -3313,6 +3329,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 
         <div class="toolbar po-toolbar" id="po-toolbar">
           <input type="text" class="input" id="po-search" placeholder="ابحث برقم الأمر / المورد / المشروع..." style="flex:1;max-width:340px">
+          <select class="select" id="po-filter-project"><option value="">كل الجهات / المشاريع</option></select>
           <select class="select" id="po-filter-sector"><option value="">كل القطاعات</option></select>
           <select class="select" id="po-filter-status"><option value="">كل الحالات</option></select>
           <select class="select" id="po-filter-priority"><option value="">كل الأولويات</option></select>
@@ -3326,6 +3343,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
                   <th data-posort="po_number">رقم الأمر</th>
                   <th data-posort="issue_date">التاريخ</th>
                   <th data-posort="supplier">المورد</th>
+                  <th data-posort="project">المشروع / الجهة</th>
                   <th data-posort="sector">القطاع</th>
                   <th data-posort="total" style="text-align:left">الإجمالي</th>
                   <th data-posort="status">الحالة</th>
@@ -3862,8 +3880,10 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           <datalist id="po-suppliers-list"></datalist>
         </div>
         <div class="form-field">
-          <label class="form-label">المشروع / الموقع</label>
-          <input type="text" class="form-input" id="po-f-project" placeholder="اسم المشروع أو الموقع">
+          <label class="form-label">المشروع / جهة التنفيذ <span class="req">*</span></label>
+          <input type="text" class="form-input" id="po-f-project" list="po-projects-list" placeholder="اسم المشروع أو الجهة أو الموقع">
+          <datalist id="po-projects-list"></datalist>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:4px">تظهر في القائمة وفي أمر الشراء المطبوع وكل التقارير.</div>
         </div>
       </div>
       <div class="form-row">
@@ -5168,7 +5188,7 @@ const STATE = {
   purchaseOrders: [],
   poView: 'analytics',
   poSegment: 'all',
-  poFilter: {q:'', sector:'', status:'', priority:''},
+  poFilter: {q:'', sector:'', status:'', priority:'', project:''},
   poSort: {col:'issue_date', dir:'desc'},
   poPage: 1,
   poSelected: new Set(),
@@ -11672,6 +11692,8 @@ function buildPOListReport(opts){
   let list=[...(STATE.purchaseOrders||[])];
   if(opts.status) list=list.filter(o=>o.status===opts.status);
   if(opts.sector) list=list.filter(o=>o.sector===opts.sector);
+  if(opts.project==='__none__') list=list.filter(o=>!String(o.project||'').trim());
+  else if(opts.project) list=list.filter(o=>String(o.project||'').trim()===opts.project);
   if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
   if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
   list.sort((a,b)=>(poToISO(b.issue_date)||'').localeCompare(poToISO(a.issue_date)||''));
@@ -11681,12 +11703,22 @@ function buildPOListReport(opts){
     <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
     <td class="center">${escapeHtml(poFmtDate(o.issue_date))}</td>
     <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(poProjectText(o))}</td>
     <td>${escapeHtml(o.sector||'—')}</td>
     <td class="num price">${fmtPrice(o.total)}</td>
     <td class="center"><span class="print-badge ${poStatusBadgeClass(o.status)}">${escapeHtml(o.status||'—')}</span></td>
     <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
-  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا توجد أوامر مطابقة للمرشّحات</td></tr>';
-  const filterDesc=[opts.status?('الحالة: '+opts.status):'', opts.sector?('القطاع: '+opts.sector):'', opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):''].filter(Boolean).join(' · ')||'كل الأوامر';
+  </tr>`).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#888">لا توجد أوامر مطابقة للمرشّحات</td></tr>';
+  // تجميع حسب الجهة/المشروع — ليعرف المدير أين صُرفت المشتريات
+  const byProj={};
+  list.forEach(o=>{ const k=poProjectText(o); (byProj[k]=byProj[k]||{c:0,v:0}); byProj[k].c++; byProj[k].v+=Number(o.total)||0; });
+  const projRows=Object.entries(byProj).sort((a,b)=>b[1].v-a[1].v).map(([k,x])=>`<tr>
+    <td>${escapeHtml(k)}</td>
+    <td class="center">${x.c}</td>
+    <td class="num price">${fmtPrice(x.v)}</td>
+  </tr>`).join('') || '<tr><td colspan="3" class="center" style="padding:14px;color:#888">—</td></tr>';
+  const projDesc = opts.project==='__none__' ? 'الجهة: بلا جهة محدّدة' : (opts.project?('الجهة: '+opts.project):'');
+  const filterDesc=[opts.status?('الحالة: '+opts.status):'', projDesc, opts.sector?('القطاع: '+opts.sector):'', opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):''].filter(Boolean).join(' · ')||'كل الأوامر';
   const body=`
     <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
       <div class="print-stat-card accent"><span class="label">عدد الأوامر</span><span class="value">${list.length}</span></div>
@@ -11697,9 +11729,16 @@ function buildPOListReport(opts){
     <div class="print-section">
       <div class="print-section-title">سجل أوامر الشراء</div>
       <table class="print-table">
-        <thead><tr><th>رقم الأمر</th><th class="center">التاريخ</th><th>المورد</th><th>القطاع</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th></tr></thead>
+        <thead><tr><th>رقم الأمر</th><th class="center">التاريخ</th><th>المورد</th><th>المشروع / الجهة</th><th>القطاع</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="4">الإجمالي (${list.length} أمر)</td><td class="num">${fmtPrice(totTot)}</td><td colspan="2"></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">الإجمالي (${list.length} أمر)</td><td class="num">${fmtPrice(totTot)}</td><td colspan="2"></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="print-section">
+      <div class="print-section-title">التوزيع حسب الجهة / المشروع</div>
+      <table class="print-table">
+        <thead><tr><th>الجهة / المشروع</th><th class="center">عدد الأوامر</th><th class="num">القيمة (شامل الضريبة)</th></tr></thead>
+        <tbody>${projRows}</tbody>
       </table>
     </div>`;
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
@@ -11713,12 +11752,13 @@ function buildPOOverdueReport(){
   const rows=list.map(o=>`<tr class="${(o.days_delayed||0)>30?'award-row':''}">
     <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
     <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(poProjectText(o))}</td>
     <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
     <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${o.days_delayed} يوم</span></td>
     <td class="center">${poCurrentStageAge(o)} يوم</td>
     <td>${escapeHtml(o.delay_reason||'غير محدد')}</td>
     <td class="num price">${fmtPrice(o.total)}</td>
-  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#1f7a55">لا توجد أوامر متأخرة 👍</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#1f7a55">لا توجد أوامر متأخرة 👍</td></tr>';
   const body=`
     <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
       <div class="print-stat-card accent"><span class="label">أوامر متأخرة</span><span class="value">${list.length}</span></div>
@@ -11729,7 +11769,7 @@ function buildPOOverdueReport(){
     <div class="print-section">
       <div class="print-section-title">الأوامر المتأخرة (الأكثر تأخيراً أولاً)</div>
       <table class="print-table">
-        <thead><tr><th>رقم الأمر</th><th>المورد</th><th class="center">التسليم المتوقع</th><th class="center">التأخير</th><th class="center">عمر المرحلة</th><th>السبب</th><th class="num">القيمة</th></tr></thead>
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>المشروع / الجهة</th><th class="center">التسليم المتوقع</th><th class="center">التأخير</th><th class="center">عمر المرحلة</th><th>السبب</th><th class="num">القيمة</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -11747,11 +11787,12 @@ function buildPOFinanceReport(){
   const rows=list.map(o=>`<tr>
     <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
     <td>${escapeHtml(o.supplier||'—')}</td>
+    <td>${escapeHtml(poProjectText(o))}</td>
     <td>${escapeHtml(o.payment_method||'—')}</td>
     <td class="center"><span class="print-badge ${o.status==='تم التحويل'?'ok':'warn'}">${escapeHtml(o.status)}</span></td>
     <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
     <td class="num price">${fmtPrice(o.total)}</td>
-  </tr>`).join('') || '<tr><td colspan="6" class="center" style="padding:16px;color:#888">لا توجد أوامر لدى الإدارة المالية</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="7" class="center" style="padding:16px;color:#888">لا توجد أوامر لدى الإدارة المالية</td></tr>';
   const body=`
     <div class="print-grid-stats">
       <div class="print-stat-card accent"><span class="label">إجمالي الأوامر المالية</span><span class="value">${list.length}</span></div>
@@ -11762,9 +11803,9 @@ function buildPOFinanceReport(){
     <div class="print-section">
       <div class="print-section-title">الأوامر لدى الإدارة المالية</div>
       <table class="print-table">
-        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>طريقة الدفع</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th><th class="num">الإجمالي</th></tr></thead>
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>المشروع / الجهة</th><th>طريقة الدفع</th><th class="center">الحالة</th><th class="center">التسليم المتوقع</th><th class="num">الإجمالي</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="5">الإجمالي شامل الضريبة</td><td class="num">${fmtPrice(totTot)}</td></tr></tfoot>
+        <tfoot><tr><td colspan="6">الإجمالي شامل الضريبة</td><td class="num">${fmtPrice(totTot)}</td></tr></tfoot>
       </table>
     </div>
     <div class="print-total-words"><strong>بانتظار التحويل كتابةً:</strong> ${escapeHtml(tafqitSAR(awTot))}</div>`;
@@ -12095,6 +12136,9 @@ function reportsCatalog(){
   const monthAgo = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
   const poStatusOpts = ['<option value="">كل الحالات</option>'].concat(PO_ENUMS.status.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
   const poSectorOpts = ['<option value="">كل القطاعات</option>'].concat(PO_ENUMS.sector.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  const poProjectOpts = ['<option value="">كل الجهات / المشاريع</option>']
+    .concat(poProjectList().map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`))
+    .concat(['<option value="__none__">— بلا جهة محدّدة —</option>']).join('');
   const regStatusOpts = [['all','كل الحالات'],['pending','قيد المراجعة'],['approved','مقبول'],['needs_revision','يحتاج تعديل'],['rejected','مرفوض']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditActOpts = [['','كل الإجراءات'],['add','إضافة'],['edit','تعديل'],['delete','حذف'],['login','دخول'],['approve','اعتماد'],['award','ترسية']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditTypeOpts = [['','كل الأنواع'],['item','صنف'],['supplier','مورد'],['entry','سعر'],['po','أمر شراء'],['rfq','طلب تسعير'],['user','مستخدم'],['auth','دخول']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
@@ -12114,11 +12158,12 @@ function reportsCatalog(){
       title:'سجل أوامر الشراء التفصيلي', desc:'قائمة أوامر الشراء مع إجمالياتها — قابلة للتصفية بالحالة والقطاع والفترة.',
       fields:[
         {type:'select', key:'status', label:'الحالة', html:poStatusOpts},
+        {type:'select', key:'project', label:'المشروع / الجهة', html:poProjectOpts},
         {type:'select', key:'sector', label:'القطاع', html:poSectorOpts},
         {type:'date', key:'from', label:'من تاريخ'},
         {type:'date', key:'to', label:'إلى تاريخ'},
       ],
-      run:(v)=>buildPOListReport({status:v.status||'', sector:v.sector||'', from:v.from||'', to:v.to||''}) },
+      run:(v)=>buildPOListReport({status:v.status||'', project:v.project||'', sector:v.sector||'', from:v.from||'', to:v.to||''}) },
 
     { group:'المشتريات', perm:null, icon:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
       title:'تقرير المتأخرات والتصعيد', desc:'الأوامر المتأخرة عن موعد التسليم مرتّبة بالأكثر تأخيراً، مع إبراز ما يستوجب التصعيد.',
@@ -14054,6 +14099,9 @@ function poFilteredList(){
   if(f.sector)   list=list.filter(o=>o.sector===f.sector);
   if(f.status)   list=list.filter(o=>o.status===f.status);
   if(f.priority) list=list.filter(o=>o.priority===f.priority);
+  // جهة/موقع المشروع — القيمة الخاصة __none__ تعرض الأوامر التي لم تُحدَّد جهتها (لمعالجة النقص)
+  if(f.project==='__none__') list=list.filter(o=>!String(o.project||'').trim());
+  else if(f.project) list=list.filter(o=>String(o.project||'').trim()===f.project);
   if(f.q){
     const q=f.q.trim().toLowerCase();
     list=list.filter(o=>[o.po_number,o.supplier,o.project,o.sector].some(v=>String(v||'').toLowerCase().includes(q)));
@@ -14098,8 +14146,34 @@ function fillPOSelects(){
   // supplier datalist
   const dl=document.getElementById('po-suppliers-list');
   if(dl) dl.innerHTML=[...new Set((STATE.suppliers||[]).map(s=>s.name).filter(Boolean))].map(n=>`<option value="${escapeAttr(n)}">`).join('');
+  // الجهات/المشاريع — تُستخرج من الأوامر نفسها فتتحدّث تلقائياً بلا قائمة ثابتة
+  const projects=poProjectList();
+  const pf=document.getElementById('po-filter-project');
+  if(pf){
+    const cur=pf.value;
+    const missing=(STATE.purchaseOrders||[]).filter(o=>!String(o.project||'').trim()).length;
+    pf.innerHTML='<option value="">كل الجهات / المشاريع</option>'
+      + projects.map(v=>`<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('')
+      + (missing?`<option value="__none__">— بلا جهة محدّدة (${missing}) —</option>`:'');
+    pf.value=cur;
+  }
+  const pdl=document.getElementById('po-projects-list');
+  if(pdl) pdl.innerHTML=projects.map(v=>`<option value="${escapeAttr(v)}">`).join('');
   _poSelectsReady=true;
 }
+// قائمة الجهات/المشاريع المستخدَمة فعلياً في الأوامر (مرتّبة عربياً)
+function poProjectList(){
+  return [...new Set((STATE.purchaseOrders||[]).map(o=>String(o.project||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ar'));
+}
+// خلية الجهة في الجداول — تُبرز النقص بدل إخفائه
+function poProjectCell(po){
+  const p=String(po.project||'').trim();
+  if(!p) return '<span class="po-noproject" title="لم تُحدَّد جهة أو موقع المشروع">غير محدّدة</span>';
+  return `<span class="po-project" title="${escapeAttr(p)}">${escapeHtml(p)}</span>`;
+}
+// نصّ الجهة للمستندات المطبوعة (لا يختفي عند غيابه)
+function poProjectText(po){ return String(po.project||'').trim() || 'غير محدّدة'; }
 
 /* ============================================================
    RENDER ORCHESTRATOR
@@ -14191,7 +14265,7 @@ function renderPOTable(){
   if(STATE.poPage>pages) STATE.poPage=pages;
   const start=(STATE.poPage-1)*per;
   const rows=list.slice(start,start+per);
-  if(!rows.length){ tb.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">لا توجد أوامر شراء مطابقة. ابدأ بإضافة أمر أو استيراد ملف الإكسل.</td></tr>`; }
+  if(!rows.length){ tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted)">لا توجد أوامر شراء مطابقة. ابدأ بإضافة أمر أو استيراد ملف الإكسل.</td></tr>`; }
   else tb.innerHTML=rows.map(po=>{
     const n=escapeAttr(po.po_number);
     const canEdit=hasPermission('can_edit_po'), canDel=hasPermission('can_delete_po');
@@ -14199,6 +14273,7 @@ function renderPOTable(){
       <td class="po-num">${escapeHtml(po.po_number)}</td>
       <td>${poFmtDate(po.issue_date)}</td>
       <td>${escapeHtml(po.supplier||'—')}</td>
+      <td>${poProjectCell(po)}</td>
       <td>${escapeHtml(po.sector||'—')}</td>
       <td style="text-align:left" class="price">${fmtPrice(po.total)}</td>
       <td>${poStatusChip(po)}</td>
@@ -14245,6 +14320,7 @@ function renderPOBoard(){
       ${items.map(po=>`<div class="po-card" draggable="true" ondragstart="poBoardDrag(event,'${escapeAttr(po.po_number)}')" onclick="openPODrawer('${escapeAttr(po.po_number)}')">
         <div class="po-card-num">${escapeHtml(po.po_number)}</div>
         <div class="po-card-sup">${escapeHtml(po.supplier||'—')}</div>
+        <div class="po-card-proj">🏗 ${escapeHtml(poProjectText(po))}</div>
         <div class="po-card-foot"><span>${poDelayCell(po)}</span><span class="po-card-total">${fmtPrice(po.total)}</span></div>
       </div>`).join('')||'<div style="font-size:11px;color:var(--muted);text-align:center;padding:14px">—</div>'}
     </div>`;
@@ -14262,19 +14338,35 @@ function poBoardDrop(e){ e.preventDefault(); e.currentTarget.classList.remove('d
 /* ============================================================
    STATUS WORKFLOW + QUICK ACTIONS
    ============================================================ */
-function changePOStatus(num,newStatus){
+// نقطة الانتقال الموحّدة بين المراحل: تتحقّق من الصلاحية، وتطلب سبباً مكتوباً عند الإرجاع
+// لمرحلة سابقة أو الإلغاء، وتحفظ السبب في الخط الزمني وسجل التدقيق.
+function changePOStatus(num,newStatus,note){
   const po=poFind(num); if(!po) return;
   newStatus=poNormalizeStatus(newStatus);
   if(po.status===newStatus){ renderPurchaseOrders(); return; }
   // الجميع قادرون على التحديث (بصلاحية التعديل القياسية) — ويُسجَّل المسؤول عن كل خطوة
   if(!requirePermission('can_edit_po','تحديث الأمر')){ renderPurchaseOrders(); return; }
   const from=po.status;
+  const fromStep=poStatusStep(from), toStep=poStatusStep(newStatus);
+  const isBack=(toStep>=0 && fromStep>=0 && toStep<fromStep);
+  let reason=(note==null?'':String(note)).trim();
+  if(!reason && (newStatus==='ملغى' || isBack)){
+    const q = newStatus==='ملغى'
+      ? `إلغاء الأمر ${po.po_number} — اكتب سبب الإلغاء:`
+      : `إرجاع الأمر ${po.po_number} من «${from}» إلى «${newStatus}» — اكتب السبب:`;
+    const ans=prompt(q,'');
+    if(ans===null){ renderPurchaseOrders(); return; }              // تراجع المستخدم
+    reason=String(ans).trim();
+    if(!reason){ toast('warn','السبب مطلوب','لا يمكن الإرجاع أو الإلغاء دون ذكر السبب'); renderPurchaseOrders(); return; }
+  }
   po.status_history=po.status_history||[];
-  po.status_history.push({from,to:newStatus,by:(STATE.currentUser?STATE.currentUser.displayName:'—'),at:new Date().toISOString()});
+  po.status_history.push({from,to:newStatus,by:(STATE.currentUser?STATE.currentUser.displayName:'—'),at:new Date().toISOString(),note:reason||null});
   po.status=newStatus;
   if(newStatus==='تسليم كامل' && !po.actual_delivery){ po.actual_delivery=poToISO(new Date()); }
   poSave(po,false,'update');
-  toast('success','تم التحديث',`${po.po_number} → ${newStatus}`);
+  if(reason) logAudit('edit','po',num,{stage:{from,to:newStatus},reason});
+  toast('success', isBack?'تم الإرجاع':(newStatus==='ملغى'?'تم الإلغاء':'تم الانتقال'),
+        `${po.po_number} · ${from} ← ${newStatus}`);
   if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
 }
 // الانتقال للمرحلة التالية بنقرة واحدة (مع حساب زمن المرحلة الحالية تلقائياً)
@@ -14285,6 +14377,32 @@ function poNextStage(num){
   const next=PO_STEPPER[step+1];
   if(!next){ toast('info','—','الأمر بلغ المرحلة الأخيرة'); return; }
   changePOStatus(num,next);
+}
+// نقر مرحلة في مسار الدرج: تقدّم بخطوة واحدة فقط، والقفز/الرجوع بتأكيد صريح
+function poStageJump(num,target){
+  const po=poFind(num); if(!po) return;
+  target=poNormalizeStatus(target);
+  if(po.status===target) return;
+  const fromStep=poStatusStep(po.status), toStep=poStatusStep(target);
+  if(fromStep<0){ toast('info','—','الأمر في حالة نهائية — أعِد فتحه من نافذة التعديل'); return; }
+  if(toStep>fromStep+1 && !confirm(`تخطّي ${toStep-fromStep-1} مرحلة والانتقال مباشرة إلى «${target}»؟`)) return;
+  changePOStatus(num,target);   // الإرجاع للخلف يطلب السبب داخل changePOStatus
+}
+// تحديد/تعديل جهة أو موقع المشروع مباشرةً من الدرج — لسدّ نقص البيانات دون فتح نموذج الأمر كاملاً
+function poSetProject(num){
+  const po=poFind(num); if(!po) return;
+  if(!requirePermission('can_edit_po','تحديد جهة المشروع')) return;
+  const cur=String(po.project||'').trim();
+  const known=poProjectList();
+  const hint=known.length?`\n\nالجهات المستخدَمة حالياً:\n· ${known.slice(0,12).join('\n· ')}`:'';
+  const ans=prompt(`جهة / موقع المشروع للأمر ${po.po_number}:${hint}`,cur);
+  if(ans===null) return;
+  const val=String(ans).trim();
+  if(val===cur) return;
+  po.project=val;
+  poSave(po,false,'update');
+  toast('success', val?'تم تحديد الجهة':'أُزيلت الجهة', `${po.po_number} · ${val||'غير محدّدة'}`);
+  if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
 }
 function approvePO(num){ changePOStatus(num,'اعتماد مدير الشراء'); }
 function markPODelivered(num){
@@ -14387,10 +14505,17 @@ function openPODrawer(num){
   const meta=PO_STATUS_META[po.status]||{step:-1};
   const _tl=poStageTimeline(po);
   const _durMap={}; _tl.forEach(s=>{ _durMap[s.stage]=(_durMap[s.stage]||0)+s.ms; });
+  const _canMove=hasPermission('can_edit_po') && !PO_TERMINAL.includes(po.status);
   const stepper=PO_STEPPER.map((s,i)=>{
     const done=meta.step>=0 && i<meta.step, cur=meta.step===i;
+    const isNext=(meta.step>=0 && i===meta.step+1);
     const dur=(_durMap[s]!=null)?`<div class="po-step-dur">${poFmtDuration(_durMap[s])}</div>`:'';
-    return `<div class="po-step ${done?'done':''} ${cur?'current':''}"><div class="dot">${done?'✓':i+1}</div>${escapeHtml(s)}${dur}</div>`;
+    const clickable=_canMove && !cur;
+    const cls=['po-step', done?'done':'', cur?'current':'', isNext?'next':'', clickable?'clickable':''].filter(Boolean).join(' ');
+    const act=clickable
+      ? ` onclick="poStageJump('${n}','${escapeAttr(s)}')" title="${escapeAttr((i<meta.step?'إرجاع إلى ':'نقل إلى ')+s)}"`
+      : '';
+    return `<div class="${cls}"${act}><div class="dot">${done?'✓':i+1}</div>${escapeHtml(s)}${dur}</div>`;
   }).join('');
   const _stageAge=poCurrentStageAge(po);
   const _ageBanner = !PO_TERMINAL.includes(po.status)
@@ -14407,7 +14532,7 @@ function openPODrawer(num){
   const receiptsHtml=(Array.isArray(po.receipts)&&po.receipts.length)?`
     <div class="po-drawer-sec"><h4>سجل الاستلام</h4>${po.receipts.slice().reverse().map(rc=>`<div class="po-timeline-item"><div class="po-tl-main">${(rc.lines||[]).map(l=>escapeHtml(l.desc)+' ×'+l.qty).join(' · ')||'استلام'}</div><div class="po-tl-meta">${escapeHtml(rc.by||'')} · ${escapeHtml(String(rc.at||'').slice(0,16).replace('T',' '))}${rc.note?' · '+escapeHtml(rc.note):''}</div></div>`).join('')}</div>`:'';
   const hist=(po.status_history||[]).slice().reverse();
-  const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div></div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
+  const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div>${h.note?`<div class="po-tl-meta" style="color:#8a6a30">السبب: ${escapeHtml(h.note)}</div>`:''}</div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
   const canEdit=hasPermission('can_edit_po'), canApprove=hasPermission('can_approve_po'), canDel=hasPermission('can_delete_po');
   const c=document.getElementById('po-drawer-content');
   c.innerHTML=`
@@ -14416,11 +14541,15 @@ function openPODrawer(num){
         <div>
           <div class="po-num" style="font-size:16px">${escapeHtml(po.po_number)}</div>
           <div style="font-size:13px;color:var(--ink-2);margin-top:4px">${escapeHtml(po.supplier||'—')}</div>
+          <div class="po-drawer-proj">🏗 ${escapeHtml(poProjectText(po))}${
+            canEdit?`<button class="po-linkbtn" onclick="poSetProject('${n}')">${String(po.project||'').trim()?'تغيير':'تحديد الجهة'}</button>`:''
+          }</div>
         </div>
         <button class="modal-close" onclick="closePODrawer()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="po-stepper">${stepper}</div>
       ${_ageBanner}
+      ${_nextStage?`<div class="po-stage-next">المرحلة التالية: <b>${escapeHtml(_nextStage)}</b> — انقر المرحلة في المسار أعلاه أو زرّ الانتقال أسفل الصفحة.</div>`:''}
     </div>
     <div class="po-drawer-sec"><h4>مالية</h4><div class="po-kv">
       ${kv('قبل الضريبة',fmtPrice(po.subtotal)+' ر.س')}
@@ -14571,10 +14700,24 @@ function poCollectForm(){
   if(!num){ toast('error','مطلوب','أدخل رقم الأمر'); return null; }
   if(!poValidNumber(num)){ toast('error','رقم غير صالح','رقم الأمر يحتوي رموزاً غير مسموحة (مسموح: حروف/أرقام و . _ - /)'); return null; }
   if(!_poEditingNum && poFind(num)){ toast('error','مكرر','رقم الأمر موجود مسبقاً'); return null; }
+  // جهة/موقع المشروع: إلزامية للأوامر الجديدة، وتحذير قابل للتجاوز عند تعديل أمر قديم بلا جهة
+  const project=g('po-f-project');
+  if(!project){
+    const fld=document.getElementById('po-f-project');
+    if(!_poEditingNum){
+      toast('error','الجهة مطلوبة','حدّد المشروع / جهة التنفيذ — لا يصدر أمر شراء بلا جهة');
+      if(fld) fld.focus();
+      return null;
+    }
+    if(!confirm('هذا الأمر بلا جهة / موقع مشروع، وسيظهر «غير محدّدة» في القائمة وفي أمر الشراء المطبوع.\n\nالحفظ دون تحديدها؟')){
+      if(fld) fld.focus();
+      return null;
+    }
+  }
   const subtotal=Number(document.getElementById('po-f-subtotal').value)||0;
   const existing=_poEditingNum?poFind(_poEditingNum):null;
   const po={
-    po_number:num, issue_date:g('po-f-issue')||null, sector:g('po-f-sector'), project:g('po-f-project'),
+    po_number:num, issue_date:g('po-f-issue')||null, sector:g('po-f-sector'), project,
     supplier:g('po-f-supplier'), subtotal, officer:g('po-f-officer'), payment_method:g('po-f-payment'),
     priority:g('po-f-priority'), expected_delivery:g('po-f-expected')||null, actual_delivery:g('po-f-actual')||null,
     status:g('po-f-status'), delay_reason:g('po-f-delayreason'), category:g('po-f-category'), notes:g('po-f-notes'),
@@ -14662,6 +14805,16 @@ function renderPODashboard(){
   // 2) قطاعات (قيمة)
   const sectorRows=PO_ENUMS.sector.map(s=>{const l=active.filter(o=>o.sector===s);return [s,l.length,l.reduce((a,o)=>a+num(o.total),0)];}).filter(r=>r[1]>0).sort((a,b)=>b[2]-a[2]);
   const sectorTotal=sectorRows.reduce((a,r)=>a+r[2],0)||1;
+  // 2.ب) الجهات/المشاريع — بُعد أساسي كالقطاع: أين تُصرف المشتريات فعلياً
+  const projMap={};
+  active.forEach(o=>{
+    const k=String(o.project||'').trim()||'— بلا جهة محدّدة —';
+    (projMap[k]=projMap[k]||{c:0,v:0,late:0});
+    projMap[k].c++; projMap[k].v+=num(o.total);
+    if(!PO_TERMINAL.includes(o.status)&&num(o.days_delayed)>0) projMap[k].late++;
+  });
+  const projRows=Object.entries(projMap).sort((a,b)=>b[1].v-a[1].v);
+  const projTotal=projRows.reduce((a,r)=>a+r[1].v,0)||1;
   // 3) تأخير ومخاطر
   const lateNow=active.filter(o=>!PO_TERMINAL.includes(o.status)&&num(o.days_delayed)>0);
   const delays=all.filter(o=>num(o.days_delayed)>0).map(o=>num(o.days_delayed));
@@ -14715,6 +14868,10 @@ function renderPODashboard(){
       <div class="po-analytics-grid">
         <div class="po-card-box"><h3>📦 تفصيل الأوامر حسب الحالة</h3>${poDashTable(['الحالة','عدد','النسبة'],statusRows)}</div>
         <div class="po-card-box"><h3>🏗 قيمة المشتريات حسب القطاع</h3>${sectorRows.length?poDashTable(['القطاع','عدد','القيمة (ر.س)','النسبة'],sectorRows.map(r=>[r[0],r[1],fmtPrice(r[2]),poPct(r[2],sectorTotal).toFixed(1)+'%'])):'<div class="muted">لا بيانات</div>'}</div>
+        <div class="po-card-box"><h3>🏗 المشتريات حسب الجهة / المشروع</h3>${projRows.length?poDashTable(
+          ['الجهة / المشروع','عدد','القيمة (ر.س)','النسبة','متأخر'],
+          projRows.map(([k,x])=>[escapeHtml(k),x.c,fmtPrice(x.v),poPct(x.v,projTotal).toFixed(1)+'%',x.late])
+        ):'<div class="muted">لا بيانات</div>'}</div>
         <div class="po-card-box"><h3>⚠ تحليل التأخير والمخاطر</h3>${poDashTable(['المؤشر','القيمة','التفصيل'],[
           ['نسبة الأوامر المتأخرة',poPct(lateNow.length,active.length).toFixed(1)+'%',lateNow.length+' أمر متأخر حالياً من '+active.length],
           ['متوسط أيام التأخير',avgDelay.toFixed(1),delays.length?('أعلى: '+maxDelay+' · أقل: '+minDelay+' يوم'):'لا يوجد تأخير'],
@@ -14768,6 +14925,21 @@ function poPrintDashboard(){
       <td class="center">${x.late?`<span class="print-badge danger">${x.late}</span>`:'<span class="print-badge ok">0</span>'}</td>
     </tr>`).join('') || '<tr><td colspan="4" class="center" style="color:#888;padding:14px">—</td></tr>';
 
+  // تجميع حسب الجهة/المشروع
+  const projAgg={};
+  all.filter(o=>o.status!=='ملغى').forEach(o=>{
+    const k=poProjectText(o);
+    (projAgg[k]=projAgg[k]||{c:0,v:0,late:0});
+    projAgg[k].c++; projAgg[k].v+=Number(o.total)||0;
+    if(!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0) projAgg[k].late++;
+  });
+  const projRows=Object.entries(projAgg).sort((a,b)=>b[1].v-a[1].v).map(([k,x])=>`<tr>
+      <td>${escapeHtml(k)}</td>
+      <td class="num">${x.c}</td>
+      <td class="num price">${fmtSAR(x.v)}</td>
+      <td class="center">${x.late?`<span class="print-badge danger">${x.late}</span>`:'<span class="print-badge ok">0</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="center" style="color:#888;padding:14px">—</td></tr>';
+
   // أعلى الموردين قيمةً
   const supMap={};
   all.filter(o=>o.status!=='ملغى').forEach(o=>{ const s=o.supplier||'—'; supMap[s]=(supMap[s]||0)+(Number(o.total)||0); });
@@ -14788,9 +14960,10 @@ function poPrintDashboard(){
   const lateRows=lateList.map(o=>`<tr>
       <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
       <td>${escapeHtml(o.supplier||'—')}</td>
+      <td>${escapeHtml(poProjectText(o))}</td>
       <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${o.days_delayed} يوم</span></td>
       <td>${escapeHtml(o.delay_reason||'غير محدد')}</td>
-    </tr>`).join('') || '<tr><td colspan="4" class="center" style="color:#1f7a55;padding:14px">لا توجد أوامر متأخرة 👍</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="5" class="center" style="color:#1f7a55;padding:14px">لا توجد أوامر متأخرة 👍</td></tr>';
 
   const body=`
     <div class="print-grid-stats">
@@ -14814,6 +14987,14 @@ function poPrintDashboard(){
     </div>
 
     <div class="print-section">
+      <div class="print-section-title">التوزيع حسب الجهة / المشروع</div>
+      <table class="print-table">
+        <thead><tr><th>الجهة / المشروع</th><th class="num">عدد الأوامر</th><th class="num">القيمة</th><th class="center">متأخرة</th></tr></thead>
+        <tbody>${projRows}</tbody>
+      </table>
+    </div>
+
+    <div class="print-section">
       <div class="print-section-title">أعلى الموردين قيمةً</div>
       <table class="print-table">
         <thead><tr><th class="center" style="width:34px">#</th><th>المورد</th><th class="num">إجمالي القيمة</th><th class="center">التقييم</th></tr></thead>
@@ -14824,7 +15005,7 @@ function poPrintDashboard(){
     <div class="print-section">
       <div class="print-section-title">أبرز الأوامر المتأخرة</div>
       <table class="print-table">
-        <thead><tr><th>رقم الأمر</th><th>المورد</th><th class="center">التأخير</th><th>السبب</th></tr></thead>
+        <thead><tr><th>رقم الأمر</th><th>المورد</th><th>المشروع / الجهة</th><th class="center">التأخير</th><th>السبب</th></tr></thead>
         <tbody>${lateRows}</tbody>
       </table>
     </div>`;
@@ -14943,10 +15124,10 @@ function printPO(num){
         <div class="print-party-label">المورد</div>
         <div class="print-party-name">${escapeHtml(po.supplier||'—')}</div>
         <div class="print-party-meta"><strong>طريقة الدفع:</strong> ${escapeHtml(po.payment_method||'—')}</div>
-        ${po.project?`<div class="print-party-meta"><strong>المشروع/الموقع:</strong> ${escapeHtml(po.project)}</div>`:''}
       </div>
       <div class="print-party buyer">
         <div class="print-party-label">تفاصيل الأمر</div>
+        <div class="print-party-proj"><span class="lbl">جهة / موقع تنفيذ المشروع</span>${escapeHtml(poProjectText(po))}</div>
         <div class="print-party-meta"><strong>القطاع:</strong> ${escapeHtml(po.sector||'—')}</div>
         <div class="print-party-meta"><strong>مسؤول المشتريات:</strong> ${escapeHtml(po.officer||'—')}</div>
         <div class="print-party-meta"><strong>التسليم المتوقع:</strong> ${escapeHtml(poFmtDate(po.expected_delivery))}</div>
@@ -14984,7 +15165,7 @@ function printPO(num){
   printDocOpen({
     eyebrow:'AL-DEYABI GROUP · PURCHASE ORDER',
     title:'أمر شراء',
-    subtitle:'مستند رسمي صادر عن إدارة المشتريات',
+    subtitle:`الجهة / المشروع: ${poProjectText(po)} · القطاع: ${po.sector||'—'}`,
     docNumber:po.po_number,
     date:poFmtDate(po.issue_date)!=='—'?poFmtDate(po.issue_date):undefined,
     signature:false
@@ -14998,6 +15179,7 @@ function printUrgentMemo(){
       <td class="center">${i+1}</td>
       <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
       <td>${escapeHtml(o.supplier||'—')}</td>
+      <td>${escapeHtml(poProjectText(o))}</td>
       <td class="num">${fmtPrice(o.subtotal)}</td>
       <td class="num price">${fmtPrice(o.total)}</td>
       <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
@@ -15009,11 +15191,11 @@ function printUrgentMemo(){
     </div>
     <table class="print-table">
       <thead><tr>
-        <th class="center" style="width:34px">#</th><th>رقم الأمر</th><th>المورد</th>
+        <th class="center" style="width:34px">#</th><th>رقم الأمر</th><th>المورد</th><th>المشروع / الجهة</th>
         <th class="num">قبل الضريبة</th><th class="num">الإجمالي (شامل)</th><th class="center">التسليم المتوقع</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="3">الإجمالي</td><td class="num">${fmtPrice(totSub)}</td><td class="num">${fmtPrice(totTot)}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">الإجمالي</td><td class="num">${fmtPrice(totSub)}</td><td class="num">${fmtPrice(totTot)}</td><td></td></tr></tfoot>
     </table>
     <div class="print-total-words" style="margin-top:12px"><strong>المطلوب:</strong> تنفيذ السداد العاجل لعدد ${list.length} أمر بإجمالي ${escapeHtml(tafqitSAR(totTot))} (شامل الضريبة).</div>`;
   printDocOpen({
@@ -15284,7 +15466,7 @@ function setupPOEvents(){
   const imp=document.getElementById('po-import-btn'); if(imp) imp.addEventListener('click',()=>{ if(!requirePermission('can_import','الاستيراد'))return; document.getElementById('po-import-preview').innerHTML=''; document.getElementById('po-import-confirm').style.display='none'; openModal('modal-po-import'); });
   const exp=document.getElementById('po-export-btn'); if(exp) exp.addEventListener('click',exportPOExcel);
   const search=document.getElementById('po-search'); let t; if(search) search.addEventListener('input',e=>{ clearTimeout(t); t=setTimeout(()=>{ STATE.poFilter.q=e.target.value; STATE.poPage=1; renderPOTable(); },200); });
-  ['sector','status','priority'].forEach(f=>{ const s=document.getElementById('po-filter-'+f); if(s) s.addEventListener('change',()=>{ STATE.poFilter[f]=s.value; STATE.poPage=1; renderPOTable(); }); });
+  ['sector','status','priority','project'].forEach(f=>{ const s=document.getElementById('po-filter-'+f); if(s) s.addEventListener('change',()=>{ STATE.poFilter[f]=s.value; STATE.poPage=1; renderPOTable(); }); });
   const dz=document.getElementById('po-dropzone'), fi=document.getElementById('po-import-file');
   if(fi) fi.addEventListener('change',e=>poHandleImportFile(e.target.files));
   if(dz){ dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');}); dz.addEventListener('dragleave',()=>dz.classList.remove('drag')); dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files&&e.dataTransfer.files.length)poHandleImportFile(e.dataTransfer.files);}); }
