@@ -925,6 +925,104 @@ Production الصحيح (اختياريّ — الاحتياطيّ يكفي) · 
 
 ---
 
+## 🗺️ خريطة النظام 2 — نظام المشتريات الأساسي (`index.html`) — مرجع العرض والتقارير والمطبوعات (2026-08-31)
+> أُنشئت بطلب المالك: «افهم وتذكر نظام المشتريات الأساسي لأننا سنجري عليه تحديثات في طريقة عرض المعلومات
+> أو في التقارير والمطبوعات». **أرقام الأسطر تقريبية وتنزاح مع التعديل — استخدمها نقطة انطلاق ثم `grep` على اسم الدالة.**
+
+### البنية العامة
+ملف واحد ضخم `index.html` (~22,880 سطراً · 2.5MB) = HTML + CSS + JS مضمّن، بلا بناء (no build step)، RTL عربي.
+- **1–2586:** كل الـCSS (بأقسام معلَّمة `/* ====== NAME ====== */`).
+- **2587–5094:** HTML — الشريط الجانبي + الصفحات (`<section class="page" id="page-*">`) + كل النوافذ (modals).
+- **5095–5143:** سكربت أول قصير. **5144:** فتح السكربت الرئيسي · **5146:** ثابت `DATA` = JSON ضخم في **سطر واحد**
+  (بذور الأصناف/الموردين/السجل من الإكسل). ⚠️ لا تقرأ السطر 5146 كاملاً — يفجّر السياق؛ استخدم `awk` بقصّ الأسطر.
+- **5148–5175:** `STATE` — مصدر الحالة الوحيد في الذاكرة (`items/suppliers/history/purchaseOrders` + المرشّحات
+  والفرز والصفحات + `currentUser` + `poView/poSegment/poFilter/poSort/poPage`).
+- **5177–5240:** كتالوج الصلاحيات `can_*` (`can_create_po`/`can_edit_po`/`can_approve_po`/`can_delete_po`/
+  `can_export`/`can_import`/`can_view_audit`/`can_use_ai`/`can_manage_rfq`/`can_review_registrations`…).
+  البوابات في الكود: `hasPermission(key)` · `requirePermission(key,label)` · `applyUserRoleToUI()` + سمة HTML `data-requires-perm`.
+
+### التوجيه والعرض
+`navigate(page)` (**~6044**) يبدّل `.page.active` ثم ينادي دالة العرض المطابقة:
+`renderDashboard` 6066 · `renderItems` 6157 · `renderEntry` · `renderPricing` · `renderHistory` 6621 ·
+`renderSuppliers` 6734 · `renderReference` · `renderAnalytics` 16866 · `renderAIPage` · `renderPurchaseOrders` 14107 ·
+`renderReportsCenter` 12222 · `renderPRPortal` (بوابة طلبات الشراء الداخلية 10879+).
+صفحات الشريط الجانبي (`data-page`): dashboard · items · entry · pricing · history · suppliers · registrations ·
+reference · pr · purchase-orders · reports · analytics · ai (+ agents مخفيّة).
+مُنسّقات: `fmtPrice` (en-US، حتى منزلتين) · `poFmtDate/poToISO` · `escapeHtml/escapeAttr` · `tafqitSAR` (تفقيط) 9739.
+⚠️ **تعريف مكرّر:** `renderDashboardCharts` مُعرَّفة مرّتين (12729 و**17246** — الأخيرة هي الفعّالة). لا تُكرِّر الأسماء.
+
+### وحدة أوامر الشراء (لبّ لقطة الشاشة) — 13823+
+- **الثوابت 13827–13862:** `PO_ENUMS` (sector/officer/payment_method/priority/status/delay_reason/category) ·
+  `PO_STATUS_META` (8 حالات + `step` + فئة لون) · `PO_BOARD_ORDER` · `PO_STEPPER` · `PO_TERMINAL` ·
+  `PO_STATUS_ALIAS` (توافق خلفي) · `PO_SEGMENTS` (شرائح: الكل/طلباتي/متأخرة/متعثّرة/عاجلة/بانتظار الاعتماد/لدى المالية/غير مُسلَّمة).
+- **الحساب المشتق 13879 `recomputePOderived`:** الإجمالي من البنود ⇒ `subtotal` ثم **ضريبة 15% ثابتة** ⇒ `vat`/`total`،
+  و`days_delayed` و`lead_time_days`. **مصدر الحقيقة الوحيد للأرقام — أي تعديل حسابي يبدأ هنا.**
+- **محرّك زمن المراحل 13898+:** `poStageTimeline` · `poCurrentStageAge` · `poStageStats` (للاختناقات وزمن الدورة).
+- **العرض:** `renderPurchaseOrders` 14107 (منسّق) → `renderPOKPIs` 14128 (شريط الـ7 مؤشّرات في اللقطة، كلٌّ قابل للنقر
+  فيصفّي) · `renderPOSegments` 14165 · `renderPOTable` 14186 (الجدول + الترقيم + الفرز بالنقر على `th[data-posort]`) ·
+  `renderPOBoard` 14236 (كانبان بسحب وإفلات يغيّر الحالة) · `renderPODashboard` 14649 (لوحة التحكم التحليلية) ·
+  `renderPOAlerts` (الإنذارات) · `poHealthScore` 14844 (مؤشّر صحة النظام).
+  خلايا مساعدة: `poStatusChip` 14174 · `poDelayCell` 14180 · `poDashTable` 14645 · `poBarRows` 14640.
+- **HTML الصفحة 3280–3347:** `#po-kpi-strip` · أزرار العروض `.po-view-btn[data-poview]` · `#po-segments` ·
+  `#po-toolbar` (بحث/قطاع/حالة/أولوية) · `#po-table > #po-tbody` (10 أعمدة) · `#po-board` · `#po-dashboard` · `#po-alerts`.
+- **الأفعال:** `changePOStatus` 14265 · `poNextStage` 14281 · الاستلام `poReceiveOpen/Save` 14316/14351 (يُغلق الأمر تلقائياً
+  عند اكتمال الكميات) · الدرج `openPODrawer` 14384 · النموذج `openPOModal`/`poCollectForm` 14568/`savePO` 14592 ·
+  `poFromAward` 14602 (إنشاء أمر من ترسية RFQ) · استيراد/تصدير Excel 15062+ (`poHandleImportFile`/`poConfirmImport`).
+- **حقول أمر الشراء:** `po_number · issue_date · sector · project · supplier · subtotal(+vat/total مشتقّة) · officer ·
+  payment_method · priority · expected_delivery · actual_delivery · status · delay_reason · category · notes ·
+  items[{desc,unit,qty,price,received_qty}] · receipts[] · status_history[] · source · created_by/at`.
+
+### نظام الطباعة الموحّد (كل المطبوعات تمرّ منه — نقطة التعديل الرئيسية للمطبوعات)
+- **`printDocOpen(opts, bodyHtml)` ← 9728** هي **نقطة الدخول الموحّدة**: تحمّل بيانات الشركة ثم تبني وتعرض المعاينة.
+  خيارات `opts`: `eyebrow · title · subtitle · docNumber · date · compactHeader · signature · note · watermark`.
+- `buildPrintDoc` 9711 = `.print-document` [علامة مائية + ترويسة + eyebrow/عنوان/عنوان فرعي + المحتوى + تذييل].
+  `buildPrintHeader` 9622 (ترويسة كاملة بمعلومات الشركة، أو `compactHeader` مختصرة للأوراق الداخلية) ·
+  `buildPrintFooter` 9684 (طُبع بواسطة + التاريخ + خانة توقيع اختيارية).
+- **معجم CSS للمطبوعات (1084–1440)** — استخدمه ولا تخترع أنماطاً: `.print-section/.print-section-title` ·
+  `.print-table` (+`.num`/`.center`/`.price` + `thead`/`tfoot`) · `.print-grid-stats`+`.print-stat-card[.accent]` ·
+  `.print-badge[.ok/.warn/.danger/.info/.neutral]` · `.print-note-box[.danger]` · `.print-parties/.print-party[.buyer]` ·
+  `.print-quote-totals` · `.print-total-words` · `.print-terms` · `.print-signatures/.print-sign` · `.print-info-grid`.
+- **المعاينة والإخراج:** `showPrintPreview` 10300 (يفتح `#modal-print-preview` ويضيف `body.print-preview-active`) ·
+  `executePrint` 10322 (**طباعة عبر iframe مخفيّ** ينسخ كل الأنماط وينتظر جاهزية الخطوط — يحلّ مشاكل التشكيل العربي) ·
+  تصدير PDF حقيقي 10402+ (html2canvas + jsPDF) · تصدير Word 10661+ (docx.js) · المكتبات من CDN بثلاثة مصادر بديلة.
+- **مطبوعات جاهزة:** أمر شراء رسمي `printPO` 14902 (أطراف + بنود + إجماليات + تفقيط + شروط + 3 تواقيع) ·
+  مذكرة استعجال مالية `printUrgentMemo` 14993 · طلب شراء `~11356` · تقارير الأصناف/الموردين/الكتالوج/المقارنة/
+  عرض السعر الرسمي/السجل 10842–10878.
+
+### مركز التقارير (11645–12275) — نقطة التعديل الرئيسية للتقارير
+- **`reportsCatalog()` 12088** يُرجع مصفوفة تعريفات؛ كل تقرير كائن:
+  `{group, perm, icon, title, desc, fields:[{type:'select|date', key, label, html, value, required}], run(values), ai?}`.
+  **إضافة تقرير جديد = عنصر في هذه المصفوفة + دالة `buildXReport()` تنتهي بـ`printDocOpen`.** لا شيء آخر.
+- `renderReportsCenter` 12222 يرسم البطاقات مجمَّعة بـ`group` ويقفل ما تنقص صلاحيته · `reportRun(idx)` 12261 يجمع
+  قيم الحقول ويشغّل `run` (يدعم async + حالة تحميل على الزر).
+- **المجموعات والتقارير القائمة (17):** *المشتريات:* لوحة المشتريات `poPrintDashboard` 14751 · التقرير الإداري الذكي
+  (AI) `poGenerateAIReport` 15051 · سجل أوامر الشراء `buildPOListReport` 11670 · المتأخرات والتصعيد 11708 ·
+  الأوامر لدى المالية 11739 · زمن الدورة والاختناقات 11774 · طلبات الشراء `buildPRReport` 11130.
+  *الموردون:* تقرير مورد `printSupplierReport` · تقييم وأداء الموردين 11798 · دليل الموردين 11834.
+  *الأصناف والأسعار:* كتالوج الأسعار · السجل التاريخي · فرص التوفير 11861 · تذبذب الأسعار 11891 · تغطية التسعير 11921 ·
+  تحليل الفئات 11950. *طلبات التسعير:* حالة RFQ 11974. *التسجيلات:* تسجيل الموردين 12011. *التدقيق:* سجل التدقيق 12049.
+- مُساعد مشترك للأصناف: `priceAnalytics()` 11650 (المُسعَّر/غير المُسعَّر/التذبذب/التوفير/الفئات).
+
+### البيانات والمزامنة
+- سحابة Supabase **المشروع القديم `yofcaxvstjcrmbgciwym`** بمتغيّرات `SUPABASE_*` (لا `PORTAL_*`).
+  الجداول المستخدَمة: `proc_items · proc_history · proc_suppliers · proc_purchase_orders · proc_purchase_requests ·
+  proc_pr_items · proc_pr_approvals · proc_rfqs · proc_rfq_quotes · proc_users · proc_departments · proc_settings ·
+  proc_notifications · proc_item_aliases · proc_audit_log · proc_ai_usage`.
+- وحدة المزامنة 12775–13657 (السحابة مصدر الحقيقة لأوامر الشراء مع دمج الإضافات المحلية غير المرفوعة 13574).
+  مفاتيح `localStorage` بادئتها `proc_*` أيضاً (نسخة محليّة/تفضيلات) — لا تخلطها بأسماء الجداول.
+- التدقيق `logAudit(action,type,id,payload)`؛ وحدات أخرى: الاستيراد الذكي بالـAI 17980+ · مطابقة الأصناف 19209+ ·
+  صفحة AI المتقدّمة 17359+.
+
+### قواعد التعديل على هذا الملف
+1. **لا سكربت بناء** — التعديل مباشر في `index.html`؛ تحقّق السلامة بـ`node --check` على كتلة السكربت المستخرَجة.
+2. **العرض:** غيّر في دالة `render*` المعنيّة فقط؛ الأرقام المشتقّة من `recomputePOderived` لا تُحسب مرة ثانية في العرض.
+3. **المطبوعات:** ابْنِ `bodyHtml` بأصناف `.print-*` القائمة ومرّره لـ`printDocOpen` — لا `window.open` ولا CSS خاص.
+4. **التقارير:** أضف تعريفاً في `reportsCatalog()` + دالة بناء؛ واحترم `perm` (صلاحية) لكل تقرير.
+5. **لا تُكرّر أسماء الدوال العامة** (سابقة `renderDashboardCharts` المُعرَّفة مرّتين).
+6. النظام 2 منفصل تماماً عن البوابة (نظام 3): لا `portal_*` هنا، ولا لمس `index.html` من أجل البوابة.
+
+---
+
 ## ملاحظات مهمة لتجنّب الأخطاء
 - عند العمل على البوابة (نظام 3): استعمل `portal_*` و`PORTAL_SUPABASE_*` و`purchase-portal.html`/`functions/api/portal-*` فقط.
 - عند العمل على النظام الرئيسي (نظام 2): `proc_*`/`pr_*` و`SUPABASE_*` و`index.html`/`requests.html`/`admin-users.js`/`notify.js`.
