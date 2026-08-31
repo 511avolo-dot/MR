@@ -2408,6 +2408,13 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-num .pfx{opacity:.45;font-size:11px}
 .po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
 .po-card-num .seq{font-size:13px}
+/* الأوامر المُسلَّمة: صفّ منتهٍ يتميّز فوراً عن العمل النشط */
+.po-row-done td{background:rgba(45,106,79,0.055)}
+.po-row-done:hover td{background:rgba(45,106,79,0.10)}
+.po-row-done td:not(:first-child){color:var(--muted)}
+.po-row-done .po-num .seq{color:#1f4e3a}
+.po-done-badge{display:inline-block;margin-inline-start:8px;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:800;
+  background:rgba(45,106,79,0.16);color:#1f4e3a;vertical-align:middle;white-space:nowrap}
 .po-gap-row td{background:repeating-linear-gradient(45deg,rgba(192,57,43,0.05),rgba(192,57,43,0.05) 8px,transparent 8px,transparent 16px);
   color:#a93226;font-size:11.5px;font-weight:700;text-align:center;padding:5px 10px !important;letter-spacing:.02em}
 .po-seq-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--muted)}
@@ -11789,8 +11796,8 @@ function buildPOOverdueReport(){
     <td>${escapeHtml(o.supplier||'—')}</td>
     <td>${escapeHtml(poProjectText(o))}</td>
     <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
-    <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${o.days_delayed} يوم</span></td>
-    <td class="center">${poCurrentStageAge(o)} يوم</td>
+    <td class="center"><span class="print-badge ${(o.days_delayed||0)>30?'danger':'warn'}">${escapeHtml(poDays(o.days_delayed))}</span></td>
+    <td class="center">${escapeHtml(poDays(poCurrentStageAge(o)))}</td>
     <td>${escapeHtml(o.delay_reason||'غير محدد')}</td>
     <td class="num price">${fmtPrice(o.total)}</td>
   </tr>`).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#1f7a55">لا توجد أوامر متأخرة 👍</td></tr>';
@@ -14392,10 +14399,24 @@ function poStatusChip(po){
   return `<span class="po-status-chip ${meta.cls}" style="position:relative" onclick="event.stopPropagation()">${escapeHtml(po.status)}
     <select onchange="changePOStatus('${escapeAttr(po.po_number)}',this.value)" onclick="event.stopPropagation()">${opts}</select></span>`;
 }
+// صيغة الأيام بالعربية الصحيحة (مفرد/مثنّى/جمع قلّة/تمييز)
+function poDays(n){
+  n=Math.abs(Number(n)||0);
+  if(n===1) return 'يوم واحد';
+  if(n===2) return 'يومان';
+  if(n>=3 && n<=10) return n+' أيام';
+  return n+' يوماً';
+}
 function poDelayCell(po){
   const d=po.days_delayed||0;
   const cls=d===0?'po-delay-0':d<=7?'po-delay-mid':'po-delay-high';
-  return `<span class="po-delay-pill ${cls}">${d===0?'في الموعد':d+' يوم'}</span>`;
+  // الأمر المُسلَّم: نصّ صريح بصيغة الماضي («سُلّم…») بدل «في الموعد» الذي يُقرأ كأنه قيد الانتظار
+  if(po.status==='تسليم كامل'){
+    const when=poFmtDate(po.actual_delivery);
+    const tip=when!=='—'?` title="تاريخ الاستلام: ${escapeAttr(when)}"`:'';
+    return `<span class="po-delay-pill ${cls}"${tip}>${d===0?'سُلّم في الموعد':'سُلّم متأخراً '+poDays(d)}</span>`;
+  }
+  return `<span class="po-delay-pill ${cls}">${d===0?'في الموعد':poDays(d)}</span>`;
 }
 
 function renderPOTable(){
@@ -14427,8 +14448,9 @@ function renderPOTable(){
         }
       }
     }
-    return gap+`<tr onclick="openPODrawer('${n}')" style="cursor:pointer">
-      <td>${poNumCell(po.po_number)}</td>
+    const done=(po.status==='تسليم كامل');
+    return gap+`<tr class="${done?'po-row-done':''}" onclick="openPODrawer('${n}')" style="cursor:pointer">
+      <td>${poNumCell(po.po_number)}${done?'<span class="po-done-badge">✓ مُسلَّم</span>':''}</td>
       <td>${poFmtDate(po.issue_date)}</td>
       <td>${escapeHtml(po.supplier||'—')}</td>
       <td>${poProjectCell(po)}</td>
