@@ -2400,7 +2400,22 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-seg.active{background:var(--accent);border-color:var(--accent);color:#231F20}
 .po-seg .seg-count{opacity:.7;margin-inline-start:4px;font-size:11px}
 .po-table td,.po-table th{white-space:nowrap}
+.po-table th.sorted{color:var(--ink);position:relative}
+.po-table th.sorted::after{content:'↕';font-size:10px;margin-inline-start:4px;color:var(--accent)}
 .po-table .po-num{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12.5px}
+/* تسلسل الأرقام: البادئة باهتة والرقم التسلسلي بارز */
+.po-num{font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+.po-num .pfx{opacity:.45;font-size:11px}
+.po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
+.po-card-num .seq{font-size:13px}
+.po-gap-row td{background:repeating-linear-gradient(45deg,rgba(192,57,43,0.05),rgba(192,57,43,0.05) 8px,transparent 8px,transparent 16px);
+  color:#a93226;font-size:11.5px;font-weight:700;text-align:center;padding:5px 10px !important;letter-spacing:.02em}
+.po-seq-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--muted)}
+.po-seq-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:5px 12px}
+.po-seq-chip b{font-family:'IBM Plex Mono',monospace;color:var(--ink);font-size:12.5px}
+.po-seq-chip.gaps{border-color:rgba(192,57,43,0.35);background:rgba(192,57,43,0.06);color:#a93226;cursor:pointer}
+.po-seq-chip.gaps:hover{background:rgba(192,57,43,0.12)}
+.po-seq-chip.ok{border-color:rgba(45,106,79,0.3);background:rgba(45,106,79,0.07);color:#1f4e3a}
 .po-status-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .po-status-chip select{position:absolute;opacity:0;width:100%;height:100%;left:0;top:0;cursor:pointer}
 .po-st-review{background:rgba(122,113,104,0.12);color:#6a625a}
@@ -3326,6 +3341,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
         </div>
 
         <div class="po-segments" id="po-segments"></div>
+        <div class="po-seq-bar" id="po-seq-bar"></div>
 
         <div class="toolbar po-toolbar" id="po-toolbar">
           <input type="text" class="input" id="po-search" placeholder="ابحث برقم الأمر / المورد / المشروع..." style="flex:1;max-width:340px">
@@ -5189,7 +5205,7 @@ const STATE = {
   poView: 'analytics',
   poSegment: 'all',
   poFilter: {q:'', sector:'', status:'', priority:'', project:''},
-  poSort: {col:'issue_date', dir:'desc'},
+  poSort: {col:'po_number', dir:'desc'},   // السجل دفتر مرقّم: التسلسل هو الترتيب الطبيعي
   poPage: 1,
   poSelected: new Set(),
 };
@@ -11703,7 +11719,7 @@ function buildPOListReport(opts){
   else if(opts.project) list=list.filter(o=>String(o.project||'').trim()===opts.project);
   if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
   if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
-  list.sort((a,b)=>(poToISO(b.issue_date)||'').localeCompare(poToISO(a.issue_date)||''));
+  list.sort((a,b)=>poNumCompare(b.po_number,a.po_number));   // السجل بترتيب التسلسل (الأحدث رقماً أولاً)
   const totSub=list.reduce((s,o)=>s+(Number(o.subtotal)||0),0);
   const totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
   const rows=list.map(o=>`<tr>
@@ -11724,6 +11740,17 @@ function buildPOListReport(opts){
     <td class="center">${x.c}</td>
     <td class="num price">${fmtPrice(x.v)}</td>
   </tr>`).join('') || '<tr><td colspan="3" class="center" style="padding:14px;color:#888">—</td></tr>';
+  // بيان التسلسل: نطاق الأرقام والفجوات داخله (على الأوامر المعروضة في التقرير)
+  const seqNote = (()=>{
+    const sums=poSeqSummary(list);
+    if(!sums.length) return '';
+    const parts=sums.slice(0,3).map(s=>{
+      const miss=s.missing.length;
+      const sample=miss?(' — غير مسجّل: '+s.missing.slice(0,10).join('، ')+(miss>10?` و${miss-10} أخرى`:'')):' — متّصل بلا فجوات';
+      return `السلسلة ${s.prefix}: من ${s.min} إلى ${s.max} · ${s.count} أمر${sample}`;
+    });
+    return `<div class="print-note-box${sums.some(s=>s.missing.length)?' danger':''}"><span class="nb-title">تسلسل الأرقام</span>${escapeHtml(parts.join(' · '))}</div>`;
+  })();
   const projDesc = opts.project==='__none__' ? 'الجهة: بلا جهة محدّدة' : (opts.project?('الجهة: '+opts.project):'');
   const filterDesc=[opts.status?('الحالة: '+opts.status):'', projDesc, opts.sector?('القطاع: '+opts.sector):'', opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):''].filter(Boolean).join(' · ')||'كل الأوامر';
   const body=`
@@ -11733,6 +11760,7 @@ function buildPOListReport(opts){
       <div class="print-stat-card"><span class="label">شامل الضريبة</span><span class="value">${fmtPrice(totTot)}</span><span class="sub">ر.س</span></div>
     </div>
     <div class="print-note-box"><span class="nb-title">المرشّحات المطبّقة</span>${escapeHtml(filterDesc)}</div>
+    ${seqNote}
     <div class="print-section">
       <div class="print-section-title">سجل أوامر الشراء</div>
       <table class="print-table">
@@ -13932,6 +13960,51 @@ const PO_SEGMENTS = [
   {key:'undelivered', label:'غير مُسلَّمة',     fn:o=>!PO_TERMINAL.includes(o.status)},
 ];
 
+/* ---------- تسلسل أرقام الأوامر ----------
+   رقم الأمر = بادئة + رقم تسلسلي في آخره (P.O-DG26-3209). السجل الحقيقي يحمل صيغتين
+   للسنة نفسها (DG26 و DG2026)، لذا نوحّدها في «مفتاح السلسلة» فيبقى التسلسل واحداً
+   متّصلاً في الفرز وكشف الفجوات، مع إبقاء الرقم المخزَّن كما هو. */
+function poSeqParse(num){
+  const s=String(num==null?'':num).trim();
+  const m=s.match(/^(.*?)(\d+)$/);
+  if(!m) return null;
+  return { raw:s, prefix:m[1], digits:m[2], seq:Number(m[2]), pad:m[2].length };
+}
+function poSeriesKey(prefix){ return String(prefix||'').replace(/20(\d{2})/g,'$1').toLowerCase().replace(/\s+/g,''); }
+function poSeriesOf(po){ const p=poSeqParse(po&&po.po_number); return p?poSeriesKey(p.prefix):''; }
+// فرز طبيعي: الرقم التسلسلي أولاً (فلا تفرّقه صيغة السنة) ثم البادئة
+function poNumCompare(a,b){
+  const pa=poSeqParse(a), pb=poSeqParse(b);
+  if(pa&&pb){
+    if(pa.seq!==pb.seq) return pa.seq-pb.seq;
+    return poSeriesKey(pa.prefix).localeCompare(poSeriesKey(pb.prefix),'ar');
+  }
+  if(pa) return 1;
+  if(pb) return -1;
+  return String(a||'').localeCompare(String(b||''),'ar');
+}
+// خلية الرقم: البادئة باهتة والرقم التسلسلي بارز — ليُقرأ التسلسل بنظرة
+function poNumCell(num){
+  const p=poSeqParse(num);
+  if(!p) return `<span class="po-num">${escapeHtml(String(num||'—'))}</span>`;
+  return `<span class="po-num"><span class="pfx">${escapeHtml(p.prefix)}</span><span class="seq">${escapeHtml(p.digits)}</span></span>`;
+}
+// ملخّص كل سلسلة: النطاق والعدد والأرقام المفقودة داخله
+function poSeqSummary(list){
+  const map={};
+  (list||[]).forEach(o=>{
+    const p=poSeqParse(o.po_number); if(!p) return;
+    const k=poSeriesKey(p.prefix);
+    (map[k]=map[k]||{key:k, sample:p.prefix, seqs:new Set(), count:0});
+    map[k].seqs.add(p.seq); map[k].count++;
+  });
+  return Object.values(map).map(s=>{
+    const arr=[...s.seqs].sort((a,b)=>a-b);
+    const min=arr[0], max=arr[arr.length-1], have=new Set(arr), missing=[];
+    for(let n=min;n<=max;n++) if(!have.has(n)) missing.push(n);
+    return {key:s.key, prefix:s.sample, count:s.count, min, max, missing};
+  }).sort((a,b)=>b.count-a.count);
+}
 /* ---------- date helpers ---------- */
 function poParseDate(v){
   if(!v) return null;
@@ -14094,15 +14167,15 @@ function poSave(po, isNew, auditAction){
 }
 function poFind(num){ return STATE.purchaseOrders.find(x=>x.po_number===num); }
 
+// الرقم التالي يواصل السلسلة القائمة بنفس بادئتها (لا يخترع بادئة جديدة تكسر التسلسل)
 function poNextNumber(){
-  const year=new Date().getFullYear();
-  let max=0;
-  STATE.purchaseOrders.forEach(o=>{
-    const m=String(o.po_number||'').match(/(\d+)\s*$/);
-    if(m){ const n=+m[1]; if(n>max) max=n; }
+  let best=null;
+  (STATE.purchaseOrders||[]).forEach(o=>{
+    const p=poSeqParse(o.po_number);
+    if(p && (!best || p.seq>best.seq)) best=p;
   });
-  const next=(max>0?max+1:1001);
-  return `P.O-DG${year}-${next}`;
+  if(best) return best.prefix + String(best.seq+1).padStart(best.pad,'0');
+  return `P.O-DG${new Date().getFullYear()}-1001`;
 }
 // تحقّق أمني: يمنع رموزاً قد تُحقَن في معالِجات inline (يسمح بالحروف/الأرقام و . _ - / ومسافة)
 function poValidNumber(num){ return /^[\p{L}\p{N}._\-\/ ]+$/u.test(String(num||'')); }
@@ -14137,6 +14210,7 @@ function poFilteredList(){
   const dateCols=new Set(['issue_date','expected_delivery','actual_delivery']);
   list.sort((a,b)=>{
     let x=a[col], y=b[col];
+    if(col==='po_number') return poNumCompare(x,y)*mul;   // فرز طبيعي بالتسلسل
     if(numCols.has(col)){ x=Number(x)||0; y=Number(y)||0; return (x-y)*mul; }
     if(dateCols.has(col)){ x=poToISO(x); y=poToISO(y); }
     return String(x||'').localeCompare(String(y||''),'ar')*mul;
@@ -14215,10 +14289,12 @@ function renderPurchaseOrders(){
   show('po-view-analytics',STATE.poView==='analytics');
   show('po-view-alerts',STATE.poView==='alerts');
   const segBar=document.getElementById('po-segments'), tb=document.getElementById('po-toolbar');
+  const seqBar=document.getElementById('po-seq-bar');
   const listy=(STATE.poView==='list');
   if(segBar) segBar.style.display=listy?'':'none';
   if(tb) tb.style.display=listy?'':'none';
-  if(STATE.poView==='list'){ renderPOSegments(); renderPOTable(); }
+  if(seqBar) seqBar.style.display=listy?'':'none';
+  if(STATE.poView==='list'){ renderPOSegments(); renderPOSeqBar(); renderPOTable(); }
   else if(STATE.poView==='board') renderPOBoard();
   else if(STATE.poView==='analytics') renderPODashboard();
   else if(STATE.poView==='alerts') renderPOAlerts();
@@ -14253,14 +14329,53 @@ function renderPOKPIs(){
   el.querySelectorAll('.po-kpi').forEach(node=>{
     node.onclick=()=>{ const k=kpis[+node.dataset.kpi];
       if(k.view){ STATE.poView=k.view; }
-      else { STATE.poView='list'; STATE.poFilter={q:'',sector:'',status:k.statusFilter||'',priority:''};
+      else { STATE.poView='list'; STATE.poFilter={q:'',sector:'',status:k.statusFilter||'',priority:'',project:''};
         STATE.poSegment=k.seg||'all'; STATE.poPage=1;
         const ss=document.getElementById('po-filter-status'); if(ss) ss.value=k.statusFilter||'';
+        ['sector','priority','project'].forEach(x=>{ const el2=document.getElementById('po-filter-'+x); if(el2) el2.value=''; });
+        const sq=document.getElementById('po-search'); if(sq) sq.value='';
       }
       renderPurchaseOrders();
     };
   });
 }
+
+// شريط التسلسل: نطاق كل سلسلة وعددها والأرقام المفقودة داخلها
+function renderPOSeqBar(){
+  const el=document.getElementById('po-seq-bar'); if(!el) return;
+  const sums=poSeqSummary(STATE.purchaseOrders).slice(0,3);
+  if(!sums.length){ el.innerHTML=''; return; }
+  const sorted=(STATE.poSort.col==='po_number');
+  el.innerHTML=sums.map(s=>{
+    const miss=s.missing.length;
+    return `<span class="po-seq-chip">السلسلة <b>${escapeHtml(s.prefix)}</b> · من <b>${s.min}</b> إلى <b>${s.max}</b> · ${s.count} أمر</span>`
+      + (miss
+        ? `<span class="po-seq-chip gaps" onclick="poShowMissing('${escapeAttr(s.key)}')" title="عرض الأرقام المفقودة">⚠ ${miss} رقم مفقود في التسلسل</span>`
+        : `<span class="po-seq-chip ok">✓ التسلسل متّصل بلا فجوات</span>`);
+  }).join('')
+  + (sorted?'':`<span class="po-seq-chip gaps" onclick="poSortBySeq()" title="ترتيب القائمة بالتسلسل">↕ الترتيب الحالي ليس بالتسلسل — رتّب بالرقم</span>`);
+}
+function poSortBySeq(){ STATE.poSort={col:'po_number',dir:'desc'}; STATE.poPage=1; renderPurchaseOrders(); }
+// نافذة الأرقام المفقودة داخل سلسلة بعينها
+function poShowMissing(key){
+  const s=poSeqSummary(STATE.purchaseOrders).find(x=>x.key===key); if(!s) return;
+  const chips=s.missing.map(n=>`<span class="po-seq-chip" style="padding:4px 10px"><b>${escapeHtml(s.prefix+String(n))}</b></span>`).join(' ');
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-missing';
+  m.innerHTML=`<div class="modal" style="max-width:640px;width:96vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
+      <h3 style="margin:0;font-size:16px">فجوات تسلسل الأوامر — ${escapeHtml(s.prefix)}</h3>
+      <button class="modal-close" onclick="poCloseMissing()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:16px 20px;max-height:60vh;overflow:auto">
+      <p style="font-size:12.5px;color:var(--muted,#777);margin:0 0 12px">النطاق <b>${s.min}</b> — <b>${s.max}</b> · موجود ${s.count} أمر · <b style="color:#a93226">${s.missing.length}</b> رقم غير مسجّل. تحقّق من كونها ملغاة أو لم تُدخَل بعد.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border,#eee)">
+      <button class="btn btn-ghost btn-sm" onclick="poCloseMissing()">إغلاق</button>
+    </div></div>`;
+  document.body.appendChild(m);
+}
+function poCloseMissing(){ const m=document.getElementById('modal-po-missing'); if(m) m.remove(); }
 
 function renderPOSegments(){
   const el=document.getElementById('po-segments'); if(!el) return;
@@ -14291,12 +14406,29 @@ function renderPOTable(){
   if(STATE.poPage>pages) STATE.poPage=pages;
   const start=(STATE.poPage-1)*per;
   const rows=list.slice(start,start+per);
+  // فواصل الفجوات: تظهر فقط عند الفرز بالرقم وبلا أي تصفية (وإلا فالنقص متوقَّع لا فجوة)
+  const f=STATE.poFilter;
+  const showGaps = STATE.poSort.col==='po_number' && STATE.poSegment==='all'
+    && !f.q && !f.sector && !f.status && !f.priority && !f.project;
   if(!rows.length){ tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted)">لا توجد أوامر شراء مطابقة. ابدأ بإضافة أمر أو استيراد ملف الإكسل.</td></tr>`; }
-  else tb.innerHTML=rows.map(po=>{
+  else tb.innerHTML=rows.map((po,ri)=>{
     const n=escapeAttr(po.po_number);
     const canEdit=hasPermission('can_edit_po'), canDel=hasPermission('can_delete_po');
-    return `<tr onclick="openPODrawer('${n}')" style="cursor:pointer">
-      <td class="po-num">${escapeHtml(po.po_number)}</td>
+    // فاصل يوضّح انقطاع التسلسل بين هذا الأمر وسابقه في الصفحة
+    let gap='';
+    if(showGaps && ri>0){
+      const a=poSeqParse(rows[ri-1].po_number), b=poSeqParse(po.po_number);
+      if(a && b && poSeriesKey(a.prefix)===poSeriesKey(b.prefix)){
+        const hi=Math.max(a.seq,b.seq), lo=Math.min(a.seq,b.seq), miss=hi-lo-1;
+        if(miss>0){
+          const nums=[]; for(let x=lo+1;x<hi && nums.length<8;x++) nums.push(x);
+          const list2=nums.join('، ')+(miss>nums.length?` و${miss-nums.length} أخرى`:'');
+          gap=`<tr class="po-gap-row"><td colspan="11">⋯ انقطاع في التسلسل: ${miss} رقم غير موجود (${escapeHtml(list2)})</td></tr>`;
+        }
+      }
+    }
+    return gap+`<tr onclick="openPODrawer('${n}')" style="cursor:pointer">
+      <td>${poNumCell(po.po_number)}</td>
       <td>${poFmtDate(po.issue_date)}</td>
       <td>${escapeHtml(po.supplier||'—')}</td>
       <td>${poProjectCell(po)}</td>
@@ -14328,7 +14460,8 @@ function renderPOTable(){
   document.querySelectorAll('#po-table th[data-posort]').forEach(th=>{
     const c=th.dataset.posort;
     th.style.cursor='pointer';
-    th.onclick=()=>{ if(STATE.poSort.col===c){ STATE.poSort.dir=STATE.poSort.dir==='asc'?'desc':'asc'; } else { STATE.poSort={col:c,dir:'asc'}; } renderPOTable(); };
+    th.classList.toggle('sorted', STATE.poSort.col===c);
+    th.onclick=()=>{ if(STATE.poSort.col===c){ STATE.poSort.dir=STATE.poSort.dir==='asc'?'desc':'asc'; } else { STATE.poSort={col:c,dir:c==='po_number'?'desc':'asc'}; } STATE.poPage=1; renderPurchaseOrders(); };
   });
 }
 function poGoPage(p){ STATE.poPage=p; renderPOTable(); window.scrollTo({top:0,behavior:'smooth'}); }
@@ -14344,7 +14477,7 @@ function renderPOBoard(){
     return `<div class="po-col" data-status="${escapeAttr(st)}" ondragover="poBoardOver(event)" ondragleave="poBoardLeave(event)" ondrop="poBoardDrop(event)">
       <div class="po-col-head"><span class="po-status-chip ${meta.cls}" style="cursor:default">${escapeHtml(st)} · ${items.length}</span><span class="po-col-val">${fmtPrice(val)}</span></div>
       ${items.map(po=>`<div class="po-card" draggable="true" ondragstart="poBoardDrag(event,'${escapeAttr(po.po_number)}')" onclick="openPODrawer('${escapeAttr(po.po_number)}')">
-        <div class="po-card-num">${escapeHtml(po.po_number)}</div>
+        <div class="po-card-num">${poNumCell(po.po_number)}</div>
         <div class="po-card-sup">${escapeHtml(po.supplier||'—')}</div>
         <div class="po-card-proj">🏗 ${escapeHtml(poProjectText(po))}</div>
         <div class="po-card-foot"><span>${poDelayCell(po)}</span><span class="po-card-total">${fmtPrice(po.total)}</span></div>
