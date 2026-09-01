@@ -2378,6 +2378,66 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .agent-thinking span:nth-child(2){animation-delay:0.2s}
 .agent-thinking span:nth-child(3){animation-delay:0.4s}
 
+/* ============ HYDRATION (قناع الأرقام ريثما تصل بيانات السحابة) ============ */
+/* الأرقام المحلية تُخفى خلف هيكل نابض بدل أن تُعرض ثم تقفز عند وصول السحابة */
+body.data-loading .stat-value,
+body.data-loading .po-kpi-value,
+body.data-loading .po-hero .v,
+body.data-loading .po-kpi .v,
+body.data-loading .nav-count,
+body.data-loading .seg-count,
+body.data-loading .tp-n,
+.tp-n.tp-skel{
+  color:transparent !important;background:transparent !important;position:relative;
+}
+body.data-loading .stat-value::after,
+body.data-loading .po-kpi-value::after,
+body.data-loading .po-hero .v::after,
+body.data-loading .po-kpi .v::after,
+body.data-loading .nav-count::after,
+body.data-loading .seg-count::after,
+body.data-loading .tp-n::after,
+.tp-n.tp-skel::after{
+  content:'';position:absolute;inset:12% 0;min-height:12px;border-radius:6px;
+  background:linear-gradient(90deg,rgba(122,113,104,0.12) 25%,rgba(122,113,104,0.22) 50%,rgba(122,113,104,0.12) 75%);
+  background-size:200% 100%;animation:skelShimmer 1.1s ease-in-out infinite;
+}
+@keyframes skelShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* السطر الفرعي يحمل أرقاماً أيضاً */
+body.data-loading .stat-meta{color:transparent !important;position:relative}
+body.data-loading .stat-meta::after{content:'';position:absolute;inset-inline-start:0;top:20%;height:9px;width:70%;border-radius:5px;
+  background:linear-gradient(90deg,rgba(122,113,104,0.10) 25%,rgba(122,113,104,0.18) 50%,rgba(122,113,104,0.10) 75%);
+  background-size:200% 100%;animation:skelShimmer 1.1s ease-in-out infinite}
+/* الكتل المركّبة (مؤشرات الأداء والرسوم) تُعتَّم بدل تفكيك كل رقم فيها */
+body.data-loading #kpi-section,
+body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;transition:opacity .2s}
+.hyd-bar{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1600;display:none;
+  align-items:center;gap:10px;padding:9px 18px;border-radius:24px;font-size:12.5px;font-weight:600;
+  background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-md);color:var(--ink-2)}
+.hyd-bar.show{display:inline-flex}
+.hyd-bar .spin{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.hyd-bar.offline{border-color:rgba(192,57,43,0.4);color:#a93226;background:rgba(192,57,43,0.06)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ============ لوحة المهام والتنبيهات (عند الدخول) ============ */
+.tasks-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 22px;margin-bottom:22px;box-shadow:var(--shadow-sm)}
+.tp-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tp-title{font-size:16px;font-weight:800;color:var(--ink)}
+.tp-sub{font-size:11.5px;color:var(--muted)}
+.tp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tp-card{display:flex;flex-direction:column;gap:3px;padding:13px 15px;border:1px solid var(--border);
+  border-radius:12px;background:var(--surface-2);cursor:pointer;transition:all .15s;text-align:start}
+.tp-card:hover{border-color:var(--accent);box-shadow:var(--shadow-sm);transform:translateY(-1px)}
+.tp-card .tp-n{font-size:24px;font-weight:800;font-family:'IBM Plex Mono',monospace;color:var(--ink);line-height:1.1}
+.tp-card .tp-l{font-size:12.5px;font-weight:700;color:var(--ink-2)}
+.tp-card .tp-a{font-size:10.5px;color:var(--muted)}
+.tp-card.danger{border-inline-start:3px solid #c0392b}.tp-card.danger .tp-n{color:#c0392b}
+.tp-card.gold{border-inline-start:3px solid #C4A265}.tp-card.gold .tp-n{color:#9A7A45}
+.tp-card.info{border-inline-start:3px solid #2b5173}.tp-card.info .tp-n{color:#2b5173}
+.tp-card.ok{border-inline-start:3px solid #2d6a4f}.tp-card.ok .tp-n{color:#1f7a55}
+.tp-clear{display:flex;align-items:center;gap:10px;padding:16px;border-radius:12px;background:rgba(45,106,79,0.07);
+  border:1px solid rgba(45,106,79,0.25);color:#1f4e3a;font-size:13px;font-weight:700}
 /* ============ PURCHASE ORDERS MODULE ============ */
 .po-kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
 .po-kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
@@ -2834,6 +2894,9 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
           </div>
           <p class="page-subtitle">نظرة شاملة على أسعار المشتريات، الأصناف المُسعّرة، والسجل التاريخي الحديث عبر جميع الفئات والموردين المعتمدين.</p>
         </div>
+
+        <!-- لوحة المهام والتنبيهات: ما يحتاج متابعة المستخدم فور الدخول -->
+        <div id="tasks-panel"></div>
 
         <div class="stats-grid" id="stats-grid"></div>
 
@@ -6128,7 +6191,99 @@ function navigate(page){
 }
 
 /* ========== DASHBOARD ========== */
+/* ============================================================
+   لوحة المهام والتنبيهات — أول ما يراه المستخدم بعد الدخول
+   تجمع ما يحتاج متابعته فعلاً: أوامر متعثّرة/ناقصة، تسجيلات موردين
+   بانتظار المراجعة، وطلبات شراء بانتظار اعتماده.
+   ============================================================ */
+const TASKS = { regsPending:null, prPending:null, loaded:false };
+function tasksGreeting(){
+  const h=new Date().getHours();
+  const g = h<12 ? 'صباح الخير' : (h<17 ? 'طاب يومك' : 'مساء الخير');
+  const n = (STATE.currentUser && (STATE.currentUser.displayName||STATE.currentUser.username)) || '';
+  return n ? `${g}، ${n}` : g;
+}
+// عدّادات سحابية (تسجيلات الموردين + طلبات الشراء بانتظار اعتماد المستخدم)
+async function tasksLoadCloud(){
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  // تسجيلات الموردين المعلّقة
+  if(hasPermission('can_review_registrations')){
+    try{
+      const {count} = await CLOUD.client.from('proc_supplier_registrations')
+        .select('id',{count:'exact',head:true}).eq('status','pending');
+      TASKS.regsPending = count||0;
+    }catch(e){ TASKS.regsPending=null; }
+  }
+  // طلبات الشراء التي يستطيع المستخدم البتّ فيها
+  if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
+    try{ await prLoadAll(); TASKS.prPending = prInbox().length; }catch(e){ TASKS.prPending=null; }
+  }
+  TASKS.loaded=true;
+  renderTasksPanel();
+}
+function renderTasksPanel(){
+  const host=document.getElementById('tasks-panel'); if(!host) return;
+  const all=STATE.purchaseOrders||[];
+  const active=all.filter(o=>!PO_TERMINAL.includes(o.status));
+  const num=v=>Number(v)||0;
+  const late     = active.filter(o=>num(o.days_delayed)>0);
+  const partial  = all.filter(poIsPartial);
+  const finance  = all.filter(o=>o.status==='تسليم للإدارة المالية');
+  const review   = all.filter(o=>o.status==='قيد المراجعة');
+  const noProj   = active.filter(o=>!String(o.project||'').trim());
+  const noReason = late.filter(o=>!String(o.delay_reason||'').trim());
+  const seqMiss  = poSeqSummary(all).reduce((a,s)=>a+s.missing.length,0);
+
+  const jumpList=(seg,extra)=>{ STATE.poView='list'; STATE.poSegment=seg||'all';
+    STATE.poFilter={q:'',sector:'',status:'',priority:'',project:'',...(extra||{})};
+    STATE.poPage=1; navigate('purchase-orders'); };
+  const cards=[
+    {n:late.length,     cls:'danger', l:'أوامر متأخرة',              a:'تجاوزت موعد التسليم — تحتاج تصعيداً', go:()=>jumpList('late')},
+    {n:partial.length,  cls:'gold',   l:'تسليم جزئي بانتظار الإقفال', a:'أكمل الاستلام ليُقفل الأمر',        go:()=>jumpList('partial')},
+    {n:finance.length,  cls:'info',   l:'لدى الإدارة المالية',        a:'بانتظار التحويل والسداد',            go:()=>jumpList('finance')},
+    {n:review.length,   cls:'',       l:'بانتظار الاعتماد',           a:'أوامر قيد المراجعة',                 go:()=>jumpList('all',{status:'قيد المراجعة'})},
+    {n:noProj.length,   cls:'gold',   l:'أوامر بلا جهة / مشروع',      a:'بيانات ناقصة — حدّد الجهة',          go:()=>jumpList('all',{project:'__none__'})},
+    {n:noReason.length, cls:'',       l:'متأخر بلا سبب مسجّل',        a:'سجّل سبب التأخير للمتابعة',          go:()=>jumpList('late')},
+    {n:seqMiss,         cls:'',       l:'فجوات في تسلسل الأرقام',     a:'أرقام غير مسجّلة داخل السلسلة',      go:()=>{ jumpList('all'); const s=poSeqSummary(STATE.purchaseOrders).find(x=>x.missing.length); if(s) setTimeout(()=>poShowMissing(s.key),300); }},
+  ];
+  if(hasPermission('can_review_registrations')){
+    cards.push({n:TASKS.regsPending, cls:'info', l:'طلبات تسجيل موردين', a:'بانتظار مراجعتك واعتمادها',
+                go:()=>{ navigate('registrations'); try{ loadRegistrations(); }catch(e){} }});
+  }
+  if(TASKS.prPending!=null || hasPermission('can_approve_l1') || hasPermission('can_approve_l2')){
+    cards.push({n:TASKS.prPending, cls:'danger', l:'طلبات شراء بانتظار اعتمادك', a:'اتخذ القرار في سلسلة الاعتماد', go:()=>navigate('pr')});
+  }
+  // البطاقات ذات القيمة null (لم تصل بعد) تبقى ظاهرة بهيكل نابض؛ والصفرية تُخفى
+  const shown=cards.filter(c=>c.n===null || c.n>0);
+  const pending=(hydIsPending()||!TASKS.loaded);
+  const sub = HYD.state==='offline'
+    ? 'بيانات محلية — تعذّر الاتصال بالسحابة'
+    : (pending?'جارٍ التحديث من السحابة…':'محدَّثة الآن');
+  host.innerHTML=`
+    <div class="tasks-panel">
+      <div class="tp-head">
+        <div>
+          <div class="tp-title">${escapeHtml(tasksGreeting())} — ما يحتاج متابعتك</div>
+          <div class="tp-sub">${escapeHtml(sub)}</div>
+        </div>
+      </div>
+      ${shown.length? `<div class="tp-grid">${shown.map((c,i)=>`
+        <div class="tp-card ${c.cls}" data-tp="${i}">
+          <span class="tp-n">${c.n===null?'—':c.n}</span>
+          <span class="tp-l">${escapeHtml(c.l)}</span>
+          <span class="tp-a">${escapeHtml(c.a)}</span>
+        </div>`).join('')}</div>`
+      : `<div class="tp-clear">✓ لا يوجد ما يحتاج متابعتك الآن — كل الأوامر ضمن مواعيدها وبياناتها مكتملة.</div>`}
+    </div>`;
+  host.querySelectorAll('.tp-card').forEach(el=>{
+    el.onclick=()=>{ const c=shown[+el.dataset.tp]; if(c && c.go) c.go(); };
+  });
+  // البطاقات المعلّقة تُقنَّع كبقية الأرقام حتى تصل بياناتها
+  host.querySelectorAll('.tp-card').forEach((el,i)=>{ if(shown[i] && shown[i].n===null) el.querySelector('.tp-n').classList.add('tp-skel'); });
+}
+
 function renderDashboard(){
+  try{ renderTasksPanel(); }catch(e){ console.warn('tasks panel', e); }
   const items = STATE.items;
   const hist = STATE.history;
   const pricedItems = items.filter(i=>i.last_price!=null);
@@ -13728,6 +13883,63 @@ async function refreshFromCloud(){
   else if(STATE.page==='purchase-orders') renderPurchaseOrders();
   else if(STATE.page==='pr'){ __prLoaded=false; renderPRPortal(); }
   updateCloudStatus('connected');
+  // اتصال متأخر بعد إعلان «غير متصل»: ارفع القناع وأزل التنبيه، والبيانات الآن حقيقية
+  if(HYD.state==='offline'){
+    HYD.state='ready';
+    document.body.classList.remove('data-loading');
+    const b=document.getElementById('hyd-bar'); if(b){ b.className='hyd-bar'; b.innerHTML=''; }
+  }
+  try{ renderTasksPanel(); }catch(e){}
+}
+
+/* ============================================================
+   HYDRATION — منع «قفزة الأرقام» عند الدخول
+   المشكلة: init() يرسم الأرقام من البذور/التخزين المحلي فوراً، ثم يصل رد السحابة
+   فتتغيّر كل الأرقام أمام المستخدم. الحل: نُخفي القيم خلف هيكل نابض حتى تصل
+   بيانات السحابة (أو يُحسم تعذّر الاتصال)، ثم نكشفها مرة واحدة صحيحة.
+   ============================================================ */
+const HYD = { state:'idle', startedAt:0, settledAt:0, timer:null };   // idle | pending | ready | offline
+function hydIsPending(){ return HYD.state==='pending'; }
+function hydBar(){
+  let el=document.getElementById('hyd-bar');
+  if(!el){ el=document.createElement('div'); el.id='hyd-bar'; el.className='hyd-bar'; document.body.appendChild(el); }
+  return el;
+}
+function hydBegin(){
+  if(HYD.state==='pending') return;
+  HYD.state='pending'; HYD.startedAt=Date.now();
+  document.body.classList.add('data-loading');
+  const b=hydBar();
+  b.className='hyd-bar show';
+  b.innerHTML='<span class="spin"></span><span>جارٍ تحميل أحدث البيانات من السحابة…</span>';
+  clearTimeout(HYD.timer);
+  // شبكة أمان: لا نُبقي الأرقام مقنّعة للأبد لو تعذّر الاتصال بصمت
+  HYD.timer=setTimeout(()=>hydSettle('offline'), 15000);
+}
+function hydSettle(state){
+  if(HYD.state!=='pending' && HYD.state!=='idle') return;
+  clearTimeout(HYD.timer);
+  HYD.state=(state==='ready')?'ready':'offline';
+  HYD.settledAt=Date.now();
+  document.body.classList.remove('data-loading');
+  const b=hydBar();
+  if(HYD.state==='ready'){ b.className='hyd-bar'; b.innerHTML=''; }
+  else{
+    b.className='hyd-bar offline show';
+    b.innerHTML='<span>⚠ تعذّر الاتصال بالسحابة — الأرقام المعروضة من نسخة محلية</span>';
+    setTimeout(()=>{ const x=document.getElementById('hyd-bar'); if(x && HYD.state==='offline') x.classList.remove('show'); }, 8000);
+  }
+  try{ updateCounts(); }catch(e){}
+  try{ renderTasksPanel(); }catch(e){}
+  if(HYD.state==='ready'){ try{ tasksLoadCloud(); }catch(e){} }
+}
+// نقطة الدخول: تُستدعى فور فتح النظام — بلا تأخير صناعي
+async function hydrateFromCloud(){
+  hydBegin();
+  let ok=false;
+  try{ ok = await tryAutoConnectCloud(); }catch(e){ ok=false; }
+  hydSettle(ok?'ready':'offline');
+  return ok;
 }
 
 async function tryAutoConnectCloud(){
@@ -16181,13 +16393,8 @@ function init(){
   renderDashboard();
   
   // === Try cloud auto-connect ===
-  // Wait briefly so the supabase library finishes loading
-  setTimeout(async ()=>{
-    const ok = await tryAutoConnectCloud();
-    if(ok){
-      toast('success','اتصال سحابي','تم الاتصال بالسحابة وتحديث البيانات');
-    }
-  }, 800);
+  // فوراً بلا تأخير: العميل مُهيَّأ مسبقاً في bootstrap، والأرقام تبقى مقنّعة حتى تصل البيانات
+  hydrateFromCloud();
   
   // === GLOBAL KEYBOARD SHORTCUTS ===
   document.addEventListener('keydown',e=>{
