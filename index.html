@@ -2408,6 +2408,16 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-num .pfx{opacity:.45;font-size:11px}
 .po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
 .po-card-num .seq{font-size:13px}
+/* التسليم الجزئي: لون مختلف (ذهبي) يميّزه عن المُسلَّم كاملاً وعن النشط — عمل لم يُقفَل بعد */
+.po-row-partial td{background:rgba(196,162,101,0.10)}
+.po-row-partial:hover td{background:rgba(196,162,101,0.17)}
+.po-row-partial .po-num .seq{color:#8a6a30}
+.po-partial-badge{display:inline-flex;align-items:center;gap:5px;margin-inline-start:8px;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:800;
+  background:rgba(196,162,101,0.22);color:#7a5a20;vertical-align:middle;white-space:nowrap}
+.po-partial-bar{display:inline-block;width:34px;height:5px;border-radius:3px;background:rgba(122,90,32,0.20);overflow:hidden;vertical-align:middle}
+.po-partial-bar i{display:block;height:100%;background:#9A7A45}
+.po-partial-note{margin-top:10px;font-size:12px;background:rgba(196,162,101,0.12);border:1px solid rgba(196,162,101,0.45);
+  color:#7a5a20;border-radius:8px;padding:8px 12px;font-weight:600;line-height:1.7}
 /* الأوامر المُسلَّمة: صفّ منتهٍ يتميّز فوراً عن العمل النشط */
 .po-row-done td{background:rgba(45,106,79,0.055)}
 .po-row-done:hover td{background:rgba(45,106,79,0.10)}
@@ -2554,6 +2564,7 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-alert-card .ac-count{font-size:28px;font-weight:800;font-family:'IBM Plex Mono',monospace}
 .po-alert-card.red{border-inline-start:3px solid #c0392b}
 .po-alert-card.amber{border-inline-start:3px solid #C4A265}
+.po-alert-card.gold{border-inline-start:3px solid #9A7A45;background:rgba(196,162,101,0.06)}
 .po-alert-card .ac-label{font-size:12.5px;color:var(--ink-2);font-weight:600;margin-top:4px}
 .po-ai-summary{background:linear-gradient(135deg,rgba(196,162,101,0.08),rgba(154,122,69,0.04));border:1px solid rgba(196,162,101,0.25);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:1.7;color:var(--ink-2)}
 .po-ai-summary .ai-tag{font-size:10px;background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#74c69d;padding:2px 8px;border-radius:8px;font-weight:700;margin-inline-end:8px}
@@ -13961,6 +13972,7 @@ const PO_SEGMENTS = [
   {key:'mine',        label:'طلباتي',          fn:o=>{const u=STATE.currentUser&&STATE.currentUser.displayName;return !!u && o.officer===u;}},
   {key:'late',        label:'متأخرة',          fn:o=>(o.days_delayed||0)>0 && !PO_TERMINAL.includes(o.status)},
   {key:'stuck',       label:'متعثّرة',          fn:o=>!PO_TERMINAL.includes(o.status) && poCurrentStageAge(o)>7},
+  {key:'partial',     label:'تسليم جزئي',      fn:o=>o.status==='تسليم جزئي'},
   {key:'urgent',      label:'عاجلة',           fn:o=>o.priority==='عاجل' && !PO_TERMINAL.includes(o.status)},
   {key:'review',      label:'بانتظار الاعتماد', fn:o=>o.status==='قيد المراجعة'},
   {key:'finance',     label:'لدى المالية',      fn:o=>o.status==='تسليم للإدارة المالية'||o.status==='تم التحويل'},
@@ -14399,6 +14411,16 @@ function poStatusChip(po){
   return `<span class="po-status-chip ${meta.cls}" style="position:relative" onclick="event.stopPropagation()">${escapeHtml(po.status)}
     <select onchange="changePOStatus('${escapeAttr(po.po_number)}',this.value)" onclick="event.stopPropagation()">${opts}</select></span>`;
 }
+// حالة التسليم الجزئي: كم استُلم من كم، ومنذ متى آخر استلام (للمتابعة والإقفال)
+function poPartialInfo(po){
+  const s=poReceivedSum(po);
+  const rc=(po.receipts||[]);
+  const lastAt=rc.length?rc[rc.length-1].at:null;
+  const days=lastAt?Math.max(0,Math.round((Date.now()-new Date(lastAt).getTime())/86400000)):null;
+  return { received:s.received, ordered:s.ordered, remaining:Math.max(0,s.ordered-s.received),
+           pct:s.ordered?Math.round(s.received/s.ordered*100):0, lastAt, daysSince:days };
+}
+function poIsPartial(po){ return po && po.status==='تسليم جزئي'; }
 // صيغة الأيام بالعربية الصحيحة (مفرد/مثنّى/جمع قلّة/تمييز)
 function poDays(n){
   n=Math.abs(Number(n)||0);
@@ -14448,9 +14470,16 @@ function renderPOTable(){
         }
       }
     }
-    const done=(po.status==='تسليم كامل');
-    return gap+`<tr class="${done?'po-row-done':''}" onclick="openPODrawer('${n}')" style="cursor:pointer">
-      <td>${poNumCell(po.po_number)}${done?'<span class="po-done-badge">✓ مُسلَّم</span>':''}</td>
+    const done=(po.status==='تسليم كامل'), partial=poIsPartial(po);
+    let mark='';
+    if(done) mark='<span class="po-done-badge">✓ مُسلَّم</span>';
+    else if(partial){
+      const pi=poPartialInfo(po);
+      mark=`<span class="po-partial-badge" title="مستلَم ${pi.received} من ${pi.ordered} — بانتظار إكمال الاستلام والإقفال">`
+         + `<span class="po-partial-bar"><i style="width:${pi.pct}%"></i></span>${pi.received}/${pi.ordered}</span>`;
+    }
+    return gap+`<tr class="${done?'po-row-done':(partial?'po-row-partial':'')}" onclick="openPODrawer('${n}')" style="cursor:pointer">
+      <td>${poNumCell(po.po_number)}${mark}</td>
       <td>${poFmtDate(po.issue_date)}</td>
       <td>${escapeHtml(po.supplier||'—')}</td>
       <td>${poProjectCell(po)}</td>
@@ -14731,6 +14760,9 @@ function openPODrawer(num){
       <div class="po-stepper">${stepper}</div>
       ${_ageBanner}
       ${_nextStage?`<div class="po-stage-next">المرحلة التالية: <b>${escapeHtml(_nextStage)}</b> — انقر المرحلة في المسار أعلاه أو زرّ الانتقال أسفل الصفحة.</div>`:''}
+      ${poIsPartial(po)?(()=>{ const pi=poPartialInfo(po);
+        return `<div class="po-partial-note">📦 تسليم جزئي: استُلم <b>${pi.received}</b> من <b>${pi.ordered}</b> (متبقٍّ <b>${pi.remaining}</b>)${pi.daysSince!=null?` · منذ آخر استلام <b>${escapeHtml(poDays(pi.daysSince))}</b>`:''}.<br>تابع المورد بالكميات المتبقّية، وبإكمال الاستلام يُقفَل الأمر تلقائياً.</div>`;
+      })():''}
     </div>
     <div class="po-drawer-sec"><h4>مالية</h4><div class="po-kv">
       ${kv('قبل الضريبة',fmtPrice(po.subtotal)+' ر.س')}
@@ -15224,15 +15256,41 @@ function renderPOAlerts(){
   const near=all.filter(o=>{ if(PO_TERMINAL.includes(o.status)) return false; const d=poParseDate(o.expected_delivery); if(!d) return false; const diff=Math.round((d-poParseDate(new Date()))/86400000); return diff>=0&&diff<=3; });
   const noReason=all.filter(o=>(o.days_delayed||0)>0 && !o.delay_reason && !PO_TERMINAL.includes(o.status));
   const weak=all.filter(o=>{ const r=poSupplierRating(o.supplier); return r!=null && r<=2; });
+  // تسليم جزئي: عمل مفتوح لم يُقفَل — يُرتَّب بالأقدم متابعةً أولاً
+  const partial=all.filter(poIsPartial)
+    .map(o=>({o, pi:poPartialInfo(o)}))
+    .sort((a,b)=>(b.pi.daysSince??0)-(a.pi.daysSince??0));
+  const partialRows=partial.map(({o,pi})=>{
+    const stale=(pi.daysSince!=null && pi.daysSince>7);
+    return `<tr onclick="openPODrawer('${escapeAttr(o.po_number)}')" style="cursor:pointer">
+      <td>${poNumCell(o.po_number)}</td>
+      <td>${escapeHtml(o.supplier||'—')}</td>
+      <td>${escapeHtml(poProjectText(o))}</td>
+      <td class="num"><span class="po-partial-badge"><span class="po-partial-bar"><i style="width:${pi.pct}%"></i></span>${pi.received}/${pi.ordered}</span></td>
+      <td class="num">${pi.remaining}</td>
+      <td class="num" style="color:${stale?'#a93226':'inherit'}">${pi.daysSince==null?'—':escapeHtml(poDays(pi.daysSince))}</td>
+      <td class="num"><button class="btn btn-accent btn-sm" onclick="event.stopPropagation();poReceiveOpen('${escapeAttr(o.po_number)}')" data-requires-perm="can_edit_po">إكمال الاستلام</button></td>
+    </tr>`;
+  }).join('');
   const health=Math.round(poHealthScore()*100);
-  const card=(cls,count,label,seg,statusFilter)=>`<div class="po-alert-card ${cls}" onclick="poAlertJump('${seg||''}','${statusFilter||''}')"><div class="ac-count" style="color:${cls==='red'?'#c0392b':cls==='amber'?'#9A7A45':'var(--ink)'}">${count}</div><div class="ac-label">${escapeHtml(label)}</div></div>`;
+  const card=(cls,count,label,seg,statusFilter)=>`<div class="po-alert-card ${cls}" onclick="poAlertJump('${seg||''}','${statusFilter||''}')"><div class="ac-count" style="color:${cls==='red'?'#c0392b':(cls==='amber'||cls==='gold')?'#9A7A45':'var(--ink)'}">${count}</div><div class="ac-label">${escapeHtml(label)}</div></div>`;
   el.innerHTML=`
     <div class="po-alert-grid">
       ${card('red',esc.length,'🔴 تصعيد فوري (> 30 يوم)','late')}
       ${card('amber',near.length,'🟡 قاربت على التأخير (≤ 3 أيام)','undelivered')}
+      ${card('gold',partial.length,'📦 تسليم جزئي — بانتظار الإقفال','partial')}
       ${card('',noReason.length,'⚪ متأخر بدون سبب محدد','late')}
       ${card('',weak.length,'⭐ موردون بتقييم ضعيف (≤ 2)','all')}
     </div>
+    ${partial.length?`
+    <div class="po-card-box">
+      <h3>📦 أوامر بتسليم جزئي — متابعة وإقفال</h3>
+      <p class="po-rep-note">استُلم جزء من البنود ولم يُقفَل الأمر بعد. أكمل الاستلام ليُقفَل تلقائياً، أو تابع المورد بالكميات المتبقّية. الصفوف مرتّبة بالأطول انتظاراً منذ آخر استلام.</p>
+      <table class="po-dash-table">
+        <thead><tr><th>رقم الأمر</th><th class="num">المورد</th><th class="num">المشروع / الجهة</th><th class="num">المستلَم</th><th class="num">المتبقّي</th><th class="num">منذ آخر استلام</th><th class="num">إجراء</th></tr></thead>
+        <tbody>${partialRows}</tbody>
+      </table>
+    </div>`:''}
     <div class="po-card-box" style="max-width:420px">
       <h3>مؤشر صحة النظام العام</h3>
       <div style="display:flex;align-items:center;gap:18px">
@@ -15246,7 +15304,10 @@ function renderPOAlerts(){
 }
 function poAlertJump(seg,statusFilter){
   STATE.poView='list'; STATE.poSegment=seg||'all';
-  STATE.poFilter={q:'',sector:'',status:statusFilter||'',priority:''}; STATE.poPage=1;
+  STATE.poFilter={q:'',sector:'',status:statusFilter||'',priority:'',project:''}; STATE.poPage=1;
+  const ss=document.getElementById('po-filter-status'); if(ss) ss.value=statusFilter||'';
+  ['sector','priority','project'].forEach(x=>{ const el=document.getElementById('po-filter-'+x); if(el) el.value=''; });
+  const sq=document.getElementById('po-search'); if(sq) sq.value='';
   renderPurchaseOrders();
 }
 
