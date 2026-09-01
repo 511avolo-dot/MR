@@ -2408,6 +2408,17 @@ tbody tr:nth-child(9){animation-delay:0.18s} tbody tr:nth-child(10){animation-de
 .po-num .pfx{opacity:.45;font-size:11px}
 .po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
 .po-card-num .seq{font-size:13px}
+/* الملغى: صفّ مطفأ مشطوب — لا يُحسب ولا يُتابَع، ويجب ألّا يُقرأ كأمر قائم */
+.po-row-cancelled td{background:repeating-linear-gradient(45deg,rgba(122,113,104,0.07),rgba(122,113,104,0.07) 6px,transparent 6px,transparent 12px)}
+.po-row-cancelled:hover td{background:rgba(122,113,104,0.14)}
+.po-row-cancelled td{color:#9a9088}
+.po-row-cancelled .po-num .seq{color:#9a9088;text-decoration:line-through}
+.po-row-cancelled .po-num .pfx{text-decoration:line-through}
+.po-row-cancelled .price,.po-row-cancelled .po-delay-pill{text-decoration:line-through;opacity:.75}
+.po-cancel-badge{display:inline-block;margin-inline-start:8px;padding:1px 8px;border-radius:20px;font-size:10px;font-weight:800;
+  background:rgba(192,57,43,0.12);color:#a93226;vertical-align:middle;white-space:nowrap;text-decoration:none}
+.po-cancel-note{margin-top:10px;font-size:12px;background:rgba(192,57,43,0.07);border:1px solid rgba(192,57,43,0.35);
+  color:#a93226;border-radius:8px;padding:8px 12px;font-weight:600;line-height:1.7}
 /* التسليم الجزئي: لون مختلف (ذهبي) يميّزه عن المُسلَّم كاملاً وعن النشط — عمل لم يُقفَل بعد */
 .po-row-partial td{background:rgba(196,162,101,0.10)}
 .po-row-partial:hover td{background:rgba(196,162,101,0.17)}
@@ -14421,6 +14432,13 @@ function poPartialInfo(po){
            pct:s.ordered?Math.round(s.received/s.ordered*100):0, lastAt, daysSince:days };
 }
 function poIsPartial(po){ return po && po.status==='تسليم جزئي'; }
+function poIsCancelled(po){ return po && po.status==='ملغى'; }
+// سبب الإلغاء ومن ألغاه ومتى — يُلتقط من الخط الزمني (changePOStatus يُلزم بالسبب)
+function poCancelInfo(po){
+  const h=(po&&po.status_history||[]).slice().reverse().find(x=>x.to==='ملغى');
+  if(!h) return null;
+  return { reason:h.note||'', by:h.by||'', at:String(h.at||'').slice(0,10) };
+}
 // صيغة الأيام بالعربية الصحيحة (مفرد/مثنّى/جمع قلّة/تمييز)
 function poDays(n){
   n=Math.abs(Number(n)||0);
@@ -14432,6 +14450,8 @@ function poDays(n){
 function poDelayCell(po){
   const d=po.days_delayed||0;
   const cls=d===0?'po-delay-0':d<=7?'po-delay-mid':'po-delay-high';
+  // الملغى لا يُقاس عليه تأخير — إظهار «في الموعد» له مضلّل
+  if(po.status==='ملغى') return `<span class="po-delay-pill" style="background:rgba(122,113,104,0.12);color:#9a9088">—</span>`;
   // الأمر المُسلَّم: نصّ صريح بصيغة الماضي («سُلّم…») بدل «في الموعد» الذي يُقرأ كأنه قيد الانتظار
   if(po.status==='تسليم كامل'){
     const when=poFmtDate(po.actual_delivery);
@@ -14470,15 +14490,20 @@ function renderPOTable(){
         }
       }
     }
-    const done=(po.status==='تسليم كامل'), partial=poIsPartial(po);
+    const done=(po.status==='تسليم كامل'), partial=poIsPartial(po), cancelled=poIsCancelled(po);
     let mark='';
-    if(done) mark='<span class="po-done-badge">✓ مُسلَّم</span>';
+    if(cancelled){
+      const ci=poCancelInfo(po);
+      const tip=ci?`سبب الإلغاء: ${ci.reason||'—'}${ci.by?` · بواسطة ${ci.by}`:''}${ci.at?` · ${ci.at}`:''}`:'أمر ملغى';
+      mark=`<span class="po-cancel-badge" title="${escapeAttr(tip)}">✕ ملغى</span>`;
+    }
+    else if(done) mark='<span class="po-done-badge">✓ مُسلَّم</span>';
     else if(partial){
       const pi=poPartialInfo(po);
       mark=`<span class="po-partial-badge" title="مستلَم ${pi.received} من ${pi.ordered} — بانتظار إكمال الاستلام والإقفال">`
          + `<span class="po-partial-bar"><i style="width:${pi.pct}%"></i></span>${pi.received}/${pi.ordered}</span>`;
     }
-    return gap+`<tr class="${done?'po-row-done':(partial?'po-row-partial':'')}" onclick="openPODrawer('${n}')" style="cursor:pointer">
+    return gap+`<tr class="${cancelled?'po-row-cancelled':(done?'po-row-done':(partial?'po-row-partial':''))}" onclick="openPODrawer('${n}')" style="cursor:pointer">
       <td>${poNumCell(po.po_number)}${mark}</td>
       <td>${poFmtDate(po.issue_date)}</td>
       <td>${escapeHtml(po.supplier||'—')}</td>
@@ -14760,6 +14785,10 @@ function openPODrawer(num){
       <div class="po-stepper">${stepper}</div>
       ${_ageBanner}
       ${_nextStage?`<div class="po-stage-next">المرحلة التالية: <b>${escapeHtml(_nextStage)}</b> — انقر المرحلة في المسار أعلاه أو زرّ الانتقال أسفل الصفحة.</div>`:''}
+      ${poIsCancelled(po)?(()=>{ const ci=poCancelInfo(po);
+        return `<div class="po-cancel-note">✕ هذا الأمر <b>ملغى</b>${ci&&ci.at?` بتاريخ ${escapeHtml(ci.at)}`:''}${ci&&ci.by?` — بواسطة ${escapeHtml(ci.by)}`:''}.`
+             + `${ci&&ci.reason?`<br>السبب: ${escapeHtml(ci.reason)}`:''}<br>لا يدخل في قيمة المشتريات ولا في مؤشرات المتابعة.</div>`;
+      })():''}
       ${poIsPartial(po)?(()=>{ const pi=poPartialInfo(po);
         return `<div class="po-partial-note">📦 تسليم جزئي: استُلم <b>${pi.received}</b> من <b>${pi.ordered}</b> (متبقٍّ <b>${pi.remaining}</b>)${pi.daysSince!=null?` · منذ آخر استلام <b>${escapeHtml(poDays(pi.daysSince))}</b>`:''}.<br>تابع المورد بالكميات المتبقّية، وبإكمال الاستلام يُقفَل الأمر تلقائياً.</div>`;
       })():''}
