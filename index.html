@@ -2547,6 +2547,24 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 /* جهة / موقع المشروع */
 .po-project{display:inline-block;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-weight:600;color:var(--ink-2)}
 .po-noproject{display:inline-block;padding:2px 9px;border-radius:8px;font-size:10.5px;font-weight:700;background:rgba(196,162,101,0.16);color:#8a6a30}
+/* ====== سجل المشاريع المعتمد ====== */
+.po-prj-unmapped{display:inline-block;margin-inline-start:5px;font-size:11px;color:#b7791f;cursor:help}
+.prj-tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.prj-tab{border:0;background:none;padding:8px 14px;font:inherit;font-weight:700;font-size:12.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.prj-tab.active{color:var(--ink);border-bottom-color:var(--accent,#2b6cb0)}
+.prj-badge{display:inline-block;min-width:18px;padding:1px 6px;border-radius:9px;font-size:10.5px;background:rgba(183,121,31,.16);color:#8a6a30;margin-inline-start:4px}
+.prj-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.prj-table{width:100%;font-size:12.5px;border-collapse:collapse}
+.prj-table th{position:sticky;top:0;background:var(--surface-2);padding:7px 8px;text-align:right;font-size:11.5px;color:var(--muted)}
+.prj-table td{padding:7px 8px;border-top:1px solid var(--border);vertical-align:top}
+.prj-alias{display:inline-block;padding:1px 7px;margin:1px 2px 1px 0;border-radius:7px;font-size:10.5px;background:var(--surface-2);color:var(--ink-2);cursor:pointer}
+.prj-alias:hover{background:rgba(192,57,43,.12);color:#a93226}
+.prj-wrap{max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.prj-row-kind{display:inline-block;padding:1px 7px;border-radius:7px;font-size:10.5px;font-weight:700}
+.prj-k-alias{background:rgba(31,122,85,.14);color:#1f7a55}
+.prj-k-suggest{background:rgba(183,121,31,.16);color:#8a6a30}
+.prj-k-new{background:var(--surface-2);color:var(--muted)}
+.prj-empty{padding:18px;text-align:center;color:var(--muted);font-size:12.5px}
 .po-card-proj{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .po-drawer-proj{font-size:12.5px;color:#8a6a30;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .po-linkbtn{background:transparent;border:1px dashed var(--accent);color:#8a6a30;border-radius:7px;padding:2px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
@@ -3421,6 +3439,10 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
             <button class="po-view-btn" data-poview="alerts" type="button">الإنذارات</button>
           </div>
           <div class="po-actions">
+            <button class="btn btn-ghost btn-sm" id="po-projects-btn" data-requires-perm="can_edit_po" data-tooltip="سجل المشاريع المعتمد — توحيد أسماء الجهات">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+              المشاريع
+            </button>
             <button class="btn btn-ghost btn-sm" id="po-import-btn" data-requires-perm="can_import" data-tooltip="استيراد من ملف Excel">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
               استيراد Excel
@@ -3993,9 +4015,9 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
         </div>
         <div class="form-field">
           <label class="form-label">المشروع / جهة التنفيذ <span class="req">*</span></label>
-          <input type="text" class="form-input" id="po-f-project" list="po-projects-list" placeholder="اسم المشروع أو الجهة أو الموقع">
-          <datalist id="po-projects-list"></datalist>
-          <div style="font-size:10.5px;color:var(--muted);margin-top:4px">تظهر في القائمة وفي أمر الشراء المطبوع وكل التقارير.</div>
+          <select class="form-input" id="po-f-project"></select>
+          <input type="text" class="form-input" id="po-f-project-new" style="display:none;margin-top:6px" placeholder="اسم المشروع الجديد — يُضاف إلى سجل المشاريع">
+          <div id="po-f-project-hint" style="font-size:10.5px;color:var(--muted);margin-top:4px">الاختيار من سجل المشاريع المعتمد — فلا تتكرّر الجهة الواحدة بكتابات مختلفة.</div>
         </div>
       </div>
       <div class="form-row">
@@ -4131,6 +4153,64 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
     <div class="modal-footer">
       <button class="btn btn-ghost" data-close-modal>إلغاء</button>
       <button class="btn btn-accent" id="po-import-confirm" style="display:none">اعتماد الاستيراد</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PROJECTS REGISTRY MODAL — سجل المشاريع المعتمد ============ -->
+<div class="modal-overlay" id="modal-projects">
+  <div class="modal lg" role="dialog" aria-labelledby="modal-projects-title">
+    <div class="modal-header">
+      <div class="modal-icon" style="background:linear-gradient(135deg,#2b6cb0,#1a365d)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+      </div>
+      <div class="modal-title-block">
+        <div class="modal-eyebrow">تعريف موحّد للجهات</div>
+        <div class="modal-title" id="modal-projects-title">سجل المشاريع المعتمد</div>
+        <div class="modal-subtitle">اسم واحد لكل مشروع + مرادفاته — فلا تُصنَّف الكتابة المختلفة أو الخطأ الإملائي مشروعاً آخر</div>
+      </div>
+      <button class="modal-close" data-close-modal aria-label="إغلاق">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="prj-tabs">
+        <button class="prj-tab active" data-prjtab="list">المشاريع</button>
+        <button class="prj-tab" data-prjtab="unify">توحيد الكتابات <span class="prj-badge" id="prj-unify-count">0</span></button>
+      </div>
+      <div id="prj-pane-list"></div>
+      <div id="prj-pane-unify" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal>إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PROJECT PICKER (من درج الأمر) ============ -->
+<div class="modal-overlay" id="modal-po-project">
+  <div class="modal" role="dialog" aria-labelledby="modal-po-project-title">
+    <div class="modal-header">
+      <div class="modal-icon" style="background:linear-gradient(135deg,#2b6cb0,#1a365d)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>
+      </div>
+      <div class="modal-title-block">
+        <div class="modal-eyebrow" id="pp-eyebrow">—</div>
+        <div class="modal-title" id="modal-po-project-title">تحديد المشروع / الجهة</div>
+        <div class="modal-subtitle">من سجل المشاريع المعتمد</div>
+      </div>
+      <button class="modal-close" data-close-modal aria-label="إغلاق">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <select class="form-input" id="pp-select"></select>
+      <input type="text" class="form-input" id="pp-new" style="display:none;margin-top:8px" placeholder="اسم المشروع الجديد">
+      <div id="pp-hint" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal>إلغاء</button>
+      <button class="btn btn-accent" id="pp-save">حفظ</button>
     </div>
   </div>
 </div>
@@ -6253,6 +6333,7 @@ function renderTasksPanel(){
   const noProj   = active.filter(o=>!String(o.project||'').trim());
   const noReason = late.filter(o=>!String(o.delay_reason||'').trim());
   const seqMiss  = poSeqSummary(all).reduce((a,s)=>a+s.missing.length,0);
+  let unify=0; try{ unify=prjPendingUnify().length+prjDuplicatePairs().length; }catch(e){}
 
   const jumpList=(seg,extra)=>{ STATE.poView='list'; STATE.poSegment=seg||'all';
     STATE.poFilter={q:'',sector:'',status:'',priority:'',project:'',...(extra||{})};
@@ -6265,6 +6346,7 @@ function renderTasksPanel(){
     {n:noProj.length,   cls:'gold',   l:'أوامر بلا جهة / مشروع',      a:'بيانات ناقصة — حدّد الجهة',          go:()=>jumpList('all',{project:'__none__'})},
     {n:noReason.length, cls:'',       l:'متأخر بلا سبب مسجّل',        a:'سجّل سبب التأخير للمتابعة',          go:()=>jumpList('late')},
     {n:seqMiss,         cls:'',       l:'فجوات في تسلسل الأرقام',     a:'أرقام غير مسجّلة داخل السلسلة',      go:()=>{ jumpList('all'); const s=poSeqSummary(STATE.purchaseOrders).find(x=>x.missing.length); if(s) setTimeout(()=>poShowMissing(s.key),300); }},
+    {n:unify,           cls:'gold',   l:'كتابات مشاريع تحتاج توحيد',  a:'الجهة نفسها بأكثر من كتابة',         go:()=>{ navigate('purchase-orders'); setTimeout(()=>openProjectsModal('unify'),150); }},
   ];
   if(hasPermission('can_review_registrations')){
     cards.push({n:TASKS.regsPending, cls:'info', l:'طلبات تسجيل موردين', a:'بانتظار مراجعتك واعتمادها',
@@ -13843,6 +13925,9 @@ async function refreshFromCloud(){
     STATE.purchaseOrders.forEach(recomputePOderived);
   }
 
+  // سجل المشاريع: يُحمَّل بعد وصول الأوامر كي تعمل البذرة الأولى على بيانات حقيقية
+  try{ await prjLoad(); }catch(e){ reportError('prjLoad', e); }
+
   // Apply local edits (item edits from local users)
   loadItemEdits();
   loadSupplierEdits();
@@ -14568,7 +14653,12 @@ function poFilteredList(){
   else if(f.project) list=list.filter(o=>String(o.project||'').trim()===f.project);
   if(f.q){
     const q=f.q.trim().toLowerCase();
-    list=list.filter(o=>[o.po_number,o.supplier,o.project,o.sector].some(v=>String(v||'').toLowerCase().includes(q)));
+    // البحث واعٍ بالمرادفات: كتابة قديمة لمشروع تجد أوامره باسمه المعتمد
+    let aliasName='';
+    try{ const r=prjResolve(f.q.trim()); if(r.status==='ok') aliasName=r.project.name; }catch(e){}
+    list=list.filter(o=>
+      [o.po_number,o.supplier,o.project,o.sector].some(v=>String(v||'').toLowerCase().includes(q))
+      || (aliasName && String(o.project||'').trim()===aliasName));
   }
   const {col,dir}=STATE.poSort, mul=dir==='asc'?1:-1;
   const numCols=new Set(['total','subtotal','days_delayed','lead_time_days']);
@@ -14611,7 +14701,7 @@ function fillPOSelects(){
   // supplier datalist
   const dl=document.getElementById('po-suppliers-list');
   if(dl) dl.innerHTML=[...new Set((STATE.suppliers||[]).map(s=>s.name).filter(Boolean))].map(n=>`<option value="${escapeAttr(n)}">`).join('');
-  // الجهات/المشاريع — تُستخرج من الأوامر نفسها فتتحدّث تلقائياً بلا قائمة ثابتة
+  // الجهات/المشاريع — سجلّ المشاريع المعتمد + أي كتابة ما تزال مستعملة في الأوامر
   const projects=poProjectList();
   const pf=document.getElementById('po-filter-project');
   if(pf){
@@ -14622,23 +14712,655 @@ function fillPOSelects(){
       + (missing?`<option value="__none__">— بلا جهة محدّدة (${missing}) —</option>`:'');
     pf.value=cur;
   }
-  const pdl=document.getElementById('po-projects-list');
-  if(pdl) pdl.innerHTML=projects.map(v=>`<option value="${escapeAttr(v)}">`).join('');
   _poSelectsReady=true;
 }
-// قائمة الجهات/المشاريع المستخدَمة فعلياً في الأوامر (مرتّبة عربياً)
+/* قائمة الجهات/المشاريع للعرض: أسماء السجل المعتمد أولاً، ثم أي كتابة ما تزال
+   مستعملة في الأوامر ولم تُوحَّد بعد (كي لا تختفي أوامر من المرشّح). */
 function poProjectList(){
-  return [...new Set((STATE.purchaseOrders||[]).map(o=>String(o.project||'').trim()).filter(Boolean))]
-    .sort((a,b)=>a.localeCompare(b,'ar'));
+  const used=(STATE.purchaseOrders||[]).map(o=>String(o.project||'').trim()).filter(Boolean);
+  return [...new Set([...prjNames(), ...used])].sort((a,b)=>a.localeCompare(b,'ar'));
+}
+/* يملأ مُنتقي المشروع في نموذج الأمر — قائمة معتمدة + خيار «مشروع جديد».
+   القيمة الحالية غير المعتمدة تُضاف كخيار مؤقّت كي لا يفقدها التعديل. */
+function poFillProjectSelect(cur){
+  const sel=document.getElementById('po-f-project'); if(!sel) return;
+  const val=String(cur==null?sel.value:cur).trim();
+  const names=prjNames();
+  const extra=(val && !names.includes(val)) ? val : '';
+  sel.innerHTML='<option value="">— اختر المشروع / الجهة —</option>'
+    + names.map(v=>`<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('')
+    + (extra?`<option value="${escapeAttr(extra)}">${escapeHtml(extra)} (غير معتمد)</option>`:'')
+    + '<option value="__new__">➕ مشروع جديد…</option>';
+  sel.value=val;
+  const nw=document.getElementById('po-f-project-new');
+  if(nw){ nw.style.display='none'; nw.value=''; }
+}
+/* تبديل وضع «مشروع جديد» + تلميح حيّ يكشف التشابه قبل إنشاء مكرّر */
+function poProjectSelChanged(){
+  const sel=document.getElementById('po-f-project');
+  const nw=document.getElementById('po-f-project-new');
+  const hint=document.getElementById('po-f-project-hint');
+  if(!sel||!nw) return;
+  const isNew=(sel.value==='__new__');
+  nw.style.display=isNew?'':'none';
+  if(isNew){ nw.focus(); }
+  if(hint) hint.textContent=isNew
+    ? 'اكتب الاسم كاملاً — سينبّهك النظام إن كان مشروعاً قائماً بكتابة مختلفة.'
+    : 'الاختيار من سجل المشاريع المعتمد — فلا تتكرّر الجهة الواحدة بكتابات مختلفة.';
+}
+/* تلميح حيّ موحّد لحقلَي «مشروع جديد» (النموذج والمنتقي) */
+function prjTypeHint(text){
+  const r=prjResolve(text);
+  if(r.status==='empty') return 'اكتب الاسم كاملاً — سينبّهك النظام إن كان مشروعاً قائماً بكتابة مختلفة.';
+  if(r.status==='ok') return `<span style="color:#9A7A45">هذا هو المشروع القائم «${escapeHtml(r.project.name)}» — سيُستخدم كما هو.</span>`;
+  if(r.status==='suggest') return `<span style="color:#9A7A45">مشابه لمشروع قائم: «${escapeHtml(r.project.name)}» (${Math.round(r.score*100)}%) — سيسألك النظام عند الحفظ.</span>`;
+  if(r.candidates&&r.candidates.length) return `<span style="color:var(--muted)">مشاريع قريبة: ${r.candidates.slice(0,3).map(c=>escapeHtml(c.project.name)).join(' · ')} — تأكّد أنه مشروع مستقل.</span>`;
+  return '<span style="color:#1f7a55">مشروع جديد — لا مشابه له في السجل.</span>';
+}
+function poProjectNewTyping(){
+  const nw=document.getElementById('po-f-project-new');
+  const hint=document.getElementById('po-f-project-hint');
+  if(!nw||!hint) return;
+  hint.innerHTML=prjTypeHint(nw.value);
+}
+/* يقرأ حقل المشروع ويُرجع **الاسم المعتمد**:
+   - اختيار من القائمة ⇒ كما هو
+   - مشروع جديد ⇒ فحص التشابه («هل تقصد…؟») ثم تسجيله في السجل
+   يُرجع null إذا ألغى المستخدم العملية. */
+function poReadProjectField(){
+  const sel=document.getElementById('po-f-project');
+  if(!sel) return '';
+  if(sel.value!=='__new__') return String(sel.value||'').trim();
+  const nw=document.getElementById('po-f-project-new');
+  const nm=String(nw?nw.value:'').trim();
+  if(!nm) return '';
+  const r=prjResolve(nm);
+  if(r.status==='ok') return r.project.name;                       // موجود اسماً أو مرادفاً
+  if(r.status==='suggest'){
+    const ok=confirm(`يوجد مشروع قائم مشابه:\n\n«${r.project.name}»\n\nموافق = استخدام المشروع القائم (وتُحفظ «${nm}» مرادفاً له)\nإلغاء = إنشاء مشروع جديد مستقل باسم «${nm}»`);
+    if(ok){ prjAddAlias(r.project.id,nm); return r.project.name; }
+  }
+  const p=prjAdd(nm);
+  return p?p.name:nm;
 }
 // خلية الجهة في الجداول — تُبرز النقص بدل إخفائه
 function poProjectCell(po){
   const p=String(po.project||'').trim();
   if(!p) return '<span class="po-noproject" title="لم تُحدَّد جهة أو موقع المشروع">غير محدّدة</span>';
-  return `<span class="po-project" title="${escapeAttr(p)}">${escapeHtml(p)}</span>`;
+  // كتابة لا تطابق اسماً معتمداً في سجل المشاريع ⇒ تُوسم كي تُوحَّد بدل أن تمرّ صامتة
+  let flag='';
+  if(PRJ.list.length){
+    const r=prjResolve(p);
+    if(!(r.status==='ok' && r.project.name===p))
+      flag=`<span class="po-prj-unmapped" title="كتابة غير معتمدة${r.project?` — تتبع «${escapeAttr(r.project.name)}»`:''} · وحّدها من سجل المشاريع">⚠</span>`;
+  }
+  return `<span class="po-project" title="${escapeAttr(p)}">${escapeHtml(p)}</span>${flag}`;
 }
 // نصّ الجهة للمستندات المطبوعة (لا يختفي عند غيابه)
 function poProjectText(po){ return String(po.project||'').trim() || 'غير محدّدة'; }
+
+/* ============================================================
+   سجل المشاريع المعتمد (Canonical Project Registry)
+   المشكلة: «المشروع / جهة التنفيذ» كان نصّاً حرّاً، فكل كتابة مختلفة أو خطأ
+   إملائي يصنع «مشروعاً» جديداً في القائمة والمرشّحات وكل التقارير، ويستحيل
+   معرفة قيمة مشروع واحد. الحل: سجلّ مشاريع معتمَد — لكل مشروع اسم واحد
+   ومرادفاته (كل كتابة سابقة تُحفظ مرادفاً)، والاختيار من قائمة لا كتابة حرّة،
+   مع كشف التشابه الإملائي قبل إنشاء مشروع مكرّر.
+   ⚠️ بلا أي تغيير في المخطّط: po.project يبقى يحمل **الاسم المعتمد** فقط،
+   فكل الجداول والمطبوعات والتقارير القائمة تعمل كما هي دون تعديل.
+   ============================================================ */
+const PRJ_SETTINGS_KEY='projects_registry';
+const PRJ_LOCAL_KEY='proc_projects';
+const PRJ={ list:[], loaded:false, seeded:false };
+
+// كلمات عامّة لا تميّز مشروعاً عن آخر — تُسقَط عند **المقارنة** فقط (لا عند العرض)
+const PRJ_STOPWORDS=new Set(['مشروع','مشاريع','موقع','مواقع','عقد','عقود','جهه','شركه','مؤسسه','مبني','منشاه','اعمال','توريد']);
+
+/* تطبيع خاصّ بأسماء المشاريع: يوحّد الهمزات والياء والتاء المربوطة والأرقام
+   الهندية، ويُسقط التشكيل وأداة التعريف والكلمات العامّة والرموز.
+   ⚠️ لا يستعمل siNormalize لأن مرادفاتها مخصّصة لوحدات الأصناف (كجم/مم/بوصة)
+   وتشوّه أسماء المشاريع (تحوّل x و× إلى مسافات مثلاً). */
+function prjNorm(s){
+  const base=String(s==null?'':s).toLowerCase()
+    .replace(/[٠-٩]/g,ch=>String(ch.charCodeAt(0)-0x0660))
+    .replace(/[۰-۹]/g,ch=>String(ch.charCodeAt(0)-0x06F0))
+    .replace(/[ً-ٰٟـ]/g,'')      // تشكيل + تطويل
+    .replace(/[إأآٱا]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه')
+    .replace(/[ؤئ]/g,'ء')
+    .replace(/[^\p{L}\p{N}]+/gu,' ')
+    .trim();
+  const words=base.split(' ').filter(Boolean)
+    .map(w=>w.length>3?w.replace(/^ال/,''):w)        // أداة التعريف (لا تُقتطع من كلمة قصيرة)
+    .filter(w=>w && !PRJ_STOPWORDS.has(w));
+  return words.join(' ') || base;
+}
+
+/* ---------- قياس التشابه (لكشف الأخطاء الإملائية) ---------- */
+function prjBigrams(t){
+  const m=new Map();
+  for(let i=0;i<t.length-1;i++){ const b=t.slice(i,i+2); m.set(b,(m.get(b)||0)+1); }
+  return m;
+}
+function prjDice(x,y){
+  if(x.length<2||y.length<2) return x===y?1:0;
+  const A=prjBigrams(x), B=prjBigrams(y);
+  let inter=0,na=0,nb=0;
+  A.forEach(v=>na+=v); B.forEach(v=>nb+=v);
+  A.forEach((v,k)=>{ const w=B.get(k); if(w) inter+=Math.min(v,w); });
+  return (2*inter)/(na+nb);
+}
+function prjLev(a,b){
+  if(a===b) return 0;
+  if(!a.length) return b.length;
+  if(!b.length) return a.length;
+  let prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    const cur=[i];
+    for(let j=1;j<=b.length;j++) cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[b.length];
+}
+/* تشابه 0..1 — الأعلى بين تشابه الثنائيات ونسبة مسافة التحرير.
+   الثنائيات تلتقط اختلاف ترتيب الكلمات، ومسافة التحرير تلتقط الحرف الواحد
+   المختلف في الأسماء القصيرة (وهو الخطأ الإملائي الأشيع). */
+function prjSim(a,b){
+  const x=prjNorm(a), y=prjNorm(b);
+  if(!x||!y) return 0;
+  if(x===y) return 1;
+  const lev=1-(prjLev(x,y)/Math.max(x.length,y.length));
+  return Math.max(prjDice(x,y), lev);
+}
+const PRJ_SIM_STRONG=0.86;   // تشابه قويّ ⇒ اقتراح «هل تقصد…؟» (لا يُطبَّق تلقائياً)
+const PRJ_SIM_WEAK=0.70;     // مرشّح يُعرض ضمن الاحتمالات
+
+/* ---------- الوصول للسجل ---------- */
+function prjActive(){ return PRJ.list.filter(p=>p.active!==false); }
+function prjById(id){ return PRJ.list.find(p=>p.id===id)||null; }
+function prjNames(){ return prjActive().map(p=>p.name).sort((a,b)=>a.localeCompare(b,'ar')); }
+function prjNewId(){ return 'PRJ-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6); }
+
+let _prjIdx=null, _prjIdxSig='';
+function prjIndex(){
+  const sig=JSON.stringify(PRJ.list.map(p=>[p.id,p.name,p.code||'',p.aliases||[]]));
+  if(_prjIdx && _prjIdxSig===sig) return _prjIdx;
+  const m=new Map();
+  PRJ.list.forEach(p=>{
+    [p.name, p.code, ...(p.aliases||[])].forEach(k=>{
+      const n=prjNorm(k); if(n && !m.has(n)) m.set(n,p);
+    });
+  });
+  _prjIdx=m; _prjIdxSig=sig; return m;
+}
+function prjInvalidate(){ _prjIdx=null; _prjIdxSig=''; }
+
+/* يحلّ نصّاً حرّاً إلى مشروع معتمد:
+   ok      = مطابقة قاطعة (الاسم أو مرادف أو تطابق بعد التطبيع)
+   suggest = تشابه قويّ يحتاج تأكيداً بشرياً — **لا يُطبَّق تلقائياً أبداً**
+   none    = لا مشروع مطابق (مرشّحات ضعيفة إن وُجدت) */
+function prjResolve(text){
+  const raw=String(text==null?'':text).trim();
+  if(!raw) return {status:'empty', project:null, score:0, candidates:[]};
+  const n=prjNorm(raw);
+  const hit=prjIndex().get(n);
+  if(hit) return {status:'ok', project:hit, score:1, candidates:[],
+                  method: hit.name===raw ? 'exact' : (prjNorm(hit.name)===n ? 'norm' : 'alias')};
+  const scored=PRJ.list.map(p=>{
+    let best=prjSim(raw,p.name);
+    (p.aliases||[]).forEach(a=>{ const s=prjSim(raw,a); if(s>best) best=s; });
+    return {project:p, score:best};
+  }).filter(x=>x.score>=PRJ_SIM_WEAK).sort((a,b)=>b.score-a.score).slice(0,5);
+  if(scored.length && scored[0].score>=PRJ_SIM_STRONG)
+    return {status:'suggest', project:scored[0].project, score:scored[0].score, candidates:scored, method:'fuzzy'};
+  return {status:'none', project:null, score:scored.length?scored[0].score:0, candidates:scored};
+}
+// الاسم المعتمد لنصّ حرّ — المطابقة القاطعة فقط، بلا تخمين
+function prjCanonical(text){ const r=prjResolve(text); return r.status==='ok'?r.project.name:''; }
+
+/* ---------- الحفظ والتحميل (بلا جدول جديد: proc_settings) ---------- */
+function prjPersistLocal(){
+  try{ localStorage.setItem(PRJ_LOCAL_KEY,JSON.stringify(PRJ.list)); }
+  catch(e){ reportError('prjPersistLocal',e,null,'تعذّر حفظ سجل المشاريع محلياً'); }
+}
+async function prjPersistCloud(){
+  if(!window.CLOUD||!CLOUD.enabled||!CLOUD.client) return false;
+  try{
+    const {error}=await CLOUD.client.from('proc_settings').upsert({
+      key:PRJ_SETTINGS_KEY,
+      value:{version:1, projects:PRJ.list},
+      description:'سجل المشاريع المعتمد (الاسم + المرادفات)',
+      updated_by:STATE.currentUser?STATE.currentUser.username:null,
+      updated_at:new Date().toISOString()
+    },{onConflict:'key'});
+    if(error) throw error;
+    return true;
+  }catch(e){ reportError('prjPersistCloud',e,null,'تعذّر حفظ سجل المشاريع في السحابة'); return false; }
+}
+function prjPersist(){ prjInvalidate(); prjPersistLocal(); prjPersistCloud(); }
+
+// النسخة المحلية — تُقرأ عند الإقلاع كي تعمل الشاشة قبل وصول السحابة (أو بلا اتصال)
+function prjLoadLocal(){
+  try{ const raw=localStorage.getItem(PRJ_LOCAL_KEY); if(raw){ const a=JSON.parse(raw); if(Array.isArray(a)) PRJ.list=a; } }catch(e){}
+  prjInvalidate();
+  return PRJ.list;
+}
+async function prjLoad(){
+  // المحلي أولاً كي تعمل الشاشة فوراً، ثم السحابة مصدر الحقيقة
+  prjLoadLocal();
+  if(window.CLOUD&&CLOUD.enabled&&CLOUD.client){
+    try{
+      const {data}=await CLOUD.client.from('proc_settings').select('value').eq('key',PRJ_SETTINGS_KEY).maybeSingle();
+      let v=data&&data.value; if(typeof v==='string'){ try{ v=JSON.parse(v); }catch(_){ v=null; } }
+      if(v&&Array.isArray(v.projects)){ PRJ.list=v.projects; prjPersistLocal(); }
+    }catch(e){ reportError('prjLoad',e); }
+  }
+  PRJ.loaded=true; prjInvalidate();
+  // بذرة أولى: سجلّ فارغ وأوامر تحمل جهات ⇒ ابنِ السجل من الكتابات المتطابقة بعد التطبيع
+  if(!PRJ.list.length && (STATE.purchaseOrders||[]).some(o=>String(o.project||'').trim())){
+    const n=prjSeedFromOrders();
+    if(n) prjPersist();
+  }
+  return PRJ.list;
+}
+
+/* بذرة السجل من الأوامر: كل مجموعة كتابات **متطابقة بعد التطبيع** = مشروع واحد
+   (تطابق قاطع لا تخمين)، اسمه المعتمد أكثر الكتابات وروداً، وبقيّتها مرادفات.
+   لا يمسّ أي أمر شراء — يبني السجل فقط. */
+function prjSeedFromOrders(){
+  const counts=new Map();
+  (STATE.purchaseOrders||[]).forEach(o=>{
+    const v=String(o.project||'').trim(); if(!v) return;
+    counts.set(v,(counts.get(v)||0)+1);
+  });
+  const groups=new Map();
+  counts.forEach((c,raw)=>{
+    if(prjResolve(raw).status==='ok') return;            // معروف مسبقاً
+    const k=prjNorm(raw);
+    if(!groups.has(k)) groups.set(k,[]);
+    groups.get(k).push({raw,c});
+  });
+  let added=0;
+  groups.forEach(variants=>{
+    variants.sort((a,b)=> b.c-a.c || b.raw.length-a.raw.length);
+    const name=variants[0].raw;
+    PRJ.list.push({
+      id:prjNewId(), name, code:'', sector:'', active:true,
+      aliases:variants.slice(1).map(v=>v.raw),
+      created_at:new Date().toISOString(),
+      created_by:STATE.currentUser?STATE.currentUser.username:null
+    });
+    added++;
+  });
+  if(added){ prjInvalidate(); PRJ.seeded=true; }
+  return added;
+}
+
+/* ---------- تحرير السجل ---------- */
+function prjAdd(name,extra){
+  const nm=String(name||'').trim();
+  if(!nm) return null;
+  const hit=prjIndex().get(prjNorm(nm));
+  if(hit) return hit;                                     // موجود (اسماً أو مرادفاً)
+  const p={ id:prjNewId(), name:nm, code:'', sector:'', active:true, aliases:[],
+            created_at:new Date().toISOString(),
+            created_by:STATE.currentUser?STATE.currentUser.username:null, ...(extra||{}) };
+  PRJ.list.push(p); prjPersist();
+  try{ logAudit('create','project',p.id,{name:nm}); }catch(e){}
+  return p;
+}
+function prjAddAlias(id,alias){
+  const p=prjById(id); const a=String(alias||'').trim();
+  if(!p||!a) return false;
+  const n=prjNorm(a);
+  if(prjNorm(p.name)===n || (p.aliases||[]).some(x=>prjNorm(x)===n)) return false;
+  const owner=prjIndex().get(n);
+  if(owner && owner.id!==id) return false;                // مرادف يخصّ مشروعاً آخر
+  p.aliases=[...(p.aliases||[]),a]; prjPersist();
+  return true;
+}
+function prjRemoveAlias(id,alias){
+  const p=prjById(id); if(!p) return false;
+  const before=(p.aliases||[]).length;
+  p.aliases=(p.aliases||[]).filter(x=>x!==alias);
+  if(p.aliases.length!==before){ prjPersist(); return true; }
+  return false;
+}
+/* إعادة التسمية: الاسم القديم يصبح مرادفاً (فتبقى الكتابات القديمة قابلة للحلّ)
+   وتُعاد كتابة كل الأوامر إلى الاسم الجديد كي يبقى po.project معتمداً دائماً. */
+function prjRename(id,newName){
+  const p=prjById(id); const nm=String(newName||'').trim();
+  if(!p||!nm||nm===p.name) return 0;
+  const owner=prjIndex().get(prjNorm(nm));
+  if(owner && owner.id!==id) return -1;                   // الاسم يخصّ مشروعاً آخر
+  const old=p.name;
+  p.name=nm;
+  if(prjNorm(old)!==prjNorm(nm) && !(p.aliases||[]).includes(old)) p.aliases=[...(p.aliases||[]),old];
+  prjPersist();
+  const n=prjRewriteOrders(old,nm);
+  try{ logAudit('update','project',p.id,{from:old,to:nm,orders:n}); }catch(e){}
+  return n;
+}
+/* يعيد كتابة جهة الأوامر من اسم إلى آخر (الأساس الوحيد لتغيير po.project) */
+function prjRewriteOrders(fromName,toName){
+  let n=0;
+  (STATE.purchaseOrders||[]).forEach(o=>{
+    if(String(o.project||'').trim()!==fromName) return;
+    o.project=toName;
+    poUpsertLocal(o); poCloudUpsert(o); n++;
+  });
+  return n;
+}
+function prjSetActive(id,on){ const p=prjById(id); if(!p) return false; p.active=!!on; prjPersist(); return true; }
+function prjOrderCount(name){ return (STATE.purchaseOrders||[]).filter(o=>String(o.project||'').trim()===name).length; }
+function prjStats(p){
+  const names=new Set([p.name,...(p.aliases||[])]);
+  const list=(STATE.purchaseOrders||[]).filter(o=>names.has(String(o.project||'').trim()));
+  return { count:list.length, value:list.reduce((s,o)=>s+(Number(o.total)||0),0) };
+}
+/* حذف مشروع: مسموح فقط إن لم يعد أي أمر يستعمله (وإلا يُعطَّل) */
+function prjDelete(id){
+  const p=prjById(id); if(!p) return false;
+  if(prjStats(p).count) return false;
+  PRJ.list=PRJ.list.filter(x=>x.id!==id); prjPersist();
+  try{ logAudit('delete','project',id,{name:p.name}); }catch(e){}
+  return true;
+}
+
+/* ---------- التوحيد: الكتابات المستعملة في الأوامر وغير المعتمدة ---------- */
+/* يُرجع صفّاً لكل كتابة مستعملة لا تطابق اسماً معتمداً حرفياً:
+   alias   = تُحلّ قطعاً لمشروع معتمد (مرادف/تطابق بعد التطبيع) ⇒ توحيد مؤكَّد
+   suggest = تشابه قويّ مع مشروع ⇒ يحتاج تأكيد المستخدم
+   new     = بلا مطابقة ⇒ يُنشأ مشروعاً جديداً */
+function prjPendingUnify(){
+  const counts=new Map();
+  (STATE.purchaseOrders||[]).forEach(o=>{
+    const v=String(o.project||'').trim(); if(!v) return;
+    counts.set(v,(counts.get(v)||0)+1);
+  });
+  const rows=[];
+  counts.forEach((count,raw)=>{
+    const r=prjResolve(raw);
+    if(r.status==='ok' && r.project.name===raw) return;   // معتمد أصلاً
+    if(r.status==='ok')      rows.push({raw,count,kind:'alias',   target:r.project, score:1});
+    else if(r.status==='suggest') rows.push({raw,count,kind:'suggest', target:r.project, score:r.score});
+    else                     rows.push({raw,count,kind:'new',     target:null, score:r.score,candidates:r.candidates});
+  });
+  return rows.sort((a,b)=> (a.kind===b.kind? b.count-a.count : (a.kind==='alias'?-1:b.kind==='alias'?1:a.kind==='suggest'?-1:1)));
+}
+/* أزواج مشاريع متشابهة **داخل السجل نفسه** — تنشأ حين يُسجَّل الخطأ الإملائي
+   مشروعاً مستقلاً (بذرة أولى أو إدخال قديم)، فيبدو معتمداً ولا يظهر في التوحيد.
+   كل زوج تشابهه ≥ العتبة القويّة = مرشّح دمج يحتاج تأكيداً بشرياً (لا دمج تلقائي). */
+function prjDuplicatePairs(){
+  const out=[];
+  for(let i=0;i<PRJ.list.length;i++){
+    for(let j=i+1;j<PRJ.list.length;j++){
+      const a=PRJ.list[i], b=PRJ.list[j];
+      const score=prjSim(a.name,b.name);
+      if(score<PRJ_SIM_STRONG) continue;
+      // يُبقى الأكثر استعمالاً (وعند التساوي الأقدم) كي تقلّ إعادة الكتابة
+      const ca=prjStats(a).count, cb=prjStats(b).count;
+      const keep=(cb>ca)?b:a, drop=(keep===a)?b:a;
+      out.push({keep, drop, score, count:(keep===a?cb:ca)});
+    }
+  }
+  return out.sort((x,y)=>y.score-x.score);
+}
+/* يطبّق صفوف التوحيد: يعيد كتابة الأوامر إلى الاسم المعتمد ويحفظ الكتابة
+   القديمة مرادفاً كي يُحلّ أي إدخال أو استيراد لاحق تلقائياً. */
+function prjApplyUnify(rows){
+  let orders=0, merged=0, created=0;
+  (rows||[]).forEach(row=>{
+    let target=row.target;
+    if(row.kind==='new'||!target){ target=prjAdd(row.raw); if(target) created++; }
+    if(!target) return;
+    if(prjNorm(target.name)!==prjNorm(row.raw)) prjAddAlias(target.id,row.raw);
+    if(target.name!==row.raw){ orders+=prjRewriteOrders(row.raw,target.name); merged++; }
+  });
+  if(merged||created){
+    prjPersist();
+    try{ logAudit('update','project','unify',{merged,created,orders}); }catch(e){}
+  }
+  return {orders,merged,created};
+}
+
+/* ---------- واجهة سجل المشاريع ---------- */
+let _prjTab='list', _prjUnifyRows=[], _prjDupRows=[], _prjQuery='';
+function openProjectsModal(tab){
+  _prjTab=tab||'list'; _prjQuery='';
+  prjRenderModal();
+  openModal('modal-projects');
+}
+function prjRenderModal(){
+  const pend=prjPendingUnify();
+  const cnt=document.getElementById('prj-unify-count');
+  if(cnt) cnt.textContent=pend.length+prjDuplicatePairs().length;
+  document.querySelectorAll('.prj-tab').forEach(b=>b.classList.toggle('active',b.dataset.prjtab===_prjTab));
+  const pl=document.getElementById('prj-pane-list'), pu=document.getElementById('prj-pane-unify');
+  if(pl) pl.style.display=(_prjTab==='list')?'':'none';
+  if(pu) pu.style.display=(_prjTab==='unify')?'':'none';
+  if(_prjTab==='list') prjRenderList(); else prjRenderUnify(pend);
+}
+function prjRenderList(){
+  const host=document.getElementById('prj-pane-list'); if(!host) return;
+  const q=prjNorm(_prjQuery);
+  const rows=PRJ.list
+    .filter(p=>!q || prjNorm(p.name).includes(q) || (p.aliases||[]).some(a=>prjNorm(a).includes(q)))
+    .sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const orphan=(STATE.purchaseOrders||[]).filter(o=>!String(o.project||'').trim()).length;
+  host.innerHTML=`
+    <div class="prj-toolbar">
+      <input type="text" class="input" id="prj-search" placeholder="ابحث في المشاريع والمرادفات..." value="${escapeAttr(_prjQuery)}" style="flex:1;max-width:260px">
+      <button class="btn btn-accent btn-sm" data-prj-act="add">＋ مشروع جديد</button>
+      <button class="btn btn-ghost btn-sm" data-prj-act="seed" title="ينشئ مشروعاً لكل كتابة مستعملة في الأوامر لم تُسجَّل بعد">استخراج من الأوامر</button>
+      <span style="margin-inline-start:auto;font-size:11.5px;color:var(--muted)">${PRJ.list.length} مشروع${orphan?` · ${orphan} أمر بلا جهة`:''}</span>
+    </div>
+    ${rows.length?`<div class="prj-wrap"><table class="prj-table"><thead><tr>
+      <th>المشروع</th><th>الرمز</th><th>المرادفات (اضغط للحذف)</th><th style="text-align:center">أوامر</th><th style="text-align:center">القيمة</th><th></th>
+    </tr></thead><tbody>${rows.map(p=>{
+      const st=prjStats(p);
+      return `<tr${p.active===false?' style="opacity:.55"':''}>
+        <td><b>${escapeHtml(p.name)}</b>${p.active===false?' <span class="prj-row-kind prj-k-new">معطّل</span>':''}</td>
+        <td style="color:var(--muted)">${escapeHtml(p.code||'—')}</td>
+        <td>${(p.aliases||[]).length?(p.aliases||[]).map(a=>`<span class="prj-alias" data-prj-act="delalias" data-prj-id="${escapeAttr(p.id)}" data-prj-alias="${escapeAttr(a)}" title="حذف المرادف">${escapeHtml(a)} ✕</span>`).join(''):'<span style="color:var(--muted)">—</span>'}
+            <button class="po-linkbtn" data-prj-act="addalias" data-prj-id="${escapeAttr(p.id)}">＋ مرادف</button></td>
+        <td style="text-align:center">${st.count}</td>
+        <td style="text-align:center">${fmtPrice(st.value)}</td>
+        <td style="white-space:nowrap">
+          <button class="po-linkbtn" data-prj-act="rename" data-prj-id="${escapeAttr(p.id)}">إعادة تسمية</button>
+          <button class="po-linkbtn" data-prj-act="merge" data-prj-id="${escapeAttr(p.id)}">دمج في آخر</button>
+          <button class="po-linkbtn" data-prj-act="toggle" data-prj-id="${escapeAttr(p.id)}">${p.active===false?'تفعيل':'تعطيل'}</button>
+          ${st.count?'':`<button class="po-linkbtn" data-prj-act="del" data-prj-id="${escapeAttr(p.id)}" style="color:#a93226">حذف</button>`}
+        </td></tr>`;
+    }).join('')}</tbody></table></div>`
+    :`<div class="prj-empty">لا مشاريع في السجل بعد — أنشئ مشروعاً، أو استخرج المشاريع من أوامر الشراء القائمة.</div>`}`;
+  const s=document.getElementById('prj-search');
+  if(s) s.oninput=()=>{ _prjQuery=s.value; prjRenderList(); const el=document.getElementById('prj-search'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } };
+  prjWireActions(host);
+}
+function prjRenderUnify(pend){
+  const host=document.getElementById('prj-pane-unify'); if(!host) return;
+  _prjUnifyRows=pend||prjPendingUnify();
+  _prjDupRows=prjDuplicatePairs();
+  if(!_prjUnifyRows.length && !_prjDupRows.length){
+    host.innerHTML='<div class="prj-empty">✓ كل جهات الأوامر معتمدة ولا مشاريع متشابهة في السجل.</div>';
+    return;
+  }
+  const rawTable=_prjUnifyRows.length?`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+      <b>كتابات في الأوامر خارج السجل.</b> التوحيد يعيد كتابة جهة الأوامر إلى الاسم المعتمد
+      ويحفظ الكتابة القديمة مرادفاً، فتُحلّ تلقائياً في أي إدخال أو استيراد لاحق.
+    </div>
+    <div class="prj-wrap"><table class="prj-table"><thead><tr>
+      <th style="width:34px"><input type="checkbox" id="prj-u-all"></th>
+      <th>الكتابة في الأوامر</th><th style="text-align:center">أوامر</th><th>الحالة</th><th>الوجهة</th>
+    </tr></thead><tbody>${_prjUnifyRows.map((r,i)=>`<tr>
+      <td><input type="checkbox" class="prj-u-chk" data-i="${i}"${r.kind==='alias'?' checked':''}></td>
+      <td><b>${escapeHtml(r.raw)}</b></td>
+      <td style="text-align:center">${r.count}</td>
+      <td><span class="prj-row-kind prj-k-${r.kind}">${r.kind==='alias'?'مطابقة مؤكَّدة':r.kind==='suggest'?`تشابه ${Math.round(r.score*100)}%`:'مشروع جديد'}</span></td>
+      <td>${r.target?escapeHtml(r.target.name):'<span style="color:var(--muted)">يُنشأ باسمه</span>'}</td>
+    </tr>`).join('')}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin:10px 0 16px;align-items:center">
+      <button class="btn btn-accent btn-sm" data-prj-act="applyunify">توحيد المحدَّد</button>
+      <span style="font-size:11.5px;color:var(--muted)">المطابقات المؤكَّدة محدّدة مسبقاً · راجع صفوف التشابه قبل الاعتماد</span>
+    </div>`:'';
+  const dupTable=_prjDupRows.length?`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+      <b>مشاريع متشابهة داخل السجل.</b> غالباً المشروع نفسه سُجِّل مرّتين بخطأ إملائي.
+      الدمج ينقل أوامر المشروع المكرّر ويجعل اسمه مرادفاً — <b>راجعها قبل الاعتماد</b> فقد تكون مشاريع متمايزة فعلاً.
+    </div>
+    <div class="prj-wrap"><table class="prj-table"><thead><tr>
+      <th style="width:34px"></th><th>يُدمج</th><th style="text-align:center">أوامره</th><th>في</th><th style="text-align:center">التشابه</th>
+    </tr></thead><tbody>${_prjDupRows.map((d,i)=>`<tr>
+      <td><input type="checkbox" class="prj-d-chk" data-i="${i}"></td>
+      <td><b>${escapeHtml(d.drop.name)}</b></td>
+      <td style="text-align:center">${prjStats(d.drop).count}</td>
+      <td>${escapeHtml(d.keep.name)}</td>
+      <td style="text-align:center"><span class="prj-row-kind prj-k-suggest">${Math.round(d.score*100)}%</span></td>
+    </tr>`).join('')}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <button class="btn btn-accent btn-sm" data-prj-act="applydups">دمج المحدَّد</button>
+      <span style="font-size:11.5px;color:var(--muted)">لا شيء محدَّد مسبقاً — القرار لك</span>
+    </div>`:'';
+  host.innerHTML=rawTable+dupTable;
+  const all=document.getElementById('prj-u-all');
+  if(all) all.onchange=()=>host.querySelectorAll('.prj-u-chk').forEach(c=>c.checked=all.checked);
+  prjWireActions(host);
+}
+function prjWireActions(host){
+  host.querySelectorAll('[data-prj-act]').forEach(el=>{
+    el.onclick=()=>prjAction(el.dataset.prjAct, el.dataset.prjId, el.dataset.prjAlias);
+  });
+}
+function prjAction(act,id,alias){
+  if(!requirePermission('can_edit_po','إدارة سجل المشاريع')) return;
+  if(act==='add'){
+    const nm=prompt('اسم المشروع / الجهة الجديد:'); if(nm===null) return;
+    const v=String(nm).trim(); if(!v) return;
+    const r=prjResolve(v);
+    if(r.status==='ok'){ toast('info','موجود مسبقاً',`هذا المشروع مسجَّل باسم «${r.project.name}»`); return; }
+    if(r.status==='suggest' && !confirm(`يوجد مشروع مشابه «${r.project.name}» (${Math.round(r.score*100)}%).\n\nإلغاء = عودة · موافق = إنشاء مشروع مستقل باسم «${v}»`)) return;
+    prjAdd(v); toast('success','أُضيف المشروع',v);
+  } else if(act==='seed'){
+    const n=prjSeedFromOrders();
+    if(n){ prjPersist(); toast('success','استُخرجت المشاريع',`${n} مشروع من أوامر الشراء`); }
+    else toast('info','—','لا كتابات جديدة في الأوامر خارج السجل');
+  } else if(act==='rename'){
+    const p=prjById(id); if(!p) return;
+    const nm=prompt(`الاسم المعتمد الجديد للمشروع «${p.name}»:\n(سيُعاد كتابة جهة كل أوامره، ويُحفظ الاسم القديم مرادفاً)`,p.name);
+    if(nm===null) return;
+    const n=prjRename(id,String(nm).trim());
+    if(n===-1){ toast('error','اسم مستعمل','هذا الاسم يخصّ مشروعاً آخر في السجل'); return; }
+    toast('success','أُعيدت التسمية',`حُدّث ${n} أمر`);
+  } else if(act==='addalias'){
+    const a=prompt('كتابة بديلة (مرادف) لهذا المشروع:'); if(a===null) return;
+    if(prjAddAlias(id,String(a).trim())) toast('success','أُضيف المرادف','سيُحلّ تلقائياً في الإدخال والاستيراد');
+    else toast('error','تعذّر','المرادف موجود أو يخصّ مشروعاً آخر');
+  } else if(act==='delalias'){
+    if(!confirm(`حذف المرادف «${alias}»؟`)) return;
+    prjRemoveAlias(id,alias);
+  } else if(act==='merge'){
+    const p=prjById(id); if(!p) return;
+    const others=PRJ.list.filter(x=>x.id!==id);
+    if(!others.length){ toast('info','—','لا يوجد مشروع آخر للدمج فيه'); return; }
+    const list=others.map((x,i)=>`${i+1}. ${x.name}`).join('\n');
+    const ans=prompt(`دمج «${p.name}» في أي مشروع؟ اكتب الرقم:\n\n${list}`);
+    if(ans===null) return;
+    const t=others[Number(String(ans).trim())-1];
+    if(!t){ toast('error','اختيار غير صالح','اكتب رقم المشروع من القائمة'); return; }
+    const st=prjStats(p);
+    if(!confirm(`دمج «${p.name}» (${st.count} أمر) في «${t.name}»؟\n\nستُعاد كتابة جهة الأوامر، ويصبح الاسم ومرادفاته مرادفات للمشروع الهدف.`)) return;
+    const n=prjMergeProjects(id,t.id);
+    toast('success','تمّ الدمج',`حُدّث ${n} أمر`);
+  } else if(act==='toggle'){
+    const p=prjById(id); if(!p) return;
+    prjSetActive(id,p.active===false);
+  } else if(act==='del'){
+    const p=prjById(id); if(!p) return;
+    if(!confirm(`حذف «${p.name}» من السجل؟ (لا أوامر تستعمله)`)) return;
+    if(!prjDelete(id)) toast('error','تعذّر الحذف','المشروع مستعمل في أوامر — عطّله بدل حذفه');
+  } else if(act==='applyunify'){
+    const host=document.getElementById('prj-pane-unify');
+    const picked=[...host.querySelectorAll('.prj-u-chk')].filter(c=>c.checked).map(c=>_prjUnifyRows[+c.dataset.i]);
+    if(!picked.length){ toast('info','—','لم تحدّد أي صفّ'); return; }
+    if(!confirm(`توحيد ${picked.length} كتابة؟ ستُعاد كتابة جهة الأوامر إلى الأسماء المعتمدة.`)) return;
+    const res=prjApplyUnify(picked);
+    toast('success','تمّ التوحيد',`${res.merged} كتابة · ${res.orders} أمر${res.created?` · ${res.created} مشروع جديد`:''}`);
+  } else if(act==='applydups'){
+    const host=document.getElementById('prj-pane-unify');
+    const picked=[...host.querySelectorAll('.prj-d-chk')].filter(c=>c.checked).map(c=>_prjDupRows[+c.dataset.i]);
+    if(!picked.length){ toast('info','—','لم تحدّد أي زوج'); return; }
+    if(!confirm(`دمج ${picked.length} مشروع مكرّر؟\n\n${picked.map(d=>`«${d.drop.name}» ← «${d.keep.name}»`).join('\n')}`)) return;
+    let orders=0, done=0;
+    picked.forEach(d=>{ if(prjById(d.drop.id)&&prjById(d.keep.id)){ orders+=prjMergeProjects(d.drop.id,d.keep.id); done++; } });
+    toast('success','تمّ الدمج',`${done} مشروع · ${orders} أمر`);
+  }
+  prjRenderModal();
+  try{ renderPurchaseOrders(); }catch(e){}
+  try{ renderTasksPanel(); }catch(e){}
+}
+/* دمج مشروع في آخر: أوامره تُعاد كتابتها، واسمه ومرادفاته تصير مرادفات للهدف */
+function prjMergeProjects(fromId,toId){
+  const a=prjById(fromId), b=prjById(toId);
+  if(!a||!b||a.id===b.id) return 0;
+  const n=prjRewriteOrders(a.name,b.name);
+  const add=[a.name,...(a.aliases||[])].filter(x=>prjNorm(x)!==prjNorm(b.name));
+  b.aliases=[...new Set([...(b.aliases||[]),...add])];
+  PRJ.list=PRJ.list.filter(x=>x.id!==fromId);
+  prjPersist();
+  try{ logAudit('update','project',b.id,{merged_from:a.name,orders:n}); }catch(e){}
+  return n;
+}
+
+/* ---------- مُنتقي المشروع من درج الأمر ---------- */
+let _ppTarget=null;
+function ppFill(cur){
+  const sel=document.getElementById('pp-select'); if(!sel) return;
+  const val=String(cur||'').trim();
+  const names=prjNames();
+  const extra=(val && !names.includes(val)) ? val : '';
+  sel.innerHTML='<option value="">— بلا جهة محدّدة —</option>'
+    + names.map(v=>`<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('')
+    + (extra?`<option value="${escapeAttr(extra)}">${escapeHtml(extra)} (غير معتمد)</option>`:'')
+    + '<option value="__new__">➕ مشروع جديد…</option>';
+  sel.value=val;
+  const nw=document.getElementById('pp-new'); if(nw){ nw.style.display='none'; nw.value=''; }
+  const h=document.getElementById('pp-hint'); if(h) h.textContent='';
+}
+function ppChanged(){
+  const sel=document.getElementById('pp-select'), nw=document.getElementById('pp-new'), h=document.getElementById('pp-hint');
+  if(!sel||!nw) return;
+  const isNew=(sel.value==='__new__');
+  nw.style.display=isNew?'':'none';
+  if(isNew) nw.focus();
+  if(h) h.textContent=isNew?'اكتب الاسم كاملاً — سينبّهك النظام إن كان مشروعاً قائماً بكتابة مختلفة.':'';
+}
+function ppTyping(){
+  const nw=document.getElementById('pp-new'), h=document.getElementById('pp-hint');
+  if(!nw||!h) return;
+  h.innerHTML=prjTypeHint(nw.value);
+}
+function ppSave(){
+  const po=poFind(_ppTarget); if(!po) return;
+  const sel=document.getElementById('pp-select');
+  let val=String(sel.value||'').trim();
+  if(val==='__new__'){
+    const nm=String(document.getElementById('pp-new').value||'').trim();
+    if(!nm){ toast('error','مطلوب','اكتب اسم المشروع'); return; }
+    const r=prjResolve(nm);
+    if(r.status==='ok') val=r.project.name;
+    else if(r.status==='suggest' && confirm(`يوجد مشروع قائم مشابه «${r.project.name}».\n\nموافق = استخدامه (وتُحفظ «${nm}» مرادفاً) · إلغاء = مشروع جديد مستقل`)){
+      prjAddAlias(r.project.id,nm); val=r.project.name;
+    } else { const p=prjAdd(nm); val=p?p.name:nm; }
+  }
+  const cur=String(po.project||'').trim();
+  closeModal('modal-po-project');
+  if(val===cur) return;
+  po.project=val;
+  poSave(po,false,'update');
+  toast('success', val?'تم تحديد الجهة':'أُزيلت الجهة', `${po.po_number} · ${val||'غير محدّدة'}`);
+  if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(_ppTarget);
+}
 
 /* ============================================================
    RENDER ORCHESTRATOR
@@ -14962,17 +15684,10 @@ function poStageJump(num,target){
 function poSetProject(num){
   const po=poFind(num); if(!po) return;
   if(!requirePermission('can_edit_po','تحديد جهة المشروع')) return;
-  const cur=String(po.project||'').trim();
-  const known=poProjectList();
-  const hint=known.length?`\n\nالجهات المستخدَمة حالياً:\n· ${known.slice(0,12).join('\n· ')}`:'';
-  const ans=prompt(`جهة / موقع المشروع للأمر ${po.po_number}:${hint}`,cur);
-  if(ans===null) return;
-  const val=String(ans).trim();
-  if(val===cur) return;
-  po.project=val;
-  poSave(po,false,'update');
-  toast('success', val?'تم تحديد الجهة':'أُزيلت الجهة', `${po.po_number} · ${val||'غير محدّدة'}`);
-  if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
+  _ppTarget=num;
+  const eb=document.getElementById('pp-eyebrow'); if(eb) eb.textContent=po.po_number;
+  ppFill(po.project);
+  openModal('modal-po-project');
 }
 function approvePO(num){ changePOStatus(num,'اعتماد مدير الشراء'); }
 function markPODelivered(num){
@@ -15230,7 +15945,7 @@ function openPOModal(num){
   g('po-f-number').readOnly=!!num;
   g('po-f-issue').value=def.issue_date;
   g('po-f-sector').value=def.sector;
-  g('po-f-project').value=def.project;
+  poFillProjectSelect(def.project);
   g('po-f-supplier').value=def.supplier;
   g('po-f-subtotal').value=def.subtotal;
   g('po-f-officer').value=def.officer;
@@ -15302,8 +16017,9 @@ function poCollectForm(){
   if(!num){ toast('error','مطلوب','أدخل رقم الأمر'); return null; }
   if(!poValidNumber(num)){ toast('error','رقم غير صالح','رقم الأمر يحتوي رموزاً غير مسموحة (مسموح: حروف/أرقام و . _ - /)'); return null; }
   if(!_poEditingNum && poFind(num)){ toast('error','مكرر','رقم الأمر موجود مسبقاً'); return null; }
-  // جهة/موقع المشروع: إلزامية للأوامر الجديدة، وتحذير قابل للتجاوز عند تعديل أمر قديم بلا جهة
-  const project=g('po-f-project');
+  // جهة/موقع المشروع: تُقرأ من سجل المشاريع (اختيار أو مشروع جديد بعد فحص التشابه).
+  // إلزامية للأوامر الجديدة، وتحذير قابل للتجاوز عند تعديل أمر قديم بلا جهة.
+  const project=poReadProjectField();
   if(!project){
     const fld=document.getElementById('po-f-project');
     if(!_poEditingNum){
@@ -15369,7 +16085,7 @@ async function poFromAward(prId){
     openPOModal(null);
     const g=id=>document.getElementById(id);
     if(g('po-f-supplier')) g('po-f-supplier').value = supplier;
-    if(g('po-f-project'))  g('po-f-project').value  = rfq.title || '';
+    if(g('po-f-project'))  poFillProjectSelect(prjCanonical(rfq.title||'') || rfq.title || '');
     if(g('po-f-notes'))    g('po-f-notes').value    = `مُنشأ من ترسية عروض الأسعار: ${rfq.title||rfqId} · طلب الاعتماد: ${pr.title||prId}`;
     const wrap=document.getElementById('po-items-rows'); if(wrap) wrap.innerHTML='';
     if(items.length) items.forEach(it=>addPOItemRow(it)); else addPOItemRow({});
@@ -16023,6 +16739,23 @@ function poParseRegisterSheet(sheet,fileTag,warnings,seen,out){
     out.push(po);
   });
 }
+/* يوحّد جهة الأوامر المستورَدة عبر سجل المشاريع.
+   ok ⇒ تُكتب بالاسم المعتمد · suggest/none ⇒ تنبيه فقط (القرار بشريّ من شاشة التوحيد) */
+function poImportResolveProjects(out,warnings){
+  const sum={mapped:0,suggest:0,unknown:0};
+  const seenRaw=new Set();
+  (out||[]).forEach(o=>{
+    const raw=String(o.project||'').trim();
+    if(!raw) return;
+    const r=prjResolve(raw);
+    if(r.status==='ok'){ if(r.project.name!==raw){ o.project=r.project.name; sum.mapped++; } return; }
+    if(seenRaw.has(raw)) return;
+    seenRaw.add(raw);
+    if(r.status==='suggest'){ sum.suggest++; if(warnings) warnings.push(`المشروع «${raw}» يشبه «${r.project.name}» بنسبة ${Math.round(r.score*100)}% — وحّده من سجل المشاريع`); }
+    else { sum.unknown++; if(warnings) warnings.push(`مشروع غير معتمد: «${raw}» — يُضاف للسجل من شاشة المشاريع`); }
+  });
+  return sum;
+}
 async function poHandleImportFile(files){
   if(!files) return;
   if(!requirePermission('can_import','الاستيراد')) return;
@@ -16054,6 +16787,10 @@ async function poHandleImportFile(files){
       }
       warnings.push(`${tag||file.name}: تنسيق غير معروف (لا «رقم الأمر» ولا جدول أصناف)`);
     }
+    // سجل المشاريع: توحيد جهة كل أمر مستورَد. المطابقة القاطعة (اسم/مرادف/تطابق
+    // بعد التطبيع) تُطبَّق تلقائياً، والتشابه القويّ يُنبَّه عليه ليُحسم بشرياً من
+    // «توحيد الكتابات» — فلا يخمّن الاستيراد صامتاً ولا يصنع مشروعاً مكرّراً.
+    const prjSum=poImportResolveProjects(out,warnings);
     _poImportRows=out;
     const newCount=out.filter(o=>!poFind(o.po_number)).length, updCount=out.length-newCount;
     const totalItems=out.reduce((s,o)=>s+((o.items&&o.items.length)||0),0);
@@ -16063,8 +16800,10 @@ async function poHandleImportFile(files){
         <div class="po-import-stat"><b style="color:#1f7a55">${newCount}</b>جديد</div>
         <div class="po-import-stat"><b style="color:#9A7A45">${updCount}</b>تحديث</div>
         <div class="po-import-stat"><b>${totalItems}</b>بند</div>
+        <div class="po-import-stat"><b style="color:${(prjSum.suggest+prjSum.unknown)?'#9A7A45':'#1f7a55'}">${prjSum.mapped}</b>جهة وُحّدت</div>
         <div class="po-import-stat"><b style="color:#c0392b">${warnings.length}</b>تنبيه</div>
       </div>
+      ${(prjSum.suggest+prjSum.unknown)?`<div class="po-warn-row" style="margin-bottom:8px">${prjSum.suggest+prjSum.unknown} كتابة مشروع غير معتمدة — بعد الاستيراد افتح <b>المشاريع ← توحيد الكتابات</b> لضمّها لمشاريعها.</div>`:''}
       ${out.length?`<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px"><table style="width:100%;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--surface-2)"><th style="padding:6px">رقم الأمر</th><th>المورد</th><th>بنود</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody>${out.slice(0,40).map(o=>`<tr><td style="padding:5px 6px">${escapeHtml(o.po_number)}</td><td>${escapeHtml(o.supplier||'—')}</td><td style="text-align:center">${(o.items&&o.items.length)||0}</td><td>${fmtPrice(o.total)}</td><td>${escapeHtml(o.status)}</td></tr>`).join('')}</tbody></table></div>`:''}
       ${warnings.length?`<details><summary style="cursor:pointer;font-size:12px;color:#a93226">${warnings.length} تنبيه</summary><div style="max-height:120px;overflow:auto;margin-top:6px">${warnings.slice(0,50).map(w=>`<div class="po-warn-row">${escapeHtml(w)}</div>`).join('')}</div></details>`:''}`;
     document.getElementById('po-import-confirm').style.display=out.length?'':'none';
@@ -16110,6 +16849,14 @@ function setupPOEvents(){
   const add=document.getElementById('po-add-btn'); if(add) add.addEventListener('click',()=>openPOModal(null));
   const imp=document.getElementById('po-import-btn'); if(imp) imp.addEventListener('click',()=>{ if(!requirePermission('can_import','الاستيراد'))return; document.getElementById('po-import-preview').innerHTML=''; document.getElementById('po-import-confirm').style.display='none'; openModal('modal-po-import'); });
   const exp=document.getElementById('po-export-btn'); if(exp) exp.addEventListener('click',exportPOExcel);
+  const prjb=document.getElementById('po-projects-btn'); if(prjb) prjb.addEventListener('click',()=>openProjectsModal('list'));
+  // سجل المشاريع: مُنتقي النموذج + مُنتقي الدرج + تبويبا نافذة السجل
+  const pfs=document.getElementById('po-f-project'); if(pfs) pfs.addEventListener('change',poProjectSelChanged);
+  const pfn=document.getElementById('po-f-project-new'); if(pfn) pfn.addEventListener('input',poProjectNewTyping);
+  const pps=document.getElementById('pp-select'); if(pps) pps.addEventListener('change',ppChanged);
+  const ppn=document.getElementById('pp-new'); if(ppn) ppn.addEventListener('input',ppTyping);
+  const ppb=document.getElementById('pp-save'); if(ppb) ppb.addEventListener('click',ppSave);
+  document.querySelectorAll('.prj-tab').forEach(b=>b.addEventListener('click',()=>{ _prjTab=b.dataset.prjtab; prjRenderModal(); }));
   const search=document.getElementById('po-search'); let t; if(search) search.addEventListener('input',e=>{ clearTimeout(t); t=setTimeout(()=>{ STATE.poFilter.q=e.target.value; STATE.poPage=1; renderPOTable(); },200); });
   ['sector','status','priority','project'].forEach(f=>{ const s=document.getElementById('po-filter-'+f); if(s) s.addEventListener('change',()=>{ STATE.poFilter[f]=s.value; STATE.poPage=1; renderPOTable(); }); });
   const dz=document.getElementById('po-dropzone'), fi=document.getElementById('po-import-file');
@@ -16131,6 +16878,7 @@ function init(){
   mergePOSupplierSeed();
   loadUserEntries();
   loadUserPOs();
+  prjLoadLocal();       // سجل المشاريع المعتمد (النسخة المحلية — السحابة تُحدّثه لاحقاً)
   loadItemEdits();      // Apply user edits to items
   loadSupplierEdits();  // Apply user edits to suppliers
   loadSupplierHidden(); // Remove hidden suppliers
