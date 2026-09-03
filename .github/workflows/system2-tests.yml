@@ -1,0 +1,53 @@
+name: system2-tests
+
+# شبكة الأمان الآلية لنظام المشتريات الأساسي (index.html).
+# كانت كل مسارات CI تخدم البوابة (النظام 3) والنظام الأساسي بلا أي تغطية،
+# فكل انحدار يكتشفه المستخدم لا النظام. هذا المسار يمنع ذلك.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'scripts/system2-tests.mjs'
+      - '.github/workflows/system2-tests.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'scripts/system2-tests.mjs'
+      - '.github/workflows/system2-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: تأكيدات النظام 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # سلامة نحوية لكل كتلة سكربت داخل الصفحة — لا سكربت بناء في المشروع،
+      # فهذه هي المرحلة التي تلتقط خطأ الصياغة قبل أن يصل للمستخدم.
+      - name: فحص الصياغة (node --check)
+        run: |
+          node -e '
+            const fs=require("fs"), os=require("os"), path=require("path"), {execFileSync}=require("child_process");
+            const html=fs.readFileSync("index.html","utf8");
+            const blocks=[...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+            if(!blocks.length){ console.error("لم يُعثر على كتل سكربت"); process.exit(1); }
+            blocks.forEach((b,i)=>{
+              const f=path.join(os.tmpdir(),`block${i}.js`);
+              fs.writeFileSync(f,b);
+              execFileSync(process.execPath,["--check",f],{stdio:"inherit"});
+            });
+            console.log(`صياغة سليمة في ${blocks.length} كتلة سكربت`);
+          '
+
+      - name: حزمة تأكيدات النظام 2
+        run: node scripts/system2-tests.mjs

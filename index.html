@@ -2468,6 +2468,10 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .po-num .pfx{opacity:.45;font-size:11px}
 .po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
 .po-card-num .seq{font-size:13px}
+/* حلقة السعر في درج الأمر */
+.po-price-note{margin:0 24px 16px;font-size:12.5px;line-height:1.75;background:rgba(45,106,79,0.07);
+  border:1px solid rgba(45,106,79,0.28);color:#1f4e3a;border-radius:8px;padding:10px 13px;font-weight:600}
+.po-price-note.pending{background:var(--surface-2);border-color:var(--border);color:var(--muted);font-weight:500}
 /* الملغى: صفّ مطفأ مشطوب — لا يُحسب ولا يُتابَع، ويجب ألّا يُقرأ كأمر قائم */
 .po-row-cancelled td{background:repeating-linear-gradient(45deg,rgba(122,113,104,0.07),rgba(122,113,104,0.07) 6px,transparent 6px,transparent 12px)}
 .po-row-cancelled:hover td{background:rgba(122,113,104,0.14)}
@@ -6132,7 +6136,7 @@ function saveUserEntry(entry){
     const arr = stored? JSON.parse(stored):[];
     arr.unshift(entry);
     localStorage.setItem('proc_user_entries', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ في الحفظ','تعذر حفظ السجل محلياً')}
+  }catch(e){ reportError('saveUserEntry', e, null, {title:'تعذّر حفظ السجل',body:'لم يُحفظ السعر على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
 function deleteUserEntry(num){
   try{
@@ -6160,8 +6164,24 @@ function saveUserItem(item){
     const arr = stored? JSON.parse(stored):[];
     arr.unshift(item);
     localStorage.setItem('proc_user_items', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ في الحفظ','تعذر حفظ الصنف محلياً')}
+  }catch(e){ reportError('saveUserItem', e, null, {title:'تعذّر حفظ الصنف',body:'لم يُحفظ الصنف على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
+
+/* ============================================================
+   الإبلاغ الموحّد عن الأخطاء
+   بديل عن كتل catch الفارغة: يسجّل دائماً في الطرفية (مع سياق يُميّز الموضع)،
+   ويُشعِر المستخدم فقط حين يمسّ الخلل بياناته — فلا يبقى فشلٌ خفيّاً كما كان.
+   ============================================================ */
+const ERR_LOG = [];
+function reportError(where, err, ctx, userMessage){
+  const rec = { at:new Date().toISOString(), where, msg:(err&&err.message)||String(err||''), ctx:ctx||null };
+  ERR_LOG.push(rec); if(ERR_LOG.length>200) ERR_LOG.shift();
+  try{ console.error('[proc] '+where, rec.msg, ctx||''); }catch(_){}
+  if(userMessage){ try{ toast('error', userMessage.title||'تعذّر إتمام العملية', userMessage.body||rec.msg); }catch(_){} }
+  return rec;
+}
+// لعرضه عند التشخيص: procErrors() في وحدة التحكم
+function procErrors(){ return ERR_LOG.slice().reverse(); }
 
 /* ========== FORMATTERS ========== */
 const fmtPrice = n => n==null||isNaN(n) ? '—' : Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
@@ -7443,7 +7463,7 @@ function logAudit(action, type, target, meta){
     });
     if(arr.length>500) arr.length = 500;
     localStorage.setItem('proc_audit', JSON.stringify(arr));
-  }catch(e){}
+  }catch(e){ reportError('logAudit.local', e, {action, type}); }
   // Also push to cloud audit log if connected (async, fire and forget)
   pushAuditToCloud({
     username,
@@ -8465,7 +8485,7 @@ function saveUserSupplier(sup){
     const arr = stored? JSON.parse(stored): [];
     arr.unshift(sup);
     localStorage.setItem('proc_user_suppliers', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ','تعذر حفظ المورد محلياً')}
+  }catch(e){ reportError('saveUserSupplier', e, null, {title:'تعذّر حفظ المورد',body:'لم يُحفظ المورد على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
 function updateUserSupplier(id, sup){
   try{
@@ -13006,54 +13026,9 @@ function clearAuditLog(){
   renderLocalAudit();
 }
 
-/* ============================================================ */
-/* ========== ENHANCED DASHBOARD CHARTS ======================= */
-/* ============================================================ */
-function renderDashboardCharts(){
-  // Monthly activity (last 12 months)
-  const monthCounts = {};
-  STATE.history.forEach(h=>{
-    if(!h.date) return;
-    const m = String(h.date).slice(0,7); // YYYY-MM
-    if(!/^\d{4}-\d{2}$/.test(m)) return;
-    monthCounts[m] = (monthCounts[m]||0)+1;
-  });
-  // Last 12 months including current
-  const months = Object.keys(monthCounts).sort().slice(-12);
-  const points = months.map(m=>({x:m, y:monthCounts[m]}));
-  renderLineChart('dash-trend-chart', points, {width:760, height:230});
-  document.getElementById('dash-trend-sub').textContent = `${months.length} شهر · ${Object.values(monthCounts).reduce((a,b)=>a+b,0)} عرض إجمالي`;
-
-  // Spending by category
-  const catSpend = {};
-  STATE.history.forEach(h=>{
-    if(!h.category || h.price==null) return;
-    const p = Number(h.price); if(!isFinite(p)) return; // سعر مشوّه لا يُفسد إجمالي الفئة
-    catSpend[h.category] = (catSpend[h.category]||0) + p;
-  });
-  const topCats = Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,6);
-  renderBarChart('dash-cat-chart', topCats.map(([label,value])=>({label,value})), {width:480, height:230});
-
-  // Top suppliers ranked
-  const topSup = [...STATE.suppliers].sort((a,b)=>(b.offers_count||0)-(a.offers_count||0)).slice(0,5);
-  document.getElementById('rank-suppliers').innerHTML = topSup.length? topSup.map((s,i)=>`
-    <div class="rank-item ${i===0?'top1':i===1?'top2':i===2?'top3':''}" onclick="openSupplierDetail('${escapeAttr(s.name).replace(/'/g,"\\'")}')" style="cursor:pointer">
-      <div class="rank-num">${i+1}</div>
-      <div class="rank-name" title="${escapeAttr(s.name)}">${escapeHtml(s.name)}</div>
-      <div class="rank-value">${s.offers_count||0} عرض</div>
-    </div>
-  `).join('') : '<div class="chart-empty">لا توجد بيانات</div>';
-
-  // Top items by last price
-  const topItems = [...STATE.items].filter(i=>i.last_price!=null).sort((a,b)=>Number(b.last_price)-Number(a.last_price)).slice(0,5);
-  document.getElementById('rank-items').innerHTML = topItems.length? topItems.map((it,i)=>`
-    <div class="rank-item ${i===0?'top1':i===1?'top2':i===2?'top3':''}" onclick="openItemDetail('${escapeAttr(it.code)}')" style="cursor:pointer">
-      <div class="rank-num">${i+1}</div>
-      <div class="rank-name" title="${escapeAttr(it.name||'')}">${escapeHtml((it.name||'').slice(0,40))}${(it.name||'').length>40?'…':''}</div>
-      <div class="rank-value">${fmtPrice(it.last_price)} ر.س</div>
-    </div>
-  `).join('') : '<div class="chart-empty">لا توجد بيانات</div>';
-}
+/* ملاحظة: كانت هنا نسخة أولى من renderDashboardCharts تطغى عليها النسخة الفعّالة الأحدث
+   (وحدة الرسوم البيانية الحقيقية أسفل الملف) فلا تُنفَّذ أبداً — حُذفت لإزالة الالتباس.
+   يحرس بقاءها واحدة اختبارُ «لا أسماء دوال مكرّرة» في scripts/system2-tests.mjs. */
 
 /* ============================================================ */
 /* ========== SUPABASE CLOUD SYNC ============================= */
@@ -13842,16 +13817,19 @@ async function refreshFromCloud(){
   if(!data) return;
   // Replace user-tagged items, history, suppliers
   // Strategy: cloud is source of truth for cloud items; merge with original DATA
+  // ⚠️ DATA مُعرَّف بـconst فلا يوجد على window — قراءته عبر window.DATA كانت تُرجع undefined
+  // فيُحسب أساس الدمج صفراً، وتختفي أي سجلات محلية غير مرفوعة للسحابة بلا إنذار.
+  const SEED = (typeof DATA!=='undefined' && DATA) ? DATA : {};
   const cloudItemCodes = new Set(data.items.map(i=>i.code));
-  const baseItems = (window.DATA?.items||[]).filter(i=>!cloudItemCodes.has(i.code));
+  const baseItems = (SEED.items||[]).filter(i=>!cloudItemCodes.has(i.code));
   STATE.items = [...data.items.map(x=>({...x,_cloud:true})), ...baseItems];
 
   const cloudSupNames = new Set(data.suppliers.map(s=>s.name));
-  const baseSups = (window.DATA?.suppliers||[]).filter(s=>!cloudSupNames.has(s.name));
+  const baseSups = (SEED.suppliers||[]).filter(s=>!cloudSupNames.has(s.name));
   STATE.suppliers = [...data.suppliers.map(x=>({...x,_cloud:true,_user:true})), ...baseSups];
 
   const cloudHistNums = new Set(data.history.map(h=>h.num));
-  const baseHist = (window.DATA?.history||[]).filter(h=>!cloudHistNums.has(h.num));
+  const baseHist = (SEED.history||[]).filter(h=>!cloudHistNums.has(h.num));
   STATE.history = [...data.history.map(x=>({...x,_cloud:true,_user:true})), ...baseHist];
 
   // أوامر الشراء: السحابة مصدر الحقيقة + دمج الإضافات المحلية غير المرفوعة
@@ -13860,7 +13838,8 @@ async function refreshFromCloud(){
     let localPOs = [];
     try{ localPOs = JSON.parse(localStorage.getItem('proc_user_pos')||'[]'); }catch(e){}
     const localOnly = localPOs.filter(o=>!cloudPONums.has(o.po_number));
-    STATE.purchaseOrders = [...data.purchaseOrders.map(x=>({...x,_cloud:true})), ...localOnly];
+    // _sync = طابع النسخة السحابية التي بين أيدينا — أساس القفل المتفائل في poCloudUpsert
+    STATE.purchaseOrders = [...data.purchaseOrders.map(x=>({...x,_cloud:true,_sync:x.updated_at||null})), ...localOnly];
     STATE.purchaseOrders.forEach(recomputePOderived);
   }
 
@@ -14382,18 +14361,152 @@ async function poCloudUpsert(po){
   if(po.source) payload.source = po.source;
   // سجل الاستلام — يتطلب عمود receipts jsonb (ترقية db/goods-receipt.sql)؛ يُضاف فقط عند وجوده
   if(po.receipts) payload.receipts = po.receipts;
+  // قفل متفائل: لا نكتب فوق تعديل مستخدم آخر. po._sync = طابع آخر نسخة رأيناها من السحابة.
   try{
-    const {data}=await CLOUD.client.from('proc_purchase_orders').select('po_number').eq('po_number',po.po_number).maybeSingle();
-    if(!data) payload.created_by=u;
-  }catch(e){}
+    const {data:cur}=await CLOUD.client.from('proc_purchase_orders')
+      .select('po_number,updated_at,updated_by').eq('po_number',po.po_number).maybeSingle();
+    if(!cur){ payload.created_by=u; }
+    else if(po._sync && cur.updated_at && cur.updated_at!==po._sync){
+      const who = cur.updated_by ? ` بواسطة ${cur.updated_by}` : '';
+      toast('error','تعارض تعديل',`عُدِّل الأمر ${po.po_number}${who} أثناء عملك. أعِد التحميل ثم طبّق تغييرك حتى لا يُمحى عمل الآخر.`);
+      reportError('poCloudUpsert.conflict', new Error('stale write blocked'), {po:po.po_number, mine:po._sync, theirs:cur.updated_at});
+      return false;
+    }
+  }catch(e){ reportError('poCloudUpsert.precheck', e, {po:po.po_number}); }
   try{ const {error}=await CLOUD.client.from('proc_purchase_orders').upsert(payload);
+    if(!error) po._sync = payload.updated_at;   // طابع النسخة التي صارت في السحابة الآن
     if(error){ console.warn('[po] cloud upsert:',error.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
     return true; }
   catch(e){ console.warn('[po] cloud upsert ex:',e.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
 }
 async function poCloudDelete(num){
   if(!window.CLOUD||!CLOUD.enabled||!CLOUD.client) return;
-  try{ await CLOUD.client.from('proc_purchase_orders').delete().eq('po_number',num); }catch(e){}
+  try{ const {error}=await CLOUD.client.from('proc_purchase_orders').delete().eq('po_number',num);
+    if(error) reportError('poCloudDelete', error, {po:num}, {title:'تعذّر الحذف من السحابة',body:'حُذف محلياً فقط — سيعود عند المزامنة. تحقّق من الاتصال.'});
+  }catch(e){ reportError('poCloudDelete', e, {po:num}, {title:'تعذّر الحذف من السحابة',body:'حُذف محلياً فقط — سيعود عند المزامنة. تحقّق من الاتصال.'}); }
+}
+
+/* ============================================================
+   حلقة السعر — أمر الشراء يُغذّي السجل السعري
+   ------------------------------------------------------------
+   السعر في بند أمر شراء معتمد هو أوثق سعر تملكه الشركة: سعر نُفِّذ
+   بمورد وتاريخ محدَّدين، لا عرضاً قابلاً للتغيّر. كان لا يعود أبداً
+   إلى السجل، فتقارير التوفير والتذبذب والتغطية تعمل على بيانات جزئية.
+
+   القواعد المثبَّتة:
+   • لا تُسجَّل إلا من أمر بلغ «اعتماد مدير الشراء» فما بعد، وغير ملغى.
+   • المطابقة بالكتالوج حتميّة ومحافِظة (تطابق تام بعد التطبيع، ثم تساوي
+     مجموعة الكلمات). ما دون ذلك لا يُخمَّن — يُعَدّ «بلا مطابقة» ويُعرض للمستخدم.
+   • المرجع `PO:<رقم الأمر>#<ترتيب البند>` هو مفتاح التكرار: إعادة الحفظ
+     تُحدِّث السجل نفسه ولا تُنشئ نسخة ثانية.
+   • إلغاء الأمر أو حذفه يسحب سجلاته — سعرٌ لم يُدفَع لا يبقى في دفتر الأسعار.
+   • بلا أي تغيير في المخطّط: المرجع يُخزَّن في حقل reference القائم.
+   ============================================================ */
+const PO_PRICE_REF = 'PO:';
+function poPriceRef(poNumber, idx){ return PO_PRICE_REF + poNumber + '#' + idx; }
+function poPriceRefPrefix(poNumber){ return PO_PRICE_REF + poNumber + '#'; }
+
+// فهرس أسماء الأصناف (يُعاد بناؤه عند تغيّر الكتالوج فقط)
+let __poItemIdx = null, __poItemIdxSig = '';
+function poItemIndex(){
+  const items = STATE.items || [];
+  const sig = items.length + '|' + (items[0] ? items[0].code : '');
+  if(__poItemIdx && __poItemIdxSig === sig) return __poItemIdx;
+  const tokKey = s => siNormalize(s).split(' ').filter(Boolean).sort().join(' ');
+  // الكتالوج يحوي أسماء مكرّرة فعلياً (قِيس: 15 اسماً مطبَّعاً على 32 صنفاً).
+  // ننسب السعر لصنف واحد فقط حين لا يكون الاسم ملتبساً — وإلا فهو تخمين.
+  const exact = new Map(), tokens = new Map();
+  const bump = (map, key, it)=>{ if(!key) return;
+    const cur = map.get(key);
+    if(!cur) map.set(key, { item:it, count:1 }); else cur.count++;
+  };
+  items.forEach(it=>{ bump(exact, siNormalize(it.name || ''), it); bump(tokens, tokKey(it.name || ''), it); });
+  __poItemIdx = { exact, tokens, tokKey };
+  __poItemIdxSig = sig;
+  return __poItemIdx;
+}
+/* سبب المطابقة أو تعذّرها: {item} أو {item:null, reason:'ambiguous'|'none'} */
+function poMatchLine(desc){
+  const d = String(desc || '').trim();
+  if(!d) return { item:null, reason:'none' };
+  const ix = poItemIndex();
+  const hit = ix.exact.get(siNormalize(d)) || ix.tokens.get(ix.tokKey(d));
+  if(!hit) return { item:null, reason:'none' };
+  if(hit.count > 1) return { item:null, reason:'ambiguous' };   // اسم يخصّ أكثر من صنف — لا نُخمّن
+  return { item:hit.item, reason:'ok' };
+}
+// يُرجع الصنف المطابق أو null — لا تخمين
+function poMatchItem(desc){ return poMatchLine(desc).item; }
+// هل بلغ الأمر مرحلة يُعتدّ فيها بسعره؟
+function poPriceEligible(po){
+  return !!po && po.status !== 'ملغى' && poStatusStep(po.status) >= 1;
+}
+
+/* يُزامن بنود الأمر مع السجل السعري. يُرجع ملخّصاً {added,updated,removed,unmatched}. */
+function poSyncPriceHistory(po){
+  const res = { added:0, updated:0, removed:0, unmatched:0 };
+  if(!po || !po.po_number) return res;
+  const prefix = poPriceRefPrefix(po.po_number);
+  const existing = new Map();
+  (STATE.history || []).forEach(h=>{ if(h && typeof h.reference==='string' && h.reference.startsWith(prefix)) existing.set(h.reference, h); });
+
+  const eligible = poPriceEligible(po);
+  const lines = eligible && Array.isArray(po.items) ? po.items : [];
+  const keep = new Set();
+  let maxNum = Math.max(0, ...(STATE.history || []).map(h=>Number(h.num) || 0));
+
+  lines.forEach((it, idx)=>{
+    const price = Number(it.price) || 0;
+    const qty = Number(it.qty) || 0;
+    if(!(price > 0 && qty > 0)) return;          // بند بلا سعر أو كمية: لا يُسجَّل
+    const item = poMatchItem(it.desc);
+    if(!item){ res.unmatched++; return; }        // لا تخمين — يُعرض للمستخدم ليربطه
+    const ref = poPriceRef(po.po_number, idx);
+    keep.add(ref);
+    const prev = existing.get(ref);
+    const fields = {
+      code: item.code,
+      name: item.name || it.desc || '',
+      category: item.category || '',
+      price: +price.toFixed(2),
+      unit: it.unit || item.unit || '',
+      supplier: po.supplier || '',
+      date: poToISO(po.issue_date) || todayStr(),
+      reference: ref,
+      note: 'من أمر شراء ' + po.po_number,
+    };
+    if(prev){
+      const changed = ['code','price','supplier','date','unit','name','category'].some(k=>prev[k]!==fields[k]);
+      if(changed){
+        Object.assign(prev, fields);
+        res.updated++;
+        if(window.CLOUD && CLOUD.enabled) CLOUD.history.upsert(prev).catch(e=>reportError('poPrice.upsert', e, {ref}));
+      }
+    } else {
+      const entry = Object.assign({ num: ++maxNum, _user:true, _po:true }, fields);
+      STATE.history.unshift(entry);
+      saveUserEntry(entry);
+      res.added++;
+      if(window.CLOUD && CLOUD.enabled) CLOUD.history.insert(entry).catch(e=>reportError('poPrice.insert', e, {ref}));
+    }
+  });
+
+  // سجلات لم تعد لها بنود (حُذف البند، أو أُلغي الأمر، أو تراجعت مرحلته) تُسحَب
+  existing.forEach((h, ref)=>{
+    if(keep.has(ref)) return;
+    STATE.history = STATE.history.filter(x=>x!==h);
+    deleteUserEntry(h.num);
+    res.removed++;
+    if(window.CLOUD && CLOUD.enabled) CLOUD.history.delete(h.num).catch(e=>reportError('poPrice.delete', e, {ref}));
+  });
+
+  if(res.added || res.updated || res.removed){
+    recomputeItemStats();
+    updateCounts();
+    logAudit('edit','entry', po.po_number, { price_loop:res });
+  }
+  po._priceSync = res;
+  return res;
 }
 
 /* ---------- save / delete pipeline ---------- */
@@ -14404,8 +14517,18 @@ function poSave(po, isNew, auditAction){
   poUpsertLocal(po);
   poCloudUpsert(po);
   logAudit(auditAction||(isNew?'create':'update'),'po',po.po_number,{new:{status:po.status,total:po.total,supplier:po.supplier}});
+  // حلقة السعر: كل بند معتمد يصير ملاحظة سعرية في السجل
+  let ps = null;
+  try{ ps = poSyncPriceHistory(po); }catch(e){ reportError('poSyncPriceHistory', e, {po:po.po_number}); }
   updateCounts();
   renderPurchaseOrders();
+  if(ps && (ps.added || ps.removed)){
+    const bits = [];
+    if(ps.added)   bits.push(`أُضيف ${ps.added} سعر للسجل`);
+    if(ps.removed) bits.push(`سُحب ${ps.removed}`);
+    if(ps.unmatched) bits.push(`${ps.unmatched} بلا مطابقة`);
+    toast('info','السجل السعري', bits.join(' · '));
+  }
 }
 function poFind(num){ return STATE.purchaseOrders.find(x=>x.po_number===num); }
 
@@ -14862,6 +14985,8 @@ function deletePO(num){
   if(!requirePermission('can_delete_po','حذف الأمر')) return;
   const po=poFind(num); if(!po) return;
   if(!confirm(`حذف أمر الشراء ${num}؟ لا يمكن التراجع.`)) return;
+  // اسحب أسعاره من السجل قبل إزالته: سعرٌ لأمر محذوف لا يبقى في دفتر الأسعار
+  try{ poSyncPriceHistory({ po_number:num, status:'ملغى', items:[] }); }catch(e){ reportError('deletePO.priceLoop', e, {po:num}); }
   STATE.purchaseOrders=STATE.purchaseOrders.filter(x=>x.po_number!==num);
   poRemoveLocal(num); poCloudDelete(num);
   logAudit('delete','po',num,{});
@@ -14981,6 +15106,28 @@ function openPODrawer(num){
   const hist=(po.status_history||[]).slice().reverse();
   const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div>${h.note?`<div class="po-tl-meta" style="color:#8a6a30">السبب: ${escapeHtml(h.note)}</div>`:''}</div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
   const canEdit=hasPermission('can_edit_po'), canApprove=hasPermission('can_approve_po'), canDel=hasPermission('can_delete_po');
+  // حلقة السعر: ماذا غذّى هذا الأمر في السجل السعري، وما البنود التي لم تُطابَق
+  const _priceHtml=(()=>{
+    const lines=Array.isArray(po.items)?po.items:[];
+    if(!lines.length) return '';
+    const fed=(STATE.history||[]).filter(h=>h&&typeof h.reference==='string'&&h.reference.startsWith(poPriceRefPrefix(po.po_number)));
+    const unmatched=poPriceEligible(po)
+      ? lines.filter(it=>(Number(it.price)||0)>0&&(Number(it.qty)||0)>0&&!poMatchItem(it.desc))
+        .map(it=>({desc:it.desc, reason:poMatchLine(it.desc).reason}))
+      : [];
+    const ambig=unmatched.filter(u=>u.reason==='ambiguous').length;
+    if(!poPriceEligible(po)){
+      return `<div class="po-price-note pending">📈 لم تُسجَّل أسعار هذا الأمر بعد — تُضاف إلى السجل السعري عند بلوغه «اعتماد مدير الشراء».</div>`;
+    }
+    if(!fed.length && !unmatched.length) return '';
+    return `<div class="po-price-note">
+      ${fed.length?`📈 غذّى السجل السعري بـ<b>${fed.length}</b> ${fed.length===1?'سعر':'أسعار'} — تُحدِّث سعر الصنف وتقارير التوفير.`:''}
+      ${unmatched.length?`<div style="margin-top:6px">⚠ <b>${unmatched.length}</b> ${unmatched.length===1?'بند لم يُسجَّل سعره':'بنود لم تُسجَّل أسعارها'}:
+        <div style="font-weight:400;margin-top:3px">${unmatched.slice(0,4).map(u=>'• '+escapeHtml(String(u.desc||'').slice(0,56))+(u.reason==='ambiguous'?' <span style="opacity:.8">(اسم يخصّ أكثر من صنف)</span>':'')).join('<br>')}
+        ${unmatched.length>4?`<br>و${unmatched.length-4} غيرها`:''}</div>
+        <div style="font-weight:400;margin-top:4px;opacity:.85">${ambig?'وحّد أسماء الأصناف المكرّرة في الكتالوج، و':'أ'}ضِف الصنف الناقص بالاسم نفسه ليُسجَّل سعره تلقائياً.</div></div>`:''}
+    </div>`;
+  })();
   const c=document.getElementById('po-drawer-content');
   c.innerHTML=`
     <div class="po-drawer-head">
@@ -15028,6 +15175,7 @@ function openPODrawer(num){
       ${kv('الحالة','<span class="po-status-chip '+(meta.cls||'')+'" style="cursor:default">'+escapeHtml(po.status)+'</span>')}
     </div></div>
     ${itemsHtml}
+    ${_priceHtml}
     ${receiptsHtml}
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>
@@ -21073,31 +21221,12 @@ async function siCommitImport(){
   }
 }
 
-/* === Helpers for storage === */
-function saveUserItem(item){
-  try{
-    const stored = localStorage.getItem('proc_user_items');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(item);
-    localStorage.setItem('proc_user_items', JSON.stringify(arr));
-  }catch(e){}
-}
-function saveUserSupplier(sup){
-  try{
-    const stored = localStorage.getItem('proc_user_suppliers');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(sup);
-    localStorage.setItem('proc_user_suppliers', JSON.stringify(arr));
-  }catch(e){}
-}
-function saveUserEntry(entry){
-  try{
-    const stored = localStorage.getItem('proc_user_entries');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(entry);
-    localStorage.setItem('proc_user_entries', JSON.stringify(arr));
-  }catch(e){}
-}
+/* === Helpers for storage ===
+   ⚠️ لا تُعرِّف saveUserItem/saveUserSupplier/saveUserEntry هنا مجدّداً:
+   كانت مُعرَّفة مرّتين، فالنسخة الأخيرة كانت تطغى على الأصلية في كل الاستدعاءات —
+   بـ push بدل unshift (ينقلب ترتيب «الأحدث أولاً») وبـ catch فارغ يبتلع فشل الحفظ.
+   التعريفات الوحيدة الآن: saveUserItem (~6157) · saveUserSupplier (~8462) · saveUserEntry (~6129).
+   يحرس ذلك اختبار «لا أسماء دوال مكرّرة» في scripts/system2-tests.mjs. */
 
 /* === Wire up event handlers === */
 (function setupSmartImport(){
