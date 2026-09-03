@@ -8,7 +8,8 @@
     "test:stage1": "node scripts/stage1-tests.mjs",
     "test:baseline": "bash db/staging-bootstrap/verify-baseline.sh",
     "test:browser-fixture": "node scripts/e2e/browser-fixture.test.mjs",
-    "test:enterprise-contract": "node scripts/e2e/enterprise-ui-contract.test.mjs && node scripts/e2e/portal-doc-authorization.test.mjs && node scripts/e2e/portal-upload-cleanup.test.mjs"
+    "test:enterprise-contract": "node scripts/e2e/enterprise-ui-contract.test.mjs && node scripts/e2e/portal-doc-authorization.test.mjs && node scripts/e2e/portal-upload-cleanup.test.mjs",
+    "test:system2": "node scripts/system2-tests.mjs"
   },
   "devDependencies": {
     "playwright": "1.55.0"

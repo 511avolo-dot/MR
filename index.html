@@ -6132,7 +6132,7 @@ function saveUserEntry(entry){
     const arr = stored? JSON.parse(stored):[];
     arr.unshift(entry);
     localStorage.setItem('proc_user_entries', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ في الحفظ','تعذر حفظ السجل محلياً')}
+  }catch(e){ reportError('saveUserEntry', e, null, {title:'تعذّر حفظ السجل',body:'لم يُحفظ السعر على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
 function deleteUserEntry(num){
   try{
@@ -6160,8 +6160,24 @@ function saveUserItem(item){
     const arr = stored? JSON.parse(stored):[];
     arr.unshift(item);
     localStorage.setItem('proc_user_items', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ في الحفظ','تعذر حفظ الصنف محلياً')}
+  }catch(e){ reportError('saveUserItem', e, null, {title:'تعذّر حفظ الصنف',body:'لم يُحفظ الصنف على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
+
+/* ============================================================
+   الإبلاغ الموحّد عن الأخطاء
+   بديل عن كتل catch الفارغة: يسجّل دائماً في الطرفية (مع سياق يُميّز الموضع)،
+   ويُشعِر المستخدم فقط حين يمسّ الخلل بياناته — فلا يبقى فشلٌ خفيّاً كما كان.
+   ============================================================ */
+const ERR_LOG = [];
+function reportError(where, err, ctx, userMessage){
+  const rec = { at:new Date().toISOString(), where, msg:(err&&err.message)||String(err||''), ctx:ctx||null };
+  ERR_LOG.push(rec); if(ERR_LOG.length>200) ERR_LOG.shift();
+  try{ console.error('[proc] '+where, rec.msg, ctx||''); }catch(_){}
+  if(userMessage){ try{ toast('error', userMessage.title||'تعذّر إتمام العملية', userMessage.body||rec.msg); }catch(_){} }
+  return rec;
+}
+// لعرضه عند التشخيص: procErrors() في وحدة التحكم
+function procErrors(){ return ERR_LOG.slice().reverse(); }
 
 /* ========== FORMATTERS ========== */
 const fmtPrice = n => n==null||isNaN(n) ? '—' : Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
@@ -7443,7 +7459,7 @@ function logAudit(action, type, target, meta){
     });
     if(arr.length>500) arr.length = 500;
     localStorage.setItem('proc_audit', JSON.stringify(arr));
-  }catch(e){}
+  }catch(e){ reportError('logAudit.local', e, {action, type}); }
   // Also push to cloud audit log if connected (async, fire and forget)
   pushAuditToCloud({
     username,
@@ -8465,7 +8481,7 @@ function saveUserSupplier(sup){
     const arr = stored? JSON.parse(stored): [];
     arr.unshift(sup);
     localStorage.setItem('proc_user_suppliers', JSON.stringify(arr));
-  }catch(e){toast('error','خطأ','تعذر حفظ المورد محلياً')}
+  }catch(e){ reportError('saveUserSupplier', e, null, {title:'تعذّر حفظ المورد',body:'لم يُحفظ المورد على هذا الجهاز — قد تكون مساحة التخزين ممتلئة.'}); }
 }
 function updateUserSupplier(id, sup){
   try{
@@ -13006,54 +13022,9 @@ function clearAuditLog(){
   renderLocalAudit();
 }
 
-/* ============================================================ */
-/* ========== ENHANCED DASHBOARD CHARTS ======================= */
-/* ============================================================ */
-function renderDashboardCharts(){
-  // Monthly activity (last 12 months)
-  const monthCounts = {};
-  STATE.history.forEach(h=>{
-    if(!h.date) return;
-    const m = String(h.date).slice(0,7); // YYYY-MM
-    if(!/^\d{4}-\d{2}$/.test(m)) return;
-    monthCounts[m] = (monthCounts[m]||0)+1;
-  });
-  // Last 12 months including current
-  const months = Object.keys(monthCounts).sort().slice(-12);
-  const points = months.map(m=>({x:m, y:monthCounts[m]}));
-  renderLineChart('dash-trend-chart', points, {width:760, height:230});
-  document.getElementById('dash-trend-sub').textContent = `${months.length} شهر · ${Object.values(monthCounts).reduce((a,b)=>a+b,0)} عرض إجمالي`;
-
-  // Spending by category
-  const catSpend = {};
-  STATE.history.forEach(h=>{
-    if(!h.category || h.price==null) return;
-    const p = Number(h.price); if(!isFinite(p)) return; // سعر مشوّه لا يُفسد إجمالي الفئة
-    catSpend[h.category] = (catSpend[h.category]||0) + p;
-  });
-  const topCats = Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,6);
-  renderBarChart('dash-cat-chart', topCats.map(([label,value])=>({label,value})), {width:480, height:230});
-
-  // Top suppliers ranked
-  const topSup = [...STATE.suppliers].sort((a,b)=>(b.offers_count||0)-(a.offers_count||0)).slice(0,5);
-  document.getElementById('rank-suppliers').innerHTML = topSup.length? topSup.map((s,i)=>`
-    <div class="rank-item ${i===0?'top1':i===1?'top2':i===2?'top3':''}" onclick="openSupplierDetail('${escapeAttr(s.name).replace(/'/g,"\\'")}')" style="cursor:pointer">
-      <div class="rank-num">${i+1}</div>
-      <div class="rank-name" title="${escapeAttr(s.name)}">${escapeHtml(s.name)}</div>
-      <div class="rank-value">${s.offers_count||0} عرض</div>
-    </div>
-  `).join('') : '<div class="chart-empty">لا توجد بيانات</div>';
-
-  // Top items by last price
-  const topItems = [...STATE.items].filter(i=>i.last_price!=null).sort((a,b)=>Number(b.last_price)-Number(a.last_price)).slice(0,5);
-  document.getElementById('rank-items').innerHTML = topItems.length? topItems.map((it,i)=>`
-    <div class="rank-item ${i===0?'top1':i===1?'top2':i===2?'top3':''}" onclick="openItemDetail('${escapeAttr(it.code)}')" style="cursor:pointer">
-      <div class="rank-num">${i+1}</div>
-      <div class="rank-name" title="${escapeAttr(it.name||'')}">${escapeHtml((it.name||'').slice(0,40))}${(it.name||'').length>40?'…':''}</div>
-      <div class="rank-value">${fmtPrice(it.last_price)} ر.س</div>
-    </div>
-  `).join('') : '<div class="chart-empty">لا توجد بيانات</div>';
-}
+/* ملاحظة: كانت هنا نسخة أولى من renderDashboardCharts تطغى عليها النسخة الفعّالة الأحدث
+   (وحدة الرسوم البيانية الحقيقية أسفل الملف) فلا تُنفَّذ أبداً — حُذفت لإزالة الالتباس.
+   يحرس بقاءها واحدة اختبارُ «لا أسماء دوال مكرّرة» في scripts/system2-tests.mjs. */
 
 /* ============================================================ */
 /* ========== SUPABASE CLOUD SYNC ============================= */
@@ -13842,16 +13813,19 @@ async function refreshFromCloud(){
   if(!data) return;
   // Replace user-tagged items, history, suppliers
   // Strategy: cloud is source of truth for cloud items; merge with original DATA
+  // ⚠️ DATA مُعرَّف بـconst فلا يوجد على window — قراءته عبر window.DATA كانت تُرجع undefined
+  // فيُحسب أساس الدمج صفراً، وتختفي أي سجلات محلية غير مرفوعة للسحابة بلا إنذار.
+  const SEED = (typeof DATA!=='undefined' && DATA) ? DATA : {};
   const cloudItemCodes = new Set(data.items.map(i=>i.code));
-  const baseItems = (window.DATA?.items||[]).filter(i=>!cloudItemCodes.has(i.code));
+  const baseItems = (SEED.items||[]).filter(i=>!cloudItemCodes.has(i.code));
   STATE.items = [...data.items.map(x=>({...x,_cloud:true})), ...baseItems];
 
   const cloudSupNames = new Set(data.suppliers.map(s=>s.name));
-  const baseSups = (window.DATA?.suppliers||[]).filter(s=>!cloudSupNames.has(s.name));
+  const baseSups = (SEED.suppliers||[]).filter(s=>!cloudSupNames.has(s.name));
   STATE.suppliers = [...data.suppliers.map(x=>({...x,_cloud:true,_user:true})), ...baseSups];
 
   const cloudHistNums = new Set(data.history.map(h=>h.num));
-  const baseHist = (window.DATA?.history||[]).filter(h=>!cloudHistNums.has(h.num));
+  const baseHist = (SEED.history||[]).filter(h=>!cloudHistNums.has(h.num));
   STATE.history = [...data.history.map(x=>({...x,_cloud:true,_user:true})), ...baseHist];
 
   // أوامر الشراء: السحابة مصدر الحقيقة + دمج الإضافات المحلية غير المرفوعة
@@ -13860,7 +13834,8 @@ async function refreshFromCloud(){
     let localPOs = [];
     try{ localPOs = JSON.parse(localStorage.getItem('proc_user_pos')||'[]'); }catch(e){}
     const localOnly = localPOs.filter(o=>!cloudPONums.has(o.po_number));
-    STATE.purchaseOrders = [...data.purchaseOrders.map(x=>({...x,_cloud:true})), ...localOnly];
+    // _sync = طابع النسخة السحابية التي بين أيدينا — أساس القفل المتفائل في poCloudUpsert
+    STATE.purchaseOrders = [...data.purchaseOrders.map(x=>({...x,_cloud:true,_sync:x.updated_at||null})), ...localOnly];
     STATE.purchaseOrders.forEach(recomputePOderived);
   }
 
@@ -14382,18 +14357,29 @@ async function poCloudUpsert(po){
   if(po.source) payload.source = po.source;
   // سجل الاستلام — يتطلب عمود receipts jsonb (ترقية db/goods-receipt.sql)؛ يُضاف فقط عند وجوده
   if(po.receipts) payload.receipts = po.receipts;
+  // قفل متفائل: لا نكتب فوق تعديل مستخدم آخر. po._sync = طابع آخر نسخة رأيناها من السحابة.
   try{
-    const {data}=await CLOUD.client.from('proc_purchase_orders').select('po_number').eq('po_number',po.po_number).maybeSingle();
-    if(!data) payload.created_by=u;
-  }catch(e){}
+    const {data:cur}=await CLOUD.client.from('proc_purchase_orders')
+      .select('po_number,updated_at,updated_by').eq('po_number',po.po_number).maybeSingle();
+    if(!cur){ payload.created_by=u; }
+    else if(po._sync && cur.updated_at && cur.updated_at!==po._sync){
+      const who = cur.updated_by ? ` بواسطة ${cur.updated_by}` : '';
+      toast('error','تعارض تعديل',`عُدِّل الأمر ${po.po_number}${who} أثناء عملك. أعِد التحميل ثم طبّق تغييرك حتى لا يُمحى عمل الآخر.`);
+      reportError('poCloudUpsert.conflict', new Error('stale write blocked'), {po:po.po_number, mine:po._sync, theirs:cur.updated_at});
+      return false;
+    }
+  }catch(e){ reportError('poCloudUpsert.precheck', e, {po:po.po_number}); }
   try{ const {error}=await CLOUD.client.from('proc_purchase_orders').upsert(payload);
+    if(!error) po._sync = payload.updated_at;   // طابع النسخة التي صارت في السحابة الآن
     if(error){ console.warn('[po] cloud upsert:',error.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
     return true; }
   catch(e){ console.warn('[po] cloud upsert ex:',e.message); toast('warn','تنبيه مزامنة','حُفظ أمر الشراء محلياً، لكن تعذّر رفعه للسحابة — تحقّق من الاتصال.'); return false; }
 }
 async function poCloudDelete(num){
   if(!window.CLOUD||!CLOUD.enabled||!CLOUD.client) return;
-  try{ await CLOUD.client.from('proc_purchase_orders').delete().eq('po_number',num); }catch(e){}
+  try{ const {error}=await CLOUD.client.from('proc_purchase_orders').delete().eq('po_number',num);
+    if(error) reportError('poCloudDelete', error, {po:num}, {title:'تعذّر الحذف من السحابة',body:'حُذف محلياً فقط — سيعود عند المزامنة. تحقّق من الاتصال.'});
+  }catch(e){ reportError('poCloudDelete', e, {po:num}, {title:'تعذّر الحذف من السحابة',body:'حُذف محلياً فقط — سيعود عند المزامنة. تحقّق من الاتصال.'}); }
 }
 
 /* ---------- save / delete pipeline ---------- */
@@ -21073,31 +21059,12 @@ async function siCommitImport(){
   }
 }
 
-/* === Helpers for storage === */
-function saveUserItem(item){
-  try{
-    const stored = localStorage.getItem('proc_user_items');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(item);
-    localStorage.setItem('proc_user_items', JSON.stringify(arr));
-  }catch(e){}
-}
-function saveUserSupplier(sup){
-  try{
-    const stored = localStorage.getItem('proc_user_suppliers');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(sup);
-    localStorage.setItem('proc_user_suppliers', JSON.stringify(arr));
-  }catch(e){}
-}
-function saveUserEntry(entry){
-  try{
-    const stored = localStorage.getItem('proc_user_entries');
-    const arr = stored? JSON.parse(stored): [];
-    arr.push(entry);
-    localStorage.setItem('proc_user_entries', JSON.stringify(arr));
-  }catch(e){}
-}
+/* === Helpers for storage ===
+   ⚠️ لا تُعرِّف saveUserItem/saveUserSupplier/saveUserEntry هنا مجدّداً:
+   كانت مُعرَّفة مرّتين، فالنسخة الأخيرة كانت تطغى على الأصلية في كل الاستدعاءات —
+   بـ push بدل unshift (ينقلب ترتيب «الأحدث أولاً») وبـ catch فارغ يبتلع فشل الحفظ.
+   التعريفات الوحيدة الآن: saveUserItem (~6157) · saveUserSupplier (~8462) · saveUserEntry (~6129).
+   يحرس ذلك اختبار «لا أسماء دوال مكرّرة» في scripts/system2-tests.mjs. */
 
 /* === Wire up event handlers === */
 (function setupSmartImport(){
