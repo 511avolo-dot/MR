@@ -2468,6 +2468,10 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .po-num .pfx{opacity:.45;font-size:11px}
 .po-num .seq{font-weight:800;font-size:14px;letter-spacing:.02em;color:var(--ink)}
 .po-card-num .seq{font-size:13px}
+/* حلقة السعر في درج الأمر */
+.po-price-note{margin:0 24px 16px;font-size:12.5px;line-height:1.75;background:rgba(45,106,79,0.07);
+  border:1px solid rgba(45,106,79,0.28);color:#1f4e3a;border-radius:8px;padding:10px 13px;font-weight:600}
+.po-price-note.pending{background:var(--surface-2);border-color:var(--border);color:var(--muted);font-weight:500}
 /* الملغى: صفّ مطفأ مشطوب — لا يُحسب ولا يُتابَع، ويجب ألّا يُقرأ كأمر قائم */
 .po-row-cancelled td{background:repeating-linear-gradient(45deg,rgba(122,113,104,0.07),rgba(122,113,104,0.07) 6px,transparent 6px,transparent 12px)}
 .po-row-cancelled:hover td{background:rgba(122,113,104,0.14)}
@@ -14382,6 +14386,129 @@ async function poCloudDelete(num){
   }catch(e){ reportError('poCloudDelete', e, {po:num}, {title:'تعذّر الحذف من السحابة',body:'حُذف محلياً فقط — سيعود عند المزامنة. تحقّق من الاتصال.'}); }
 }
 
+/* ============================================================
+   حلقة السعر — أمر الشراء يُغذّي السجل السعري
+   ------------------------------------------------------------
+   السعر في بند أمر شراء معتمد هو أوثق سعر تملكه الشركة: سعر نُفِّذ
+   بمورد وتاريخ محدَّدين، لا عرضاً قابلاً للتغيّر. كان لا يعود أبداً
+   إلى السجل، فتقارير التوفير والتذبذب والتغطية تعمل على بيانات جزئية.
+
+   القواعد المثبَّتة:
+   • لا تُسجَّل إلا من أمر بلغ «اعتماد مدير الشراء» فما بعد، وغير ملغى.
+   • المطابقة بالكتالوج حتميّة ومحافِظة (تطابق تام بعد التطبيع، ثم تساوي
+     مجموعة الكلمات). ما دون ذلك لا يُخمَّن — يُعَدّ «بلا مطابقة» ويُعرض للمستخدم.
+   • المرجع `PO:<رقم الأمر>#<ترتيب البند>` هو مفتاح التكرار: إعادة الحفظ
+     تُحدِّث السجل نفسه ولا تُنشئ نسخة ثانية.
+   • إلغاء الأمر أو حذفه يسحب سجلاته — سعرٌ لم يُدفَع لا يبقى في دفتر الأسعار.
+   • بلا أي تغيير في المخطّط: المرجع يُخزَّن في حقل reference القائم.
+   ============================================================ */
+const PO_PRICE_REF = 'PO:';
+function poPriceRef(poNumber, idx){ return PO_PRICE_REF + poNumber + '#' + idx; }
+function poPriceRefPrefix(poNumber){ return PO_PRICE_REF + poNumber + '#'; }
+
+// فهرس أسماء الأصناف (يُعاد بناؤه عند تغيّر الكتالوج فقط)
+let __poItemIdx = null, __poItemIdxSig = '';
+function poItemIndex(){
+  const items = STATE.items || [];
+  const sig = items.length + '|' + (items[0] ? items[0].code : '');
+  if(__poItemIdx && __poItemIdxSig === sig) return __poItemIdx;
+  const tokKey = s => siNormalize(s).split(' ').filter(Boolean).sort().join(' ');
+  // الكتالوج يحوي أسماء مكرّرة فعلياً (قِيس: 15 اسماً مطبَّعاً على 32 صنفاً).
+  // ننسب السعر لصنف واحد فقط حين لا يكون الاسم ملتبساً — وإلا فهو تخمين.
+  const exact = new Map(), tokens = new Map();
+  const bump = (map, key, it)=>{ if(!key) return;
+    const cur = map.get(key);
+    if(!cur) map.set(key, { item:it, count:1 }); else cur.count++;
+  };
+  items.forEach(it=>{ bump(exact, siNormalize(it.name || ''), it); bump(tokens, tokKey(it.name || ''), it); });
+  __poItemIdx = { exact, tokens, tokKey };
+  __poItemIdxSig = sig;
+  return __poItemIdx;
+}
+/* سبب المطابقة أو تعذّرها: {item} أو {item:null, reason:'ambiguous'|'none'} */
+function poMatchLine(desc){
+  const d = String(desc || '').trim();
+  if(!d) return { item:null, reason:'none' };
+  const ix = poItemIndex();
+  const hit = ix.exact.get(siNormalize(d)) || ix.tokens.get(ix.tokKey(d));
+  if(!hit) return { item:null, reason:'none' };
+  if(hit.count > 1) return { item:null, reason:'ambiguous' };   // اسم يخصّ أكثر من صنف — لا نُخمّن
+  return { item:hit.item, reason:'ok' };
+}
+// يُرجع الصنف المطابق أو null — لا تخمين
+function poMatchItem(desc){ return poMatchLine(desc).item; }
+// هل بلغ الأمر مرحلة يُعتدّ فيها بسعره؟
+function poPriceEligible(po){
+  return !!po && po.status !== 'ملغى' && poStatusStep(po.status) >= 1;
+}
+
+/* يُزامن بنود الأمر مع السجل السعري. يُرجع ملخّصاً {added,updated,removed,unmatched}. */
+function poSyncPriceHistory(po){
+  const res = { added:0, updated:0, removed:0, unmatched:0 };
+  if(!po || !po.po_number) return res;
+  const prefix = poPriceRefPrefix(po.po_number);
+  const existing = new Map();
+  (STATE.history || []).forEach(h=>{ if(h && typeof h.reference==='string' && h.reference.startsWith(prefix)) existing.set(h.reference, h); });
+
+  const eligible = poPriceEligible(po);
+  const lines = eligible && Array.isArray(po.items) ? po.items : [];
+  const keep = new Set();
+  let maxNum = Math.max(0, ...(STATE.history || []).map(h=>Number(h.num) || 0));
+
+  lines.forEach((it, idx)=>{
+    const price = Number(it.price) || 0;
+    const qty = Number(it.qty) || 0;
+    if(!(price > 0 && qty > 0)) return;          // بند بلا سعر أو كمية: لا يُسجَّل
+    const item = poMatchItem(it.desc);
+    if(!item){ res.unmatched++; return; }        // لا تخمين — يُعرض للمستخدم ليربطه
+    const ref = poPriceRef(po.po_number, idx);
+    keep.add(ref);
+    const prev = existing.get(ref);
+    const fields = {
+      code: item.code,
+      name: item.name || it.desc || '',
+      category: item.category || '',
+      price: +price.toFixed(2),
+      unit: it.unit || item.unit || '',
+      supplier: po.supplier || '',
+      date: poToISO(po.issue_date) || todayStr(),
+      reference: ref,
+      note: 'من أمر شراء ' + po.po_number,
+    };
+    if(prev){
+      const changed = ['code','price','supplier','date','unit','name','category'].some(k=>prev[k]!==fields[k]);
+      if(changed){
+        Object.assign(prev, fields);
+        res.updated++;
+        if(window.CLOUD && CLOUD.enabled) CLOUD.history.upsert(prev).catch(e=>reportError('poPrice.upsert', e, {ref}));
+      }
+    } else {
+      const entry = Object.assign({ num: ++maxNum, _user:true, _po:true }, fields);
+      STATE.history.unshift(entry);
+      saveUserEntry(entry);
+      res.added++;
+      if(window.CLOUD && CLOUD.enabled) CLOUD.history.insert(entry).catch(e=>reportError('poPrice.insert', e, {ref}));
+    }
+  });
+
+  // سجلات لم تعد لها بنود (حُذف البند، أو أُلغي الأمر، أو تراجعت مرحلته) تُسحَب
+  existing.forEach((h, ref)=>{
+    if(keep.has(ref)) return;
+    STATE.history = STATE.history.filter(x=>x!==h);
+    deleteUserEntry(h.num);
+    res.removed++;
+    if(window.CLOUD && CLOUD.enabled) CLOUD.history.delete(h.num).catch(e=>reportError('poPrice.delete', e, {ref}));
+  });
+
+  if(res.added || res.updated || res.removed){
+    recomputeItemStats();
+    updateCounts();
+    logAudit('edit','entry', po.po_number, { price_loop:res });
+  }
+  po._priceSync = res;
+  return res;
+}
+
 /* ---------- save / delete pipeline ---------- */
 function poSave(po, isNew, auditAction){
   recomputePOderived(po);
@@ -14390,8 +14517,18 @@ function poSave(po, isNew, auditAction){
   poUpsertLocal(po);
   poCloudUpsert(po);
   logAudit(auditAction||(isNew?'create':'update'),'po',po.po_number,{new:{status:po.status,total:po.total,supplier:po.supplier}});
+  // حلقة السعر: كل بند معتمد يصير ملاحظة سعرية في السجل
+  let ps = null;
+  try{ ps = poSyncPriceHistory(po); }catch(e){ reportError('poSyncPriceHistory', e, {po:po.po_number}); }
   updateCounts();
   renderPurchaseOrders();
+  if(ps && (ps.added || ps.removed)){
+    const bits = [];
+    if(ps.added)   bits.push(`أُضيف ${ps.added} سعر للسجل`);
+    if(ps.removed) bits.push(`سُحب ${ps.removed}`);
+    if(ps.unmatched) bits.push(`${ps.unmatched} بلا مطابقة`);
+    toast('info','السجل السعري', bits.join(' · '));
+  }
 }
 function poFind(num){ return STATE.purchaseOrders.find(x=>x.po_number===num); }
 
@@ -14848,6 +14985,8 @@ function deletePO(num){
   if(!requirePermission('can_delete_po','حذف الأمر')) return;
   const po=poFind(num); if(!po) return;
   if(!confirm(`حذف أمر الشراء ${num}؟ لا يمكن التراجع.`)) return;
+  // اسحب أسعاره من السجل قبل إزالته: سعرٌ لأمر محذوف لا يبقى في دفتر الأسعار
+  try{ poSyncPriceHistory({ po_number:num, status:'ملغى', items:[] }); }catch(e){ reportError('deletePO.priceLoop', e, {po:num}); }
   STATE.purchaseOrders=STATE.purchaseOrders.filter(x=>x.po_number!==num);
   poRemoveLocal(num); poCloudDelete(num);
   logAudit('delete','po',num,{});
@@ -14967,6 +15106,28 @@ function openPODrawer(num){
   const hist=(po.status_history||[]).slice().reverse();
   const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div>${h.note?`<div class="po-tl-meta" style="color:#8a6a30">السبب: ${escapeHtml(h.note)}</div>`:''}</div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
   const canEdit=hasPermission('can_edit_po'), canApprove=hasPermission('can_approve_po'), canDel=hasPermission('can_delete_po');
+  // حلقة السعر: ماذا غذّى هذا الأمر في السجل السعري، وما البنود التي لم تُطابَق
+  const _priceHtml=(()=>{
+    const lines=Array.isArray(po.items)?po.items:[];
+    if(!lines.length) return '';
+    const fed=(STATE.history||[]).filter(h=>h&&typeof h.reference==='string'&&h.reference.startsWith(poPriceRefPrefix(po.po_number)));
+    const unmatched=poPriceEligible(po)
+      ? lines.filter(it=>(Number(it.price)||0)>0&&(Number(it.qty)||0)>0&&!poMatchItem(it.desc))
+        .map(it=>({desc:it.desc, reason:poMatchLine(it.desc).reason}))
+      : [];
+    const ambig=unmatched.filter(u=>u.reason==='ambiguous').length;
+    if(!poPriceEligible(po)){
+      return `<div class="po-price-note pending">📈 لم تُسجَّل أسعار هذا الأمر بعد — تُضاف إلى السجل السعري عند بلوغه «اعتماد مدير الشراء».</div>`;
+    }
+    if(!fed.length && !unmatched.length) return '';
+    return `<div class="po-price-note">
+      ${fed.length?`📈 غذّى السجل السعري بـ<b>${fed.length}</b> ${fed.length===1?'سعر':'أسعار'} — تُحدِّث سعر الصنف وتقارير التوفير.`:''}
+      ${unmatched.length?`<div style="margin-top:6px">⚠ <b>${unmatched.length}</b> ${unmatched.length===1?'بند لم يُسجَّل سعره':'بنود لم تُسجَّل أسعارها'}:
+        <div style="font-weight:400;margin-top:3px">${unmatched.slice(0,4).map(u=>'• '+escapeHtml(String(u.desc||'').slice(0,56))+(u.reason==='ambiguous'?' <span style="opacity:.8">(اسم يخصّ أكثر من صنف)</span>':'')).join('<br>')}
+        ${unmatched.length>4?`<br>و${unmatched.length-4} غيرها`:''}</div>
+        <div style="font-weight:400;margin-top:4px;opacity:.85">${ambig?'وحّد أسماء الأصناف المكرّرة في الكتالوج، و':'أ'}ضِف الصنف الناقص بالاسم نفسه ليُسجَّل سعره تلقائياً.</div></div>`:''}
+    </div>`;
+  })();
   const c=document.getElementById('po-drawer-content');
   c.innerHTML=`
     <div class="po-drawer-head">
@@ -15014,6 +15175,7 @@ function openPODrawer(num){
       ${kv('الحالة','<span class="po-status-chip '+(meta.cls||'')+'" style="cursor:default">'+escapeHtml(po.status)+'</span>')}
     </div></div>
     ${itemsHtml}
+    ${_priceHtml}
     ${receiptsHtml}
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>

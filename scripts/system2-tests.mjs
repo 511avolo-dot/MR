@@ -79,8 +79,18 @@ const NEEDED_FNS = [
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
   'poStageStats', 'poFmtDuration', 'poCurrentStageAge', 'poProjectStats', 'printPO',
+  'poPriceRef', 'poPriceRefPrefix', 'poItemIndex', 'poMatchItem', 'poPriceEligible',
+  'poSyncPriceHistory', 'recomputeItemStats', 'siNormalize', 'poMatchLine',
 ];
-const NEEDED_CONSTS = ['PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS'];
+// متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف)
+const NEEDED_LETS = ['__poItemIdx'];
+function grabLet(name){
+  const lines = JS.split('\n');
+  const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
+  if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
+  return lines[i];
+}
+const NEEDED_CONSTS = ['SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -104,6 +114,11 @@ function poStageTimeline(){ return []; }
 function poSupplierRating(){ return null; }
 function poUpsertLocal(){}
 function poCloudUpsert(){}
+function saveUserEntry(){}
+function deleteUserEntry(){}
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+const localStorage = { getItem:()=>null, setItem(){}, removeItem(){} };
+const window = {};
 let __captured = null;
 async function printDocOpen(opts, body){ __captured = {opts, body}; }
 const document = {
@@ -113,7 +128,7 @@ const document = {
 };
 `;
 
-const body = [stubs, ...NEEDED_CONSTS.map(grabConst), ...NEEDED_FNS.map(grab)].join('\n\n');
+const body = [stubs, ...NEEDED_LETS.map(grabLet), ...NEEDED_CONSTS.map(grabConst), ...NEEDED_FNS.map(grab)].join('\n\n');
 const exportLine = `; return {${[...NEEDED_FNS, ...NEEDED_CONSTS].join(',')}, STATE, get captured(){return __captured;}};`;
 let M;
 try {
@@ -299,6 +314,79 @@ G('٧) تجميع الجهات (يغذّي التقرير الذكي)');
   T('التجميع بالجهة صحيح', st.find(x => x.project === 'أ').count === 2);
   T('مرتّب تنازلياً بالقيمة', st[0].value >= st[st.length - 1].value);
   T('اللقطة تعدّ الأوامر بلا جهة', api.poStateSnapshot().no_project === 1);
+}
+
+/* ── 9) حلقة السعر ──────────────────────────────────────────── */
+G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
+{
+  STATE.items = [
+    { code:'IT-1', name:'أنابيب PVC 50 مم', category:'أدوات صحية', unit:'حبة' },
+    { code:'IT-2', name:'كيبل نحاس 3×2.5', category:'كهرباء', unit:'متر' },
+  ];
+  STATE.history = [];
+
+  T('المطابقة التامة بعد التطبيع', api.poMatchItem('أنابيب PVC 50 مم')?.code === 'IT-1');
+  T('المطابقة رغم اختلاف ترتيب الكلمات', api.poMatchItem('PVC 50 مم أنابيب')?.code === 'IT-1');
+  T('لا تخمين لبند غير موجود', api.poMatchItem('صنف لا وجود له إطلاقاً') === null);
+  T('سبب التعذّر يُميَّز: غير موجود', api.poMatchLine('صنف لا وجود له إطلاقاً').reason === 'none');
+  // اسم يخصّ صنفين — الكتالوج الحقيقي فيه 15 حالة كهذه، والتخمين ينسب السعر لصنف خاطئ
+  STATE.items.push({ code:'IT-3', name:'أنابيب PVC 50 مم', category:'أخرى', unit:'حبة' });
+  T('الاسم الملتبس لا يُطابَق تخميناً', api.poMatchItem('أنابيب PVC 50 مم') === null);
+  T('سبب التعذّر يُميَّز: التباس', api.poMatchLine('أنابيب PVC 50 مم').reason === 'ambiguous');
+  STATE.items.pop();
+  T('زوال الالتباس يعيد المطابقة', api.poMatchItem('أنابيب PVC 50 مم')?.code === 'IT-1');
+
+  const draft = mkPO({ po_number:'P.O-DG26-9001', status:'قيد المراجعة', supplier:'مورد أ', issue_date:'2026-08-10',
+    items:[{desc:'أنابيب PVC 50 مم', qty:10, price:120}] });
+  T('الأمر قبل الاعتماد غير مؤهَّل', api.poPriceEligible(draft) === false);
+  let r = api.poSyncPriceHistory(draft);
+  T('لا يُسجَّل سعر من أمر غير معتمد', r.added === 0 && STATE.history.length === 0);
+
+  const po = mkPO({ po_number:'P.O-DG26-9001', status:'اعتماد مدير الشراء', supplier:'مورد أ', issue_date:'2026-08-10',
+    items:[ {desc:'أنابيب PVC 50 مم', qty:10, price:120},
+            {desc:'كيبل نحاس 3×2.5',  qty:5,  price:40},
+            {desc:'صنف خارج الكتالوج', qty:2, price:99},
+            {desc:'أنابيب PVC 50 مم', qty:1, price:0} ] });
+  r = api.poSyncPriceHistory(po);
+  T('البنود المطابَقة تُسجَّل', r.added === 2, JSON.stringify(r));
+  T('البند بلا مطابقة يُعَدّ ولا يُخمَّن', r.unmatched === 1);
+  T('البند بسعر صفر لا يُسجَّل', STATE.history.length === 2);
+  T('المرجع يحمل رقم الأمر وترتيب البند',
+    STATE.history.some(h => h.reference === 'PO:P.O-DG26-9001#0'));
+  T('السجل يحمل المورد والتاريخ من الأمر',
+    STATE.history.every(h => h.supplier === 'مورد أ' && h.date === '2026-08-10'));
+  T('السجل مربوط بكود الصنف', STATE.history.every(h => h.code === 'IT-1' || h.code === 'IT-2'));
+
+  api.recomputeItemStats();
+  T('سعر الصنف تحدَّث من الأمر', STATE.items.find(i=>i.code==='IT-1').last_price === 120);
+
+  r = api.poSyncPriceHistory(po);
+  T('إعادة الحفظ لا تُكرّر السجلات', r.added === 0 && r.updated === 0 && STATE.history.length === 2);
+
+  po.items[0].price = 135;
+  r = api.poSyncPriceHistory(po);
+  T('تعديل سعر البند يُحدِّث السجل نفسه', r.updated === 1 && STATE.history.length === 2);
+  api.recomputeItemStats();
+  T('سعر الصنف يتبع التعديل', STATE.items.find(i=>i.code==='IT-1').last_price === 135);
+
+  po.items.splice(1, 1);
+  r = api.poSyncPriceHistory(po);
+  T('حذف بند يسحب سجله', r.removed === 1 && STATE.history.length === 1);
+
+  po.status = 'ملغى';
+  r = api.poSyncPriceHistory(po);
+  T('إلغاء الأمر يسحب كل أسعاره', r.removed === 1 && STATE.history.length === 0);
+  api.recomputeItemStats();
+  T('سعر الصنف يعود فارغاً بعد السحب', STATE.items.find(i=>i.code==='IT-1').last_price === null);
+
+  // لا يمسّ السجلات اليدوية
+  STATE.history = [{ num:1, code:'IT-1', name:'أنابيب PVC 50 مم', price:99, supplier:'يدوي', date:'2026-01-01', reference:'عرض سعر', _user:true }];
+  po.status = 'اعتماد مدير الشراء'; po.items = [{desc:'أنابيب PVC 50 مم', qty:1, price:120}];
+  api.poSyncPriceHistory(po);
+  T('السجلات اليدوية لا تُمَسّ', STATE.history.some(h => h.reference === 'عرض سعر'));
+  po.status = 'ملغى';
+  api.poSyncPriceHistory(po);
+  T('السحب لا يطال إلا سجلات هذا الأمر', STATE.history.length === 1 && STATE.history[0].reference === 'عرض سعر');
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
