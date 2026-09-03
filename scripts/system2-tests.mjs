@@ -82,12 +82,12 @@ const NEEDED_FNS = [
   'poPriceRef', 'poPriceRefPrefix', 'poItemIndex', 'poMatchItem', 'poPriceEligible',
   'poSyncPriceHistory', 'recomputeItemStats', 'siNormalize', 'poMatchLine',
   // سجل المشاريع المعتمد
-  'prjNorm', 'prjBigrams', 'prjDice', 'prjLev', 'prjSim', 'prjActive', 'prjById', 'prjNames',
+  'prjNorm', 'prjClean', 'prjBigrams', 'prjDice', 'prjLev', 'prjDigits', 'prjSim', 'prjActive', 'prjById', 'prjNames',
   'prjNewId', 'prjIndex', 'prjInvalidate', 'prjResolve', 'prjCanonical',
   'prjPersistLocal', 'prjPersistCloud', 'prjPersist', 'prjSeedFromOrders',
   'prjAdd', 'prjAddAlias', 'prjRemoveAlias', 'prjRename', 'prjRewriteOrders', 'prjSetActive',
   'prjOrderCount', 'prjStats', 'prjDelete', 'prjPendingUnify', 'prjApplyUnify', 'prjMergeProjects',
-  'prjDuplicatePairs', 'poImportResolveProjects',
+  'prjDuplicatePairs', 'prjAutoUnify', 'poImportResolveProjects',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx'];
@@ -515,6 +515,43 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('دمج الزوج يوحّد الأوامر',
     STATE.purchaseOrders.filter(o => o.project === 'المحكمة الإدارية').length === 3);
   T('لا أزواج متبقّية بعد الدمج', api.prjDuplicatePairs().length === 0);
+
+  // الأرقام مميِّزة لا إملائية — «فرع الرياض 3» و«فرع الرياض 4» مشروعان مختلفان
+  T('اسمان بأرقام مختلفة دون عتبة الترشيح',
+    api.prjSim('فرع الرياض 3', 'فرع الرياض 4') < api.PRJ_SIM_WEAK);
+  T('رقم على جانب واحد لا يُقترح تلقائياً',
+    api.prjSim('مستودع الخرج', 'مستودع الخرج 2') < api.PRJ_SIM_STRONG);
+  T('الأرقام نفسها لا تُضعف التشابه',
+    api.prjSim('فرع الرياض ٣', 'فرع الرياض 3') === 1);
+  reset([
+    { id:'N1', name:'فرع الرياض 3', aliases:[], active:true },
+    { id:'N2', name:'فرع الرياض 4', aliases:[], active:true },
+  ]);
+  T('لا زوج دمج كاذب بين رقمين مختلفين', api.prjDuplicatePairs().length === 0);
+  T('كلٌّ يُحلّ لنفسه', api.prjResolve('فرع الرياض 4').project.id === 'N2');
+
+  // المسافات الزائدة: قيمة مخزَّنة مختلفة ⇒ مجموعة منفصلة في كل تجميع يقرأ po.project
+  reset([]);
+  STATE.purchaseOrders = [
+    { po_number:'W-1', project:'مستودع الخرج',    total:100 },
+    { po_number:'W-2', project:'  مستودع الخرج ', total:100 },
+    { po_number:'W-3', project:'مستودع  الخرج',   total:100 },
+  ];
+  api.prjSeedFromOrders();
+  T('البذرة تنتج مشروعاً واحداً للمسافات المختلفة', PRJ.list.length === 1);
+  T('الاسم المعتمد نظيف من المسافات الزائدة', PRJ.list[0].name === 'مستودع الخرج');
+  const auto = api.prjAutoUnify();
+  T('التوحيد التلقائي يعيد كتابة الأوامر المخزَّنة بمسافات زائدة', auto.orders === 2);
+  T('كل الأوامر بقيمة مخزَّنة واحدة',
+    new Set(STATE.purchaseOrders.map(o => o.project)).size === 1);
+  T('لا يبقى شيء للتوحيد', api.prjPendingUnify().length === 0);
+  T('التوحيد التلقائي لا يكتب ثانيةً بلا داعٍ', api.prjAutoUnify().orders === 0);
+
+  // التوحيد التلقائي لا يمسّ المشتبه به (قراره بشريّ)
+  reset([{ id:'S1', name:'المحكمة الإدارية', aliases:[], active:true }]);
+  STATE.purchaseOrders = [{ po_number:'S-1', project:'المحكمة الادارة', total:100 }];
+  T('المشتبه به لا يُوحَّد تلقائياً',
+    api.prjAutoUnify().orders === 0 && STATE.purchaseOrders[0].project === 'المحكمة الادارة');
 
   // الاستيراد: القاطع يُطبَّق، المشتبه يُنبَّه ولا يُخمَّن
   reset([{ id:'P1', name:'برج الشمال', aliases:['البرج الشمالي'], active:true }]);

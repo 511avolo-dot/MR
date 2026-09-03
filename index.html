@@ -13925,8 +13925,13 @@ async function refreshFromCloud(){
     STATE.purchaseOrders.forEach(recomputePOderived);
   }
 
-  // سجل المشاريع: يُحمَّل بعد وصول الأوامر كي تعمل البذرة الأولى على بيانات حقيقية
-  try{ await prjLoad(); }catch(e){ reportError('prjLoad', e); }
+  // سجل المشاريع: يُحمَّل بعد وصول الأوامر كي تعمل البذرة الأولى على بيانات حقيقية،
+  // ثم يُطبَّق التوحيد المؤكَّد على الأوامر القائمة فتُصلَّح البيانات التاريخية بلا تدخّل.
+  try{
+    await prjLoad();
+    const au=prjAutoUnify();
+    if(au.orders) toast('success','توحيد المشاريع',`وُحّدت ${au.rows} كتابة على ${au.orders} أمر`);
+  }catch(e){ reportError('prjLoad', e); }
 
   // Apply local edits (item edits from local users)
   loadItemEdits();
@@ -14770,7 +14775,12 @@ function poProjectNewTyping(){
 function poReadProjectField(){
   const sel=document.getElementById('po-f-project');
   if(!sel) return '';
-  if(sel.value!=='__new__') return String(sel.value||'').trim();
+  if(sel.value!=='__new__'){
+    // الخيار المؤقّت (قيمة قديمة أو عنوان ترسية) قد يكون كتابة غير معتمدة —
+    // يُحلّ قطعاً إن أمكن كي لا يُحفظ أمر جديد بكتابة خارج السجل.
+    const v=String(sel.value||'').trim();
+    return v ? (prjCanonical(v)||v) : '';
+  }
   const nw=document.getElementById('po-f-project-new');
   const nm=String(nw?nw.value:'').trim();
   if(!nm) return '';
@@ -14861,18 +14871,34 @@ function prjLev(a,b){
   }
   return prev[b.length];
 }
+// أرقام الاسم مميِّزة لا إملائية: «فرع الرياض 3» و«فرع الرياض 4» مشروعان مختلفان
+function prjDigits(normalized){ return (String(normalized||'').match(/\d+/g)||[]); }
 /* تشابه 0..1 — الأعلى بين تشابه الثنائيات ونسبة مسافة التحرير.
    الثنائيات تلتقط اختلاف ترتيب الكلمات، ومسافة التحرير تلتقط الحرف الواحد
-   المختلف في الأسماء القصيرة (وهو الخطأ الإملائي الأشيع). */
+   المختلف في الأسماء القصيرة (وهو الخطأ الإملائي الأشيع).
+   ⚠️ الأرقام تكسر التشابه: اسمان بأرقام مختلفة مشروعان متمايزان مهما تشابه نصّهما
+   (وإلّا صار «فرع الرياض 3» و«فرع الرياض 4» مرشّحَي دمج بنسبة 90%). */
 function prjSim(a,b){
   const x=prjNorm(a), y=prjNorm(b);
   if(!x||!y) return 0;
   if(x===y) return 1;
   const lev=1-(prjLev(x,y)/Math.max(x.length,y.length));
-  return Math.max(prjDice(x,y), lev);
+  const score=Math.max(prjDice(x,y), lev);
+  const dx=prjDigits(x), dy=prjDigits(y);
+  const sx=dx.slice().sort().join(','), sy=dy.slice().sort().join(',');
+  if(sx!==sy){
+    // أرقام مختلفة على الجانبين ⇒ متمايزان قطعاً (دون عتبة الترشيح)
+    if(dx.length && dy.length) return Math.min(score, PRJ_SIM_WEAK-0.01);
+    // رقم على جانب واحد ⇒ لا يُقترح تلقائياً، لكنه يبقى مرشّحاً يراه المستخدم
+    return Math.min(score, PRJ_SIM_STRONG-0.01);
+  }
+  return score;
 }
 const PRJ_SIM_STRONG=0.86;   // تشابه قويّ ⇒ اقتراح «هل تقصد…؟» (لا يُطبَّق تلقائياً)
 const PRJ_SIM_WEAK=0.70;     // مرشّح يُعرض ضمن الاحتمالات
+
+/* تنظيف خفيف للاسم المعروض: مسافات زائدة فقط — لا يغيّر المعنى ولا الحروف */
+function prjClean(s){ return String(s==null?'':s).replace(/\s+/g,' ').trim(); }
 
 /* ---------- الوصول للسجل ---------- */
 function prjActive(){ return PRJ.list.filter(p=>p.active!==false); }
@@ -14982,10 +15008,10 @@ function prjSeedFromOrders(){
   let added=0;
   groups.forEach(variants=>{
     variants.sort((a,b)=> b.c-a.c || b.raw.length-a.raw.length);
-    const name=variants[0].raw;
+    const name=prjClean(variants[0].raw);
     PRJ.list.push({
       id:prjNewId(), name, code:'', sector:'', active:true,
-      aliases:variants.slice(1).map(v=>v.raw),
+      aliases:variants.slice(1).map(v=>prjClean(v.raw)).filter(a=>a!==name),
       created_at:new Date().toISOString(),
       created_by:STATE.currentUser?STATE.currentUser.username:null
     });
@@ -14997,7 +15023,7 @@ function prjSeedFromOrders(){
 
 /* ---------- تحرير السجل ---------- */
 function prjAdd(name,extra){
-  const nm=String(name||'').trim();
+  const nm=prjClean(name);
   if(!nm) return null;
   const hit=prjIndex().get(prjNorm(nm));
   if(hit) return hit;                                     // موجود (اسماً أو مرادفاً)
@@ -15042,9 +15068,13 @@ function prjRename(id,newName){
 }
 /* يعيد كتابة جهة الأوامر من اسم إلى آخر (الأساس الوحيد لتغيير po.project) */
 function prjRewriteOrders(fromName,toName){
+  const key=String(fromName||'').trim();
   let n=0;
   (STATE.purchaseOrders||[]).forEach(o=>{
-    if(String(o.project||'').trim()!==fromName) return;
+    const cur=String(o.project||'');
+    // يطابق القيمة كما هي مخزَّنة أو بعد التشذيب — فتُصلَّح المسافات الزائدة أيضاً
+    if(cur!==fromName && cur.trim()!==key) return;
+    if(cur===toName) return;                      // لا كتابة سحابية بلا تغيير
     o.project=toName;
     poUpsertLocal(o); poCloudUpsert(o); n++;
   });
@@ -15074,7 +15104,9 @@ function prjDelete(id){
 function prjPendingUnify(){
   const counts=new Map();
   (STATE.purchaseOrders||[]).forEach(o=>{
-    const v=String(o.project||'').trim(); if(!v) return;
+    // القيمة **كما هي مخزَّنة** لا مشذّبة: المسافات الزائدة تصنع مجموعة منفصلة
+    // في كل تجميع يقرأ po.project، فيجب أن تُعاد كتابتها هي أيضاً.
+    const v=String(o.project||''); if(!v.trim()) return;
     counts.set(v,(counts.get(v)||0)+1);
   });
   const rows=[];
@@ -15086,6 +15118,18 @@ function prjPendingUnify(){
     else                     rows.push({raw,count,kind:'new',     target:null, score:r.score,candidates:r.candidates});
   });
   return rows.sort((a,b)=> (a.kind===b.kind? b.count-a.count : (a.kind==='alias'?-1:b.kind==='alias'?1:a.kind==='suggest'?-1:1)));
+}
+/* يطبّق التوحيد **المؤكَّد وحده** على الأوامر القائمة تلقائياً: كل كتابة تُحلّ قطعاً
+   (مرادف أو تطابق بعد التطبيع) تُعاد كتابتها بالاسم المعتمد. المشتبه به والمجهول
+   لا يُمسّان (قرارهما بشريّ من شاشة التوحيد).
+   يعمل مرّة واحدة فعلياً: بعد أوّل تشغيل لا يبقى ما يُعاد كتابته فلا كتابة سحابية متكرّرة. */
+function prjAutoUnify(){
+  if(!hasPermission('can_edit_po')) return {orders:0,rows:0};
+  const rows=prjPendingUnify().filter(r=>r.kind==='alias');
+  if(!rows.length) return {orders:0,rows:0};
+  const res=prjApplyUnify(rows);
+  try{ logAudit('update','project','auto-unify',{rows:rows.length,orders:res.orders}); }catch(e){}
+  return {orders:res.orders, rows:rows.length};
 }
 /* أزواج مشاريع متشابهة **داخل السجل نفسه** — تنشأ حين يُسجَّل الخطأ الإملائي
    مشروعاً مستقلاً (بذرة أولى أو إدخال قديم)، فيبدو معتمداً ولا يظهر في التوحيد.
@@ -15111,7 +15155,13 @@ function prjApplyUnify(rows){
   let orders=0, merged=0, created=0;
   (rows||[]).forEach(row=>{
     let target=row.target;
-    if(row.kind==='new'||!target){ target=prjAdd(row.raw); if(target) created++; }
+    if(row.kind==='new'||!target){
+      // كتابتان جديدتان متطابقتان بعد التطبيع ⇒ prjAdd يُرجع المشروع نفسه للثانية،
+      // فنَعُدّ الإنشاء بتغيّر طول السجل لا بمجرّد رجوع كائن.
+      const before=PRJ.list.length;
+      target=prjAdd(row.raw);
+      if(target && PRJ.list.length>before) created++;
+    }
     if(!target) return;
     if(prjNorm(target.name)!==prjNorm(row.raw)) prjAddAlias(target.id,row.raw);
     if(target.name!==row.raw){ orders+=prjRewriteOrders(row.raw,target.name); merged++; }
