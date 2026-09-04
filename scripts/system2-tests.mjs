@@ -50,6 +50,15 @@ T('لا أسماء دوال مكرّرة (التعريف الأخير يطغى �
 // فيُحسب أساس دمج البذور صفراً وتختفي السجلات المحلية غير المرفوعة.
 T('لا قراءة للبذور عبر window.DATA (تُرجع undefined دائماً)', !/window\.DATA/.test(CODE));
 
+// أصل ضخم مضمَّن أكثر من مرّة = بايتات تُنزَّل مكرّرة في كل فتح للصفحة.
+// سابقة مقيسة: شعار الشركة كان مضمَّناً مرّتين (221KB × 2 = 8.3% من الملف).
+const b64s = [...HTML.matchAll(/base64,([A-Za-z0-9+/=]{5000,})/g)].map(m => m[1]);
+const b64seen = new Map();
+b64s.forEach(x => b64seen.set(x, (b64seen.get(x) || 0) + 1));
+const b64dups = [...b64seen.entries()].filter(([, c]) => c > 1);
+T('لا أصل base64 ضخم مضمَّن أكثر من مرّة', b64dups.length === 0,
+  b64dups.map(([x, c]) => `${Math.round(x.length / 1024)}KB×${c}`).join('، '));
+
 /* ── 2) تحميل الدوال الخالصة في صندوق ─────────────────────────── */
 function grab(name) {
   const lines = JS.split('\n');
@@ -77,6 +86,7 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
+  'rtIndexOf', 'rtApply',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
   'poStageStats', 'poFmtDuration', 'poCurrentStageAge', 'poProjectStats', 'printPO',
@@ -99,7 +109,8 @@ function grabLet(name){
   return lines[i];
 }
 const NEEDED_CONSTS = ['SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
-  'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK'];
+  'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
+  'RT_MAP'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -676,6 +687,81 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('الأوامر لدى المالية تُصفّى بالمشروع', /4005/.test(api.captured.body));
   api.buildPOFinanceReport();
   T('ولدى المالية بلا مرشّح تعمل كما كانت', /4005/.test(api.captured.body));
+}
+
+/* ── المزامنة التفاضلية ───────────────────────────────────────── */
+{
+  G('١١) المزامنة التفاضلية — تطبيق الحدث بلا تحميل كامل');
+  const STATE = api.STATE;
+  const ev = (type, row, old) => ({ eventType:type, new:row, old:old });
+
+  // أمر شراء: إضافة ثم تعديل نفس الصفّ
+  STATE.purchaseOrders = [];
+  let ok = api.rtApply('pos', ev('INSERT', {
+    po_number:'P.O-DG26-7001', issue_date:'2026-08-01', supplier:'مورد', project:'برج',
+    subtotal:1000, status:'قيد المراجعة', items:[], updated_at:'2026-08-01T10:00:00Z' }));
+  T('حدث إضافة أمر يُطبَّق مباشرةً', ok === true && STATE.purchaseOrders.length === 1);
+  T('الأرقام المشتقّة تُحسب للصفّ المُطبَّق',
+    STATE.purchaseOrders[0].vat === 150 && STATE.purchaseOrders[0].total === 1150);
+  T('طابع القفل المتفائل يُضبط كما في التحميل الكامل',
+    STATE.purchaseOrders[0]._sync === '2026-08-01T10:00:00Z');
+  T('الصفّ يُوسم سحابياً', STATE.purchaseOrders[0]._cloud === true);
+
+  ok = api.rtApply('pos', ev('UPDATE', {
+    po_number:'P.O-DG26-7001', issue_date:'2026-08-01', supplier:'مورد آخر', project:'برج',
+    subtotal:2000, status:'اعتماد مدير الشراء', items:[], updated_at:'2026-08-01T11:00:00Z' }));
+  T('التعديل يستبدل الصفّ ولا يُكرّره', ok && STATE.purchaseOrders.length === 1);
+  T('القيم الجديدة سرت', STATE.purchaseOrders[0].supplier === 'مورد آخر'
+    && STATE.purchaseOrders[0].total === 2300);
+  T('الطابع تحدَّث مع التعديل', STATE.purchaseOrders[0]._sync === '2026-08-01T11:00:00Z');
+
+  // صنف: مفتاحه code
+  STATE.items = [{ code:'IT-1', name:'قديم', category:'أ' }];
+  api.rtApply('items', ev('UPDATE', { code:'IT-1', name:'جديد', category:'أ' }));
+  T('الصنف يُطابَق بالكود ويُستبدَل',
+    STATE.items.length === 1 && STATE.items[0].name === 'جديد' && STATE.items[0]._cloud === true);
+  api.rtApply('items', ev('INSERT', { code:'IT-2', name:'صنف ثانٍ' }));
+  T('الصنف الجديد يُضاف أوّلاً (الأحدث أولاً)',
+    STATE.items.length === 2 && STATE.items[0].code === 'IT-2');
+
+  // المورد: المفتاح id ثم الاسم — تغيير الاسم على نفس المعرّف تعديلٌ لا صفّ جديد
+  STATE.suppliers = [{ id:'S-1', name:'الاسم القديم' }];
+  api.rtApply('suppliers', ev('UPDATE', { id:'S-1', name:'الاسم الجديد' }));
+  T('المورد يُطابَق بالمعرّف حتى لو تغيّر اسمه',
+    STATE.suppliers.length === 1 && STATE.suppliers[0].name === 'الاسم الجديد');
+  // صفّ بلا معرّف يُطابَق بالاسم (سجلّ بذرة قديم)
+  STATE.suppliers = [{ name:'مورد بذرة' }];
+  api.rtApply('suppliers', ev('INSERT', { id:'S-9', name:'مورد بذرة' }));
+  T('الصفّ السحابي يحلّ محلّ سجلّ البذرة بنفس الاسم',
+    STATE.suppliers.length === 1 && STATE.suppliers[0].id === 'S-9');
+
+  // السجل السعري: مفتاحه num
+  STATE.history = [{ num:5, code:'IT-1', price:100 }];
+  api.rtApply('history', ev('UPDATE', { num:5, code:'IT-1', price:150 }));
+  T('سجلّ السعر يُطابَق برقمه', STATE.history.length === 1 && STATE.history[0].price === 150);
+
+  // الحالات التي **يجب** أن تسقط للتحميل الكامل — لا تخمين
+  T('الحذف يسقط للتحميل الكامل عمداً',
+    api.rtApply('pos', ev('DELETE', null, { po_number:'P.O-DG26-7001' })) === false);
+  T('الحدث المجهول لا يُطبَّق', api.rtApply('pos', ev('TRUNCATE', {})) === false);
+  T('الجدول غير المعروف لا يُطبَّق', api.rtApply('unknown', ev('INSERT', { id:1 })) === false);
+  T('حمولة فارغة لا تُطبَّق', api.rtApply('pos', null) === false);
+  T('صفّ بلا مفتاح لا يُطبَّق', api.rtApply('items', ev('INSERT', { name:'بلا كود' })) === false);
+  T('مفتاح فارغ نصّياً لا يُطبَّق', api.rtApply('items', ev('INSERT', { code:'', name:'س' })) === false);
+
+  // الحذف لم يغيّر الحالة (لأنه لم يُطبَّق)
+  T('الحذف الساقط لا يمسّ الحالة',
+    STATE.purchaseOrders.length === 1 && STATE.purchaseOrders[0].po_number === 'P.O-DG26-7001');
+
+  // rtIndexOf: ترتيب المفاتيح مُحترَم
+  const list = [{ id:'A', name:'س' }, { id:'B', name:'ص' }];
+  T('يُطابق بالمفتاح الأوّل المتوفّر', api.rtIndexOf(list, ['id','name'], { id:'B', name:'س' }) === 1);
+  T('يسقط للمفتاح التالي عند غياب الأوّل', api.rtIndexOf(list, ['id','name'], { name:'س' }) === 0);
+  T('لا مطابقة ⇒ -1', api.rtIndexOf(list, ['id','name'], { id:'Z' }) === -1);
+
+  // خريطة الجداول تغطّي ما تشترك عليه القناة اللحظية
+  T('الخريطة تغطّي الجداول الأربعة',
+    ['items','suppliers','history','pos'].every(k => api.RT_MAP[k] && api.RT_MAP[k].arr && api.RT_MAP[k].keys.length));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
