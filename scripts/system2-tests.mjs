@@ -76,21 +76,30 @@ const NEEDED_FNS = [
   'poPartialInfo', 'poReceivedSum', 'poDays', 'poDelayCell', 'poStatusBadgeClass',
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
+  'repList', 'repFilterProjects', 'repDescList',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
   'poStageStats', 'poFmtDuration', 'poCurrentStageAge', 'poProjectStats', 'printPO',
   'poPriceRef', 'poPriceRefPrefix', 'poItemIndex', 'poMatchItem', 'poPriceEligible',
   'poSyncPriceHistory', 'recomputeItemStats', 'siNormalize', 'poMatchLine',
+  // سجل المشاريع المعتمد
+  'prjNorm', 'prjClean', 'prjBigrams', 'prjDice', 'prjLev', 'prjDigits', 'prjSim', 'prjActive', 'prjById', 'prjNames',
+  'prjNewId', 'prjIndex', 'prjInvalidate', 'prjResolve', 'prjCanonical',
+  'prjPersistLocal', 'prjPersistCloud', 'prjPersist', 'prjSeedFromOrders',
+  'prjAdd', 'prjAddAlias', 'prjRemoveAlias', 'prjRename', 'prjRewriteOrders', 'prjSetActive',
+  'prjOrderCount', 'prjStats', 'prjDelete', 'prjPendingUnify', 'prjApplyUnify', 'prjMergeProjects',
+  'prjDuplicatePairs', 'prjAutoUnify', 'poImportResolveProjects',
 ];
-// متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف)
-const NEEDED_LETS = ['__poItemIdx'];
+// متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS'];
+const NEEDED_CONSTS = ['SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+  'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -387,6 +396,286 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   po.status = 'ملغى';
   api.poSyncPriceHistory(po);
   T('السحب لا يطال إلا سجلات هذا الأمر', STATE.history.length === 1 && STATE.history[0].reference === 'عرض سعر');
+}
+
+/* ── سجل المشاريع المعتمد ────────────────────────────────────── */
+{
+  G('٩) سجل المشاريع المعتمد — توحيد كتابات الجهة');
+  const PRJ = api.PRJ;
+  const reset = (list) => { PRJ.list = list || []; api.prjInvalidate(); };
+
+  // التطبيع: الكتابات المختلفة للمشروع نفسه تنهار إلى مفتاح واحد
+  T('التطبيع يوحّد الهمزة والتاء المربوطة وأداة التعريف',
+    api.prjNorm('المحكمة الإدارية') === api.prjNorm('محكمه الاداريه'));
+  T('التطبيع يُسقط الرموز والمسافات الزائدة',
+    api.prjNorm('  برج-الشمال  ') === api.prjNorm('برج الشمال'));
+  T('التطبيع يوحّد الأرقام الهندية', api.prjNorm('مستودع ٣') === api.prjNorm('مستودع 3'));
+  T('كلمة «مشروع» العامّة لا تصنع مشروعاً آخر',
+    api.prjNorm('مشروع برج الشمال') === api.prjNorm('برج الشمال'));
+  T('مشروعان مختلفان لا ينهاران لمفتاح واحد',
+    api.prjNorm('برج الشمال') !== api.prjNorm('برج الجنوب'));
+
+  // قياس التشابه: يلتقط الخطأ الإملائي دون خلط المشاريع المتمايزة
+  T('الخطأ الإملائي بحرف واحد تشابهه قويّ',
+    api.prjSim('المحكمة الإدارية', 'المحكمة الادارة') >= api.PRJ_SIM_STRONG);
+  T('مشروعان مختلفان تشابههما دون العتبة',
+    api.prjSim('مستودع الرياض', 'مستودع جدة') < api.PRJ_SIM_STRONG);
+
+  // الحلّ: قاطع (اسم/مرادف/تطبيع) مقابل اقتراح لا يُطبَّق تلقائياً
+  reset([{ id:'P1', name:'المحكمة الإدارية', aliases:['محكمة إدارية بالرياض'], active:true }]);
+  T('الاسم المعتمد يُحلّ قطعاً', api.prjResolve('المحكمة الإدارية').method === 'exact');
+  T('الكتابة المختلفة تُحلّ قطعاً بعد التطبيع',
+    api.prjResolve('محكمه الاداريه').status === 'ok');
+  T('المرادف يُحلّ قطعاً', api.prjResolve('محكمة إدارية بالرياض').status === 'ok');
+  const sug = api.prjResolve('المحكمة الادارة');
+  T('الخطأ الإملائي اقتراح لا مطابقة', sug.status === 'suggest' && sug.project.id === 'P1');
+  T('الاقتراح لا يُطبَّق تلقائياً (prjCanonical لا يخمّن)', api.prjCanonical('المحكمة الادارة') === '');
+  T('مشروع غريب لا يُحلّ', api.prjResolve('سد وادي حنيفة').status === 'none');
+  T('الفراغ حالة مستقلّة', api.prjResolve('   ').status === 'empty');
+
+  // منع المكرّر عند الإضافة
+  reset([{ id:'P1', name:'برج الشمال', aliases:[], active:true }]);
+  T('إضافة كتابة مختلفة لمشروع قائم تُرجعه نفسه',
+    api.prjAdd('برج شمال').id === 'P1' && PRJ.list.length === 1);
+  const p2 = api.prjAdd('برج الجنوب');
+  T('مشروع مختلف يُضاف فعلاً', p2 && p2.id !== 'P1' && PRJ.list.length === 2);
+
+  // المرادفات محجوزة لمشروع واحد
+  T('المرادف يُقبل', api.prjAddAlias('P1', 'البرج الشمالي') === true);
+  T('المرادف لا يُسرَق من مشروع آخر', api.prjAddAlias(p2.id, 'البرج الشمالي') === false);
+  T('المرادف يعمل فوراً في الحلّ', api.prjResolve('البرج الشمالي').project.id === 'P1');
+  T('حذف المرادف يُلغي حلّه',
+    api.prjRemoveAlias('P1', 'البرج الشمالي') && api.prjResolve('البرج الشمالي').status !== 'ok');
+
+  // البذرة من الأوامر: الكتابات المتطابقة بعد التطبيع = مشروع واحد
+  const STATE = api.STATE;
+  STATE.purchaseOrders = [
+    { po_number:'A-1', project:'المحكمة الإدارية', total:100 },
+    { po_number:'A-2', project:'المحكمة الإدارية', total:100 },
+    { po_number:'A-3', project:'محكمه الاداريه',  total:100 },
+    { po_number:'A-4', project:'مستودع الخرج',    total:50  },
+    { po_number:'A-5', project:'',                total:10  },
+  ];
+  reset([]);
+  const seeded = api.prjSeedFromOrders();
+  T('البذرة تنشئ مشروعاً لكل مجموعة متطابقة بعد التطبيع', seeded === 2 && PRJ.list.length === 2);
+  const court = PRJ.list.find(p => api.prjNorm(p.name) === api.prjNorm('المحكمة الإدارية'));
+  T('الاسم المعتمد هو الكتابة الأكثر وروداً', court.name === 'المحكمة الإدارية');
+  T('الكتابة الأقلّ تُحفظ مرادفاً', court.aliases.includes('محكمه الاداريه'));
+  T('البذرة لا تمسّ أي أمر شراء', STATE.purchaseOrders[2].project === 'محكمه الاداريه');
+
+  // التوحيد: يعيد كتابة الأوامر ويحفظ المرادف
+  const pend = api.prjPendingUnify();
+  T('صفّ توحيد واحد للكتابة غير المعتمدة', pend.length === 1 && pend[0].raw === 'محكمه الاداريه');
+  T('الصفّ مصنّف مطابقة مؤكَّدة', pend[0].kind === 'alias' && pend[0].target.id === court.id);
+  const res = api.prjApplyUnify(pend);
+  T('التوحيد يعيد كتابة الأوامر', res.orders === 1 && STATE.purchaseOrders[2].project === 'المحكمة الإدارية');
+  T('لا يبقى صفّ توحيد بعد التطبيق', api.prjPendingUnify().length === 0);
+  T('القيمة تتجمّع تحت المشروع الواحد', api.prjStats(court).count === 3);
+
+  // إعادة التسمية: تُعيد كتابة الأوامر وتحفظ الاسم القديم مرادفاً
+  const n = api.prjRename(court.id, 'المحكمة الإدارية بالرياض');
+  T('إعادة التسمية تُحدّث كل أوامر المشروع', n === 3);
+  T('كل الأوامر صارت بالاسم الجديد',
+    STATE.purchaseOrders.filter(o => o.project === 'المحكمة الإدارية بالرياض').length === 3);
+  T('الاسم القديم صار مرادفاً يُحلّ', api.prjResolve('المحكمة الإدارية').project.id === court.id);
+  T('اسم يخصّ مشروعاً آخر يُرفض',
+    api.prjRename(court.id, PRJ.list.find(p => p.id !== court.id).name) === -1);
+
+  // الدمج
+  const store = PRJ.list.find(p => p.id !== court.id);
+  const moved = api.prjMergeProjects(store.id, court.id);
+  T('الدمج ينقل أوامر المشروع المدموج', moved === 1);
+  T('المشروع المدموج يخرج من السجل', !api.prjById(store.id) && PRJ.list.length === 1);
+  T('اسم المدموج يبقى قابلاً للحلّ مرادفاً', api.prjResolve('مستودع الخرج').project.id === court.id);
+
+  // الحذف محكوم بالاستعمال
+  T('لا حذف لمشروع مستعمل', api.prjDelete(court.id) === false);
+  const tmp = api.prjAdd('مشروع بلا أوامر');
+  T('حذف مشروع غير مستعمل يمرّ', api.prjDelete(tmp.id) === true);
+
+  // الأزواج المتشابهة داخل السجل: الخطأ الإملائي المسجَّل مشروعاً مستقلاً
+  // يبدو معتمداً ولا يظهر في التوحيد — لذلك يُرصد على حدة ويُدمج بقرار بشريّ.
+  reset([]);
+  STATE.purchaseOrders = [
+    { po_number:'E-1', project:'المحكمة الإدارية', total:100 },
+    { po_number:'E-2', project:'المحكمة الإدارية', total:100 },
+    { po_number:'E-3', project:'المحكمة الادارة',  total:100 },
+    { po_number:'E-4', project:'مستودع الخرج',    total:50  },
+  ];
+  api.prjSeedFromOrders();
+  T('الخطأ الإملائي يُسجَّل مشروعاً مستقلاً (البذرة لا تخمّن)', PRJ.list.length === 3);
+  T('لا يظهر في صفوف التوحيد لأنه صار معتمداً', api.prjPendingUnify().length === 0);
+  const pairs = api.prjDuplicatePairs();
+  T('يُرصد زوجاً متشابهاً داخل السجل', pairs.length === 1);
+  T('يُبقى الأكثر استعمالاً ويُدمج الأقلّ',
+    pairs[0].keep.name === 'المحكمة الإدارية' && pairs[0].drop.name === 'المحكمة الادارة');
+  T('المشروع المتمايز ليس ضمن الأزواج',
+    !pairs.some(p => p.keep.name === 'مستودع الخرج' || p.drop.name === 'مستودع الخرج'));
+  api.prjMergeProjects(pairs[0].drop.id, pairs[0].keep.id);
+  T('دمج الزوج يوحّد الأوامر',
+    STATE.purchaseOrders.filter(o => o.project === 'المحكمة الإدارية').length === 3);
+  T('لا أزواج متبقّية بعد الدمج', api.prjDuplicatePairs().length === 0);
+
+  // الأرقام مميِّزة لا إملائية — «فرع الرياض 3» و«فرع الرياض 4» مشروعان مختلفان
+  T('اسمان بأرقام مختلفة دون عتبة الترشيح',
+    api.prjSim('فرع الرياض 3', 'فرع الرياض 4') < api.PRJ_SIM_WEAK);
+  T('رقم على جانب واحد لا يُقترح تلقائياً',
+    api.prjSim('مستودع الخرج', 'مستودع الخرج 2') < api.PRJ_SIM_STRONG);
+  T('الأرقام نفسها لا تُضعف التشابه',
+    api.prjSim('فرع الرياض ٣', 'فرع الرياض 3') === 1);
+  reset([
+    { id:'N1', name:'فرع الرياض 3', aliases:[], active:true },
+    { id:'N2', name:'فرع الرياض 4', aliases:[], active:true },
+  ]);
+  T('لا زوج دمج كاذب بين رقمين مختلفين', api.prjDuplicatePairs().length === 0);
+  T('كلٌّ يُحلّ لنفسه', api.prjResolve('فرع الرياض 4').project.id === 'N2');
+
+  // المسافات الزائدة: قيمة مخزَّنة مختلفة ⇒ مجموعة منفصلة في كل تجميع يقرأ po.project
+  reset([]);
+  STATE.purchaseOrders = [
+    { po_number:'W-1', project:'مستودع الخرج',    total:100 },
+    { po_number:'W-2', project:'  مستودع الخرج ', total:100 },
+    { po_number:'W-3', project:'مستودع  الخرج',   total:100 },
+  ];
+  api.prjSeedFromOrders();
+  T('البذرة تنتج مشروعاً واحداً للمسافات المختلفة', PRJ.list.length === 1);
+  T('الاسم المعتمد نظيف من المسافات الزائدة', PRJ.list[0].name === 'مستودع الخرج');
+  const auto = api.prjAutoUnify();
+  T('التوحيد التلقائي يعيد كتابة الأوامر المخزَّنة بمسافات زائدة', auto.orders === 2);
+  T('كل الأوامر بقيمة مخزَّنة واحدة',
+    new Set(STATE.purchaseOrders.map(o => o.project)).size === 1);
+  T('لا يبقى شيء للتوحيد', api.prjPendingUnify().length === 0);
+  T('التوحيد التلقائي لا يكتب ثانيةً بلا داعٍ', api.prjAutoUnify().orders === 0);
+
+  // التوحيد التلقائي لا يمسّ المشتبه به (قراره بشريّ)
+  reset([{ id:'S1', name:'المحكمة الإدارية', aliases:[], active:true }]);
+  STATE.purchaseOrders = [{ po_number:'S-1', project:'المحكمة الادارة', total:100 }];
+  T('المشتبه به لا يُوحَّد تلقائياً',
+    api.prjAutoUnify().orders === 0 && STATE.purchaseOrders[0].project === 'المحكمة الادارة');
+
+  // الاستيراد: القاطع يُطبَّق، المشتبه يُنبَّه ولا يُخمَّن
+  reset([{ id:'P1', name:'برج الشمال', aliases:['البرج الشمالي'], active:true }]);
+  const rows = [
+    { po_number:'B-1', project:'البرج الشمالي' },
+    { po_number:'B-2', project:'برج شمال' },
+    { po_number:'B-3', project:'برج الشمل' },
+    { po_number:'B-4', project:'سد وادي حنيفة' },
+    { po_number:'B-5', project:'' },
+  ];
+  const warns = [];
+  const sum = api.poImportResolveProjects(rows, warns);
+  T('الاستيراد يوحّد المرادف تلقائياً', rows[0].project === 'برج الشمال');
+  T('الاستيراد يوحّد الكتابة المتطابقة بعد التطبيع', rows[1].project === 'برج الشمال');
+  T('عدّاد التوحيد صحيح', sum.mapped === 2);
+  T('الخطأ الإملائي لا يُخمَّن في الاستيراد', rows[2].project === 'برج الشمل' && sum.suggest === 1);
+  T('المشروع الغريب يُنبَّه عليه', sum.unknown === 1 && warns.length === 2);
+  T('الجهة الفارغة لا تُنبِّه', rows[4].project === '');
+
+  // خلية الجدول تسم الكتابة غير المعتمدة
+  T('الكتابة غير المعتمدة تُوسم في الجدول',
+    /po-prj-unmapped/.test(api.poProjectCell({ project:'برج الشمل' })));
+  T('الاسم المعتمد بلا وسم', !/po-prj-unmapped/.test(api.poProjectCell({ project:'برج الشمال' })));
+
+  // مرشّح القائمة يجمع السجل والمستعمل
+  STATE.purchaseOrders = [{ po_number:'C-1', project:'موقع غير مسجّل' }];
+  const names = api.poProjectList();
+  T('قائمة المرشّح تضمّ السجل والمستعمل معاً',
+    names.includes('برج الشمال') && names.includes('موقع غير مسجّل'));
+
+  // البحث واعٍ بالمرادفات
+  STATE.purchaseOrders = [{ po_number:'D-1', project:'برج الشمال', status:'قيد المراجعة' }];
+  STATE.purchaseOrders.forEach(api.recomputePOderived);
+  STATE.poSegment = 'all'; STATE.poSort = { col:'po_number', dir:'desc' };
+  STATE.poFilter = { q:'البرج الشمالي', sector:'', status:'', priority:'', project:'' };
+  T('البحث بكتابة قديمة يجد أوامر المشروع', api.poFilteredList().length === 1);
+  STATE.poFilter.q = '';
+}
+
+/* ── تقارير متعدّدة المشاريع/الحالات ─────────────────────────── */
+{
+  G('١٠) تقارير أوامر الشراء — اختيار عدّة مشاريع وحالات');
+  const STATE = api.STATE;
+  const mk = (n, project, status, days) => ({
+    po_number:'P.O-DG26-' + n, issue_date:'2026-08-01', project, supplier:'مورد',
+    sector:'إنشاءات', subtotal:1000, status, days_delayed:days||0,
+    expected_delivery:'2026-08-20', items:[], status_history:[],
+  });
+  STATE.purchaseOrders = [
+    mk(4001, 'برج الشمال',   'قيد المراجعة', 0),
+    mk(4002, 'مستودع الخرج', 'قيد المراجعة', 12),
+    mk(4003, 'فرع الرياض 3', 'تسليم كامل',   0),
+    mk(4004, '',             'قيد المراجعة', 5),
+    mk(4005, 'برج الشمال',   'تسليم للإدارة المالية', 0),
+  ];
+  STATE.purchaseOrders.forEach(api.recomputePOderived);
+
+  // repList: يقبل الواحد والمتعدّد والفارغ
+  T('القيمة الواحدة تصير قائمة', api.repList('أ').length === 1);
+  T('المصفوفة تمرّ كما هي بلا فراغات', api.repList(['أ','','ب']).join(',') === 'أ,ب');
+  T('الفراغ والمصفوفة الفارغة = بلا تصفية',
+    api.repList('').length === 0 && api.repList([]).length === 0 && api.repList(undefined).length === 0);
+
+  // التصفية بعدّة مشاريع
+  const all = STATE.purchaseOrders;
+  T('بلا اختيار تمرّ كل الأوامر', api.repFilterProjects(all, []).length === 5);
+  T('مشروع واحد (توافق خلفي مع النصّ)', api.repFilterProjects(all, 'برج الشمال').length === 2);
+  T('مشروعان معاً في تقرير واحد',
+    api.repFilterProjects(all, ['برج الشمال','فرع الرياض 3']).length === 3);
+  T('«بلا جهة» تُختار مع مشاريع أخرى',
+    api.repFilterProjects(all, ['برج الشمال','__none__']).length === 3);
+  T('«بلا جهة» وحدها لا تجلب المحدّدة',
+    api.repFilterProjects(all, ['__none__']).every(o => !String(o.project||'').trim()));
+
+  // وصف المرشّح المطبوع يسمّي المختار
+  T('الوصف يسمّي المشروعين', api.repDescList('الجهة', ['برج الشمال','فرع الرياض 3'])
+    === 'الجهة: برج الشمال + فرع الرياض 3');
+  T('الوصف يختصر ما زاد على أربعة',
+    /و1 أخرى$/.test(api.repDescList('الجهة', ['أ','ب','ج','د','هـ'])));
+  T('بلا اختيار لا وصف', api.repDescList('الجهة', []) === '');
+  T('«بلا جهة» تُترجَم في الوصف', api.repDescList('الجهة', ['__none__']) === 'الجهة: بلا جهة محدّدة');
+
+  // التقرير نفسه: عدّة مشاريع + عدّة حالات
+  api.buildPOListReport({ project:['برج الشمال','مستودع الخرج'] });
+  let cap = api.captured;
+  T('السجل يطبع أوامر المشروعين معاً', /4001/.test(cap.body) && /4002/.test(cap.body));
+  T('ويستبعد ما سواهما', !/4003/.test(cap.body) && !/4004/.test(cap.body));
+  T('عنوان التقرير يذكر المشروعين', /برج الشمال \+ مستودع الخرج/.test(cap.opts.subtitle));
+
+  api.buildPOListReport({ status:['قيد المراجعة','تسليم كامل'] });
+  cap = api.captured;
+  T('عدّة حالات في تقرير واحد', /4001/.test(cap.body) && /4003/.test(cap.body));
+  T('والحالة غير المختارة مستبعَدة', !/4005/.test(cap.body));
+
+  // الفجوة لا تُعلَن على تقرير مُصفّى — الأمر المستبعَد بالمرشّح ليس «غير مسجّل»
+  api.buildPOListReport({ project:['برج الشمال','مستودع الخرج'] });
+  cap = api.captured;
+  T('التقرير المُصفّى لا يدّعي فجوات كاذبة', !/غير مسجّل/.test(cap.body));
+  T('ويقول إنه مُصفّى', /التقرير مُصفّى/.test(cap.body));
+  api.buildPOListReport({});
+  cap = api.captured;
+  T('التقرير غير المُصفّى ما زال يكشف الفجوات الحقيقية',
+    /متّصل بلا فجوات/.test(cap.body) || /غير مسجّل/.test(cap.body));
+  T('وغير المُصفّى لا يُوصَف بأنه مُصفّى', !/التقرير مُصفّى/.test(cap.body));
+
+  // التوزيع حسب الجهة يبقى مبنيّاً على المُصفّى
+  api.buildPOListReport({ project:['برج الشمال'] });
+  cap = api.captured;
+  T('قسم التوزيع يحصر المشروع المختار',
+    /التوزيع حسب الجهة/.test(cap.body) && !/مستودع الخرج/.test(cap.body));
+
+  // المتأخرات ولدى المالية صارا يقبلان مشاريع متعدّدة
+  api.buildPOOverdueReport({ project:['مستودع الخرج'] });
+  cap = api.captured;
+  T('المتأخرات تُصفّى بالمشروع', /4002/.test(cap.body) && !/4004/.test(cap.body));
+  T('وعنوانها يذكر الجهة', /مستودع الخرج/.test(cap.opts.subtitle));
+  api.buildPOOverdueReport();
+  T('المتأخرات بلا مرشّح تبقى كما كانت', /4002/.test(api.captured.body) && /4004/.test(api.captured.body));
+
+  api.buildPOFinanceReport({ project:['برج الشمال'] });
+  T('الأوامر لدى المالية تُصفّى بالمشروع', /4005/.test(api.captured.body));
+  api.buildPOFinanceReport();
+  T('ولدى المالية بلا مرشّح تعمل كما كانت', /4005/.test(api.captured.body));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
