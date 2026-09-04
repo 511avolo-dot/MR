@@ -2577,11 +2577,15 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .rep-multi-panel{position:absolute;z-index:40;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;
   max-width:280px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 10px 28px rgba(0,0,0,.16);padding:6px}
+.rep-multi-panel.up{top:auto;bottom:calc(100% + 4px)}
+/* البطاقة تقصّ ما يخرج عنها؛ يُرفع القصّ ما دامت لوحة الاختيار مفتوحة فقط،
+   مع z-index كي لا تمرّ فوقها البطاقات التالية في ترتيب المستند. */
+.rep-card.menu-open{overflow:visible;z-index:60}
 .rep-multi-tools{display:flex;gap:6px;padding:2px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:4px}
 .rep-multi-tools button{flex:1;border:0;background:var(--surface-2);border-radius:6px;padding:4px 6px;
   font:inherit;font-size:11px;color:var(--ink-2);cursor:pointer}
 .rep-multi-tools button:hover{background:rgba(196,162,101,.18)}
-.rep-multi-list{max-height:210px;overflow:auto}
+.rep-multi-list{max-height:210px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .rep-multi-list label{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;
   font-size:12px;cursor:pointer}
 .rep-multi-list label:hover{background:var(--surface-2)}
@@ -12691,11 +12695,35 @@ function repMultiHtml(f){
   </div>`;
 }
 function repMultiRoot(el){ return el.closest('.rep-multi'); }
+function repMultiCloseAll(){
+  document.querySelectorAll('.rep-multi-panel').forEach(x=>{
+    x.hidden=true; x.classList.remove('up');
+    const l=x.querySelector('.rep-multi-list'); if(l) l.style.maxHeight='';
+  });
+  document.querySelectorAll('.rep-card.menu-open').forEach(c=>c.classList.remove('menu-open'));
+}
 function repMultiToggle(btn){
   const root=repMultiRoot(btn), panel=root.querySelector('.rep-multi-panel');
   const wasOpen=!panel.hidden;
-  document.querySelectorAll('.rep-multi-panel').forEach(x=>{ x.hidden=true; });
-  panel.hidden=wasOpen;
+  repMultiCloseAll();
+  if(wasOpen) return;
+  panel.hidden=false;
+  // ⚠️ .rep-card فيها overflow:hidden (لشريطها العلوي المتدرّج) فتقصّ اللوحة عند حدّها
+  // ويستحيل الوصول لبقيّة الخيارات — نرفع القصّ ما دامت اللوحة مفتوحة فقط.
+  const card=root.closest('.rep-card'); if(card) card.classList.add('menu-open');
+  repMultiPlace(root);
+}
+/* يفتح لأعلى إن ضاق ما تحت الزرّ، ويحدّ ارتفاع القائمة بالمساحة المتاحة
+   فتبقى قابلة للتمرير داخلياً مهما كان موضع البطاقة في الشاشة. */
+function repMultiPlace(root){
+  const panel=root.querySelector('.rep-multi-panel'), btn=root.querySelector('.rep-multi-btn');
+  if(!panel||panel.hidden||!btn) return;
+  const r=btn.getBoundingClientRect();
+  const below=window.innerHeight-r.bottom-16, above=r.top-16;
+  const up = below<180 && above>below;
+  panel.classList.toggle('up', up);
+  const list=panel.querySelector('.rep-multi-list');
+  if(list) list.style.maxHeight=Math.max(120, Math.min(240, (up?above:below)-56))+'px';
 }
 function repMultiSet(btn,on){
   const root=repMultiRoot(btn);
@@ -12724,8 +12752,14 @@ function repMultiWireOutside(){
   __repMultiWired=true;
   document.addEventListener('click', e=>{
     if(e.target.closest && e.target.closest('.rep-multi')) return;
-    document.querySelectorAll('.rep-multi-panel').forEach(p=>{ p.hidden=true; });
+    repMultiCloseAll();
   });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') repMultiCloseAll(); });
+  // تمرير الصفحة يغيّر المساحة تحت الزرّ — يُعاد الحساب لا يُغلق (فلا يضيع الاختيار)
+  const replace=()=>document.querySelectorAll('.rep-multi-panel:not([hidden])')
+    .forEach(p=>repMultiPlace(p.closest('.rep-multi')));
+  window.addEventListener('scroll', replace, true);
+  window.addEventListener('resize', replace);
 }
 
 let __REPORTS_DEFS = [];
