@@ -59,6 +59,27 @@ const b64dups = [...b64seen.entries()].filter(([, c]) => c > 1);
 T('لا أصل base64 ضخم مضمَّن أكثر من مرّة', b64dups.length === 0,
   b64dups.map(([x, c]) => `${Math.round(x.length / 1024)}KB×${c}`).join('، '));
 
+/* ── حوكمة ووصولية (فحوص بنيوية) ──────────────────────────────── */
+// كل مفتاح صلاحية معرَّف يجب أن يُنفَّذ فعلاً، وكل مفتاح مُنفَّذ يجب أن يكون معرَّفاً.
+// مفتاح بلا إنفاذ = وعد حوكميّ لا يحرس شيئاً؛ ومفتاح بلا تعريف = بوّابة لا يستطيع
+// المدير منحها أو سحبها من لوحة الصلاحيات.
+const permCat  = [...JS.matchAll(/\{\s*key:\s*'(can_[a-z0-9_]+)'/g)].map(m => m[1]);
+const permUsed = new Set([...JS.matchAll(/(?:hasPermission|requirePermission)\(\s*'(can_[a-z0-9_]+)'/g)].map(m => m[1]));
+const permAttr = new Set([...HTML.matchAll(/data-requires-perm="(can_[a-z0-9_]+)"/g)].map(m => m[1]));
+const permAll  = new Set([...permUsed, ...permAttr]);
+const permSet  = new Set(permCat);
+T('لا مفتاح صلاحية معرَّف بلا إنفاذ', [...permSet].every(k => permAll.has(k)),
+  [...permSet].filter(k => !permAll.has(k)).join('، '));
+T('لا بوّابة تستعمل مفتاحاً غير معرَّف في الكتالوج', [...permAll].every(k => permSet.has(k)),
+  [...permAll].filter(k => !permSet.has(k)).join('، '));
+T('لا مفتاح مكرّر في كتالوج الصلاحيات', permCat.length === permSet.size,
+  permCat.filter((k, i) => permCat.indexOf(k) !== i).join('، '));
+
+// ممرّ الوصولية يجب أن يبقى مربوطاً: الشاشات تُرسَم بـinnerHTML فتفقد السمات،
+// فإزالة أيّ من نقاط الربط تُعيد الحقول والنوافذ بلا اسم مقروء بصمت.
+T('ممرّ الوصولية مربوط بالإقلاع والتنقّل وفتح النوافذ',
+  (CODE.match(/a11yWire\(/g) || []).length >= 4);
+
 /* ── 2) تحميل الدوال الخالصة في صندوق ─────────────────────────── */
 function grab(name) {
   const lines = JS.split('\n');

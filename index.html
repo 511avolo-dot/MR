@@ -4243,7 +4243,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
       </button>
     </div>
     <div class="modal-body">
-      <select class="form-input" id="pp-select"></select>
+      <select class="form-input" id="pp-select" aria-label="المشروع / الجهة"></select>
       <input type="text" class="form-input" id="pp-new" style="display:none;margin-top:8px" placeholder="اسم المشروع الجديد">
       <div id="pp-hint" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
     </div>
@@ -5172,7 +5172,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       <!-- STEP 1: Upload -->
       <div id="si-step-upload">
         <div class="si-dropzone" id="si-dropzone">
-          <input type="file" id="si-file-input" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp" style="display:none">
+          <input type="file" id="si-file-input" aria-label="اختيار ملف للاستيراد الذكي" accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp" style="display:none">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--gold);margin-bottom:12px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           <div style="font-weight:600;font-size:16px;margin-bottom:6px">اسحب الملف هنا أو انقر للاختيار</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
@@ -5319,7 +5319,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
       <div class="ai-panel-title">المساعد الذكي</div>
       <div class="ai-panel-sub">اسألني عن أسعارك وموردينك</div>
     </div>
-    <button class="ai-close-btn" id="ai-close">
+    <button class="ai-close-btn" id="ai-close" aria-label="إغلاق المساعد">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg>
     </button>
   </div>
@@ -5337,7 +5337,7 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
   </div>
   <div class="ai-input-wrap">
     <input class="ai-input" id="ai-input" placeholder="اسأل عن أي صنف أو مورد..." autocomplete="off">
-    <button class="ai-send-btn" id="ai-send">
+    <button class="ai-send-btn" id="ai-send" aria-label="إرسال">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
     </button>
   </div>
@@ -6327,6 +6327,7 @@ function navigate(page){
   if(page==='purchase-orders')renderPurchaseOrders();
   if(page==='reports')renderReportsCenter();
   if(page==='pr')renderPRPortal();
+  a11yWire();   // الشاشات تُرسَم بـinnerHTML فتُفقد سمات الوصولية — يُعاد ربطها بعد الرسم
 }
 
 /* ========== DASHBOARD ========== */
@@ -8273,7 +8274,75 @@ window.claude.complete = async function(opts){
 /* ============================================================ */
 /* ========== MODAL SYSTEM ==================================== */
 /* ============================================================ */
-function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; } }
+
+/* ============================================================
+   الوصولية — اسم مقروء لكل عنصر يعتمد على الشكل وحده
+   القياس على الـDOM الحيّ: 49 من 116 حقلاً بلا اسم مقروء (أغلبها <select>
+   فلا placeholder لها فيقرأها القارئ الشاشي «قائمة منسدلة» بلا معنى)،
+   و15 من 18 نافذة بلا role=dialog/aria-labelledby، وزرّان أيقونيان بلا تسمية.
+   الحلّ ممرّ واحد يشتقّ الاسم من **التسمية المرئية المجاورة** بدل 49 تعديلاً
+   يدويّاً — فيغطّي العناصر المولَّدة وقت التشغيل أيضاً لا الثابتة وحدها،
+   ولا يغيّر أي شيء مرئي.
+   ============================================================ */
+function a11yHasName(el){
+  return !!(el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')
+    || el.getAttribute('title') || el.getAttribute('placeholder')
+    || (el.id && document.querySelector('label[for="'+(window.CSS&&CSS.escape?CSS.escape(el.id):el.id)+'"]'))
+    || el.closest('label'));
+}
+// التسمية المرئية: داخل حاوية الحقل نفسها، وإلا أقرب تسمية سابقة
+function a11yLabelText(el){
+  const box = el.closest('.form-field, .filter-field, .rep-field, .settings-row, .field');
+  let lab = box ? box.querySelector('label, .form-label, .field-label') : null;
+  if(!lab){
+    let p = el.previousElementSibling;
+    while(p && p.tagName!=='LABEL' && !(p.classList && p.classList.contains('form-label'))) p = p.previousElementSibling;
+    lab = p;
+  }
+  if(!lab){
+    // قوائم شريط الأدوات لا تسمية مرئية لها — خيارها الأوّل هو اسمها الفعلي
+    // («كل الفئات» · «الأحدث أولاً») وهو ما يراه المستخدم المبصر نفسه.
+    if(el.tagName==='SELECT' && el.options && el.options.length){
+      return (el.options[0].textContent||'').replace(/\s+/g,' ').trim();
+    }
+    return '';
+  }
+  return (lab.textContent||'').replace(/\s+/g,' ').replace(/[*✱]/g,'').trim();
+}
+/* يُشغَّل عند الإقلاع وبعد كل تنقّل وفتح نافذة — فعله متكرّر بلا ضرر (idempotent) */
+function a11yWire(root){
+  const scope = root && root.querySelectorAll ? root : document;
+  try{
+    scope.querySelectorAll('input:not([type=hidden]), select, textarea').forEach(el=>{
+      if(a11yHasName(el)) return;
+      const t = a11yLabelText(el);
+      if(t) el.setAttribute('aria-label', t);
+    });
+    // النوافذ: دور وعنوان مربوط كي يُعلنها القارئ الشاشي عند الفتح
+    scope.querySelectorAll('.modal-overlay').forEach(ov=>{
+      const m = ov.querySelector('.modal'); if(!m) return;
+      if(!m.getAttribute('role')) m.setAttribute('role','dialog');
+      if(!m.getAttribute('aria-modal')) m.setAttribute('aria-modal','true');
+      if(!m.getAttribute('aria-labelledby') && !m.getAttribute('aria-label')){
+        const t = m.querySelector('.modal-title');
+        if(t){
+          if(!t.id) t.id = (ov.id || 'modal') + '-title';
+          m.setAttribute('aria-labelledby', t.id);
+        }
+      }
+    });
+    // أزرار الأيقونة المولَّدة: الاسم من التلميح إن وُجد
+    scope.querySelectorAll('button, [role="button"]').forEach(el=>{
+      const txt = (el.textContent||'').replace(/\s+/g,' ').trim();
+      if(txt || a11yHasName(el)) return;
+      if(!el.querySelector('svg, img')) return;
+      const t = el.getAttribute('data-tooltip');
+      if(t) el.setAttribute('aria-label', t);
+    });
+  }catch(e){ reportError('a11yWire', e); }
+}
+
+function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); } }
 function closeModal(id){
   const el=document.getElementById(id);
   if(el) el.classList.remove('active');
@@ -12504,15 +12573,47 @@ async function buildRegistrationsReport(opts){
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · SUPPLIER REGISTRATIONS', title:'تقرير طلبات تسجيل الموردين', subtitle:'حالة طلبات الانضمام للموردين'}, body);
 }
 
-/* ===== تقرير سجل التدقيق ===== */
-function buildAuditReport(opts){
+/* ===== تقرير سجل التدقيق =====
+   كان يقرأ `proc_audit` المحلي (500 إجراء على **هذا الجهاز وحده**) رغم أن
+   `logAudit` يدفع كل إجراء إلى `proc_audit_log` السحابي أيضاً — فالتقرير
+   الحوكمي كان يعكس جهازاً واحداً لا المنظومة، وهو أسوأ من غياب التقرير لأنه
+   يوحي بالاكتمال. الآن السحابة هي المصدر متى توفّرت (كل المستخدمين وكل
+   الأجهزة)، والمحلي سقوطٌ مُعلَن في متن التقرير لا صامت. */
+async function auditFetchForReport(opts){
+  opts = opts || {};
+  if(window.CLOUD && CLOUD.enabled && CLOUD.client){
+    try{
+      let q = CLOUD.client.from('proc_audit_log').select('*').order('ts',{ascending:false}).limit(1000);
+      if(opts.action) q = q.eq('action', opts.action);
+      if(opts.type)   q = q.eq('entity_type', opts.type);
+      if(opts.from)   q = q.gte('ts', new Date(opts.from).toISOString());
+      if(opts.to)     q = q.lte('ts', new Date(new Date(opts.to).getTime()+86400000).toISOString());
+      const { data, error } = await q;
+      if(error) throw error;
+      return { source:'cloud', rows:(data||[]).map(r=>({
+        ts: r.ts ? new Date(r.ts).getTime() : 0,
+        user: r.display_name || r.username || '—',
+        action: r.action, type: r.entity_type, target: r.entity_id
+      })) };
+    }catch(e){ reportError('auditFetchForReport', e); }   // السقوط للمحلي أدناه
+  }
+  let list = loadAudit();
+  if(opts.action) list = list.filter(e=>e.action===opts.action);
+  if(opts.type)   list = list.filter(e=>e.type===opts.type);
+  if(opts.from){ const f=new Date(opts.from).getTime(); list = list.filter(e=>e.ts>=f); }
+  if(opts.to){   const t=new Date(opts.to).getTime()+86400000; list = list.filter(e=>e.ts<=t); }
+  return { source:'local', rows:list };
+}
+async function buildAuditReport(opts){
   opts=opts||{};
-  let list=loadAudit();
-  if(opts.action) list=list.filter(e=>e.action===opts.action);
-  if(opts.type)   list=list.filter(e=>e.type===opts.type);
-  if(opts.from){ const f=new Date(opts.from).getTime(); list=list.filter(e=>e.ts>=f); }
-  if(opts.to){   const t=new Date(opts.to).getTime()+86400000; list=list.filter(e=>e.ts<=t); }
-  if(!list.length){ toast('info','لا بيانات','لا توجد سجلات تدقيق مطابقة على هذا الجهاز'); return; }
+  const fetched = await auditFetchForReport(opts);
+  const list = fetched.rows;
+  if(!list.length){
+    toast('info','لا بيانات', fetched.source==='cloud'
+      ? 'لا توجد سجلات تدقيق مطابقة في السجل السحابي'
+      : 'لا توجد سجلات تدقيق مطابقة على هذا الجهاز');
+    return;
+  }
   const ACT={add:'إضافة',edit:'تعديل',delete:'حذف',login:'دخول',logout:'خروج',login_failed:'دخول فاشل',approve:'اعتماد',award:'ترسية',anomaly:'شذوذ سعري'};
   const TYP={item:'صنف',supplier:'مورد',entry:'سعر',auth:'دخول',cloud:'سحابة',user:'مستخدم',po:'أمر شراء',rfq:'طلب تسعير'};
   const show=list.slice(0,200);
@@ -12532,7 +12633,11 @@ function buildAuditReport(opts){
       <div class="print-stat-card accent"><span class="label">إجمالي السجلات</span><span class="value">${list.length}</span></div>
       ${topActions}
     </div>
-    <div class="print-note-box"><span class="nb-title">ملاحظة</span>يعرض هذا التقرير سجل التدقيق المحلي على هذا الجهاز (حتى 500 إجراء أخير)${show.length<list.length?` — معروض أول ${show.length}`:''}.</div>
+    <div class="print-note-box${fetched.source==='local'?' danger':''}"><span class="nb-title">مصدر السجل</span>${
+      fetched.source==='cloud'
+        ? `السجل السحابي — كل المستخدمين وكل الأجهزة (حتى 1000 إجراء أخير)`
+        : `⚠️ تعذّر الوصول للسجل السحابي، فهذا التقرير من السجل المحلي على هذا الجهاز وحده (حتى 500 إجراء) — لا يصلح دليلاً حوكميّاً شاملاً`
+    }${show.length<list.length?` — معروض أول ${show.length} من ${list.length}`:''}.</div>
     <div class="print-section">
       <div class="print-section-title">سجل الإجراءات</div>
       <table class="print-table">
@@ -12540,7 +12645,7 @@ function buildAuditReport(opts){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · AUDIT TRAIL', title:'تقرير سجل التدقيق', subtitle:'سجل إجراءات المستخدمين على النظام'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · AUDIT TRAIL', title:'تقرير سجل التدقيق', subtitle: fetched.source==='cloud' ? 'سجل إجراءات كل المستخدمين على النظام' : 'سجل إجراءات هذا الجهاز فقط'}, body);
 }
 
 // تعريف التقارير: كل تقرير يصف حقوله ودالة تشغيله. الكل يمرّ عبر معاينة الطباعة الموحّدة.
@@ -12676,7 +12781,7 @@ function reportsCatalog(){
 
     /* ===== النظام والتدقيق ===== */
     { group:'النظام والتدقيق', perm:'can_view_audit', icon:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
-      title:'تقرير سجل التدقيق', desc:'سجل إجراءات المستخدمين المحلي على هذا الجهاز، قابل للتصفية بالإجراء والنوع والفترة.',
+      title:'تقرير سجل التدقيق', desc:'سجل إجراءات كل المستخدمين من السحابة (ويسقط للسجل المحلي مع تنبيه عند تعذّر الاتصال)، قابل للتصفية بالإجراء والنوع والفترة.',
       fields:[
         {type:'select', key:'action', label:'الإجراء', html:auditActOpts},
         {type:'select', key:'type', label:'النوع', html:auditTypeOpts},
@@ -18618,6 +18723,7 @@ function startApp(){
   applyUserRoleToUI();
   init();
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
+  try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
   startCloudAutoReconnect();
   try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
 }
