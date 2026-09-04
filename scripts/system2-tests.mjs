@@ -76,6 +76,7 @@ const NEEDED_FNS = [
   'poPartialInfo', 'poReceivedSum', 'poDays', 'poDelayCell', 'poStatusBadgeClass',
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
+  'repList', 'repFilterProjects', 'repDescList',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
   'poStageStats', 'poFmtDuration', 'poCurrentStageAge', 'poProjectStats', 'printPO',
@@ -589,6 +590,92 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   STATE.poFilter = { q:'البرج الشمالي', sector:'', status:'', priority:'', project:'' };
   T('البحث بكتابة قديمة يجد أوامر المشروع', api.poFilteredList().length === 1);
   STATE.poFilter.q = '';
+}
+
+/* ── تقارير متعدّدة المشاريع/الحالات ─────────────────────────── */
+{
+  G('١٠) تقارير أوامر الشراء — اختيار عدّة مشاريع وحالات');
+  const STATE = api.STATE;
+  const mk = (n, project, status, days) => ({
+    po_number:'P.O-DG26-' + n, issue_date:'2026-08-01', project, supplier:'مورد',
+    sector:'إنشاءات', subtotal:1000, status, days_delayed:days||0,
+    expected_delivery:'2026-08-20', items:[], status_history:[],
+  });
+  STATE.purchaseOrders = [
+    mk(4001, 'برج الشمال',   'قيد المراجعة', 0),
+    mk(4002, 'مستودع الخرج', 'قيد المراجعة', 12),
+    mk(4003, 'فرع الرياض 3', 'تسليم كامل',   0),
+    mk(4004, '',             'قيد المراجعة', 5),
+    mk(4005, 'برج الشمال',   'تسليم للإدارة المالية', 0),
+  ];
+  STATE.purchaseOrders.forEach(api.recomputePOderived);
+
+  // repList: يقبل الواحد والمتعدّد والفارغ
+  T('القيمة الواحدة تصير قائمة', api.repList('أ').length === 1);
+  T('المصفوفة تمرّ كما هي بلا فراغات', api.repList(['أ','','ب']).join(',') === 'أ,ب');
+  T('الفراغ والمصفوفة الفارغة = بلا تصفية',
+    api.repList('').length === 0 && api.repList([]).length === 0 && api.repList(undefined).length === 0);
+
+  // التصفية بعدّة مشاريع
+  const all = STATE.purchaseOrders;
+  T('بلا اختيار تمرّ كل الأوامر', api.repFilterProjects(all, []).length === 5);
+  T('مشروع واحد (توافق خلفي مع النصّ)', api.repFilterProjects(all, 'برج الشمال').length === 2);
+  T('مشروعان معاً في تقرير واحد',
+    api.repFilterProjects(all, ['برج الشمال','فرع الرياض 3']).length === 3);
+  T('«بلا جهة» تُختار مع مشاريع أخرى',
+    api.repFilterProjects(all, ['برج الشمال','__none__']).length === 3);
+  T('«بلا جهة» وحدها لا تجلب المحدّدة',
+    api.repFilterProjects(all, ['__none__']).every(o => !String(o.project||'').trim()));
+
+  // وصف المرشّح المطبوع يسمّي المختار
+  T('الوصف يسمّي المشروعين', api.repDescList('الجهة', ['برج الشمال','فرع الرياض 3'])
+    === 'الجهة: برج الشمال + فرع الرياض 3');
+  T('الوصف يختصر ما زاد على أربعة',
+    /و1 أخرى$/.test(api.repDescList('الجهة', ['أ','ب','ج','د','هـ'])));
+  T('بلا اختيار لا وصف', api.repDescList('الجهة', []) === '');
+  T('«بلا جهة» تُترجَم في الوصف', api.repDescList('الجهة', ['__none__']) === 'الجهة: بلا جهة محدّدة');
+
+  // التقرير نفسه: عدّة مشاريع + عدّة حالات
+  api.buildPOListReport({ project:['برج الشمال','مستودع الخرج'] });
+  let cap = api.captured;
+  T('السجل يطبع أوامر المشروعين معاً', /4001/.test(cap.body) && /4002/.test(cap.body));
+  T('ويستبعد ما سواهما', !/4003/.test(cap.body) && !/4004/.test(cap.body));
+  T('عنوان التقرير يذكر المشروعين', /برج الشمال \+ مستودع الخرج/.test(cap.opts.subtitle));
+
+  api.buildPOListReport({ status:['قيد المراجعة','تسليم كامل'] });
+  cap = api.captured;
+  T('عدّة حالات في تقرير واحد', /4001/.test(cap.body) && /4003/.test(cap.body));
+  T('والحالة غير المختارة مستبعَدة', !/4005/.test(cap.body));
+
+  // الفجوة لا تُعلَن على تقرير مُصفّى — الأمر المستبعَد بالمرشّح ليس «غير مسجّل»
+  api.buildPOListReport({ project:['برج الشمال','مستودع الخرج'] });
+  cap = api.captured;
+  T('التقرير المُصفّى لا يدّعي فجوات كاذبة', !/غير مسجّل/.test(cap.body));
+  T('ويقول إنه مُصفّى', /التقرير مُصفّى/.test(cap.body));
+  api.buildPOListReport({});
+  cap = api.captured;
+  T('التقرير غير المُصفّى ما زال يكشف الفجوات الحقيقية',
+    /متّصل بلا فجوات/.test(cap.body) || /غير مسجّل/.test(cap.body));
+  T('وغير المُصفّى لا يُوصَف بأنه مُصفّى', !/التقرير مُصفّى/.test(cap.body));
+
+  // التوزيع حسب الجهة يبقى مبنيّاً على المُصفّى
+  api.buildPOListReport({ project:['برج الشمال'] });
+  cap = api.captured;
+  T('قسم التوزيع يحصر المشروع المختار',
+    /التوزيع حسب الجهة/.test(cap.body) && !/مستودع الخرج/.test(cap.body));
+
+  // المتأخرات ولدى المالية صارا يقبلان مشاريع متعدّدة
+  api.buildPOOverdueReport({ project:['مستودع الخرج'] });
+  cap = api.captured;
+  T('المتأخرات تُصفّى بالمشروع', /4002/.test(cap.body) && !/4004/.test(cap.body));
+  T('وعنوانها يذكر الجهة', /مستودع الخرج/.test(cap.opts.subtitle));
+  api.buildPOOverdueReport();
+  T('المتأخرات بلا مرشّح تبقى كما كانت', /4002/.test(api.captured.body) && /4004/.test(api.captured.body));
+
+  api.buildPOFinanceReport({ project:['برج الشمال'] });
+  T('الأوامر لدى المالية تُصفّى بالمشروع', /4005/.test(api.captured.body));
+  api.buildPOFinanceReport();
+  T('ولدى المالية بلا مرشّح تعمل كما كانت', /4005/.test(api.captured.body));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

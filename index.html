@@ -2565,6 +2565,28 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .prj-k-suggest{background:rgba(183,121,31,.16);color:#8a6a30}
 .prj-k-new{background:var(--surface-2);color:var(--muted)}
 .prj-empty{padding:18px;text-align:center;color:var(--muted);font-size:12.5px}
+/* ====== مُنتقٍ متعدّد لحقول التقارير ====== */
+.rep-multi{position:relative}
+.rep-multi-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);
+  font:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;text-align:start}
+.rep-multi-btn:hover{border-color:var(--accent,#9A7A45)}
+.rep-multi.has-sel .rep-multi-btn{border-color:#9A7A45;background:rgba(196,162,101,.10);font-weight:700}
+.rep-multi-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-multi-caret{flex:none;opacity:.6;font-size:10px}
+.rep-multi-panel{position:absolute;z-index:40;top:calc(100% + 4px);inset-inline-start:0;min-width:100%;
+  max-width:280px;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 10px 28px rgba(0,0,0,.16);padding:6px}
+.rep-multi-tools{display:flex;gap:6px;padding:2px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.rep-multi-tools button{flex:1;border:0;background:var(--surface-2);border-radius:6px;padding:4px 6px;
+  font:inherit;font-size:11px;color:var(--ink-2);cursor:pointer}
+.rep-multi-tools button:hover{background:rgba(196,162,101,.18)}
+.rep-multi-list{max-height:210px;overflow:auto}
+.rep-multi-list label{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;
+  font-size:12px;cursor:pointer}
+.rep-multi-list label:hover{background:var(--surface-2)}
+.rep-multi-list input{flex:none;margin:0}
+.rep-multi-list span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .po-card-proj{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .po-drawer-proj{font-size:12.5px;color:#8a6a30;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .po-linkbtn{background:transparent;border:1px dashed var(--accent);color:#8a6a30;border-radius:7px;padding:2px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
@@ -11996,13 +12018,35 @@ function priceAnalytics(){
 }
 
 /* ===== تقارير المشتريات ===== */
+/* مرشّح التقارير يقبل قيمة واحدة أو عدّة قيم — فتقرير واحد يغطّي عدّة مشاريع/حالات
+   بدل طباعة تقرير لكل واحد. الفراغ أو المصفوفة الفارغة = بلا تصفية (الكل). */
+function repList(v){ return Array.isArray(v) ? v.filter(x=>x!=='' && x!=null) : (v ? [v] : []); }
+/* تصفية بجهة/موقع المشروع — تدعم عدّة مشاريع و«بلا جهة محدّدة» معاً */
+function repFilterProjects(list, sel){
+  const want=repList(sel);
+  if(!want.length) return list;
+  const none=want.includes('__none__');
+  const names=new Set(want.filter(x=>x!=='__none__'));
+  return list.filter(o=>{
+    const p=String(o.project||'').trim();
+    return p ? names.has(p) : none;
+  });
+}
+/* وصف المرشّح للطباعة — يسمّي المشاريع المختارة (حتى 4) ثم يختصر */
+function repDescList(label, sel, noneLabel){
+  const v=repList(sel);
+  if(!v.length) return '';
+  const names=v.map(x=>x==='__none__'?(noneLabel||'بلا جهة محدّدة'):x);
+  if(names.length<=4) return label+': '+names.join(' + ');
+  return `${label}: ${names.slice(0,4).join(' + ')} و${names.length-4} أخرى`;
+}
 function buildPOListReport(opts){
   opts=opts||{};
   let list=[...(STATE.purchaseOrders||[])];
-  if(opts.status) list=list.filter(o=>o.status===opts.status);
-  if(opts.sector) list=list.filter(o=>o.sector===opts.sector);
-  if(opts.project==='__none__') list=list.filter(o=>!String(o.project||'').trim());
-  else if(opts.project) list=list.filter(o=>String(o.project||'').trim()===opts.project);
+  const fStatus=repList(opts.status), fSector=repList(opts.sector);
+  if(fStatus.length) list=list.filter(o=>fStatus.includes(o.status));
+  if(fSector.length) list=list.filter(o=>fSector.includes(o.sector));
+  list=repFilterProjects(list, opts.project);
   if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
   if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
   list.sort((a,b)=>poNumCompare(b.po_number,a.po_number));   // السجل بترتيب التسلسل (الأحدث رقماً أولاً)
@@ -12026,19 +12070,29 @@ function buildPOListReport(opts){
     <td class="center">${x.c}</td>
     <td class="num price">${fmtPrice(x.v)}</td>
   </tr>`).join('') || '<tr><td colspan="3" class="center" style="padding:14px;color:#888">—</td></tr>';
-  // بيان التسلسل: نطاق الأرقام والفجوات داخله (على الأوامر المعروضة في التقرير)
+  // بيان التسلسل: نطاق الأرقام والفجوات داخله.
+  // ⚠️ الفجوة لا تُعلَن إلا على تقرير غير مُصفّى — وإلا عُدّ الأمر المستبعَد بالمرشّح
+  // «غير مسجّل» وهو مسجَّل فعلاً، وهذا بلاغ كاذب يربك مراجعة الدفتر.
+  const anyFilter = !!(fStatus.length || fSector.length || repList(opts.project).length || opts.from || opts.to);
   const seqNote = (()=>{
     const sums=poSeqSummary(list);
     if(!sums.length) return '';
     const parts=sums.slice(0,3).map(s=>{
+      const head=`السلسلة ${s.prefix}: من ${s.min} إلى ${s.max} · ${s.count} أمر`;
+      if(anyFilter) return head;
       const miss=s.missing.length;
-      const sample=miss?(' — غير مسجّل: '+s.missing.slice(0,10).join('، ')+(miss>10?` و${miss-10} أخرى`:'')):' — متّصل بلا فجوات';
-      return `السلسلة ${s.prefix}: من ${s.min} إلى ${s.max} · ${s.count} أمر${sample}`;
+      return head + (miss
+        ? ' — غير مسجّل: '+s.missing.slice(0,10).join('، ')+(miss>10?` و${miss-10} أخرى`:'')
+        : ' — متّصل بلا فجوات');
     });
-    return `<div class="print-note-box${sums.some(s=>s.missing.length)?' danger':''}"><span class="nb-title">تسلسل الأرقام</span>${escapeHtml(parts.join(' · '))}</div>`;
+    const danger = !anyFilter && sums.some(s=>s.missing.length);
+    const tail = anyFilter ? ' · (التقرير مُصفّى — لا تُحتسب الفجوات على قائمة مُصفّاة)' : '';
+    return `<div class="print-note-box${danger?' danger':''}"><span class="nb-title">تسلسل الأرقام</span>${escapeHtml(parts.join(' · ')+tail)}</div>`;
   })();
-  const projDesc = opts.project==='__none__' ? 'الجهة: بلا جهة محدّدة' : (opts.project?('الجهة: '+opts.project):'');
-  const filterDesc=[opts.status?('الحالة: '+opts.status):'', projDesc, opts.sector?('القطاع: '+opts.sector):'', opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):''].filter(Boolean).join(' · ')||'كل الأوامر';
+  const filterDesc=[repDescList('الحالة',opts.status), repDescList('الجهة',opts.project),
+                    repDescList('القطاع',opts.sector),
+                    opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):'']
+                   .filter(Boolean).join(' · ')||'كل الأوامر';
   const body=`
     <div class="print-grid-stats" style="grid-template-columns:repeat(3,1fr)">
       <div class="print-stat-card accent"><span class="label">عدد الأوامر</span><span class="value">${list.length}</span></div>
@@ -12065,9 +12119,13 @@ function buildPOListReport(opts){
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
 }
 
-function buildPOOverdueReport(){
-  const list=(STATE.purchaseOrders||[]).filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0)
+function buildPOOverdueReport(opts){
+  opts=opts||{};
+  const list=repFilterProjects(
+      (STATE.purchaseOrders||[]).filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0),
+      opts.project)
     .sort((a,b)=>(b.days_delayed||0)-(a.days_delayed||0));
+  const projDesc=repDescList('الجهة',opts.project);
   const esc=list.filter(o=>(o.days_delayed||0)>30);
   const totVal=list.reduce((s,o)=>s+(Number(o.total)||0),0);
   const rows=list.map(o=>`<tr class="${(o.days_delayed||0)>30?'award-row':''}">
@@ -12094,13 +12152,15 @@ function buildPOOverdueReport(){
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · OVERDUE & ESCALATION', title:'تقرير المتأخرات والتصعيد', subtitle:'أوامر الشراء المتأخرة عن موعد التسليم', watermark: esc.length?'تصعيد':''}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · OVERDUE & ESCALATION', title:'تقرير المتأخرات والتصعيد', subtitle:projDesc||'أوامر الشراء المتأخرة عن موعد التسليم', watermark: esc.length?'تصعيد':''}, body);
 }
 
-function buildPOFinanceReport(){
+function buildPOFinanceReport(opts){
+  opts=opts||{};
   const fin=['تسليم للإدارة المالية','تم التحويل'];
-  const list=(STATE.purchaseOrders||[]).filter(o=>fin.includes(o.status))
+  const list=repFilterProjects((STATE.purchaseOrders||[]).filter(o=>fin.includes(o.status)), opts.project)
     .sort((a,b)=>(poToISO(a.expected_delivery)||'').localeCompare(poToISO(b.expected_delivery)||''));
+  const projDesc=repDescList('الجهة',opts.project);
   const awaiting=list.filter(o=>o.status==='تسليم للإدارة المالية');
   const transferred=list.filter(o=>o.status==='تم التحويل');
   const totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
@@ -12130,7 +12190,7 @@ function buildPOFinanceReport(){
       </table>
     </div>
     <div class="print-total-words"><strong>بانتظار التحويل كتابةً:</strong> ${escapeHtml(tafqitSAR(awTot))}</div>`;
-  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:'متابعة السداد والتحويلات المالية'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:projDesc||'متابعة السداد والتحويلات المالية'}, body);
 }
 
 function buildPOCycleReport(){
@@ -12479,6 +12539,10 @@ function reportsCatalog(){
   const poProjectOpts = ['<option value="">كل الجهات / المشاريع</option>']
     .concat(poProjectList().map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`))
     .concat(['<option value="__none__">— بلا جهة محدّدة —</option>']).join('');
+  // خيارات الاختيار المتعدّد (مشاريع/حالات/قطاعات) — تقرير واحد لعدّة مشاريع
+  const poProjectMulti = poProjectList().map(s=>({v:s,l:s})).concat([{v:'__none__',l:'— بلا جهة محدّدة —'}]);
+  const poStatusMulti  = PO_ENUMS.status.map(s=>({v:s,l:s}));
+  const poSectorMulti  = PO_ENUMS.sector.map(s=>({v:s,l:s}));
   const regStatusOpts = [['all','كل الحالات'],['pending','قيد المراجعة'],['approved','مقبول'],['needs_revision','يحتاج تعديل'],['rejected','مرفوض']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditActOpts = [['','كل الإجراءات'],['add','إضافة'],['edit','تعديل'],['delete','حذف'],['login','دخول'],['approve','اعتماد'],['award','ترسية']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
   const auditTypeOpts = [['','كل الأنواع'],['item','صنف'],['supplier','مورد'],['entry','سعر'],['po','أمر شراء'],['rfq','طلب تسعير'],['user','مستخدم'],['auth','دخول']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
@@ -12495,11 +12559,11 @@ function reportsCatalog(){
       fields:[], run:()=>poGenerateAIReport() },
 
     { group:'المشتريات', perm:null, icon:'<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>',
-      title:'سجل أوامر الشراء التفصيلي', desc:'قائمة أوامر الشراء مع إجمالياتها — قابلة للتصفية بالحالة والقطاع والفترة.',
+      title:'سجل أوامر الشراء التفصيلي', desc:'قائمة أوامر الشراء مع إجمالياتها — اختر عدّة مشاريع أو حالات معاً في تقرير واحد.',
       fields:[
-        {type:'select', key:'status', label:'الحالة', html:poStatusOpts},
-        {type:'select', key:'project', label:'المشروع / الجهة', html:poProjectOpts},
-        {type:'select', key:'sector', label:'القطاع', html:poSectorOpts},
+        {type:'multiselect', key:'status',  label:'الحالة',            allLabel:'كل الحالات',          opts:poStatusMulti},
+        {type:'multiselect', key:'project', label:'المشروع / الجهة',   allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+        {type:'multiselect', key:'sector',  label:'القطاع',            allLabel:'كل القطاعات',          opts:poSectorMulti},
         {type:'date', key:'from', label:'من تاريخ'},
         {type:'date', key:'to', label:'إلى تاريخ'},
       ],
@@ -12507,11 +12571,13 @@ function reportsCatalog(){
 
     { group:'المشتريات', perm:null, icon:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
       title:'تقرير المتأخرات والتصعيد', desc:'الأوامر المتأخرة عن موعد التسليم مرتّبة بالأكثر تأخيراً، مع إبراز ما يستوجب التصعيد.',
-      fields:[], run:()=>buildPOOverdueReport() },
+      fields:[{type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti}],
+      run:(v)=>buildPOOverdueReport({project:v.project}) },
 
     { group:'المشتريات', perm:null, icon:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
       title:'الأوامر لدى الإدارة المالية', desc:'متابعة أوامر الشراء بانتظار التحويل أو المُحوّلة مع طريقة الدفع والإجماليات.',
-      fields:[], run:()=>buildPOFinanceReport() },
+      fields:[{type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti}],
+      run:(v)=>buildPOFinanceReport({project:v.project}) },
 
     { group:'المشتريات', perm:null, icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       title:'زمن الدورة والاختناقات', desc:'متوسط زمن دورة أمر الشراء وتفصيل مدة كل مرحلة لكشف نقاط التعثّر.',
@@ -12603,6 +12669,65 @@ function reportsCatalog(){
   ];
 }
 
+/* ============================================================
+   مُنتقٍ متعدّد لحقول التقارير (مشاريع/حالات/قطاعات)
+   المشكلة: التقرير كان يقبل مشروعاً واحداً أو حالة واحدة، فطباعة حالة
+   ثلاثة مشاريع تعني ثلاث مطبوعات منفصلة لا تُجمَع ولا تُقارَن.
+   ============================================================ */
+function repMultiHtml(f){
+  const all=escapeAttr(f.allLabel||'الكل');
+  return `<div class="rep-multi" data-rep-field="${escapeAttr(f.key)}" data-rep-multi data-all-label="${all}">
+    <button type="button" class="rep-multi-btn" onclick="repMultiToggle(this)">
+      <span class="rep-multi-txt">${escapeHtml(f.allLabel||'الكل')}</span><span class="rep-multi-caret">▾</span>
+    </button>
+    <div class="rep-multi-panel" hidden>
+      <div class="rep-multi-tools">
+        <button type="button" onclick="repMultiSet(this,true)">تحديد الكل</button>
+        <button type="button" onclick="repMultiSet(this,false)">مسح</button>
+      </div>
+      <div class="rep-multi-list">${(f.opts||[]).map(o=>
+        `<label><input type="checkbox" value="${escapeAttr(o.v)}" onchange="repMultiSync(this)"><span>${escapeHtml(o.l)}</span></label>`).join('')}</div>
+    </div>
+  </div>`;
+}
+function repMultiRoot(el){ return el.closest('.rep-multi'); }
+function repMultiToggle(btn){
+  const root=repMultiRoot(btn), panel=root.querySelector('.rep-multi-panel');
+  const wasOpen=!panel.hidden;
+  document.querySelectorAll('.rep-multi-panel').forEach(x=>{ x.hidden=true; });
+  panel.hidden=wasOpen;
+}
+function repMultiSet(btn,on){
+  const root=repMultiRoot(btn);
+  root.querySelectorAll('.rep-multi-list input').forEach(c=>{ c.checked=on; });
+  repMultiRefresh(root);
+}
+function repMultiValues(root){
+  return [...root.querySelectorAll('.rep-multi-list input')].filter(c=>c.checked).map(c=>c.value);
+}
+function repMultiSync(chk){ repMultiRefresh(repMultiRoot(chk)); }
+/* عنوان الزرّ يقول ما هو مختار فعلاً — «الكل» أو الاسم أو «N مختارة» */
+function repMultiRefresh(root){
+  const boxes=[...root.querySelectorAll('.rep-multi-list input')];
+  const sel=boxes.filter(c=>c.checked);
+  const txt=root.querySelector('.rep-multi-txt');
+  const allLabel=root.getAttribute('data-all-label')||'الكل';
+  if(!sel.length || sel.length===boxes.length) txt.textContent=allLabel;
+  else if(sel.length===1) txt.textContent=sel[0].parentNode.querySelector('span').textContent;
+  else txt.textContent=`${sel.length} مختارة`;
+  root.classList.toggle('has-sel', sel.length>0 && sel.length<boxes.length);
+}
+// إغلاق أي لوحة مفتوحة عند النقر خارجها (مرّة واحدة لكل الصفحة)
+let __repMultiWired=false;
+function repMultiWireOutside(){
+  if(__repMultiWired) return;
+  __repMultiWired=true;
+  document.addEventListener('click', e=>{
+    if(e.target.closest && e.target.closest('.rep-multi')) return;
+    document.querySelectorAll('.rep-multi-panel').forEach(p=>{ p.hidden=true; });
+  });
+}
+
 let __REPORTS_DEFS = [];
 function renderReportsCenter(){
   const host = document.getElementById('reports-center');
@@ -12615,6 +12740,7 @@ function renderReportsCenter(){
       const fieldsHtml = (d.fields||[]).map(f=>{
         if(f.type==='date') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label><input type="date" class="input" data-rep-field="${f.key}" value="${f.value||''}"></div>`;
         if(f.type==='select') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label><select class="select" data-rep-field="${f.key}">${f.html||''}</select></div>`;
+        if(f.type==='multiselect') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label>${repMultiHtml(f)}</div>`;
         return '';
       }).join('');
       const twoCol = (d.fields||[]).length>=2 ? ' two' : '';
@@ -12640,6 +12766,7 @@ function renderReportsCenter(){
     }).join('');
     return `<div class="rep-group"><div class="rep-group-title"><span class="rg-dot"></span>${escapeHtml(g)}</div><div class="rep-grid">${cards}</div></div>`;
   }).join('');
+  repMultiWireOutside();
 }
 
 // يجمع قيم الحقول للبطاقة ويشغّل التقرير (يدعم التقارير المتزامنة وغير المتزامنة)
@@ -12649,7 +12776,10 @@ async function reportRun(idx){
   if(def.perm && !requirePermission(def.perm, def.title)) return;
   const card = document.querySelector(`.rep-card[data-rep-idx="${idx}"]`);
   const vals = {};
-  if(card) card.querySelectorAll('[data-rep-field]').forEach(el=>{ vals[el.getAttribute('data-rep-field')] = el.value; });
+  if(card) card.querySelectorAll('[data-rep-field]').forEach(el=>{
+    const k=el.getAttribute('data-rep-field');
+    vals[k] = el.hasAttribute('data-rep-multi') ? repMultiValues(el) : el.value;
+  });
   const btn = card ? card.querySelector('.rep-card-foot .btn') : null;
   const orig = btn ? btn.innerHTML : '';
   if(btn){ btn.disabled = true; btn.innerHTML = '⏳ جارٍ التحضير...'; }
