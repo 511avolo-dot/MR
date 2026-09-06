@@ -2268,6 +2268,12 @@ body.role-user .admin-only{ display:none !important; }
    نُبقي الكود لإعادة تفعيله مستقبلاً عند الحاجة. */
 [data-page="agents"]{ display:none !important; }
 #page-agents{ display:none !important; }
+/* إخفاء مدخلَي قائمة جانبية لا داعي لهما (قرار المالك 2026-09-06):
+   «منهجية التسمية» و«طلبات الشراء». الصفحتان تبقيان في الكود — نُخفي
+   الرابط فقط، فبطاقة «طلبات شراء بانتظار اعتمادك» في لوحة المهام
+   تظلّ تفتح صفحة الطلبات عند وجود ما ينتظر الاعتماد. */
+.nav-item[data-page="reference"],
+.nav-item[data-page="pr"]{ display:none !important; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
