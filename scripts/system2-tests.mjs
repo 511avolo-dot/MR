@@ -149,6 +149,9 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
+  'arNorm', 'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
+  'regFmtBytes',
+  'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
@@ -172,7 +175,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP'];
 
@@ -906,6 +909,109 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('بطاقة التقرير في كتالوج المشتريات', cardAt > 0 && card.includes('buildPOFollowupReport'));
   T('بطاقتها بمرشّحات متعدّدة (حالة/جهة/قطاع)',
     ['status','project','sector'].every(k => card.includes(`key:'${k}'`)));
+}
+
+/* ── 13) الموردون: بحث عربي متسامح وسعة ألف مورد ─────────────── */
+{
+  G('١٣) الموردون — بحث عربي متسامح · سعة · متابعة صلاحية الوثائق');
+
+  // التطبيع: أكثر حالة واقعية هي الهمزة والتاء المربوطة والياء
+  T('الهمزات تُوحَّد', api.arNorm('أحمد') === api.arNorm('احمد'));
+  T('التاء المربوطة تُوحَّد', api.arNorm('مؤسسة') === api.arNorm('مؤسسه'));
+  T('الألف المقصورة تُوحَّد', api.arNorm('مصطفى') === api.arNorm('مصطفي'));
+  T('التشكيل والتطويل يُسقطان', api.arNorm('شَرِكـــة') === api.arNorm('شركه'));
+  T('الأرقام الهندية تُحوَّل', api.arNorm('٥٠٢') === '502');
+  T('لا يخلط اسمين مختلفين', api.arNorm('النخبة') !== api.arNorm('النخيل'));
+
+  const sup = {name:'مؤسسة أحمد الغامدي للمقاولات', specialty:'أعمال كهربائية', contact:'خالد',
+    phone:'+966 13-857-6550', mobile:'0501234567', email:'info@nokhba.sa',
+    commercial_reg:'4030123456', tax_id:'300012345600003', city:'الدمام'};
+  const hunt = (q) => api.supMatches(sup, api.arNorm(q).split(' ').filter(Boolean), api.supQueryDigits(q));
+  T('يجد الاسم بكتابة بلا همزات', hunt('مؤسسه احمد'));
+  T('يجد بكلمتين متفرّقتين بأي ترتيب', hunt('الغامدي مؤسسة'));
+  T('يجد بالسجل التجاري', hunt('4030123456'));
+  T('يجد بالرقم الضريبي', hunt('300012345600003'));
+  // الرقم نفسه يُكتب بثلاث صيغ في السعودية — الثلاث يجب أن تجده
+  T('يجد بالهاتف بصيغة 013…', hunt('0138576550'));
+  T('يجد بالهاتف بصيغة +966 13…', hunt('+966138576550'));
+  T('يجد بالهاتف بجزء منه', hunt('8576550'));
+  T('يجد بالجوال', hunt('0501234567'));
+  T('رقم مختلف لا يُطابق', !hunt('0559998888'));
+  T('يجد بالبريد والمدينة', hunt('nokhba') && hunt('الدمام'));
+  T('لا يطابق ما ليس فيه', !hunt('مصنع بلاستيك'));
+
+  // سعة: البحث خطّيّ على ألف مورد ويجب أن يبقى فوريّاً
+  const many = Array.from({length:1000}, (_,i) => ({
+    name:'مورد رقم ' + i, specialty:'قطاع ' + (i % 12), contact:'مسؤول ' + i,
+    phone:'05' + String(10000000 + i), mobile:'', email:'s'+i+'@x.sa',
+    commercial_reg:String(4030000000 + i), tax_id:'', city:'الرياض'}));
+  many[777].name = 'مؤسسة النخبة الذهبية';
+  const t0 = Date.now();
+  const hit = many.filter(s => api.supMatches(s, api.arNorm('النخبه الذهبيه').split(' ').filter(Boolean), ''));
+  const ms = Date.now() - t0;
+  T('يجد المورد وسط ألف مورد بكتابة مختلفة', hit.length === 1 && hit[0].name === 'مؤسسة النخبة الذهبية');
+  T('البحث في ألف مورد أسرع من 300ms', ms < 300, ms + 'ms');
+
+  // العرض على دفعات: 1000 بطاقة دفعةً واحدة تُجمّد الصفحة
+  T('العرض على دفعات لا يرسم كل الموردين دفعةً',
+    /const SUP_PAGE\s*=\s*\d+/.test(CODE) && CODE.includes('slice(0, _supShown)') && CODE.includes('function supShowMore'));
+  T('يُعلَن المجموع فلا يبدو الباقي مفقوداً',
+    CODE.includes("getElementById('sup-count')") && HTML.includes('id="sup-count"'));
+  T('مُنتقي التخصص يُعاد بناؤه مع تغيّر القائمة',
+    /sel\.options\.length\s*-\s*1\s*!==\s*specs\.length/.test(CODE));
+  T('مستمعا البحث والتخصص لا يمرّران الحدث كمعامل',
+    CODE.includes("addEventListener('input',()=>renderSuppliers())") &&
+    CODE.includes("addEventListener('change',()=>renderSuppliers())"));
+
+  // متابعة صلاحية الوثائق النظامية
+  const day = 86400000, iso = (d) => new Date(Date.now() + d*day).toISOString().slice(0,10);
+  T('يحسب الأيام المتبقّية', Math.abs(api.supDaysTo(iso(10)) - 10) <= 1);
+  T('تاريخ فارغ ⇒ لا حساب', api.supDaysTo('') === null && api.supDaysTo(null) === null);
+  T('تاريخ تالف ⇒ لا حساب', api.supDaysTo('غير صالح') === null);
+  T('السجل المنتهي يُوسَم منتهياً', api.supExpiryStrip({cr_expiry_date: iso(-40)}).includes('منتهٍ منذ'));
+  T('المقارب للانتهاء يُوسَم تحذيراً', api.supExpiryStrip({cr_expiry_date: iso(12)}).includes('ينتهي خلال'));
+  T('السارية تُوسَم سارية', api.supExpiryStrip({cr_expiry_date: iso(400)}).includes('سارٍ'));
+  T('بلا تواريخ ⇒ لا شريط', api.supExpiryStrip({}) === '');
+
+  // سعة شاشة التسجيلات: ترقيم على الخادم ومجموع حقيقي، لا سقف صامت
+  T('شاشة التسجيلات مُرقَّمة على الخادم لا مبتورة بسقف',
+    CODE.includes('const REG_PAGE_SIZE') && /\.range\(from, from \+ REG_PAGE_SIZE - 1\)/.test(CODE) &&
+    !/from\(REG_TABLE\)\.select\('\*'\)[\s\S]{0,80}\.limit\(100\)/.test(CODE));
+  T('المجموع الحقيقي يُعلَن (count exact) ومعه شريط ترقيم',
+    /count:\s*'exact'/.test(CODE) && CODE.includes('function renderRegPager') && HTML.includes('id="reg-pager"'));
+  T('للتسجيلات بحث على الخادم',
+    HTML.includes('id="reg-search"') && /legal_name_ar\.ilike\./.test(CODE) && CODE.includes('function regSearchSafe'));
+  T('البحث يُعقّم محارف PostgREST الخاصة',
+    api.regSearchSafe('a,b(c)*d\\e').indexOf(',') < 0 && api.regSearchSafe('x)y').indexOf(')') < 0);
+  T('لا يُحقن صفّ التسجيل كاملاً في سمة onclick',
+    !CODE.includes('openRegDetail(${JSON.stringify(JSON.stringify(r))})') && CODE.includes('function openRegById'));
+  T('قائمة التسجيلات تجلب أعمدتها فقط لا *',
+    CODE.includes('const REG_LIST_COLS') && !/REG_LIST_COLS[\s\S]{0,200}products_services/.test(CODE));
+  T('تصدير التسجيلات يتجاوز سقف PostgREST بالصفحات',
+    CODE.includes('async function regFetchAll') && !/from\(REG_TABLE\)\.select\('\*'\)\.order\('submitted_at', \{ascending: false\}\);/.test(CODE));
+  T('عدّ الحالات على الخادم لا بجلب آلاف الصفوف',
+    /count:\s*'exact',\s*head:\s*true/.test(CODE) && !/select\('status, metrics'\)\.limit\(2000\)/.test(CODE));
+
+  // العارض: نداء بالفهرس (مفتاح باقتباس كان يكسر السمة) وسقف ذاكرة الـblob
+  T('العارض يُنادى بالفهرس لا بمفتاح نصّيّ داخل السمة',
+    /function docvFromReg\(idx\)/.test(CODE) && !/docvFromReg\('\$\{/.test(CODE));
+  T('ذاكرة الـblob مسقوفة (13 وثيقة × 10MB لا تبقى كلّها)',
+    /while \(DOCV\.urls\.size >= \d+\)/.test(CODE) && /revokeObjectURL/.test(CODE));
+  T('نوع المستند يُشتقّ من الامتداد بدقّة',
+    api.docvKind('a/b/c.PDF') === 'pdf' && api.docvKind('x.png') === 'img' &&
+    api.docvKind('x.docx') === 'other' && api.docvKind('') === 'other');
+  T('قائمة المستندات تتجاهل المسارات الفارغة',
+    api.docvListFromReg({doc_paths:{cr:'a.pdf', vat:'', gosi:null}}).length === 1);
+  T('اسم المستند يسقط للمفتاح عند غياب ترجمته',
+    api.docvLabel('cr') === 'السجل التجاري' && api.docvLabel('zzz') === 'zzz');
+
+  // سعة التخزين تُقاس فعليّاً لا تُخمَّن
+  T('تنسيق الأحجام صحيح',
+    api.regFmtBytes(0) === '0 B' && api.regFmtBytes(1536) === '1.5 KB' &&
+    api.regFmtBytes(9 * 1024 ** 3).startsWith('9 GB'));
+  T('لوحة قياس السعة موجودة وتقارن بخطط التخزين',
+    CODE.includes('async function regMeasureStorage') && /REG_PLAN_LIMITS/.test(CODE) &&
+    HTML.includes('id="reg-capacity"') && CODE.includes("storage.from(REG_BUCKET).list("));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
