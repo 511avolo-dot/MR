@@ -89,11 +89,12 @@ async function verifyCaller(env, request) {
   } catch (_) { return null; }
 }
 /* مسار الوثيقة يُقبل بشكله المولَّد خادمياً فقط: DG-XXXX/<doc>/<اسم>.<امتداد>
-   — يمنع اجتياز المسار وقراءة أي كائن آخر في الحاوية. */
+   (وبادئة `supplier-docs/` اختيارية — احتياط لو وُضِعت المفاتيح يوماً في حاوية
+   مشتركة). ولا يُقبل أي مسار آخر: لا اجتياز مسار ولا قراءة لأي كائن آخر. */
 function safeKey(k) {
   const key = String(k || '').trim();
   if (!key || key.includes('..') || key.startsWith('/')) return null;
-  const m = key.match(/^(DG-[A-Z0-9]{4,12})\/([a-z_]+)\/([A-Za-z0-9._-]{1,120})$/);
+  const m = key.match(/^(?:supplier-docs\/)?(DG-[A-Z0-9]{4,12})\/([a-z_]+)\/([A-Za-z0-9._-]{1,120})$/);
   if (!m || !DOC_ALLOW.has(m[2])) return null;
   return key;
 }
