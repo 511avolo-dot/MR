@@ -12206,6 +12206,122 @@ function buildPOListReport(opts){
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PO REGISTER', title:'سجل أوامر الشراء التفصيلي', subtitle:filterDesc}, body);
 }
 
+/* ===== تقرير متابعة أوامر الشراء — بلا مبالغ =====
+   يُسلَّم لموظفي الصيانة للمتابعة الميدانية، فلا يحمل **أي قيمة مالية**:
+   لا إجمالي ولا ضريبة ولا سعر بند. كل ما فيه: ماذا طُلب، من أي مورد، لأي
+   جهة، وأين وصل، وكم بقي من الكميّات.
+   ⚠️ أي عمود جديد هنا يجب ألّا يحمل مبلغاً — يحرس ذلك تأكيد في الحزمة
+   يُفشِل البناء إن ظهر أي رقم مالي في متن التقرير. */
+function poFollowDelivery(po){
+  if(poIsCancelled(po)) return '<span class="print-badge neutral">ملغى</span>';
+  const d = Number(po.days_delayed)||0;
+  if(po.status==='تسليم كامل'){
+    return d>0 ? `<span class="print-badge warn">سُلّم متأخراً ${escapeHtml(poDays(d))}</span>`
+               : '<span class="print-badge ok">سُلّم في الموعد</span>';
+  }
+  if(d>0) return `<span class="print-badge danger">متأخر ${escapeHtml(poDays(d))}</span>`;
+  return '<span class="print-badge">ضمن الموعد</span>';
+}
+// نسبة الاستلام بالكميّات لا بالقيم — والأمر بلا بنود مسجَّلة يعرض «—» لا «0%» المضلّلة
+function poFollowReceived(po){
+  const s = poPartialInfo(po);
+  if(!s.ordered) return '—';
+  return `${s.received} / ${s.ordered} (${s.pct}%)`;
+}
+function buildPOFollowupReport(opts){
+  opts=opts||{};
+  let list=[...(STATE.purchaseOrders||[])];
+  const fStatus=repList(opts.status), fSector=repList(opts.sector);
+  if(fStatus.length) list=list.filter(o=>fStatus.includes(o.status));
+  if(fSector.length) list=list.filter(o=>fSector.includes(o.sector));
+  list=repFilterProjects(list, opts.project);
+  if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
+  if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
+  list.sort((a,b)=>poNumCompare(b.po_number,a.po_number));
+
+  const open      = list.filter(o=>!PO_TERMINAL.includes(o.status));
+  const late      = open.filter(o=>(Number(o.days_delayed)||0)>0);
+  const delivered = list.filter(o=>o.status==='تسليم كامل');
+  const partial   = list.filter(poIsPartial);
+
+  const rows = list.map(o=>`<tr class="${(Number(o.days_delayed)||0)>0 && !PO_TERMINAL.includes(o.status)?'award-row':''}">
+    <td dir="ltr" style="text-align:start">${escapeHtml(o.po_number)}</td>
+    <td>${escapeHtml(poProjectText(o))}</td>
+    <td>${escapeHtml(o.supplier||'—')}</td>
+    <td class="center"><span class="print-badge ${poStatusBadgeClass(o.status)}">${escapeHtml(o.status||'—')}</span></td>
+    <td class="center">${escapeHtml(poFmtDate(o.issue_date))}</td>
+    <td class="center">${escapeHtml(poFmtDate(o.expected_delivery))}</td>
+    <td class="center">${poFollowDelivery(o)}</td>
+    <td class="center">${escapeHtml(poFollowReceived(o))}</td>
+  </tr>`).join('') || '<tr><td colspan="8" class="center" style="padding:16px;color:#888">لا توجد أوامر مطابقة للمرشّحات</td></tr>';
+
+  // البنود المنتظَرة: ما لم يُستلَم بعد من الأوامر غير المُقفلة — جوهر المتابعة الميدانية
+  const pending = [];
+  list.forEach(o=>{
+    if(poIsCancelled(o) || o.status==='تسليم كامل') return;
+    (o.items||[]).forEach(it=>{
+      const q = Number(it.qty)||0, r = Math.min(q, Number(it.received_qty)||0);
+      if(q>0 && r<q) pending.push({ po:o, desc:it.desc, unit:it.unit, qty:q, got:r, left:q-r });
+    });
+  });
+  const pendingRows = pending.slice(0,120).map(x=>`<tr>
+    <td dir="ltr" style="text-align:start">${escapeHtml(x.po.po_number)}</td>
+    <td>${escapeHtml(poProjectText(x.po))}</td>
+    <td>${escapeHtml(x.desc||'—')}</td>
+    <td class="center">${escapeHtml(x.unit||'—')}</td>
+    <td class="center">${x.qty}</td>
+    <td class="center">${x.got}</td>
+    <td class="center"><b>${x.left}</b></td>
+  </tr>`).join('');
+
+  // التوزيع حسب الجهة — بالعدد فقط، لا قيمة
+  const byProj={};
+  list.forEach(o=>{ const k=poProjectText(o); const b=(byProj[k]=byProj[k]||{t:0,open:0,late:0});
+    b.t++; if(!PO_TERMINAL.includes(o.status)) b.open++; if((Number(o.days_delayed)||0)>0 && !PO_TERMINAL.includes(o.status)) b.late++; });
+  const projRows=Object.entries(byProj).sort((a,b)=>b[1].t-a[1].t).map(([k,x])=>`<tr>
+    <td>${escapeHtml(k)}</td><td class="center">${x.t}</td><td class="center">${x.open}</td>
+    <td class="center">${x.late?`<b style="color:#a23b41">${x.late}</b>`:'0'}</td>
+  </tr>`).join('') || '<tr><td colspan="4" class="center" style="padding:14px;color:#888">—</td></tr>';
+
+  const filterDesc=[repDescList('الحالة',opts.status), repDescList('الجهة',opts.project),
+                    repDescList('القطاع',opts.sector),
+                    opts.from?('من '+opts.from):'', opts.to?('إلى '+opts.to):'']
+                   .filter(Boolean).join(' · ')||'كل الأوامر';
+  const body=`
+    <div class="print-grid-stats">
+      <div class="print-stat-card accent"><span class="label">أوامر تحت المتابعة</span><span class="value">${list.length}</span></div>
+      <div class="print-stat-card"><span class="label">قيد التنفيذ</span><span class="value">${open.length}</span></div>
+      <div class="print-stat-card"><span class="label">متأخرة</span><span class="value" style="color:#b13434">${late.length}</span></div>
+      <div class="print-stat-card"><span class="label">مُسلَّمة بالكامل</span><span class="value" style="color:#1f7a55">${delivered.length}</span></div>
+    </div>
+    <div class="print-note-box"><span class="nb-title">ورقة متابعة ميدانية</span>هذا التقرير <b>بلا أي مبالغ</b> — لا أسعار ولا إجماليات؛ أُعدّ لمتابعة التنفيذ والاستلام ميدانياً. المرشّحات: ${escapeHtml(filterDesc)}.</div>
+    ${partial.length?`<div class="print-note-box danger"><span class="nb-title">بانتظار إكمال الاستلام</span>${partial.length} أمر بتسليم جزئي — تُستكمل كميّاته ليُقفل الأمر.</div>`:''}
+    <div class="print-section">
+      <div class="print-section-title">أوامر الشراء تحت المتابعة</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المشروع / الجهة</th><th>المورد</th><th class="center">المرحلة</th><th class="center">تاريخ الإصدار</th><th class="center">التسليم المتوقع</th><th class="center">حالة التسليم</th><th class="center">المستلَم / المطلوب</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${pending.length?`
+    <div class="print-section">
+      <div class="print-section-title">البنود المنتظَر استلامها${pending.length>120?` — أول 120 من ${pending.length}`:''}</div>
+      <table class="print-table">
+        <thead><tr><th>رقم الأمر</th><th>المشروع / الجهة</th><th>الصنف</th><th class="center">الوحدة</th><th class="center">المطلوب</th><th class="center">المستلَم</th><th class="center">المتبقّي</th></tr></thead>
+        <tbody>${pendingRows}</tbody>
+      </table>
+    </div>`:''}
+    <div class="print-section">
+      <div class="print-section-title">التوزيع حسب الجهة / المشروع</div>
+      <table class="print-table">
+        <thead><tr><th>الجهة / المشروع</th><th class="center">إجمالي الأوامر</th><th class="center">قيد التنفيذ</th><th class="center">متأخرة</th></tr></thead>
+        <tbody>${projRows}</tbody>
+      </table>
+    </div>`;
+  return printDocOpen({compactHeader:true, signature:true, eyebrow:'AL-DEYABI GROUP · FIELD FOLLOW-UP (NO AMOUNTS)',
+    title:'متابعة أوامر الشراء — بلا مبالغ', subtitle:filterDesc}, body);
+}
+
 function buildPOOverdueReport(opts){
   opts=opts||{};
   const list=repFilterProjects(
@@ -12691,6 +12807,17 @@ function reportsCatalog(){
         {type:'date', key:'to', label:'إلى تاريخ'},
       ],
       run:(v)=>buildPOListReport({status:v.status||'', project:v.project||'', sector:v.sector||'', from:v.from||'', to:v.to||''}) },
+
+    { group:'المشتريات', perm:null, icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
+      title:'متابعة أوامر الشراء — بلا مبالغ', desc:'ورقة متابعة ميدانية لموظفي الصيانة: الأوامر والبنود المنتظَرة وحالة التسليم — بلا أي أسعار أو إجماليات.',
+      fields:[
+        {type:'multiselect', key:'status',  label:'الحالة',            allLabel:'كل الحالات',          opts:poStatusMulti},
+        {type:'multiselect', key:'project', label:'المشروع / الجهة',   allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+        {type:'multiselect', key:'sector',  label:'القطاع',            allLabel:'كل القطاعات',          opts:poSectorMulti},
+        {type:'date', key:'from', label:'من تاريخ'},
+        {type:'date', key:'to', label:'إلى تاريخ'},
+      ],
+      run:(v)=>buildPOFollowupReport({status:v.status, project:v.project, sector:v.sector, from:v.from||'', to:v.to||''}) },
 
     { group:'المشتريات', perm:null, icon:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
       title:'تقرير المتأخرات والتصعيد', desc:'الأوامر المتأخرة عن موعد التسليم مرتّبة بالأكثر تأخيراً، مع إبراز ما يستوجب التصعيد.',
