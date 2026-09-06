@@ -73,6 +73,13 @@ const apiKey = (env) => env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY |
 const legacyConfigured = (env) => !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
 const r2 = (env) => env.SUPPLIER_DOCS || null;
 
+/* ذاكرة تحقّق قصيرة العمر داخل نسخة العامل: كل وثيقة كانت تكلّف رحلة إضافية إلى
+   `/auth/v1/user`، وفتح ستّ وثائق لمورد = ستّ رحلات. مدّة 60ث تقصّ ذلك دون أن
+   يبقى رمز ملغى صالحاً لمدّة معتبَرة. الناجح فقط يُخبَّأ (الفشل يبقى مغلقاً دوماً). */
+const VERIFY_TTL_MS = 60000;
+const VERIFY_MAX = 200;
+const verifyCache = new Map();
+
 /* يتحقّق من رمز جلسة الموظّف. فشل مغلق: أي خطأ ⇒ null ⇒ 401. */
 async function verifyCaller(env, request) {
   const base = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
@@ -81,11 +88,17 @@ async function verifyCaller(env, request) {
   const auth = request.headers.get('authorization') || '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!jwt) return null;
+  const hit = verifyCache.get(jwt);
+  if (hit && hit.exp > Date.now()) return hit.user;
+  if (hit) verifyCache.delete(jwt);
   try {
     const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${jwt}` } });
     if (!r.ok) return null;
     const u = await r.json();
-    return u && u.email ? u : null;
+    if (!(u && u.email)) return null;
+    if (verifyCache.size >= VERIFY_MAX) verifyCache.delete(verifyCache.keys().next().value);
+    verifyCache.set(jwt, { user: u, exp: Date.now() + VERIFY_TTL_MS });
+    return u;
   } catch (_) { return null; }
 }
 /* مسار الوثيقة يُقبل بشكله المولَّد خادمياً فقط: DG-XXXX/<doc>/<اسم>.<امتداد>

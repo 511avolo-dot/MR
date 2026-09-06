@@ -121,6 +121,49 @@ T('العارض لا يستعمل object/embed اللذين تمنعهما CSP',
   T('نافذة العارض خارج أقسام الصفحات (وإلا لم تفتح إلا من صفحتها)',
     dv > 0 && (secBefore < 0 || (secEnd > 0 && secEnd < dv)));
 }
+// (و) القاعدة نفسها معمَّمة على **كل** النوافذ: `.page.active` تحمل animation،
+//     وأي transform على السلف يجعله الحاوي لـposition:fixed فتُرسم النافذة
+//     منسوبةً للقسم الطويل المُمرَّر لا للشاشة (بلاغ المالك: البطاقة تعلق أسفل
+//     الشاشة ولا تُرفع). نافذتا التسجيل والقوالب أُصيبتا بذلك فعلاً ونُقِلتا.
+{
+  const inside = [];
+  const re = /id="(modal-[A-Za-z0-9_-]+)"/g;
+  let m;
+  while ((m = re.exec(HTML))) {
+    const sec = HTML.lastIndexOf('<section class="page"', m.index);
+    const end = sec < 0 ? -1 : HTML.indexOf('</section>', sec);
+    if (sec >= 0 && end > m.index) inside.push(m[1]);
+  }
+  T('لا نافذة داخل أي <section class="page"> (تُرسم أسفل الشاشة ولا تُرفع)',
+    inside.length === 0, inside.join('، '));
+}
+// (ز) السبب الجذريّ: fill-mode على حركة الصفحة يُبقي transform محسوباً للأبد.
+T('حركة .page.active بلا fill مُبقٍ للـtransform (both/forwards)',
+  /\.page\.active\s*\{[^}]*animation:[^;]*\bbackwards\b/.test(HTML) &&
+  !/\.page\.active\s*\{[^}]*animation:[^;]*\b(both|forwards)\b/.test(HTML));
+
+/* ── سرعة فتح المستندات: الوثيقة القديمة كانت ثلاث رحلات في كل مرّة ── */
+T('أوّل 404 من R2 يسم رقم التسجيل فلا تُعاد المحاولة لبقيّة وثائقه',
+  CODE.includes('REGDOC_R2_MISS') && /REGDOC_R2_MISS\.has\(/.test(CODE) && /REGDOC_R2_MISS\.add\(/.test(CODE));
+T('روابط وثائق الطلب تُسكّ دفعةً واحدة عند فتح العارض',
+  CODE.includes('function regDocSignBatch(') && /createSignedUrls\(/.test(CODE) &&
+  /docvOpen\([\s\S]{0,600}regDocSignBatch\(/.test(CODE));
+{
+  // الترتيب مهمّ: الاستدعاء بعد رسم الوثيقة المطلوبة، وإلا زاحمها التحميل المُسبَق.
+  const body = CODE.slice(CODE.indexOf('async function docvShow('));
+  const call = body.indexOf('docvPrefetchNeighbors()');
+  const draw = body.indexOf('<iframe');
+  T('تحميل مُسبَق للتبويب المجاور بعد العرض لا قبله',
+    CODE.includes('function docvPrefetchNeighbors(') && call > 0 && draw > 0 && call > draw);
+}
+T('إبطال الـblob لا يطال الوثيقة المعروضة الآن',
+  /const shown = \(DOCV\.list\[DOCV\.i\] \|\| \{\}\)\.path/.test(CODE) &&
+  /find\(k => k !== shown\)/.test(CODE));
+// (ح) ملف عرض سعر المورّد: كان يُنزَّل على الجهاز ثم يُحذف من المخزن.
+T('لا مسار يُنزّل ملف عرض السعر ثم يحذفه من المخزن',
+  !CODE.includes('rfqDownloadQuoteFile') &&
+  !/storage\.from\('supplier-docs'\)\s*\.\s*remove\(/.test(CODE) &&
+  CODE.includes('function rfqViewQuoteFile(') && /rfqViewQuoteFile[\s\S]{0,300}docvOpen\(/.test(CODE));
 
 /* ── 2) تحميل الدوال الخالصة في صندوق ─────────────────────────── */
 function grab(name) {
