@@ -18,11 +18,30 @@
  *      سلامة بنيوية · رفض المحتوى النشِط في PDF · (وترويسات التحييد عند العرض).
  *   4) الرفع بمفتاح الخدمة (خادمي) — العميل لا يملك أي صلاحية كتابة على المخزن.
  *
- * ⚠️ يتطلّب `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` في بيئة Cloudflare.
- *    بدونهما يعيد 503 بـ`reason:"not_configured"` — وتقع الصفحة على المسار القديم
- *    مؤقّتاً حتى يضبط المالك المتغيّر (انظر تعليق pushDocsViaServer في register.html).
+ * ── التخزين: Cloudflare R2 (قرار المالك 2026-09-06: «أريد أكبر حجم تخزيني… R2») ──
+ *   binding: `SUPPLIER_DOCS` — حاوية R2 **مستقلّة** عن حاوية البوابة `QUOTES_BUCKET`
+ *   (نظام 3 معزول تماماً — القاعدة الذهبية في CLAUDE.md؛ لا تخلط الحاويتين).
+ *   لماذا R2: مخزن Supabase على الخطة المجانية 1 GB = نحو 110 موردين فقط (قياس فعليّ:
+ *   ≈9 MB للمورد ⇒ 8.8 GB لألف مورد). R2 يعطي 10 GB مجاناً ثم ‎$0.015/GB شهرياً
+ *   **بلا رسوم إخراج (egress)** — فألف مورد ≈ 0.13$ شهرياً بدل ترقية بـ‎$25.
+ *   **ومكسب إضافي: الرفع على R2 لا يحتاج `SUPABASE_SERVICE_ROLE_KEY` إطلاقاً**، فيزول
+ *   الاعتماد على المتغيّر المفقود الذي عطّل الرفع الخادميّ (راجع CLAUDE.md 2026-07-21).
+ *
+ * ── القراءة: `GET /api/reg-doc?key=<path>` ──
+ *   **مُصادَقة إلزامية**: رمز جلسة Supabase للموظّف (Bearer) يُتحقَّق منه عبر
+ *   `/auth/v1/user`؛ أي فشل ⇒ 401 (فشل مغلق). ثم يُبَثّ الملف بترويسات التحييد
+ *   المشتركة (`fileResponseHeaders`) فلا يُنفَّذ محتوى نشِط ولا يُخزَّن في الكاش.
+ *   هذا يُغلق التسريب الذي كان في مخزن Supabase (وثائق تُنزَّل بلا حساب).
+ *
+ * ── التوافق الخلفي (قراءة مزدوجة، بلا ترحيل ولا انقطاع) ──
+ *   الملفات القديمة تبقى في مخزن Supabase؛ الواجهة تسأل R2 أولاً وتسقط إلى الرابط
+ *   الموقّع القديم عند 404. الجديد يُكتب على R2 فقط. لا نقل بيانات، لا شيء يُكسر.
+ *
+ * ⚠️ متغيّرات Cloudflare المطلوبة: binding `SUPPLIER_DOCS` (R2) + `SUPABASE_URL` +
+ *    `SUPABASE_ANON_KEY` (عام، للتحقّق من رموز الجلسات؛ يقبل مفتاح الخدمة بديلاً).
+ *    بلا R2 يسقط الرفع للمسار القديم (Supabase Storage) إن كان مفتاح الخدمة مضبوطاً.
  */
-import { inspectUpload } from './_file-guard.js';
+import { inspectUpload, fileResponseHeaders } from './_file-guard.js';
 
 const BUCKET = 'supplier-docs';
 const REG_RE = /^DG-[A-Z0-9]{4,12}$/;
@@ -48,11 +67,44 @@ function sameOrigin(request) {
   if (!host || !src) return false;
   try { return new URL(src).host === host; } catch (_) { return false; }
 }
-const configured = (env) => !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+// مفتاح واجهة Supabase للتحقّق من رمز الجلسة: العام يكفي (وهو عام أصلاً في الصفحة)،
+// ونقبل مفتاح الخدمة بديلاً إن كان هو المضبوط.
+const apiKey = (env) => env.SUPABASE_ANON_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
+const legacyConfigured = (env) => !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY);
+const r2 = (env) => env.SUPPLIER_DOCS || null;
+
+/* يتحقّق من رمز جلسة الموظّف. فشل مغلق: أي خطأ ⇒ null ⇒ 401. */
+async function verifyCaller(env, request) {
+  const base = String(env.SUPABASE_URL || '').replace(/\/+$/, '');
+  const key = apiKey(env);
+  if (!base || !key) return null;
+  const auth = request.headers.get('authorization') || '';
+  const jwt = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!jwt) return null;
+  try {
+    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${jwt}` } });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return u && u.email ? u : null;
+  } catch (_) { return null; }
+}
+/* مسار الوثيقة يُقبل بشكله المولَّد خادمياً فقط: DG-XXXX/<doc>/<اسم>.<امتداد>
+   (وبادئة `supplier-docs/` اختيارية — احتياط لو وُضِعت المفاتيح يوماً في حاوية
+   مشتركة). ولا يُقبل أي مسار آخر: لا اجتياز مسار ولا قراءة لأي كائن آخر. */
+function safeKey(k) {
+  const key = String(k || '').trim();
+  if (!key || key.includes('..') || key.startsWith('/')) return null;
+  const m = key.match(/^(?:supplier-docs\/)?(DG-[A-Z0-9]{4,12})\/([a-z_]+)\/([A-Za-z0-9._-]{1,120})$/);
+  if (!m || !DOC_ALLOW.has(m[2])) return null;
+  return key;
+}
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ error: 'طلب غير مصرّح به' }, 403);
-  if (!configured(env)) return json({ error: 'خدمة رفع الوثائق غير مهيّأة على الخادم', reason: 'not_configured' }, 503);
+  const bucket = r2(env);
+  if (!bucket && !legacyConfigured(env)) {
+    return json({ error: 'خدمة رفع الوثائق غير مهيّأة على الخادم', reason: 'not_configured' }, 503);
+  }
 
   const url = new URL(request.url);
   const regId = String(url.searchParams.get('reg_id') || '').trim().toUpperCase();
@@ -66,6 +118,19 @@ export async function onRequestPost({ request, env }) {
 
   const rand = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('r' + Date.now() + Math.random().toString(36).slice(2, 10));
   const path = `${regId}/${doc}/${rand}.${check.ext}`;
+
+  // المسار المفضَّل: R2 (سعة أكبر، بلا رسوم إخراج، ولا يحتاج مفتاح خدمة).
+  if (bucket) {
+    try {
+      await bucket.put(path, buf, { httpMetadata: { contentType: check.ct } });
+      return json({ ok: true, path, store: 'r2' });
+    } catch (e) {
+      console.error('[reg-doc] r2_put_failed', (e && e.message) || e);
+      // لا نسقط للمخزن القديم صامتاً إن كان R2 مقصوداً: خطأ صريح أوضح من ازدواج المخزن.
+      if (!legacyConfigured(env)) return json({ error: 'تعذّر حفظ الملف على الخادم' }, 502);
+    }
+  }
+
   const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
 
   try {
@@ -92,13 +157,47 @@ export async function onRequestPost({ request, env }) {
   // الآن: أسماء ملفات عشوائية فريدة فقط (لا استبدال، لا حذف) — لا ناقل تدميري.
   // المتبقّي (مُوثَّق): مصادقة حقيقية للرافع (رمز موقَّع مربوط بالتسجيل) = متابعة مع
   // db/system1-storage-hardening.sql؛ إزالة الحذف تُغلق أخطر جزء (المحو) الآن.
-  return json({ ok: true, path });
+  return json({ ok: true, path, store: 'supabase' });
 }
 
-export function onRequestGet({ env }) {
-  // فحص صحّة — منطقيات وجود فقط، لا قيم أسرار.
-  return json({
-    ok: configured(env),
-    checks: { supabase_url: !!env.SUPABASE_URL, service_key: !!env.SUPABASE_SERVICE_ROLE_KEY },
-  });
+/* GET بلا مُعامِلات = فحص صحّة (منطقيات وجود فقط، لا قيم أسرار).
+   GET ?key=<path> = بثّ الوثيقة من R2 لموظّف مُصادَق — فشل مغلق. */
+export async function onRequestGet({ request, env }) {
+  const url = new URL(request.url);
+  const raw = url.searchParams.get('key');
+
+  if (!raw) {
+    return json({
+      ok: !!(r2(env) || legacyConfigured(env)),
+      store: r2(env) ? 'r2' : (legacyConfigured(env) ? 'supabase' : null),
+      checks: {
+        r2_bucket: !!r2(env),
+        supabase_url: !!env.SUPABASE_URL,
+        api_key: !!apiKey(env),
+        service_key: !!env.SUPABASE_SERVICE_ROLE_KEY,
+      },
+    });
+  }
+
+  const bucket = r2(env);
+  if (!bucket) return json({ error: 'تخزين R2 غير مهيّأ', reason: 'not_configured' }, 503);
+
+  const key = safeKey(raw);
+  if (!key) return json({ error: 'مسار غير صالح' }, 400);
+
+  // مصادقة إلزامية: وثائق الموردين تحمل سجلات تجارية ورسائل بنكية.
+  const user = await verifyCaller(env, request);
+  if (!user) return json({ error: 'غير مصرّح' }, 401);
+
+  // ?meta=1 — الحجم فقط (لقياس السعة) بلا بثّ البايتات
+  if (url.searchParams.get('meta') === '1') {
+    const h = await bucket.head(key);
+    if (!h) return json({ error: 'غير موجود', reason: 'not_found' }, 404);
+    return json({ ok: true, size: h.size || 0 });
+  }
+
+  const obj = await bucket.get(key);
+  if (!obj) return json({ error: 'غير موجود', reason: 'not_found' }, 404);
+  const ct = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream';
+  return new Response(obj.body, { status: 200, headers: fileResponseHeaders(ct) });
 }

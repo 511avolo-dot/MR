@@ -3798,6 +3798,14 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             </table>
           </div>
           <div id="reg-pager" style="display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px"></div>
+          <div style="margin-top:24px;border-top:1px solid var(--border,#e6e8ee);padding-top:16px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:800;color:var(--navy,#1a3a5c)">متابعة مستندات الموردين</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadSupDocs()" style="gap:6px">تحديث</button>
+              <span style="font-size:11.5px;color:var(--muted,#64748b)">من تنقصه وثيقة إلزامية ومن انتهت أو تقارب شهاداته الانتهاء.</span>
+            </div>
+            <div id="supdoc-body"><div style="padding:16px;text-align:center;color:#94a3b8;font-size:12.5px">اضغط «تحديث» لعرض متابعة المستندات.</div></div>
+          </div>
           <div style="margin-top:22px;border-top:1px solid var(--border,#e6e8ee);padding-top:16px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
               <div style="font-size:13px;font-weight:800;color:var(--navy,#1a3a5c)">سعة التخزين داخل النظام</div>
@@ -6385,7 +6393,7 @@ function navigate(page){
    تجمع ما يحتاج متابعته فعلاً: أوامر متعثّرة/ناقصة، تسجيلات موردين
    بانتظار المراجعة، وطلبات شراء بانتظار اعتماده.
    ============================================================ */
-const TASKS = { regsPending:null, prPending:null, loaded:false };
+const TASKS = { regsPending:null, prPending:null, docIssues:null, loaded:false };
 function tasksGreeting(){
   const h=new Date().getHours();
   const g = h<12 ? 'صباح الخير' : (h<17 ? 'طاب يومك' : 'مساء الخير');
@@ -6402,6 +6410,14 @@ async function tasksLoadCloud(){
         .select('id',{count:'exact',head:true}).eq('status','pending');
       TASKS.regsPending = count||0;
     }catch(e){ TASKS.regsPending=null; }
+  }
+  // موردون معتمدون تنقصهم وثيقة إلزامية أو انتهت شهاداتهم (استعلام خفيف: أعمدة الوثائق فقط)
+  if(hasPermission('can_review_registrations')){
+    try{
+      const rows = await regFetchAll('id,legal_name_ar,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry',
+        (q)=>q.eq('status','approved'));
+      TASKS.docIssues = rows.map(supDocRow).filter(supDocNeedsAction).length;
+    }catch(e){ TASKS.docIssues=null; }
   }
   // طلبات الشراء التي يستطيع المستخدم البتّ فيها
   if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
@@ -6440,6 +6456,11 @@ function renderTasksPanel(){
   if(hasPermission('can_review_registrations')){
     cards.push({n:TASKS.regsPending, cls:'info', l:'طلبات تسجيل موردين', a:'بانتظار مراجعتك واعتمادها',
                 go:()=>{ navigate('registrations'); try{ loadRegistrations(); }catch(e){} }});
+  }
+  if(TASKS.docIssues!=null || hasPermission('can_review_registrations')){
+    cards.push({n:TASKS.docIssues, cls:'warn', l:'موردون بوثائق ناقصة أو منتهية', a:'راجع متابعة المستندات وحدّثها',
+      go:()=>{ navigate('registrations'); try{ loadRegistrations(1); }catch(e){}
+               setTimeout(()=>{ try{ supDocSetFilter('issues'); document.getElementById('supdoc-body')?.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }, 700); }});
   }
   if(TASKS.prPending!=null || hasPermission('can_approve_l1') || hasPermission('can_approve_l2')){
     cards.push({n:TASKS.prPending, cls:'danger', l:'طلبات شراء بانتظار اعتمادك', a:'اتخذ القرار في سلسلة الاعتماد', go:()=>navigate('pr')});
@@ -24019,6 +24040,7 @@ async function loadRegistrations(page) {
 
     renderRegStats();   // شريط ملخّص الحالات (استعلام خفيف منفصل) — يضبط شارة المعلّق أيضاً
     renderRegPager();
+    if (!SUPDOC_ROWS.length) loadSupDocs();   // متابعة المستندات تُحمَّل مرّة ثم بزرّ التحديث
 
     const STMAP = {
       pending:        {label:'قيد المراجعة', c:'#b45309', bg:'#fef3c7'},
@@ -24069,20 +24091,171 @@ async function loadRegistrations(page) {
   }
 }
 
+/* ── متابعة مستندات الموردين: من تنقصه وثيقة ومن انتهت وثائقه ──────────
+   الوثائق الإلزامية الستّ مطلوبة عند التسجيل، لكن لا شيء في النظام كان يُظهر
+   **من نقصته وثيقة بعد الاعتماد** ولا **من انتهت شهاداته** — والتواريخ مخزَّنة
+   أصلاً (`cr_expiry_date`/`chamber_expiry`) وتُعرض في بطاقة المورد وحدها.
+   هذه اللوحة تجمع الصورة لكل الموردين المعتمدين دفعةً واحدة. */
+const SUP_REQUIRED_DOCS = [
+  ['cr','السجل التجاري'], ['vat','شهادة الزكاة/VAT'], ['gosi','شهادة التأمينات'],
+  ['chamber','الغرفة التجارية'], ['natl_addr','العنوان الوطني'], ['iban_cert','شهادة الآيبان'],
+];
+const SUP_EXPIRY_SOON_DAYS = 30;
+let SUPDOC_ROWS = [], SUPDOC_FILTER = 'issues';
+
+/* يبني صفّ متابعة واحداً من صفّ تسجيل — منطق خالص قابل للاختبار */
+function supDocRow(reg){
+  const paths = (reg && reg.doc_paths) || {};
+  const missing = SUP_REQUIRED_DOCS.filter(([k]) => !paths[k]).map(([,l]) => l);
+  const present = SUP_REQUIRED_DOCS.filter(([k]) => !!paths[k]).length;
+  const exp = [
+    ['السجل التجاري', reg.cr_expiry_date],
+    ['عضوية الغرفة',  reg.chamber_expiry],
+  ].map(([label, d]) => ({label, d, n: supDaysTo(d)})).filter(x => x.n != null);
+  const worst = exp.length ? Math.min(...exp.map(x => x.n)) : null;
+  return {
+    id: reg.id,
+    name: reg.legal_name_ar || reg.legal_name_en || reg.id,
+    cr: reg.commercial_reg || '',
+    status: reg.status,
+    present, total: SUP_REQUIRED_DOCS.length, missing,
+    expiries: exp, worst,
+    expired: worst != null && worst < 0,
+    soon: worst != null && worst >= 0 && worst <= SUP_EXPIRY_SOON_DAYS,
+    docCount: Object.keys(paths).length,
+    reg,
+  };
+}
+function supDocNeedsAction(r){ return r.missing.length > 0 || r.expired || r.soon; }
+
+async function loadSupDocs(){
+  const box = document.getElementById('supdoc-body');
+  if (!box || !(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  box.innerHTML = '<div style="padding:22px;text-align:center;color:#64748b;font-size:13px">جارٍ التحميل…</div>';
+  try {
+    const rows = await regFetchAll(
+      'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry',
+      (q) => q.eq('status', 'approved'));
+    SUPDOC_ROWS = rows.map(supDocRow);
+    renderSupDocs();
+  } catch(e){
+    box.innerHTML = `<div style="padding:18px;color:#b91c1c;font-size:13px">تعذّر التحميل: ${escapeHtml(e.message||'')}</div>`;
+    reportError('loadSupDocs', e);
+  }
+}
+function supDocSetFilter(f){ SUPDOC_FILTER = f; renderSupDocs(); }
+function renderSupDocs(){
+  const box = document.getElementById('supdoc-body'); if(!box) return;
+  const all = SUPDOC_ROWS;
+  const F = {
+    issues:  all.filter(supDocNeedsAction),
+    missing: all.filter(r => r.missing.length > 0),
+    expired: all.filter(r => r.expired),
+    soon:    all.filter(r => r.soon),
+    all,
+  };
+  const list = F[SUPDOC_FILTER] || F.issues;
+  const tab = (k, label, n, color) => `<button onclick="supDocSetFilter('${k}')" style="cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;border:1.5px solid ${SUPDOC_FILTER===k?color:'var(--border,#e6e8ee)'};background:${SUPDOC_FILTER===k?color+'14':'var(--surface,#fff)'};border-radius:11px;padding:8px 14px">
+    <span style="font-size:17px;font-weight:800;color:${color};line-height:1">${n}</span>
+    <span style="font-size:12px;font-weight:600;color:${SUPDOC_FILTER===k?color:'var(--muted,#64748b)'}">${label}</span></button>`;
+  const chips = (r) => {
+    const paths = (r.reg.doc_paths)||{};
+    return SUP_REQUIRED_DOCS.map(([k,l]) => paths[k]
+      ? `<button onclick="supDocOpen('${escapeAttr(r.id)}','${escapeAttr(k)}')" title="فتح داخل النظام" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">✓ ${escapeHtml(l)}</button>`
+      : `<span style="background:#fff5f5;color:#b91c1c;border:1px dashed #fecaca;border-radius:6px;padding:3px 8px;font-size:11px">✕ ${escapeHtml(l)}</span>`
+    ).join(' ');
+  };
+  const expCell = (r) => {
+    if(!r.expiries.length) return '<span style="color:#94a3b8;font-size:11.5px">—</span>';
+    return r.expiries.map(x => {
+      const st = x.n < 0 ? {c:'#b91c1c', t:'منتهٍ منذ ' + poDays(Math.abs(x.n))}
+               : x.n <= SUP_EXPIRY_SOON_DAYS ? {c:'#b45309', t:'خلال ' + poDays(x.n)}
+               : {c:'#15803d', t:'سارٍ'};
+      return `<div style="font-size:11.5px;color:${st.c};font-weight:600">${escapeHtml(x.label)}: ${escapeHtml(st.t)}</div>`;
+    }).join('');
+  };
+  box.innerHTML = `
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px">
+      ${tab('issues','تحتاج متابعة',F.issues.length,'#b45309')}
+      ${tab('missing','تنقصها وثيقة',F.missing.length,'#b91c1c')}
+      ${tab('expired','وثائق منتهية',F.expired.length,'#b91c1c')}
+      ${tab('soon','تقارب الانتهاء',F.soon.length,'#c2410c')}
+      ${tab('all','كل المعتمدين',F.all.length,'#0B1B36')}
+    </div>
+    ${list.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
+          <th style="padding:11px 13px;text-align:right;font-size:12px">المورد</th>
+          <th style="padding:11px 13px;text-align:center;font-size:12px">الوثائق الإلزامية</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">الحالة التفصيلية</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">صلاحية الشهادات</th>
+          <th style="padding:11px 13px;text-align:center;font-size:12px">فتح</th>
+        </tr></thead>
+        <tbody>${list.map(r => `<tr style="border-top:1px solid var(--border,#eef1f6)">
+          <td style="padding:11px 13px">
+            <div style="font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}</div>
+            ${r.cr?`<div style="font-size:11px;color:#94a3b8;font-family:'IBM Plex Mono',monospace">س.ت ${escapeHtml(r.cr)}</div>`:''}
+          </td>
+          <td style="padding:11px 13px;text-align:center;white-space:nowrap">
+            <span style="font-weight:800;color:${r.missing.length?'#b91c1c':'#15803d'}">${r.present}</span>
+            <span style="color:#94a3b8">/${r.total}</span>
+          </td>
+          <td style="padding:11px 13px"><div style="display:flex;flex-wrap:wrap;gap:5px">${chips(r)}</div></td>
+          <td style="padding:11px 13px">${expCell(r)}</td>
+          <td style="padding:11px 13px;text-align:center">
+            <button onclick="openRegById('${escapeAttr(r.id)}')" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">الطلب</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+      : `<div style="padding:34px;text-align:center;color:#15803d;font-size:14px;font-weight:600">✓ لا يوجد ما يحتاج متابعة في هذا التصنيف</div>`}
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px">يشمل الموردين المعتمدين فقط. الوثائق تُفتح داخل النظام بعارض المستندات.</div>`;
+}
+/* فتح وثيقة بعينها من صفّ المتابعة — يعيد استخدام العارض نفسه */
+function supDocOpen(regId, key){
+  const row = SUPDOC_ROWS.find(r => r.id === regId);
+  if(!row) return;
+  const list = docvListFromReg(row.reg);
+  const i = Math.max(0, list.findIndex(d => d.key === key));
+  docvOpen(list, i, docvWho(row.reg), row.reg);
+}
+
 /* ── سعة التخزين: قياس فعليّ لا تخمين ─────────────────────────
    السؤال «هل يكفي الحفظ داخل النظام لألف مورد؟» لا يُجاب بالتقدير: نقيس
    **عيّنة حقيقية** من مجلّدات المخزن (حجم كل ملف من metadata) ونستنتج
    المتوسّط لكل مورد، ثم نُسقِطه على ألف مورد ونقارنه بحدود خطط Supabase.
    يُشغَّل عند الطلب فقط (زرّ) — لا يُثقل تحميل الشاشة. */
+/* خطط التخزين للمقارنة — انتقل التخزين إلى **Cloudflare R2** (قرار المالك):
+   10 GB مجاناً ثم ‎$0.015/GB شهرياً **بلا رسوم إخراج**. للمقارنة نُبقي سقف مخزن
+   Supabase المجاني (1 GB) لأن الملفات القديمة ما تزال هناك حتى تُستبدل. */
 const REG_PLAN_LIMITS = [
-  {name:'Free', gb:1},
-  {name:'Pro',  gb:100},
+  {name:'Supabase Free (الملفات القديمة)', gb:1},
+  {name:'Cloudflare R2 المجاني',           gb:10},
+  {name:'Cloudflare R2 المدفوع',           gb:1024, note:'≈ $0.015 لكل GB شهرياً · بلا رسوم إخراج'},
 ];
 function regFmtBytes(n){
   if(!n) return '0 B';
   const u=['B','KB','MB','GB','TB']; let i=0, v=n;
   while(v>=1024 && i<u.length-1){ v/=1024; i++; }
   return (v>=100?Math.round(v):Math.round(v*10)/10) + ' ' + u[i];
+}
+/* حجم وثيقة: R2 عبر `?meta=1` (بلا بثّ البايتات) ثم فهرس المخزن القديم. */
+async function regDocSize(path){
+  const tok = await regDocToken();
+  if(tok){
+    try{
+      const r = await fetch('/api/reg-doc?meta=1&key=' + encodeURIComponent(path), {
+        headers: { Authorization: 'Bearer ' + tok },
+      });
+      if(r.ok){ const j = await r.json(); if(j && j.size) return j.size; }
+    }catch(e){ /* اسقط للقديم */ }
+  }
+  try{
+    const dir = String(path).split('/').slice(0,-1).join('/');
+    const nameOnly = String(path).split('/').pop();
+    const {data: ls} = await CLOUD.client.storage.from(REG_BUCKET).list(dir, {limit:100});
+    const f = (ls||[]).find(x => x.name === nameOnly);
+    return (f && f.metadata && f.metadata.size) || 0;
+  }catch(e){ return 0; }
 }
 async function regMeasureStorage(){
   const box = document.getElementById('reg-capacity');
@@ -24100,11 +24273,7 @@ async function regMeasureStorage(){
       let any = false;
       for(const p of Object.values(r.doc_paths)){
         if(!p) continue;
-        const dir = String(p).split('/').slice(0,-1).join('/');
-        const nameOnly = String(p).split('/').pop();
-        const {data: ls} = await CLOUD.client.storage.from(REG_BUCKET).list(dir, {limit:100});
-        const f = (ls||[]).find(x => x.name === nameOnly);
-        const sz = f && f.metadata && f.metadata.size;
+        const sz = await regDocSize(p);
         if(sz){ bytes += sz; files++; any = true; }
       }
       if(any) measured++;
@@ -24116,10 +24285,12 @@ async function regMeasureStorage(){
       const cap = pl.gb * 1024 * 1024 * 1024;
       const fits = projected > 0 && projected <= cap;
       const maxSup = perSupplier ? Math.floor(cap / perSupplier) : null;
-      return `<div style="border:1.5px solid ${fits?'#bbf7d0':'#fecaca'};background:${fits?'#f0fdf4':'#fff5f5'};border-radius:10px;padding:10px 14px;min-width:190px">
-        <div style="font-size:12px;font-weight:800;color:#1a3a5c">خطة ${pl.name} — ${pl.gb} GB</div>
+      const cap_l = pl.gb >= 1024 ? (pl.gb/1024) + ' TB+' : pl.gb + ' GB';
+      return `<div style="border:1.5px solid ${fits?'#bbf7d0':'#fecaca'};background:${fits?'#f0fdf4':'#fff5f5'};border-radius:10px;padding:10px 14px;min-width:200px">
+        <div style="font-size:12px;font-weight:800;color:#1a3a5c">${escapeHtml(pl.name)} — ${cap_l}</div>
         <div style="font-size:12px;color:${fits?'#15803d':'#b91c1c'};font-weight:700;margin-top:3px">${fits?'✓ تكفي ألف مورد':'✕ لا تكفي ألف مورد'}</div>
         ${maxSup!=null?`<div style="font-size:11px;color:#64748b;margin-top:2px">تتّسع لنحو <b>${maxSup.toLocaleString('en-US')}</b> مورد بهذا المتوسّط</div>`:''}
+        ${pl.note?`<div style="font-size:10.5px;color:#94a3b8;margin-top:3px">${escapeHtml(pl.note)}</div>`:''}
       </div>`;
     }).join('');
     box.innerHTML = `
@@ -24551,15 +24722,44 @@ function docvTabs(){
   const active = box.children[DOCV.i];
   if (active && active.scrollIntoView) active.scrollIntoView({block:'nearest', inline:'nearest'});
 }
-/* يجلب الملف مرّة واحدة ويحتفظ بـblob URL في الجلسة (تبديل التبويبات فوريّ) */
-async function docvBlobUrl(path){
-  if (DOCV.urls.has(path)) return DOCV.urls.get(path);
+/* ── جلب وثيقة مورد: R2 أولاً ثم المخزن القديم ─────────────────────────
+   التخزين انتقل إلى Cloudflare R2 (سعة أكبر بكثير، وبلا رسوم إخراج، ولا يحتاج
+   مفتاح خدمة Supabase). الملفات المرفوعة قبل النقل تبقى في مخزن Supabase —
+   فنسأل R2 أولاً ونسقط للرابط الموقّع القديم عند 404/503. **بلا ترحيل بيانات
+   وبلا انقطاع**؛ الجديد يُكتب على R2 وحده.
+   ⚠️ قراءة R2 تمرّ بـ`/api/reg-doc` **بمصادقة إلزامية** (رمز جلسة الموظّف) —
+   لا تستبدلها برابط عام. */
+async function regDocToken(){
+  try{
+    const {data} = await CLOUD.client.auth.getSession();
+    return (data && data.session && data.session.access_token) || '';
+  }catch(e){ return ''; }
+}
+async function regDocFetch(path){
   if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)) throw new Error('يتطلب اتصالاً سحابياً');
+  const tok = await regDocToken();
+  if (tok){
+    try{
+      const r = await fetch('/api/reg-doc?key=' + encodeURIComponent(path), {
+        headers: { Authorization: 'Bearer ' + tok },
+      });
+      if (r.ok) return await r.blob();
+      // 404 = ملف قديم قبل النقل · 503 = R2 غير مربوط بعد ⇒ المخزن القديم
+      if (r.status !== 404 && r.status !== 503){
+        throw new Error('تعذّر جلب الملف (HTTP ' + r.status + ')');
+      }
+    }catch(e){ if (/HTTP/.test(e.message||'')) throw e; /* شبكة ⇒ جرّب القديم */ }
+  }
   const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 300);
   if (error || !data || !data.signedUrl) throw new Error('تعذّر إنشاء رابط الملف');
   const resp = await fetch(data.signedUrl);
   if (!resp.ok) throw new Error('تعذّر جلب الملف (HTTP ' + resp.status + ')');
-  const blob = await resp.blob();
+  return await resp.blob();
+}
+/* يجلب الملف مرّة واحدة ويحتفظ بـblob URL في الجلسة (تبديل التبويبات فوريّ) */
+async function docvBlobUrl(path){
+  if (DOCV.urls.has(path)) return DOCV.urls.get(path);
+  const blob = await regDocFetch(path);
   // نوع صريح كي يعرضه المتصفّح بدل تنزيله (بعض الملفات تُخزَّن بلا نوع)
   const kind = docvKind(path);
   const typed = blob.type ? blob : new Blob([blob], {type: kind === 'pdf' ? 'application/pdf' : 'application/octet-stream'});
@@ -25240,11 +25440,7 @@ async function downloadAllDocs(reg) {
 
   // Helper: fetch one file as blob via fresh signed URL
   async function fetchDocBlob(docId, path) {
-    const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 120);
-    if (error || !data?.signedUrl) throw new Error('فشل إنشاء الرابط');
-    const response = await fetch(data.signedUrl);
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    return response.blob();
+    return regDocFetch(path);   // R2 أولاً ثم المخزن القديم — مصدر واحد للجلب
   }
 
   // Helper: trigger browser download for a blob
