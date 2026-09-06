@@ -150,7 +150,7 @@ const NEEDED_FNS = [
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
   'arNorm', 'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
-  'regFmtBytes',
+  'regFmtBytes', 'supDocRow', 'supDocNeedsAction',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
@@ -175,7 +175,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP'];
 
@@ -1012,6 +1012,73 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('لوحة قياس السعة موجودة وتقارن بخطط التخزين',
     CODE.includes('async function regMeasureStorage') && /REG_PLAN_LIMITS/.test(CODE) &&
     HTML.includes('id="reg-capacity"') && CODE.includes("storage.from(REG_BUCKET).list("));
+}
+
+/* ── 14) متابعة مستندات الموردين + تخزين R2 ──────────────────── */
+{
+  G('١٤) متابعة مستندات الموردين · تخزين R2');
+  const day = 86400000, iso = (d) => new Date(Date.now() + d*day).toISOString().slice(0,10);
+  const full = {cr:'a.pdf', vat:'b.pdf', gosi:'c.pdf', chamber:'d.pdf', natl_addr:'e.pdf', iban_cert:'f.pdf'};
+
+  const ok = api.supDocRow({id:'DG-1', legal_name_ar:'مورد كامل', doc_paths:full,
+    cr_expiry_date: iso(400), chamber_expiry: iso(300)});
+  T('المكتمل: 6/6 بلا نواقص', ok.present === 6 && ok.missing.length === 0);
+  T('المكتمل السارية شهاداته لا يحتاج متابعة', !api.supDocNeedsAction(ok) && !ok.expired && !ok.soon);
+
+  const miss = api.supDocRow({id:'DG-2', legal_name_ar:'ناقص', doc_paths:{cr:'a.pdf', vat:'b.pdf'}});
+  T('يعُدّ النواقص بأسمائها', miss.present === 2 && miss.missing.length === 4 &&
+    miss.missing.includes('شهادة التأمينات') && miss.missing.includes('شهادة الآيبان'));
+  T('الناقص يحتاج متابعة', api.supDocNeedsAction(miss));
+
+  const expd = api.supDocRow({id:'DG-3', legal_name_ar:'منتهٍ', doc_paths:full, cr_expiry_date: iso(-5)});
+  T('المنتهي يُرصد وإن اكتملت وثائقه', expd.expired && !expd.soon && api.supDocNeedsAction(expd));
+
+  const soon = api.supDocRow({id:'DG-4', legal_name_ar:'يقارب', doc_paths:full, cr_expiry_date: iso(12)});
+  T('المقارب للانتهاء يُرصد', soon.soon && !soon.expired && api.supDocNeedsAction(soon));
+  T('عتبة القرب 30 يوماً',
+    api.supDocRow({id:'x', doc_paths:full, cr_expiry_date: iso(45)}).soon === false &&
+    api.supDocRow({id:'x', doc_paths:full, cr_expiry_date: iso(29)}).soon === true);
+
+  T('بلا تواريخ ⇒ لا إنذار صلاحية (ولا يُعَدّ منتهياً)',
+    !api.supDocRow({id:'x', doc_paths:full}).expired && !api.supDocRow({id:'x', doc_paths:full}).soon);
+  T('الأسوأ هو الحاكم عند تاريخين',
+    api.supDocRow({id:'x', doc_paths:full, cr_expiry_date: iso(400), chamber_expiry: iso(-3)}).expired);
+  T('الوثائق الإلزامية الستّ هي مرجع العدّ',
+    api.SUP_REQUIRED_DOCS.length === 6 && api.SUP_EXPIRY_SOON_DAYS === 30);
+
+  // اللوحة مربوطة: تحميل، مرشّحات، فتح بالعارض، بطاقة مهام
+  T('لوحة المتابعة مربوطة بالشاشة والعارض',
+    CODE.includes('async function loadSupDocs') && CODE.includes('function renderSupDocs') &&
+    CODE.includes('function supDocOpen') && HTML.includes('id="supdoc-body"'));
+  T('المتابعة تجلب المعتمدين فقط وبالصفحات (لا سقف عارٍ)',
+    /loadSupDocs[\s\S]{0,700}regFetchAll\([\s\S]{0,200}eq\('status', 'approved'\)/.test(CODE));
+  T('بطاقة مهام للوثائق الناقصة/المنتهية',
+    CODE.includes('TASKS.docIssues') && /موردون بوثائق ناقصة أو منتهية/.test(CODE));
+
+  // ── تخزين R2: القراءة المزدوجة والمصادقة ──
+  const RD = fs.readFileSync(path.join(ROOT, 'functions/api/reg-doc.js'), 'utf8');
+  // العزل يعني ألّا تُستعمل حاوية البوابة كـbinding — ذكرها في تعليق توضيحيّ مقصود.
+  T('الرفع يُفضّل R2 عبر binding مستقلّ عن حاوية البوابة',
+    /env\.SUPPLIER_DOCS/.test(RD) && /bucket\.put\(path, buf/.test(RD) && !/env\.QUOTES_BUCKET/.test(RD));
+  T('الرفع على R2 لا يشترط مفتاح خدمة Supabase',
+    /if \(!bucket && !legacyConfigured\(env\)\)/.test(RD));
+  T('قراءة الوثيقة من R2 مُصادَقة وفشلها مغلق',
+    /async function verifyCaller/.test(RD) && /auth\/v1\/user/.test(RD) &&
+    /const user = await verifyCaller\(env, request\);\s*\n\s*if \(!user\) return json\(\{ error: 'غير مصرّح' \}, 401\);/.test(RD));
+  T('مسار الوثيقة مُتحقَّق منه (لا اجتياز مسار)',
+    /function safeKey/.test(RD) && /includes\('\.\.'\)/.test(RD) && /DOC_ALLOW\.has\(m\[2\]\)/.test(RD));
+  T('البثّ بترويسات التحييد المشتركة',
+    /fileResponseHeaders/.test(RD) && /import \{ inspectUpload, fileResponseHeaders \}/.test(RD));
+  T('حجم الوثيقة يُقرأ بـhead لا ببثّ البايتات', /meta.*===.*'1'[\s\S]{0,200}bucket\.head\(key\)/.test(RD));
+  T('الواجهة تقرأ R2 أولاً وتسقط للمخزن القديم',
+    CODE.includes('async function regDocFetch') && /\/api\/reg-doc\?key=/.test(CODE) &&
+    /r\.status !== 404 && r\.status !== 503/.test(CODE) &&
+    /regDocFetch[\s\S]{0,900}createSignedUrl/.test(CODE));
+  T('كل مسارات الجلب توحّدت على regDocFetch',
+    (CODE.match(/regDocFetch\(/g) || []).length >= 3 &&
+    !/fetchDocBlob[\s\S]{0,300}createSignedUrl/.test(CODE));
+  T('لوحة السعة تقارن بخطط R2',
+    /Cloudflare R2 المجاني/.test(CODE) && /gb:10/.test(CODE) && CODE.includes('async function regDocSize'));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
