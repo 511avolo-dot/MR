@@ -107,6 +107,7 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
+  'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
@@ -783,6 +784,86 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   // خريطة الجداول تغطّي ما تشترك عليه القناة اللحظية
   T('الخريطة تغطّي الجداول الأربعة',
     ['items','suppliers','history','pos'].every(k => api.RT_MAP[k] && api.RT_MAP[k].arr && api.RT_MAP[k].keys.length));
+}
+
+/* ── 12) تقرير المتابعة الميدانية — سرّية المبالغ ───────────── */
+{
+  G('١٢) تقرير المتابعة بلا مبالغ (يُسلَّم لموظفي الصيانة)');
+  const STATE = api.STATE;
+  // مبالغ مميّزة لا تتصادف مع كميّة أو تاريخ أو رقم أمر — أي ظهور لها تسريب
+  const AMTS = ['987654', '432109', '765432', '210987'];
+  STATE.purchaseOrders = [
+    { po_number:'P.O-DG26-5001', issue_date:'2026-08-01', project:'برج الشمال', supplier:'مورد أ',
+      sector:'إنشاءات', status:'تسليم جزئي', expected_delivery:'2026-08-20',
+      items:[{desc:'كابل', unit:'متر', qty:10, price:987654, received_qty:4}], receipts:[], status_history:[] },
+    { po_number:'P.O-DG26-5002', issue_date:'2026-08-02', project:'مستودع الخرج', supplier:'مورد ب',
+      sector:'إنشاءات', status:'قيد التوريد', expected_delivery:'2026-08-05',
+      items:[{desc:'مضخة', unit:'حبة', qty:2, price:432109, received_qty:0}], receipts:[], status_history:[] },
+    { po_number:'P.O-DG26-5003', issue_date:'2026-08-03', project:'برج الشمال', supplier:'مورد ج',
+      sector:'إنشاءات', status:'تسليم كامل', expected_delivery:'2026-08-25', actual_delivery:'2026-08-24',
+      items:[{desc:'دهان', unit:'علبة', qty:5, price:765432, received_qty:5}], receipts:[], status_history:[] },
+    { po_number:'P.O-DG26-5004', issue_date:'2026-08-04', project:'', supplier:'مورد د',
+      sector:'النقليات', status:'ملغى', expected_delivery:'2026-08-10',
+      items:[{desc:'مولّد ملغى', unit:'حبة', qty:3, price:210987, received_qty:0}], receipts:[], status_history:[] },
+    { po_number:'P.O-DG26-5005', issue_date:'2026-08-04', project:'برج الشمال', supplier:'مورد هـ',
+      sector:'النقليات', status:'قيد المراجعة', expected_delivery:'2026-09-30',
+      items:[], receipts:[], status_history:[] },
+  ];
+  STATE.purchaseOrders.forEach(api.recomputePOderived);
+
+  await api.buildPOFollowupReport({});
+  const cap = api.captured;
+  const doc = cap.opts.title + ' ' + cap.opts.subtitle + ' ' + cap.opts.eyebrow + ' ' + cap.body;
+
+  // ── الحارس الأساس: لا مبلغ ولا أثر مالي في المستند كلّه
+  T('لا يظهر أي مبلغ من الأوامر في التقرير', AMTS.every(a => !doc.includes(a)),
+    AMTS.filter(a => doc.includes(a)).join('، '));
+  T('لا إجمالي محسوب (شامل الضريبة) في التقرير',
+    !doc.includes(String(api.STATE.purchaseOrders[0].total)) &&
+    !doc.includes(String(api.STATE.purchaseOrders[0].vat)));
+  T('لا وحدة عملة في التقرير', !doc.includes('ر.س'));
+  T('لا خلية سعر (class=price) في التقرير', !/class="[^"]*\bprice\b/.test(cap.body));
+  // حارس المصدر: عمود جديد يحمل مبلغاً يُفشِل البناء قبل أن يُطبع
+  const srcFollow = grab('buildPOFollowupReport') + grab('poFollowDelivery') + grab('poFollowReceived');
+  T('متن الدالة خالٍ من أي مصدر مالي',
+    !/fmtPrice|\.total\b|\.subtotal\b|\.vat\b|\.price\b|ر\.س/.test(srcFollow),
+    (srcFollow.match(/fmtPrice|\.total\b|\.subtotal\b|\.vat\b|\.price\b|ر\.س/g) || []).join('، '));
+
+  // ── المحتوى المفيد للمتابعة موجود فعلاً (تقرير بلا مبالغ لا بلا معلومات)
+  T('يسرد كل الأوامر المطابقة', ['5001','5002','5003','5004','5005'].every(n => cap.body.includes('P.O-DG26-' + n)));
+  T('يعرض الجهة مع كل أمر', cap.body.includes('برج الشمال') && cap.body.includes('مستودع الخرج'));
+  T('يعرض المورد', cap.body.includes('مورد أ') && cap.body.includes('مورد ج'));
+  T('نسبة الاستلام بالكميّات لا بالقيم', cap.body.includes('4 / 10 (40%)'));
+  T('الأمر بلا بنود يعرض «—» لا 0%', api.poFollowReceived(STATE.purchaseOrders[4]) === '—');
+  T('جدول البنود المنتظَرة يذكر المتبقّي', cap.body.includes('البنود المنتظَر استلامها') && cap.body.includes('كابل'));
+  T('البند المستلَم بالكامل لا يظهر في المنتظَر', !cap.body.includes('دهان'));
+  T('بنود الأمر الملغى لا تُطلب في المتابعة', !cap.body.includes('مولّد ملغى'));
+  T('التوزيع حسب الجهة بالعدد فقط',
+    cap.body.includes('التوزيع حسب الجهة / المشروع') && cap.body.includes('إجمالي الأوامر'));
+  T('لافتة التسليم الجزئي تنبّه للإقفال', cap.body.includes('بانتظار إكمال الاستلام'));
+  T('المستند يعلن أنه بلا مبالغ', cap.body.includes('بلا أي مبالغ') && cap.opts.title.includes('بلا مبالغ'));
+
+  // ── حالة التسليم بصيغة الماضي/المستقبل الصحيحة
+  T('المُسلَّم في الموعد يُوصَف بالماضي', api.poFollowDelivery(STATE.purchaseOrders[2]).includes('سُلّم'));
+  T('المتأخر قيد التنفيذ يُوصَف متأخراً', api.poFollowDelivery(STATE.purchaseOrders[1]).includes('متأخر'));
+  T('الملغى يُوسم ملغى لا «في الموعد»', api.poFollowDelivery(STATE.purchaseOrders[3]).includes('ملغى'));
+  T('الملغى بلا مبلغه حتى في بنوده', !doc.includes('210987'));
+
+  // ── المرشّحات نفسها التي في سجل الأوامر التفصيلي
+  await api.buildPOFollowupReport({ project:['برج الشمال'] });
+  const f1 = api.captured.body;
+  T('التصفية بالجهة تعمل', f1.includes('5001') && f1.includes('5003') && !f1.includes('5002'));
+  await api.buildPOFollowupReport({ status:['قيد التوريد'] });
+  T('التصفية بالحالة تعمل', api.captured.body.includes('5002') && !api.captured.body.includes('5001'));
+  await api.buildPOFollowupReport({ from:'2026-08-03' });
+  T('التصفية بالتاريخ تعمل', api.captured.body.includes('5003') && !api.captured.body.includes('5001'));
+
+  // ── الكتالوج: البطاقة موجودة ومرشّحاتها مطابقة لسجل الأوامر
+  const cardAt = JS.indexOf("title:'متابعة أوامر الشراء — بلا مبالغ', desc:");
+  const card = cardAt < 0 ? '' : JS.slice(cardAt, cardAt + 900);
+  T('بطاقة التقرير في كتالوج المشتريات', cardAt > 0 && card.includes('buildPOFollowupReport'));
+  T('بطاقتها بمرشّحات متعدّدة (حالة/جهة/قطاع)',
+    ['status','project','sector'].every(k => card.includes(`key:'${k}'`)));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
