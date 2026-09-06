@@ -88,6 +88,40 @@ T('مدخلا «منهجية التسمية» و«طلبات الشراء» مُ
 T('صفحة طلبات الشراء تبقى قابلة للوصول من لوحة المهام',
   CODE.includes("navigate('pr')") && HTML.includes('id="page-pr"'));
 
+// ── بيانات وملفات الموردين تبقى في النظام (قرار المالك 2026-09-06) ──
+// (أ) لا مسار يحذف صفوف طلبات التسجيل: حذف الصفّ ييتّم وثائقه في المخزن
+//     ويقطع رابط بطاقة المورد ببيانات تسجيله.
+T('لا مسار يحذف صفوف طلبات تسجيل الموردين',
+  !/from\(REG_TABLE\)\s*\.\s*delete\(/.test(CODE) && !CODE.includes('archiveAndClean'),
+  (CODE.match(/from\(REG_TABLE\)\s*\.\s*delete\(/g) || []).join('، '));
+// (ب) لا مسار يحذف وثيقة تسجيل من المخزن.
+T('لا مسار يحذف وثائق التسجيل من المخزن',
+  !/from\(REG_BUCKET\)\s*\.\s*remove\(/.test(CODE));
+// (ج) الوثائق تُفتح داخل النظام: لا رابط تخزين يُفتح في تبويب متصفّح خارجي.
+//     العارض يبني blob محلّياً — أي عودة إلى target="_blank" على signedUrl تُفشِل البناء.
+T('وثائق التسجيل لا تُفتح في تبويب خارجي على رابط التخزين',
+  !/signedUrl[\s\S]{0,200}target="_blank"/.test(CODE));
+T('عارض المستندات داخل النظام موجود ومربوط بنقطتَي الدخول',
+  CODE.includes('function docvOpen(') && CODE.includes('function docvShow(') &&
+  CODE.includes('docvFromReg(') && CODE.includes('docvFromSupplier(') &&
+  HTML.includes('id="modal-doc-viewer"'));
+// (د) العارض يعتمد blob محلّي داخل <iframe> — وسياسة CSP في _headers تسمح به
+//     وتمنع <object>/<embed> (object-src 'none')، فلا يُستبدَل بهما.
+T('العارض يستعمل blob محلّياً لا رابطاً خارجياً',
+  /createObjectURL/.test(CODE) && /docv-stage[\s\S]{0,4000}<iframe/.test(CODE));
+T('العارض لا يستعمل object/embed اللذين تمنعهما CSP',
+  !/docvShow[\s\S]{0,2500}<(object|embed)\b/.test(CODE));
+// (هـ) النافذة يجب أن تكون خارج أي <section class="page">: القسم غير النشط
+//      display:none فيُخفي كل ما بداخله حتى العناصر position:fixed — وقد أُصيب
+//      العارض بذلك فعلاً فلم يفتح من بطاقة المورد (صفحة الموردين).
+{
+  const dv = HTML.indexOf('id="modal-doc-viewer"');
+  const secBefore = HTML.lastIndexOf('<section class="page"', dv);
+  const secEnd = secBefore < 0 ? -1 : HTML.indexOf('</section>', secBefore);
+  T('نافذة العارض خارج أقسام الصفحات (وإلا لم تفتح إلا من صفحتها)',
+    dv > 0 && (secBefore < 0 || (secEnd > 0 && secEnd < dv)));
+}
+
 /* ── 2) تحميل الدوال الخالصة في صندوق ─────────────────────────── */
 function grab(name) {
   const lines = JS.split('\n');

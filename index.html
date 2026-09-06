@@ -3747,10 +3747,6 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             تصدير Excel
           </button>
-          <button class="btn btn-ghost" onclick="archiveAndClean()" style="gap:6px;color:#b45309;border-color:#fde68a">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-            أرشفة وتنظيف
-          </button>
           <button class="btn btn-ghost" onclick="openEmailTemplates()" style="gap:6px" data-tooltip="تخصيص قوالب رسائل البريد للموردين">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
             قوالب الإشعارات
@@ -4434,6 +4430,34 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
 </div>
 
 <!-- ============ SUPPLIER DETAIL MODAL ============ -->
+<!-- ════ عارض مستندات الموردين داخل النظام (تبويب منبثق) ════
+     وثائق التسجيل تُفتح هنا بدل فتح تبويب متصفّح على رابط التخزين:
+     الملف يُجلب برابط موقّع ثم يُعرض من blob محلّي، فلا يغادر النظام
+     ولا حاجة لحفظه على الجهاز. CSP يسمح بـframe-src blob: وimg-src blob:. -->
+<div id="modal-doc-viewer" style="display:none;position:fixed;inset:0;background:rgba(6,15,35,.72);z-index:4600;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)docvClose()">
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:1080px;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden">
+    <div style="padding:14px 20px 12px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:#64748b;font-weight:500;margin-bottom:2px;letter-spacing:.4px">مستندات المورد — محفوظة في النظام</div>
+        <h2 id="docv-title" style="font-size:16px;font-weight:700;color:var(--navy,#1a3a5c);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></h2>
+      </div>
+      <span id="docv-counter" dir="ltr" style="flex-shrink:0;font-size:12px;color:#64748b;font-family:'IBM Plex Mono',monospace"></span>
+      <button onclick="docvClose()" aria-label="إغلاق العارض" style="flex-shrink:0;background:#f1f5f9;border:none;border-radius:8px;width:34px;height:34px;font-size:20px;cursor:pointer;color:#64748b;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <!-- شريط التبويبات: مستند لكل تبويب -->
+    <div id="docv-tabs" style="display:flex;gap:6px;overflow-x:auto;padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0"></div>
+    <div id="docv-stage" style="flex:1;min-height:0;background:#f1f5f9;position:relative;display:flex;align-items:center;justify-content:center;overflow:auto"></div>
+    <div style="display:flex;gap:8px;align-items:center;padding:12px 20px;border-top:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0;flex-wrap:wrap">
+      <button onclick="docvStep(-1)" id="docv-prev" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">◀ السابق</button>
+      <button onclick="docvStep(1)" id="docv-next" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">التالي ▶</button>
+      <span style="flex:1"></span>
+      <button onclick="docvPrint()" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">🖨 طباعة</button>
+      <button onclick="docvDownload()" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">⬇ تنزيل هذا المستند</button>
+      <button onclick="docvDownloadAll()" id="docv-zip" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⬇ تنزيل الكل ZIP</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-supplier">
   <div class="modal lg">
     <div class="modal-header">
@@ -8597,8 +8621,8 @@ async function _loadSupplierRegLink(sup) {
     if (!reg) return;
     _supplierRegCache = reg;
     const docCount = reg.doc_paths ? Object.keys(reg.doc_paths).length : 0;
-    // تُعرض كل بيانات التسجيل (نصّية) مرتّبةً مباشرةً داخل بطاقة المورد — تبقى محفوظة في
-    // جدول الطلبات بعد الموافقة (المستندات فقط تُحمَّل/تُنظَّف يدوياً لتوفير المساحة).
+    // تُعرض كل بيانات التسجيل (نصّية) مرتّبةً مباشرةً داخل بطاقة المورد — بياناته
+    // ووثائقه تبقى محفوظة في النظام بعد الموافقة، وتُفتح داخله بعارض المستندات.
     const E = (v) => escapeHtml(String(v));
     const rsect = (label, rows) => {
       const filled = rows.filter(([, v]) => v != null && v !== '');
@@ -8650,7 +8674,10 @@ async function _loadSupplierRegLink(sup) {
     box.innerHTML = `<div style="margin:8px 0 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <div style="font-size:13px;font-weight:800;color:#1a3a5c">📋 بيانات التسجيل الكاملة</div>
-        ${docCount ? `<button onclick="_openSupplierReg()" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">عرض المستندات (${docCount}) وتنزيلها</button>` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${docCount ? `<button onclick="docvFromSupplier()" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">🗂 فتح المستندات (${docCount}) في النظام</button>` : ''}
+          <button onclick="_openSupplierReg()" style="background:#fff;color:#334155;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">عرض الطلب كاملاً</button>
+        </div>
       </div>
       ${sectionsHtml || '<div style="font-size:12px;color:#94a3b8">لا توجد بيانات تسجيل إضافية.</div>'}
     </div>`;
@@ -24172,6 +24199,188 @@ async function etSendTest() {
 
 let _regDetailCurrent = null; // holds the open registration for button handlers
 
+/* ============================================================
+   عارض مستندات الموردين داخل النظام (تبويب منبثق)
+   ------------------------------------------------------------
+   المشكلة: وثائق التسجيل كانت تُفتح بـtarget="_blank" على رابط
+   تخزين Supabase موقّت — أي مغادرة النظام إلى تبويب متصفّح خارجي،
+   فصار العُرف تنزيلها ZIP وحفظها على جهاز/محرك خارجي.
+   الحل: نجلب الملف برابط موقّع ثم نعرضه من **blob محلّي** داخل
+   نافذة العارض — يبقى داخل النظام، ولا يُحفَظ خارجه إلا باختيار
+   المستخدم. الملفات نفسها تبقى في المخزن ولا تُحذف.
+   ملاحظة CSP (_headers): frame-src 'self' blob: وimg-src ... blob:
+   مسموحتان، وobject-src 'none' — لذا PDF في <iframe> لا <object>.
+   ============================================================ */
+const DOCV_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية',
+  natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس',
+  quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور',
+  local_content:'شهادة المحتوى المحلي'};
+const DOCV = { list: [], i: 0, urls: new Map(), reg: null, title: '' };
+
+function docvLabel(key){ return DOCV_NAMES[key] || key; }
+function docvExt(path){ return String(path||'').split('?')[0].split('.').pop().toLowerCase(); }
+function docvKind(path){
+  const e = docvExt(path);
+  if (e === 'pdf') return 'pdf';
+  if (['jpg','jpeg','png','webp','gif','bmp','avif'].includes(e)) return 'img';
+  return 'other';
+}
+/* قائمة مستندات طلب تسجيل بشكل موحّد */
+function docvListFromReg(reg){
+  const paths = (reg && reg.doc_paths) || {};
+  return Object.entries(paths)
+    .filter(([, p]) => p)
+    .map(([key, path]) => ({ key, path, label: docvLabel(key) }));
+}
+/* يفتح العارض على مستند بعينه (أو الأول). reg اختياري — يفعّل «تنزيل الكل». */
+function docvOpen(list, index, title, reg){
+  if (!Array.isArray(list) || !list.length){ toast('info','لا توجد مستندات','هذا المورد لم يرفع وثائق'); return; }
+  docvRevoke();
+  DOCV.list = list; DOCV.reg = reg || null; DOCV.title = title || 'مستندات المورد';
+  const el = document.getElementById('modal-doc-viewer');
+  if (el){ el.style.display = 'flex'; document.body.style.overflow = 'hidden'; a11yWire(el); }
+  document.getElementById('docv-zip').style.display = reg ? '' : 'none';
+  docvShow(Math.max(0, Math.min(index|0, list.length - 1)));
+  document.addEventListener('keydown', docvKeys);
+}
+function docvClose(){
+  const el = document.getElementById('modal-doc-viewer');
+  if (el) el.style.display = 'none';
+  document.removeEventListener('keydown', docvKeys);
+  docvRevoke();
+  const stage = document.getElementById('docv-stage'); if (stage) stage.innerHTML = '';
+  // نافذة تفاصيل الطلب قد تكون مفتوحة تحته — لا نُعيد التمرير إلا إن أُغلق كل شيء
+  const reg = document.getElementById('modal-reg-detail');
+  const anyOpen = (reg && reg.style.display === 'flex') || document.querySelector('.modal-overlay.active');
+  if (!anyOpen) document.body.style.overflow = '';
+}
+function docvRevoke(){
+  DOCV.urls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
+  DOCV.urls.clear();
+}
+function docvKeys(e){
+  if (e.key === 'Escape'){ e.preventDefault(); docvClose(); }
+  else if (e.key === 'ArrowLeft')  docvStep(1);   // واجهة RTL: يسار = التالي
+  else if (e.key === 'ArrowRight') docvStep(-1);
+}
+function docvStep(d){
+  if (!DOCV.list.length) return;
+  const n = DOCV.i + d;
+  if (n < 0 || n >= DOCV.list.length) return;
+  docvShow(n);
+}
+function docvTabs(){
+  const box = document.getElementById('docv-tabs'); if (!box) return;
+  box.innerHTML = DOCV.list.map((d, idx) => {
+    const on = idx === DOCV.i;
+    return `<button onclick="docvShow(${idx})" style="flex-shrink:0;background:${on?'#1a3a5c':'#fff'};color:${on?'#fff':'#334155'};border:1.5px solid ${on?'#1a3a5c':'#e2e8f0'};border-radius:8px;padding:6px 13px;font-size:12px;font-weight:${on?'700':'500'};cursor:pointer;font-family:inherit;white-space:nowrap">${escapeHtml(d.label)}</button>`;
+  }).join('');
+  const active = box.children[DOCV.i];
+  if (active && active.scrollIntoView) active.scrollIntoView({block:'nearest', inline:'nearest'});
+}
+/* يجلب الملف مرّة واحدة ويحتفظ بـblob URL في الجلسة (تبديل التبويبات فوريّ) */
+async function docvBlobUrl(path){
+  if (DOCV.urls.has(path)) return DOCV.urls.get(path);
+  if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)) throw new Error('يتطلب اتصالاً سحابياً');
+  const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 300);
+  if (error || !data || !data.signedUrl) throw new Error('تعذّر إنشاء رابط الملف');
+  const resp = await fetch(data.signedUrl);
+  if (!resp.ok) throw new Error('تعذّر جلب الملف (HTTP ' + resp.status + ')');
+  const blob = await resp.blob();
+  // نوع صريح كي يعرضه المتصفّح بدل تنزيله (بعض الملفات تُخزَّن بلا نوع)
+  const kind = docvKind(path);
+  const typed = blob.type ? blob : new Blob([blob], {type: kind === 'pdf' ? 'application/pdf' : 'application/octet-stream'});
+  const url = URL.createObjectURL(typed);
+  DOCV.urls.set(path, url);
+  return url;
+}
+async function docvShow(i){
+  if (!DOCV.list.length) return;
+  DOCV.i = Math.max(0, Math.min(i|0, DOCV.list.length - 1));
+  const d = DOCV.list[DOCV.i];
+  document.getElementById('docv-title').textContent = DOCV.title + ' — ' + d.label;
+  document.getElementById('docv-counter').textContent = (DOCV.i + 1) + ' / ' + DOCV.list.length;
+  const prev = document.getElementById('docv-prev'), next = document.getElementById('docv-next');
+  if (prev) prev.disabled = DOCV.i === 0;
+  if (next) next.disabled = DOCV.i === DOCV.list.length - 1;
+  [prev, next].forEach(b => { if (b) b.style.opacity = b.disabled ? '.45' : '1'; });
+  docvTabs();
+  const stage = document.getElementById('docv-stage');
+  stage.innerHTML = `<div style="color:#64748b;font-size:13px;display:flex;flex-direction:column;align-items:center;gap:10px"><div style="width:26px;height:26px;border:3px solid #cbd5e1;border-top-color:#1a3a5c;border-radius:50%;animation:spin .8s linear infinite"></div>جارٍ فتح ${escapeHtml(d.label)}…</div>`;
+  try {
+    const url = await docvBlobUrl(d.path);
+    if (DOCV.list[DOCV.i] !== d) return;   // بدّل المستخدم التبويب أثناء الجلب
+    const kind = docvKind(d.path);
+    if (kind === 'pdf'){
+      stage.innerHTML = `<iframe src="${url}#view=FitH" title="${escapeAttr(d.label)}" style="width:100%;height:100%;border:0;background:#fff"></iframe>`;
+    } else if (kind === 'img'){
+      stage.innerHTML = `<img src="${url}" alt="${escapeAttr(d.label)}" style="max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12)">`;
+    } else {
+      stage.innerHTML = `<div style="text-align:center;color:#475569;font-size:13px;padding:30px">
+        <div style="font-size:34px;margin-bottom:10px">📄</div>
+        صيغة <b>${escapeHtml(docvExt(d.path) || 'غير معروفة')}</b> لا يعرضها المتصفّح داخل النظام.<br>الملف محفوظ في النظام — نزّله لفتحه ببرنامجه.
+        <div style="margin-top:14px"><button onclick="docvDownload()" style="background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">⬇ تنزيل ${escapeHtml(d.label)}</button></div>
+      </div>`;
+    }
+  } catch(e){
+    stage.innerHTML = `<div style="text-align:center;color:#b13434;font-size:13px;padding:30px">
+      <div style="font-size:30px;margin-bottom:8px">⚠️</div>تعذّر فتح المستند: ${escapeHtml(e.message || 'خطأ غير معروف')}
+      <div style="margin-top:12px"><button onclick="docvShow(${DOCV.i})" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 16px;font-size:12px;cursor:pointer;font-family:inherit">إعادة المحاولة</button></div>
+    </div>`;
+    reportError('docvShow', e, {path: d.path});
+  }
+}
+function docvFileName(d){
+  const who = (DOCV.title || 'مورد').replace(/[\s\/\\:*?"<>|]/g, '_');
+  return who + '-' + d.label.replace(/[\s\/\\:*?"<>|]/g, '_') + '.' + (docvExt(d.path) || 'pdf');
+}
+async function docvDownload(){
+  const d = DOCV.list[DOCV.i]; if (!d) return;
+  try {
+    const url = await docvBlobUrl(d.path);
+    const a = document.createElement('a');
+    a.href = url; a.download = docvFileName(d);
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('success', 'نُزّل المستند', 'يبقى محفوظاً في النظام أيضاً');
+  } catch(e){ toast('error', 'تعذّر التنزيل', e.message || ''); }
+}
+function docvDownloadAll(){
+  if (DOCV.reg) downloadAllDocs(DOCV.reg);
+}
+/* الطباعة: نافذة معزولة تحمل الـblob نفسه — لا تغادر النظام إلى رابط خارجي */
+function docvPrint(){
+  const d = DOCV.list[DOCV.i]; if (!d) return;
+  const url = DOCV.urls.get(d.path);
+  if (!url){ toast('info', 'انتظر', 'لم يكتمل تحميل المستند بعد'); return; }
+  const kind = docvKind(d.path);
+  if (kind === 'pdf'){
+    const f = document.querySelector('#docv-stage iframe');
+    try { f.contentWindow.focus(); f.contentWindow.print(); return; }
+    catch(e){ /* المتصفّح يمنع الطباعة عبر الإطار — نسقط للنافذة */ }
+  }
+  const w = window.open('', '_blank');
+  if (!w){ toast('info', 'مانع النوافذ', 'اسمح بالنوافذ المنبثقة للطباعة'); return; }
+  w.document.write(`<html dir="rtl"><head><title>${escapeHtml(docvFileName(d))}</title></head>
+    <body style="margin:0">${kind === 'img'
+      ? `<img src="${url}" style="max-width:100%" onload="window.print()">`
+      : `<iframe src="${url}" style="width:100%;height:100vh;border:0" onload="try{this.contentWindow.print()}catch(e){}"></iframe>`}</body></html>`);
+  w.document.close();
+}
+/* نقاط الدخول: من شاشة مراجعة الطلب، ومن بطاقة المورد المعتمد */
+function docvFromReg(key){
+  const reg = _regDetailCurrent;
+  if (!reg) return;
+  const list = docvListFromReg(reg);
+  const i = Math.max(0, list.findIndex(d => d.key === key));
+  docvOpen(list, i, reg.legal_name_ar || reg.trade_name || reg.id || 'مورد', reg);
+}
+function docvFromSupplier(){
+  const reg = _supplierRegCache;
+  if (!reg) return;
+  const list = docvListFromReg(reg);
+  docvOpen(list, 0, reg.legal_name_ar || reg.trade_name || reg.id || 'مورد', reg);
+}
+
 async function openRegDetail(jsonStr) {
   let r;
   try { r = JSON.parse(jsonStr); }
@@ -24345,29 +24554,23 @@ async function openRegDetail(jsonStr) {
 
   // Documents
   const docPaths = r.doc_paths || {};
-  const DOC_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة/VAT', gosi:'شهادة التأمينات', chamber:'الغرفة التجارية', natl_addr:'العنوان الوطني', iban_cert:'شهادة الآيبان', municipal:'رخصة البلدية', articles:'عقد التأسيس', quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور', local_content:'شهادة المحتوى المحلي'};
   if (Object.keys(docPaths).length) {
-    // Generate signed URLs (valid 1 hour) — bucket is private
-    const docEntries = await Promise.all(
-      Object.entries(docPaths).map(async ([k, path]) => {
-        const name = DOC_NAMES[k] || k;
-        const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 3600);
-        const url = data?.signedUrl || '#';
-        const safeName = escapeHtml(name);
-        // Store url/path as data-attrs to avoid &amp; corruption in onclick
-        return `<div style="display:inline-flex;align-items:center;gap:4px;background:#f0f4f8;border-radius:7px;border:1px solid #e2e8f0;overflow:hidden"
-          data-url="${escapeHtml(url)}" data-name="${safeName}" data-path="${escapeHtml(path)}">
-          <a href="${escapeHtml(url)}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:12px;color:var(--navy,#1a3a5c);text-decoration:none">📎 ${safeName}</a>
-          <button onclick="(function(el){downloadNamedDoc(el.dataset.url,el.dataset.name,el.dataset.path)})(this.parentElement)" title="تحميل" style="background:none;border:none;border-right:1px solid #e2e8f0;padding:5px 8px;cursor:pointer;color:#64748b;font-size:13px">⬇</button>
-        </div>`;
-      })
-    );
-    const docLinks = docEntries.join('');
+    // تُفتح داخل النظام في عارض المستندات (تبويب منبثق) — لا رابط تخزين خارجي
+    // ولا حاجة لحفظها على الجهاز؛ الملفات تبقى محفوظة في النظام.
+    const docLinks = docvListFromReg(r).map((d, idx) => {
+      const safeName = escapeHtml(d.label);
+      return `<div style="display:inline-flex;align-items:center;gap:4px;background:#f0f4f8;border-radius:7px;border:1px solid #e2e8f0;overflow:hidden">
+        <button onclick="docvFromReg('${escapeAttr(d.key)}')" title="فتح داخل النظام" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:12px;color:var(--navy,#1a3a5c);background:none;border:none;cursor:pointer;font-family:inherit">📎 ${safeName}</button>
+        <button onclick="docvFromReg('${escapeAttr(d.key)}');setTimeout(docvDownload,400)" title="تنزيل" style="background:none;border:none;border-right:1px solid #e2e8f0;padding:5px 8px;cursor:pointer;color:#64748b;font-size:13px">⬇</button>
+      </div>`;
+    }).join('');
     body.innerHTML += `<div style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
         <div style="font-size:14px;font-weight:700;color:var(--navy,#1a3a5c);border-bottom:2px solid #C4A265;padding-bottom:4px;flex:1">الوثائق المرفوعة</div>
-        <button onclick="downloadAllDocs(_regDetailCurrent)" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px;white-space:nowrap">⬇ تحميل الكل ZIP</button>
+        <button onclick="docvFromReg()" style="background:#1a3a5c;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">🗂 فتح المستندات في النظام</button>
+        <button onclick="downloadAllDocs(_regDetailCurrent)" style="background:#fff;color:#334155;border:1.5px solid #e2e8f0;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">⬇ تحميل الكل ZIP</button>
       </div>
+      <div style="font-size:11.5px;color:#64748b;margin-bottom:8px">الوثائق محفوظة في النظام وتُفتح داخله — التنزيل اختياري لا ضرورة له.</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">${docLinks}</div>
     </div>`;
   }
@@ -24720,26 +24923,6 @@ async function returnForRevision(regId) {
   }
 }
 
-async function downloadNamedDoc(signedUrl, docName, filePath) {
-  try {
-    const ext = filePath.split('.').pop().split('?')[0];
-    const filename = `${docName}.${ext}`;
-    toast('info', 'جارٍ التحميل...', filename);
-    const response = await fetch(signedUrl);
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const blob = await response.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-  } catch(e) {
-    toast('error', 'فشل التحميل: ' + e.message);
-  }
-}
-
 // باني ZIP مدمج (طريقة STORE بلا ضغط) — لا يعتمد على مكتبة خارجية/CDN قد تحجبها شبكة الشركة،
 // فينزّل كل وثائق المورد في أرشيف واحد باسمه بدل ملفات منفصلة.
 let _crcTable = null;
@@ -24869,70 +25052,13 @@ async function exportRegistrations() {
   }
 }
 
-async function archiveAndClean() {
-  if (!CLOUD || !CLOUD.enabled) return;
-
-  const filter = document.getElementById('reg-filter')?.value || 'all';
-  const isAll = filter === 'all';
-  const label = isAll ? 'جميع الطلبات المعالجة (مقبول + مرفوض)' : (filter === 'approved' ? 'الطلبات المقبولة' : 'الطلبات المرفوضة');
-
-  if (!confirm(`سيتم تصدير ${label} إلى Excel ثم حذفها من قاعدة البيانات لتحرير المساحة.\n\nهل تريد المتابعة؟`)) return;
-
-  toast('info', 'جارٍ الأرشفة', 'تحميل البيانات...');
-  try {
-    let query = CLOUD.client.from(REG_TABLE).select('*');
-    if (isAll) {
-      query = query.in('status', ['approved', 'rejected']);
-    } else {
-      query = query.eq('status', filter === 'approved' ? 'approved' : 'rejected');
-    }
-    const {data, error} = await query.order('submitted_at', {ascending: false});
-    if (error) throw error;
-    if (!data || !data.length) { toast('warn', 'لا توجد سجلات للأرشفة'); return; }
-
-    const cols = [
-      {key:'id',               label:'رقم الطلب'},
-      {key:'status',           label:'الحالة'},
-      {key:'legal_name_ar',    label:'الاسم التجاري'},
-      {key:'commercial_reg',   label:'السجل التجاري'},
-      {key:'vat_number',       label:'رقم الزكاة/VAT'},
-      {key:'phone',            label:'هاتف المنشأة'},
-      {key:'email',            label:'البريد الإلكتروني'},
-      {key:'address',          label:'العنوان'},
-      {key:'contact_name',     label:'مسؤول التواصل'},
-      {key:'contact_mobile',   label:'جوال المسؤول'},
-      {key:'sales_name',       label:'مسؤول المبيعات'},
-      {key:'sales_mobile',     label:'جوال المبيعات'},
-      {key:'business_description', label:'وصف النشاط'},
-      {key:'contractor_grade', label:'تصنيف المقاول'},
-      {key:'submitted_at',     label:'تاريخ التقديم'},
-      {key:'reviewed_at',      label:'تاريخ المراجعة'},
-      {key:'reviewed_by',      label:'المراجع'},
-      {key:'review_notes',     label:'ملاحظات المراجعة'},
-    ];
-
-    const rows = data.map(r => {
-      const flat = {...r};
-      flat.sectors = Array.isArray(r.sectors) ? r.sectors.join('، ') : (r.sectors || '');
-      flat.submitted_at = r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('ar-SA') : '';
-      flat.reviewed_at  = r.reviewed_at  ? new Date(r.reviewed_at).toLocaleDateString('ar-SA')  : '';
-      return flat;
-    });
-
-    const dateStr = new Date().toISOString().slice(0, 10);
-    await exportExcel(rows, `أرشيف-الموردين-${dateStr}`, cols, {sheetName: 'الأرشيف'});
-
-    // Delete after successful export
-    const ids = data.map(r => r.id);
-    const {error: delErr} = await CLOUD.client.from(REG_TABLE).delete().in('id', ids);
-    if (delErr) throw delErr;
-
-    toast('success', 'تم الأرشفة والتنظيف', `تم أرشفة ${data.length} سجل وحذفها من قاعدة البيانات`);
-    loadRegistrations();
-  } catch(e) {
-    toast('error', 'فشلت الأرشفة', e.message);
-  }
-}
+/* أُزيلت `archiveAndClean()` (2026-09-06، قرار المالك: «بيانات وملفات الموردين
+   تُحفظ وتبقى في النظام ولا حاجة لحفظها في الخارج»). كانت تُصدِّر الطلبات
+   المعالَجة إلى Excel ثم **تحذف صفوفها** لتحرير المساحة — فتيتّم وثائقها في
+   المخزن وتقطع رابط بطاقة المورد ببيانات تسجيله. التصدير الاختياري ما يزال
+   متاحاً بزرّ «تصدير Excel» (exportRegistrations) بلا أي حذف.
+   ⚠️ لا تُعِد أي مسار يحذف صفوف proc_supplier_registrations — يحرس ذلك تأكيد
+   في scripts/system2-tests.mjs يُفشِل البناء. */
 
 function openEditClassification(reg) {
   const current = Array.isArray(reg.sectors) ? reg.sectors.join('، ') : (reg.sectors || '');
