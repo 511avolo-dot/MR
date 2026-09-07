@@ -6409,6 +6409,30 @@ function tasksGreeting(){
   const n = (STATE.currentUser && (STATE.currentUser.displayName||STATE.currentUser.username)) || '';
   return n ? `${g}، ${n}` : g;
 }
+/* ── نبضة التذكير المجدوَل لمستندات الموردين ──────────────────────────────
+   بريد تجديد المستندات (30/14/7 يوماً ثم دوريّاً) يحتاج مَن يُشغّله يوميّاً.
+   بدل الاعتماد على مُشغِّل كرون خارجيّ، نستعمل **النبضة الكسولة** — نفس النمط
+   المُثبَت في البوابة (`portal_sla_tick`): أوّل موظّف مخوَّل يفتح النظام في
+   اليوم يُنبّه الخادم، والخادم نفسه يحمل **خانق 20 ساعة** فلا تُشغَّل الكنسة
+   أكثر من مرّة يوميّاً مهما تكرّر الدخول أو تعدّد الأجهزة.
+   ⚠️ صامتة بالكامل: لا توست ولا انتظار — فشلها لا يمسّ أي شاشة.
+   والكرون (إن رُبِط لاحقاً بـ`CRON_SECRET`) يبقى المسار الأدقّ ويتعايش معها. */
+const DOCTICK_KEY = 'proc_doc_renew_tick';
+async function docRenewTick(){
+  if(!hasPermission('can_review_registrations')) return;
+  // مرّة واحدة كل 12 ساعة لكل متصفّح (الخانق الخادميّ هو الضمانة الحقيقية)
+  try{
+    const last = Number(localStorage.getItem(DOCTICK_KEY)||0);
+    if(Date.now()-last < 12*3600*1000) return;
+    localStorage.setItem(DOCTICK_KEY, String(Date.now()));
+  }catch(e){}
+  try{
+    const tok = await regDocToken(); if(!tok) return;
+    await fetch('/api/doc-renew?sweep=1', {
+      method:'POST', headers:{ Authorization:'Bearer '+tok },
+    });
+  }catch(e){ /* صامت — التذكير اليدويّ من اللوحة يبقى متاحاً */ }
+}
 // عدّادات سحابية (تسجيلات الموردين + طلبات الشراء بانتظار اعتماد المستخدم)
 async function tasksLoadCloud(){
   if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
@@ -6423,11 +6447,17 @@ async function tasksLoadCloud(){
   // موردون معتمدون تنقصهم وثيقة إلزامية أو انتهت شهاداتهم (استعلام خفيف: أعمدة الوثائق فقط)
   if(hasPermission('can_review_registrations')){
     try{
-      const rows = await regFetchAll('id,legal_name_ar,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry',
-        (q)=>q.eq('status','approved'));
+      // ⚠️ `local_content_has` ضروريّ لرصد شهادة المحتوى المحلي المُعلَنة الناقصة (lcGap)،
+      // و`local_content_expiry` عمود اختياريّ فنسقط بدونه إن لم تُطبَّق الترقية.
+      const COLS='id,legal_name_ar,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,local_content_has';
+      let rows;
+      try{ rows = await regFetchAll(COLS+',local_content_expiry', (q)=>q.eq('status','approved')); }
+      catch(e){ rows = await regFetchAll(COLS, (q)=>q.eq('status','approved')); }
       TASKS.docIssues = rows.map(supDocRow).filter(supDocNeedsAction).length;
     }catch(e){ TASKS.docIssues=null; }
   }
+  // نبضة التذكير المجدوَل (بلا انتظار — لا تُعطّل رسم اللوحة)
+  try{ docRenewTick(); }catch(e){}
   // طلبات الشراء التي يستطيع المستخدم البتّ فيها
   if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
     try{ await prLoadAll(); TASKS.prPending = prInbox().length; }catch(e){ TASKS.prPending=null; }

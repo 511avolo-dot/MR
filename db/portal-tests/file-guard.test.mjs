@@ -429,6 +429,12 @@ let DR_TOKEN = '';
     globalThis.fetch = async (url, o={}) => {
       const u = String(url), m = (o.method||'GET').toUpperCase();
       calls.push({ url:u, method:m, body:o.body });
+      if (u.includes('/auth/v1/user')) {
+        const auth = (o.headers && (o.headers.Authorization || o.headers.authorization)) || '';
+        return auth.includes('good-jwt')
+          ? new Response(JSON.stringify({ email:'staff@aldeyabi.com' }), {status:200})
+          : new Response('{}', {status:401});
+      }
       if (u.includes('action=eq.sweep')) return new Response(JSON.stringify(opts.throttled ? [{id:1}] : []), {status:200});
       if (u.includes('action=eq.notify')) return new Response(JSON.stringify(opts.alreadySent || []), {status:200});
       if (u.includes('/rest/v1/proc_supplier_registrations')) return new Response(JSON.stringify(REGS), {status:200});
@@ -449,7 +455,45 @@ let DR_TOKEN = '';
       r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer wrong-secret' }), env: ENV_CRON });
       drT('سرّ خاطئ ⇒ 401 (مقارنة ثابتة الزمن)', r.status === 401, 'HTTP ' + r.status);
       r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }), env: DR_ENV });
-      drT('بلا CRON_SECRET مضبوط ⇒ 503 لا إرسال', r.status === 503, 'HTTP ' + r.status);
+      drT('بلا CRON_SECRET مضبوط: السرّ نفسه لا يُصرَّح ⇒ 401 لا إرسال', r.status === 401, 'HTTP ' + r.status);
+      const mails = n.calls.filter(c => c.url.includes('api.resend.com'));
+      drT('لا بريد يُرسَل في أيٍّ من حالات المنع الثلاث', mails.length === 0, mails.length + ' رسالة');
+    } finally { n.restore(); }
+  }
+  /* النبضة الكسولة: جلسة موظّف مُصادَقة same-origin تُغني عن مُشغِّل الكرون */
+  {
+    const SO = { host:'suppliers.aldeyabi.com', origin:'https://suppliers.aldeyabi.com' };
+    const n = net();
+    try {
+      let r = await dr.onRequestPost({ request: new Request('https://suppliers.aldeyabi.com/api/doc-renew?sweep=1',
+        { method:'POST', headers:{ ...SO, Authorization:'Bearer good-jwt' } }), env: DR_ENV });
+      let b = await r.json();
+      drT('نبضة موظّف مُصادَق (بلا CRON_SECRET إطلاقاً) تُشغّل الكنسة',
+        r.status===200 && b.ok && b.by==='staff' && b.sent===4, 'HTTP '+r.status+' — '+JSON.stringify(b));
+
+      r = await dr.onRequestPost({ request: new Request('https://suppliers.aldeyabi.com/api/doc-renew?sweep=1',
+        { method:'POST', headers:{ ...SO, Authorization:'Bearer bad-jwt' } }), env: DR_ENV });
+      drT('رمز جلسة غير صالح ⇒ 401 (فشل مغلق)', r.status === 401, 'HTTP ' + r.status);
+
+      r = await dr.onRequestPost({ request: new Request('https://suppliers.aldeyabi.com/api/doc-renew?sweep=1',
+        { method:'POST', headers:{ host:'suppliers.aldeyabi.com', Authorization:'Bearer good-jwt' } }), env: DR_ENV });
+      drT('رمز صالح لكن من أصل مختلف ⇒ 401 (same-origin شرط)', r.status === 401, 'HTTP ' + r.status);
+    } finally { n.restore(); }
+  }
+  /* الموظّف لا يتجاوز الخانق — `force=1` للكرون وحده */
+  {
+    const SO = { host:'suppliers.aldeyabi.com', origin:'https://suppliers.aldeyabi.com' };
+    const n = net({ throttled: true });
+    try {
+      let r = await dr.onRequestPost({ request: new Request('https://suppliers.aldeyabi.com/api/doc-renew?sweep=1&force=1',
+        { method:'POST', headers:{ ...SO, Authorization:'Bearer good-jwt' } }), env: ENV_CRON });
+      let b = await r.json();
+      drT('نبضة الموظّف تحترم الخانق ولو مرّرت force=1',
+        b.skipped === 'throttled' && n.calls.filter(c=>c.url.includes('api.resend.com')).length===0, JSON.stringify(b));
+
+      r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }, '?sweep=1&force=1'), env: ENV_CRON });
+      b = await r.json();
+      drT('الكرون وحده يتجاوز الخانق بـforce=1', b.ok === true && b.by === 'cron' && b.sent === 4, JSON.stringify(b));
     } finally { n.restore(); }
   }
   // الاختيار الصحيح

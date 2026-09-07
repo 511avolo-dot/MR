@@ -1236,6 +1236,21 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('خانق يمنع تشغيلتين في اليوم وسقف لكل تشغيلة',
     /SWEEP_MIN_HOURS/.test(RENEW_API) && /throttled/.test(RENEW_API) &&
     /SWEEP_MAX_PER_RUN/.test(RENEW_API));
+  /* النبضة الكسولة: التذكير يعمل بلا مُشغِّل كرون خارجيّ — أوّل موظّف مخوَّل
+     يفتح النظام في اليوم يُنبّه الخادم. إزالة أيّ من طرفَيها تُعيد النظام
+     لانتظار كرون قد لا يُربَط أبداً، فيصمت التذكير بلا إنذار. */
+  T('نبضة الموظّف مسار تصريح ثانٍ للكنسة (تُغني عن الـWorker)',
+    /by = 'staff'/.test(RENEW_API) && /sameOrigin\(request\) && await verifyStaff/.test(RENEW_API));
+  T('نبضة الموظّف لا تتجاوز الخانق (force للكرون وحده)',
+    /force'\) === '1' && by === 'cron'/.test(RENEW_API));
+  T('الواجهة تُطلق النبضة لحاملي مراجعة التسجيلات فقط وبصمت',
+    /function docRenewTick/.test(CODE) &&
+    /docRenewTick[\s\S]{0,400}hasPermission\('can_review_registrations'\)/.test(CODE) &&
+    /docRenewTick[\s\S]{0,900}fetch\('\/api\/doc-renew\?sweep=1'/.test(CODE));
+  T('النبضة مربوطة بمسار الإقلاع (tasksLoadCloud) وإلّا لم تُنادَ أبداً',
+    /tasksLoadCloud[\s\S]{0,1600}docRenewTick\(\)/.test(CODE));
+  T('بطاقة المهام تقرأ عمود شهادة المحتوى المحلي (وإلّا فات lcGap عدّها)',
+    /local_content_has[\s\S]{0,400}regFetchAll\(COLS\+',local_content_expiry'[\s\S]{0,400}TASKS\.docIssues/.test(CODE));
 
   // صفحة المورّد: عامّة بلا حساب — فلا تُفهرَس، ولا تحمّل أي سكربت خارجيّ (CSP).
   T('صفحة التجديد غير مفهرَسة',

@@ -324,12 +324,22 @@ function stageFor(days) {
 const STAGE_RANK = (s) => s.startsWith('exp') ? 0 : s === 'd7' ? 1 : s === 'd14' ? 2 : s === 'd30' ? 3 : 4;
 
 async function sweepReminders(env, request) {
-  const secret = String(env.CRON_SECRET || '').trim();
-  if (!secret) return json({ error: 'غير مهيّأ', reason: 'no_cron_secret' }, 503);
   const url = new URL(request.url);
+  const secret = String(env.CRON_SECRET || '').trim();
   const auth = request.headers.get('authorization') || '';
   const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : String(url.searchParams.get('key') || '');
-  if (!timingSafeEq(given, secret)) return json({ error: 'غير مصرّح' }, 401);
+
+  /* ── مَن يُصرَّح له بالتشغيل — مساران ────────────────────────────────────
+     (أ) **الكرون** بـ`CRON_SECRET` (الأدقّ: يعمل ولو لم يفتح أحد النظام).
+     (ب) **نبضة كسولة من جلسة موظّف مُصادَقة** (same-origin + رمز الجلسة) —
+         نفس النمط المُثبَت في البوابة (`portal_sla_tick`): أوّل موظّف يفتح
+         النظام في اليوم يُشغّل الكنس. تُغني عن الـWorker تماماً، والخانق
+         (20 ساعة) يجعل تكرار النداء بلا أثر.
+     `force=1` للكرون وحده — لئلّا يتجاوز موظّف الخانق بالخطأ. */
+  let by = '';
+  if (secret && given && timingSafeEq(given, secret)) by = 'cron';
+  if (!by && sameOrigin(request) && await verifyStaff(env, request)) by = 'staff';
+  if (!by) return json({ error: 'غير مصرّح' }, 401);
   if (!configured(env) || !env.RESEND_API_KEY || !tokenSecret(env)) {
     return json({ error: 'الخدمة غير مهيّأة', reason: 'not_configured' }, 503);
   }
@@ -338,7 +348,7 @@ async function sweepReminders(env, request) {
   const since = new Date(Date.now() - SWEEP_LOOKBACK_DAYS * 86400000).toISOString();
 
   /* خانق التشغيل: قيد تدقيق واحد لكل تشغيلة — يمنع الإغراق لو نُودي كل دقيقة */
-  const force = url.searchParams.get('force') === '1';
+  const force = url.searchParams.get('force') === '1' && by === 'cron';
   if (!force) {
     try {
       const r = await fetch(`${base}/rest/v1/proc_audit_log?entity_type=eq.supplier_doc&action=eq.sweep` +
@@ -431,9 +441,10 @@ async function sweepReminders(env, request) {
   await audit(env, {
     username: 'system', display_name: 'تذكير مجدوَل', user_role: 'system',
     action: 'sweep', entity_type: 'supplier_doc', entity_id: 'sweep',
-    new_value: { candidates: due.length, sent, failed: failures.length }, meta: { kind: 'doc_renewal_sweep' },
+    new_value: { candidates: due.length, sent, failed: failures.length, by },
+    meta: { kind: 'doc_renewal_sweep', by },
   });
-  return json({ ok: true, candidates: due.length, sent, failed: failures.length,
+  return json({ ok: true, by, candidates: due.length, sent, failed: failures.length,
                 capped: due.length > SWEEP_MAX_PER_RUN });
 }
 
