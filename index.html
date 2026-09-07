@@ -24114,11 +24114,17 @@ function supDocRow(reg){
     ['local_content', 'المحتوى المحلي', reg.local_content_expiry],
   ].map(([key, label, d]) => ({key, label, d, n: supDaysTo(d)})).filter(x => x.n != null);
   const worst = exp.length ? Math.min(...exp.map(x => x.n)) : null;
+  /* شهادة المحتوى المحلي: أعلن المورّد امتلاكها لكن ينقص مرفقها أو تاريخها.
+     ⚠️ ليست في الوثائق الإلزامية فلا يلتقطها فحص النواقص — وقد فقدت 7 شهادات فعليّاً
+     بسبب عيب القائمة البيضاء (2026-08-26 → 2026-09-07)، فبقيت غير مرئية للمتابعة. */
+  const lcDeclared = reg.local_content_has === true;
+  const lcGap = lcDeclared && (!paths.local_content || !reg.local_content_expiry);
   /* ما يُطلَب من المورّد رفعه: كل وثيقة إلزامية ناقصة + كل شهادة منتهية أو تقارب
-     الانتهاء. هذه بالضبط حمولة بريد التجديد (`/api/doc-renew`) — مفاتيح لا أسماء. */
+     الانتهاء + شهادة المحتوى المحلي الناقصة. حمولة بريد التجديد (`/api/doc-renew`). */
   const renew = [
     ...SUP_REQUIRED_DOCS.filter(([k]) => !paths[k]).map(([k]) => k),
     ...exp.filter(x => x.n <= SUP_EXPIRY_SOON_DAYS).map(x => x.key),
+    ...(lcGap ? ['local_content'] : []),
   ].filter((k, i, a) => a.indexOf(k) === i);
   return {
     id: reg.id,
@@ -24126,7 +24132,7 @@ function supDocRow(reg){
     cr: reg.commercial_reg || '',
     status: reg.status,
     present, total: SUP_REQUIRED_DOCS.length, missing,
-    expiries: exp, worst, renew,
+    expiries: exp, worst, renew, lcGap, lcDeclared,
     email: (reg.contact_email || reg.email || '').trim(),
     expired: worst != null && worst < 0,
     soon: worst != null && worst >= 0 && worst <= SUP_EXPIRY_SOON_DAYS,
@@ -24134,7 +24140,7 @@ function supDocRow(reg){
     reg,
   };
 }
-function supDocNeedsAction(r){ return r.missing.length > 0 || r.expired || r.soon; }
+function supDocNeedsAction(r){ return r.missing.length > 0 || r.expired || r.soon || r.lcGap; }
 
 async function loadSupDocs(){
   const box = document.getElementById('supdoc-body');
@@ -24143,7 +24149,7 @@ async function loadSupDocs(){
   try {
     /* `local_content_expiry` عمود ترقية: طلبه قبل تشغيلها يُفشِل الاستعلام كلّه في
        PostgREST فتُشلّ اللوحة — لذا نحاول به ونسقط إلى الأعمدة الأساسية عند الفشل. */
-    const BASE_COLS = 'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email';
+    const BASE_COLS = 'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email,local_content_has';
     let rows;
     try {
       rows = await regFetchAll(BASE_COLS + ',local_content_expiry', (q) => q.eq('status', 'approved'));
@@ -24180,8 +24186,9 @@ function renderSupDocs(){
     ).join(' ');
   };
   const expCell = (r) => {
-    if(!r.expiries.length) return '<span style="color:#94a3b8;font-size:11.5px">—</span>';
-    return r.expiries.map(x => {
+    const lc = r.lcGap ? '<div style="font-size:11.5px;color:#b45309;font-weight:600">المحتوى المحلي: بيانات ناقصة</div>' : '';
+    if(!r.expiries.length) return lc || '<span style="color:#94a3b8;font-size:11.5px">—</span>';
+    return lc + r.expiries.map(x => {
       const st = x.n < 0 ? {c:'#b91c1c', t:'منتهٍ منذ ' + poDays(Math.abs(x.n))}
                : x.n <= SUP_EXPIRY_SOON_DAYS ? {c:'#b45309', t:'خلال ' + poDays(x.n)}
                : {c:'#15803d', t:'سارٍ'};

@@ -1102,6 +1102,25 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
       r.renew.includes('vat') && r.renew.includes('iban_cert') && r.renew.includes('cr') &&
       r.renew.length === new Set(r.renew).size);
   }
+  /* الشهادة المُعلَنة بلا مرفق أو بلا تاريخ: ليست في الوثائق الإلزامية فلا يلتقطها
+     فحص النواقص — وهي الحالة الفعلية لسبع شهادات فُقدت بعيب القائمة البيضاء. */
+  {
+    const declaredNoFile = api.supDocRow({id:'x', doc_paths:full, local_content_has:true});
+    const declaredNoDate = api.supDocRow({id:'x', doc_paths:{...full, local_content:'p.pdf'}, local_content_has:true});
+    const complete = api.supDocRow({id:'x', doc_paths:{...full, local_content:'p.pdf'},
+                                    local_content_has:true, local_content_expiry: iso(300)});
+    const notDeclared = api.supDocRow({id:'x', doc_paths:full});
+    T('شهادة محتوى محلي مُعلَنة بلا مرفق ⇒ نقص يُطلَب تجديده',
+      declaredNoFile.lcGap === true && declaredNoFile.renew.includes('local_content') &&
+      api.supDocNeedsAction(declaredNoFile));
+    T('مُعلَنة بمرفق وبلا تاريخ ⇒ نقص أيضاً',
+      declaredNoDate.lcGap === true && declaredNoDate.renew.includes('local_content'));
+    T('مكتملة (مرفق + تاريخ سارٍ) ⇒ لا نقص',
+      complete.lcGap === false && !complete.renew.includes('local_content'));
+    T('من لم يُعلِن شهادة لا يُطالَب بها',
+      notDeclared.lcGap === false && !notDeclared.renew.includes('local_content') &&
+      !api.supDocNeedsAction(notDeclared));
+  }
   T('بريد المراسلة يُقرأ من الصفّ (الأولوية لمسؤول التواصل)',
     api.supDocRow({id:'x', doc_paths:full, contact_email:'a@b.com', email:'c@d.com'}).email === 'a@b.com' &&
     api.supDocRow({id:'x', doc_paths:full, email:'c@d.com'}).email === 'c@d.com');
