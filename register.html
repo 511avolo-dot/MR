@@ -2569,6 +2569,14 @@ html[lang="en"] .doc-card.optional-badge::after { content: 'Optional'; }
             <div id="f-lc-pct-hint" style="display:none;font-size:11.5px;margin-top:5px;color:#b4453f">النسبة تكون بين ٠ و ١٠٠.</div>
           </div>
         </div>
+        <div class="form-row">
+          <div class="field">
+            <label>تاريخ انتهاء الشهادة <span class="req">*</span></label>
+            <input type="date" id="f-lc-expiry" dir="ltr" lang="en-GB">
+            <div style="font-size:11.5px;margin-top:5px;color:var(--muted)">يُستخدَم لتذكيركم بالتجديد قبل الانتهاء.</div>
+          </div>
+          <div class="field"></div>
+        </div>
         <div class="field" style="margin-top:4px">
           <label>إرفاق الشهادة <span class="req">*</span></label>
           <input type="file" id="fi-local_content" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" style="display:none" onchange="handleLocalContentFile(event)">
@@ -3313,6 +3321,7 @@ function prefillForm(data) {
     const no  = document.getElementById('lc-no');  if (no)  no.checked  = false;
     setVal('f-lc-no', data.local_content_cert_no);
     setVal('f-lc-pct', data.local_content_percentage);
+    setVal('f-lc-expiry', data.local_content_expiry);
     toggleLocalContent();
     if ((_existingDocPaths || {})['local_content']) {
       const st = document.getElementById('lc-file-status');
@@ -3491,12 +3500,13 @@ function _todayISO() {
 // يمنع منتقي التاريخ من اختيار تاريخ انتهاء ماضٍ (مستند منتهٍ) — تدقيق فوري على مستوى الواجهة.
 function _applyExpiryMins() {
   const today = _todayISO();
-  ['f-cr-expiry', 'f-chamber-exp'].forEach((id) => { const el = document.getElementById(id); if (el) el.min = today; });
+  ['f-cr-expiry', 'f-chamber-exp', 'f-lc-expiry'].forEach((id) => { const el = document.getElementById(id); if (el) el.min = today; });
 }
 // تدقيق نهائي: ترفض الإرسال إذا كان أي تاريخ انتهاء في الماضي (مستند منتهٍ) مع تسمية المستند.
 function _validateExpiryDates() {
   const today = _todayISO();
-  const checks = [['f-cr-expiry', 'السجل التجاري'], ['f-chamber-exp', 'شهادة الغرفة التجارية']];
+  const checks = [['f-cr-expiry', 'السجل التجاري'], ['f-chamber-exp', 'شهادة الغرفة التجارية'],
+                  ['f-lc-expiry', 'شهادة المحتوى المحلي']];
   for (const [id, label] of checks) {
     const v = (document.getElementById(id)?.value || '').trim();
     if (v && v < today) {
@@ -3669,6 +3679,10 @@ function validateLocalContent() {
   const pct = parseFloat(pctRaw);
   if (!no)  { toast('warn','يرجى إدخال رقم شهادة المحتوى المحلي، أو اختيار «لا» إن لم تكن متوفّرة'); return false; }
   if (pctRaw === '' || isNaN(pct) || pct < 0 || pct > 100) { toast('warn','يرجى إدخال نسبة محتوى محلي صحيحة بين ٠ و ١٠٠'); return false; }
+  // ⚠️ `getVal` محليّة داخل دالة الإرسال — هنا نقرأ العنصر مباشرةً كبقيّة الحقول أعلاه
+  const lcExp = (document.getElementById('f-lc-expiry')?.value || '').trim();
+  if (!lcExp) { toast('warn','يرجى إدخال تاريخ انتهاء شهادة المحتوى المحلي'); return false; }
+  if (lcExp < new Date().toISOString().slice(0,10)) { toast('warn','تاريخ انتهاء شهادة المحتوى المحلي يجب أن يكون مستقبليّاً'); return false; }
   if (!uploadedDocs['local_content']) { toast('warn','يرجى إرفاق شهادة المحتوى المحلي، أو اختيار «لا» إن لم تكن متوفّرة'); return false; }
   return true;
 }
@@ -3717,6 +3731,7 @@ const FIELD_AUTHORITY = {
   vat_number:/زكاة|ضريب|vat|zatca|ضريبة/i, zakat_number:/زكاة|ضريب|zatca|ضريبة/i,
   gosi_number:/تأمين|gosi/i,
   chamber:/غرفة|chamber/i, chamber_membership:/غرفة|chamber/i, chamber_expiry:/غرفة|chamber/i,
+  local_content_expiry:/محتوى|local\s*content/i,
   address:/عنوان|وطني|national|address/i, district:/عنوان|وطني|national|address/i,
   postal_code:/عنوان|وطني|national|address/i, po_box:/عنوان|وطني|national|address/i,
   commercial_reg:/سجل|تجاري|commercial/i, legal_name_ar:/سجل|تجاري|commercial/i,
@@ -4336,6 +4351,7 @@ async function submitForm() {
       local_content_has:        !!document.getElementById('lc-yes')?.checked,
       local_content_cert_no:    document.getElementById('lc-yes')?.checked ? getVal('f-lc-no') : null,
       local_content_percentage: document.getElementById('lc-yes')?.checked ? (parseFloat(document.getElementById('f-lc-pct')?.value) || null) : null,
+      local_content_expiry:     document.getElementById('lc-yes')?.checked ? getVal('f-lc-expiry') : null,
       // Section 9
       rep_name:             repName,
       rep_title:            repTitle,
@@ -4363,7 +4379,7 @@ async function submitForm() {
       // الاختيارية المذكورة في الخطأ فقط وأعد الإرسال — التسجيل أهمّ من عمود اختياري.
       // (المقاييس + حقول شهادة المحتوى المحلي؛ المستند نفسه محفوظ في doc_paths دائماً.)
       if (error) {
-        const OPTIONAL_COLS = ['metrics','local_content_has','local_content_cert_no','local_content_percentage'];
+        const OPTIONAL_COLS = ['metrics','local_content_has','local_content_cert_no','local_content_percentage','local_content_expiry'];
         const cleaned = Object.assign({}, payload);
         let guard = 0;
         while (error && guard++ < OPTIONAL_COLS.length) {

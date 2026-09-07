@@ -40,6 +40,9 @@ const MAX_UPLOADS_PER_DAY = 20;   // سقف مضادّ للإغراق لكل ت�
 const DOC_META = {
   cr:        { label: 'السجل التجاري',        expiryCol: 'cr_expiry_date' },
   chamber:   { label: 'شهادة الغرفة التجارية', expiryCol: 'chamber_expiry' },
+  // شهادة المحتوى المحلي: عمود التاريخ **اختياريّ** — إن لم تُشغَّل الترقية بعد،
+  // يُحفَظ المستند ويُتخطّى التاريخ بهدوء (راجع patchRow) بدل تعطيل الرفع.
+  local_content: { label: 'شهادة المحتوى المحلي', expiryCol: 'local_content_expiry', optionalCol: true },
   vat:       { label: 'شهادة الزكاة/VAT',      expiryCol: null },
   gosi:      { label: 'شهادة التأمينات',       expiryCol: null },
   natl_addr: { label: 'العنوان الوطني',        expiryCol: null },
@@ -149,11 +152,19 @@ function svcHeaders(env) {
     'Content-Type': 'application/json',
   };
 }
+/* أعمدة قد لا تكون الترقية شُغِّلت لها بعد — طلبها يُفشِل الاستعلام كلّه في PostgREST،
+   فنُعيد المحاولة بإسقاطها بدل كسر الصفحة (نمط OPTIONAL_COLS في register.html). */
+const OPTIONAL_COLS = ['local_content_expiry'];
 async function fetchReg(env, id, cols) {
   const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
-  const r = await fetch(
-    `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}&select=${cols}`,
+  const get = (c) => fetch(
+    `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(id)}&select=${c}`,
     { headers: svcHeaders(env) });
+  let r = await get(cols);
+  if (!r.ok && OPTIONAL_COLS.some(c => cols.includes(c))) {
+    const trimmed = cols.split(',').filter(c => !OPTIONAL_COLS.includes(c.trim())).join(',');
+    r = await get(trimmed);
+  }
   if (!r.ok) return null;
   const rows = await r.json();
   return Array.isArray(rows) && rows[0] ? rows[0] : null;
@@ -311,7 +322,7 @@ export async function onRequestGet({ request, env }) {
   if (!p) return json({ error: 'الرابط غير صالح أو انتهت صلاحيته' }, 403);
   if (!configured(env)) return json({ error: 'الخدمة غير مهيّأة' }, 503);
 
-  const row = await fetchReg(env, p.i, 'id,legal_name_ar,legal_name_en,cr_expiry_date,chamber_expiry');
+  const row = await fetchReg(env, p.i, 'id,legal_name_ar,legal_name_en,cr_expiry_date,chamber_expiry,local_content_expiry');
   if (!row) return json({ error: 'السجل غير موجود' }, 404);
 
   return json({
@@ -353,7 +364,7 @@ async function sendRenewalRequest({ request, env }) {
   if (!valid.length) return json({ error: 'لم تُحدَّد وثائق صالحة' }, 400);
 
   const row = await fetchReg(env, regId,
-    'id,legal_name_ar,legal_name_en,email,contact_email,status,cr_expiry_date,chamber_expiry');
+    'id,legal_name_ar,legal_name_en,email,contact_email,status,cr_expiry_date,chamber_expiry,local_content_expiry');
   if (!row) return json({ error: 'السجل غير موجود' }, 404);
 
   const to = String(row.contact_email || row.email || '').trim();
@@ -445,11 +456,28 @@ async function uploadRenewal({ request, env }, url) {
   const patch = { doc_paths: { ...prevPaths, [doc]: path } };
   if (expiryCol) patch[expiryCol] = expiry;
 
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+  const patchRow = async (obj) => fetch(
+    `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(p.i)}`,
+    { method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(obj) });
+
+  let expirySaved = !!expiryCol;
   try {
-    const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
-    const r = await fetch(
-      `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(p.i)}`,
-      { method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(patch) });
+    let r = await patchRow(patch);
+    /* إعادة محاولة رشيقة للعمود الاختياريّ: إن لم تُشغَّل ترقية `local_content_expiry`
+       بعد، يردّ PostgREST بخطأ العمود المفقود — عندها نحفظ **المستند** بلا التاريخ
+       بدل خسارة الرفع كلّه (المستند أهمّ، والتاريخ يُضبط بعد الترقية). */
+    if (!r.ok && expiryCol && DOC_META[doc].optionalCol) {
+      const txt = await r.text().catch(() => '');
+      if (/42703|column|does not exist/i.test(txt)) {
+        const { [expiryCol]: _drop, ...rest } = patch;
+        expirySaved = false;
+        r = await patchRow(rest);
+      } else {
+        console.error('[doc-renew] patch_failed', r.status, txt.slice(0, 200));
+        return json({ error: 'تعذّر تحديث السجل' }, 502);
+      }
+    }
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
       console.error('[doc-renew] patch_failed', r.status, txt.slice(0, 200));
@@ -460,11 +488,12 @@ async function uploadRenewal({ request, env }, url) {
   await audit(env, {
     username: 'supplier', display_name: p.i, user_role: 'supplier',
     action: 'edit', entity_type: 'supplier_doc', entity_id: p.i,
-    old_value: { doc, path: oldPath }, new_value: { doc, path, expiry: expiryCol ? expiry : null },
+    old_value: { doc, path: oldPath }, new_value: { doc, path, expiry: expirySaved ? expiry : null },
     meta: { kind: 'doc_renewal_upload' },
   });
   await notifyReviewers(env, p.i, row.legal_name_ar || row.legal_name_en || p.i,
-    DOC_META[doc].label, expiryCol ? expiry : '');
+    DOC_META[doc].label, expirySaved ? expiry : '');
 
-  return json({ ok: true, doc, label: DOC_META[doc].label, expiry: expiryCol ? expiry : null });
+  return json({ ok: true, doc, label: DOC_META[doc].label,
+    expiry: expirySaved ? expiry : null, expiry_saved: expirySaved });
 }

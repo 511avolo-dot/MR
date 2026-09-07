@@ -54,6 +54,11 @@ const DOC_ALLOW = new Set([
   'cr', 'vat', 'gosi', 'chamber', 'natl_addr', 'iban_cert',
   // OPTIONAL_DOCS
   'municipal', 'quality', 'safety', 'clients', 'brochure',
+  // ⚠️ شهادة المحتوى المحلي: مرفق **خارج** المصفوفتين (بطاقة مستقلّة في الخطوة ٢)
+  // فسقطت من هذه القائمة، وكان الرفع يُرفض 400 و`register.html` يعامله رفضاً نهائيّاً
+  // بلا سقوط ⇒ الشهادة تُفقد صامتةً لكل مورّد يختار «نعم» (عيب حيّ، أُصلح 2026-09-07).
+  // يحرس التطابقَ الآن تأكيدٌ يستخرج كل معرّفات الوثائق من register.html.
+  'local_content',
 ]);
 
 function json(obj, status = 200) {

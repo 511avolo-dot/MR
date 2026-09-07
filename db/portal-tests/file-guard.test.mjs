@@ -343,5 +343,67 @@ let DR_TOKEN = '';
   }
 }
 
+/* (و) شهادة المحتوى المحلي: مقبولة، وتاريخها عمود ترقية يسقط بهدوء قبل تشغيلها */
+{
+  const puts = [];
+  const ENV_R2 = { ...DR_ENV, SUPPLIER_DOCS: { put: async (k) => { puts.push(k); } } };
+  const exp = Math.floor(Date.now()/1000) + 86400;
+  // رمز يغطّي شهادة المحتوى المحلي (نوقّعه بنفس مفتاح البيئة عبر نقطة الإرسال)
+  let lcToken = '';
+  {
+    const net = drNet();
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ('', { method:'POST', body: JSON.stringify({ reg_id:'DG-ABC123', docs:['local_content'] }) }, STAFF),
+        env: DR_ENV });
+      const mail = net.calls.find(c => c.url.includes('api.resend.com'));
+      const m = /renew-doc\.html\?t=([^"<\s]+)/.exec(mail ? JSON.parse(mail.body).html : '');
+      lcToken = m ? decodeURIComponent(m[1]) : '';
+      drT('شهادة المحتوى المحلي نوع صالح لطلب التجديد', r.status === 200 && !!lcToken, 'HTTP ' + r.status);
+    } finally { net.restore(); }
+  }
+  // العمود موجود ⇒ يُكتب التاريخ
+  {
+    const net = drNet();
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05`,
+          { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
+      const b = await r.json().catch(()=>({}));
+      const patch = net.calls.filter(c => c.method === 'PATCH').pop();
+      const patched = patch ? JSON.parse(patch.body) : {};
+      drT('مع الترقية: يُكتب local_content_expiry ويُبلَّغ بالحفظ',
+        r.status === 200 && patched.local_content_expiry === '2031-05-05' && b.expiry_saved === true);
+    } finally { net.restore(); }
+  }
+  // العمود غير موجود ⇒ يُحفَظ المستند ويُتخطّى التاريخ (لا يضيع الرفع)
+  {
+    const calls = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = async (url, o = {}) => {
+      const u = String(url), m = (o.method || 'GET').toUpperCase();
+      calls.push({ url: u, method: m, body: o.body });
+      if (u.includes('proc_audit_log') && u.includes('select=id'))
+        return new Response('[]', { status:200, headers:{ 'content-range':'0-0/0' } });
+      if (u.includes('/rest/v1/proc_supplier_registrations') && m === 'GET')
+        return new Response(JSON.stringify([DR_ROW]), { status:200 });
+      if (m === 'PATCH' && String(o.body).includes('local_content_expiry'))
+        return new Response('{"code":"42703","message":"column \\"local_content_expiry\\" does not exist"}', { status:400 });
+      return new Response('{}', { status:200 });
+    };
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05`,
+          { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
+      const b = await r.json().catch(()=>({}));
+      const patches = calls.filter(c => c.method === 'PATCH').map(c => JSON.parse(c.body));
+      const last = patches[patches.length-1] || {};
+      drT('بلا الترقية: المستند يُحفَظ والتاريخ يُتخطّى بهدوء (لا خسارة رفع)',
+        r.status === 200 && b.ok && b.expiry_saved === false &&
+        !!last.doc_paths.local_content && !('local_content_expiry' in last), 'HTTP ' + r.status);
+    } finally { globalThis.fetch = real; }
+  }
+}
+
 if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);

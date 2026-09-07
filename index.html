@@ -8786,6 +8786,7 @@ async function _loadSupplierRegLink(sup) {
         ['لديه شهادة سارية', reg.local_content_has == null ? null : (reg.local_content_has ? 'نعم' : 'لا')],
         ['رقم الشهادة', reg.local_content_cert_no],
         ['نسبة المحتوى المحلي', reg.local_content_percentage != null ? reg.local_content_percentage + '%' : null],
+        ['تاريخ انتهاء الشهادة', reg.local_content_expiry],
         ['المستند المرفق', (reg.doc_paths && reg.doc_paths.local_content) ? 'مرفق ✓ (ضمن المستندات)' : null],
       ]),
     ].join('');
@@ -8815,6 +8816,7 @@ function supExpiryStrip(reg){
   const items = [
     ['السجل التجاري', reg.cr_expiry_date],
     ['عضوية الغرفة', reg.chamber_expiry],
+    ['المحتوى المحلي', reg.local_content_expiry],
   ].map(([label, d]) => ({label, d, n: supDaysTo(d)})).filter(x => x.n != null);
   if(!items.length) return '';
   const chip = (x) => {
@@ -24106,8 +24108,10 @@ function supDocRow(reg){
   const missing = SUP_REQUIRED_DOCS.filter(([k]) => !paths[k]).map(([,l]) => l);
   const present = SUP_REQUIRED_DOCS.filter(([k]) => !!paths[k]).length;
   const exp = [
-    ['cr',      'السجل التجاري', reg.cr_expiry_date],
-    ['chamber', 'عضوية الغرفة',  reg.chamber_expiry],
+    ['cr',            'السجل التجاري',  reg.cr_expiry_date],
+    ['chamber',       'عضوية الغرفة',   reg.chamber_expiry],
+    // شهادة المحتوى المحلي: اختيارية، فلا تُدرَج إلا لمن سجّلها بتاريخ
+    ['local_content', 'المحتوى المحلي', reg.local_content_expiry],
   ].map(([key, label, d]) => ({key, label, d, n: supDaysTo(d)})).filter(x => x.n != null);
   const worst = exp.length ? Math.min(...exp.map(x => x.n)) : null;
   /* ما يُطلَب من المورّد رفعه: كل وثيقة إلزامية ناقصة + كل شهادة منتهية أو تقارب
@@ -24137,9 +24141,15 @@ async function loadSupDocs(){
   if (!box || !(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
   box.innerHTML = '<div style="padding:22px;text-align:center;color:#64748b;font-size:13px">جارٍ التحميل…</div>';
   try {
-    const rows = await regFetchAll(
-      'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email',
-      (q) => q.eq('status', 'approved'));
+    /* `local_content_expiry` عمود ترقية: طلبه قبل تشغيلها يُفشِل الاستعلام كلّه في
+       PostgREST فتُشلّ اللوحة — لذا نحاول به ونسقط إلى الأعمدة الأساسية عند الفشل. */
+    const BASE_COLS = 'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email';
+    let rows;
+    try {
+      rows = await regFetchAll(BASE_COLS + ',local_content_expiry', (q) => q.eq('status', 'approved'));
+    } catch(e){
+      rows = await regFetchAll(BASE_COLS, (q) => q.eq('status', 'approved'));
+    }
     SUPDOC_ROWS = rows.map(supDocRow);
     renderSupDocs();
   } catch(e){
@@ -25149,6 +25159,7 @@ async function openRegDetail(jsonStr) {
       ['لديه شهادة سارية', r.local_content_has == null ? null : (r.local_content_has ? 'نعم ✓' : 'لا')],
       ['رقم الشهادة', r.local_content_cert_no],
       ['نسبة المحتوى المحلي', r.local_content_percentage != null ? r.local_content_percentage + '%' : null],
+      ['تاريخ انتهاء الشهادة', r.local_content_expiry],
       ['المستند', (r.doc_paths && r.doc_paths.local_content) ? 'مرفق ✓ (انظر الوثائق أدناه)' : null],
     ]),
   ].join('');

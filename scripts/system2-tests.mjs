@@ -1172,6 +1172,31 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /verifyToken/.test(RENEW_API));
   T('حاوية البوابة ممنوعة في نقطة التجديد (فصل الأنظمة)',
     !/env\.QUOTES_BUCKET/.test(RENEW_API) && RENEW_API.includes('env.SUPPLIER_DOCS'));
+
+  /* ⚠️ الجذر الذي أنتج عيب «شهادة المحتوى المحلي» (2026-09-07): قائمة الوثائق
+     في `register.html` وقائمة الخادم البيضاء تنفصلان بصمت، فيُرفَض الرفع 400
+     و`register.html` يعامله رفضاً نهائيّاً ⇒ الوثيقة تُفقد. هذا التأكيد يستخرج
+     **كل** معرّفات الوثائق من نموذج التسجيل (المصفوفتان + أي `fi-<id>` مستقلّ)
+     ويُلزِم وجودها في `reg-doc.js` — فأي وثيقة جديدة تُنسى تُفشِل البناء. */
+  {
+    const REG_PAGE = fs.readFileSync(path.join(ROOT, 'register.html'), 'utf8');
+    const REG_API = fs.readFileSync(path.join(ROOT, 'functions/api/reg-doc.js'), 'utf8');
+    const listed = [...REG_PAGE.matchAll(/\{\s*id:\s*'([a-z_]+)'\s*,\s*name:/g)].map(m => m[1]);
+    const standalone = [...REG_PAGE.matchAll(/id="fi-([a-z_]+)"/g)].map(m => m[1]);
+    const docIds = [...new Set([...listed, ...standalone])];
+    const allowBlock = (REG_API.match(/const DOC_ALLOW = new Set\(\[([\s\S]*?)\]\)/) || [])[1] || '';
+    const allowed = new Set([...allowBlock.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
+    const missing = docIds.filter(d => !allowed.has(d));
+    T('كل وثيقة في نموذج التسجيل موجودة في القائمة البيضاء للخادم',
+      docIds.length >= 12 && missing.length === 0, missing.join('، '));
+    T('شهادة المحتوى المحلي مقبولة رفعاً وعرضاً وتجديداً',
+      allowed.has('local_content') && /local_content:\s*\{/.test(RENEW_API));
+  }
+  /* عمود تاريخ الشهادة ترقية اختيارية: يجب أن يعمل النظام قبلها وبعدها. */
+  T('تاريخ المحتوى المحلي يسقط بهدوء إن لم تُشغَّل الترقية',
+    /OPTIONAL_COLS = \['local_content_expiry'\]/.test(RENEW_API) &&
+    /optionalCol: true/.test(RENEW_API) && /expiry_saved/.test(RENEW_API) &&
+    /rows = await regFetchAll\(BASE_COLS,/.test(CODE));
   T('سقف يوميّ للرفع يمنع إغراق المخزن برابط مسرَّب',
     /MAX_UPLOADS_PER_DAY/.test(RENEW_API) && /recentUploadCount/.test(RENEW_API) &&
     /rate_limited/.test(RENEW_API));
