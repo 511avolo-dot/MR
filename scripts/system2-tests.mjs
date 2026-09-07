@@ -1225,6 +1225,54 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /supDocVerify[\s\S]{0,2600}supDocRenew\('/.test(CODE));
   T('الفحص محدود التزامن فلا يُغرق الشبكة', /const CONC = \d+;/.test(CODE));
 
+  /* ── حملة شهادة المحتوى المحلي ── */
+  {
+    const mk = (o) => api.supDocRow({id:'x', doc_paths:{cr:'a',vat:'b',gosi:'c',chamber:'d',natl_addr:'e',iban_cert:'f'},
+      contact_email:'a@b.com', ...o});
+    const has  = mk({ doc_paths:{cr:'a',local_content:'lc.pdf'}, local_content_has:true });
+    const none = mk({ local_content_has:false, local_content_none_at:'2026-09-07T10:00:00Z' });
+    const unknown = mk({});
+    T('ثلاث حالات لا اثنتان: مُرفِق · أفاد بعدمها · لم يُجب',
+      has.lcFile === true && none.lcNone === true && none.lcUnknown === false &&
+      unknown.lcUnknown === true && unknown.lcNone === false);
+    T('وقت الإفادة يُقرأ فيظهر في السجلّ', none.lcNoneAt === '2026-09-07T10:00:00Z');
+    T('الحملة تستهدف من لم يحسم أمره فقط (لا مُرفِق ولا مُفيد)',
+      /supDocLcTargets[\s\S]{0,260}!r\.lcFile && !r\.lcNone/.test(CODE));
+    T('الإرسال بتأكيد صريح بالعدد ومُباعَد (بريد خارجيّ لموردين حقيقيين)',
+      /supDocLcCampaign[\s\S]{0,1400}confirm\(/.test(CODE) &&
+      /supDocLcCampaign[\s\S]{0,1800}setTimeout\(z, 350\)/.test(CODE));
+    T('الحملة تمرّر الغرض للخادم فيختار القالب الصحيح',
+      /supDocRenewSend\(r\.id, \['local_content'\], 'local_content'\)/.test(CODE) &&
+      /purpose: purpose \|\| undefined/.test(CODE));
+    T('خلية «لا توجد — بإفادتهم» تُميَّز عن «لم يُجب»',
+      /لا توجد — بإفادتهم/.test(CODE) && /لم يُجب المورّد بعد/.test(CODE));
+    T('سجلّ المورد يعرض الإفادة صراحةً',
+      (CODE.match(/أفاد بعدم وجود شهادة محتوى محلي/g) || []).length >= 2);
+    T('عمود الإفادة يُجلب من القاعدة', /local_content_expiry,local_content_none_at/.test(CODE));
+  }
+  {
+    const RN = fs.readFileSync(path.join(ROOT, 'renew-doc.html'), 'utf8');
+    T('صفحة المورّد تطلب رقم الشهادة والنسبة مع الملف',
+      /d\.extra\|\|\[\]/.test(RN) && /x-\$\{i\}-\$\{esc\(f\.name\)\}/.test(RN) &&
+      /extraQs\.push/.test(RN));
+    T('التحقّق المحلّي يمنع رحلة فاشلة (نسبة 0–100 وحقل مطلوب)',
+      /رقماً بين 0 و100/.test(RN) && /أدخل ' \+ f\.label/.test(RN));
+    T('زرّ «لا توجد شهادة» موجود ومربوط بنقطة الإفادة',
+      /btn-none/.test(RN) && /declare=none/.test(RN) && /async function declareNone/.test(RN));
+    T('رفع الشهادة يُخفي زرّ الإفادة (لا تناقض)', /noneBox\.style\.display = 'none'/.test(RN));
+  }
+  {
+    const API = fs.readFileSync(path.join(ROOT, 'functions/api/doc-renew.js'), 'utf8');
+    T('الخادم يُلزِم الحقول المرافقة ويُثبِت الامتلاك عند الرفع',
+      /extra: \[/.test(API) && /setTrue: 'local_content_has'/.test(API) &&
+      /patch\[DOC_META\[doc\]\.setTrue\] = true/.test(API));
+    T('نقطة الإفادة تمنع إلغاء شهادة مرفوعة فعلاً',
+      /async function declareNoLocalContent/.test(API) && /reason: 'has_cert'/.test(API) &&
+      /409/.test(API));
+    T('قالب الحملة مستقلّ عن قالب التجديد',
+      /function localContentEmail/.test(API) && /isLc \? localContentEmail/.test(API));
+  }
+
   // اللوحة مربوطة: تحميل، مرشّحات، فتح بالعارض، بطاقة مهام
   T('لوحة المتابعة مربوطة بالشاشة والعارض',
     CODE.includes('async function loadSupDocs') && CODE.includes('function renderSupDocs') &&

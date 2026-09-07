@@ -42,7 +42,15 @@ const DOC_META = {
   chamber:   { label: 'شهادة الغرفة التجارية', expiryCol: 'chamber_expiry' },
   // شهادة المحتوى المحلي: عمود التاريخ **اختياريّ** — إن لم تُشغَّل الترقية بعد،
   // يُحفَظ المستند ويُتخطّى التاريخ بهدوء (راجع patchRow) بدل تعطيل الرفع.
-  local_content: { label: 'شهادة المحتوى المحلي', expiryCol: 'local_content_expiry', optionalCol: true },
+  /* شهادة المحتوى المحلي: لا يكفي الملفّ — الشهادة بلا رقمها ونسبتها لا تُفيد
+     التقييم ولا الأفضلية في التعاقد. فالحقلان مطلوبان مع الرفع، ورفعُها يُثبِت
+     `local_content_has=true` كذلك (فقد يرفعها مورّد لم يُعلِنها عند التسجيل). */
+  local_content: { label: 'شهادة المحتوى المحلي', expiryCol: 'local_content_expiry', optionalCol: true,
+    setTrue: 'local_content_has',
+    extra: [
+      { name: 'cert_no', col: 'local_content_cert_no', label: 'رقم الشهادة', type: 'text', max: 60 },
+      { name: 'pct', col: 'local_content_percentage', label: 'نسبة المحتوى المحلي (%)', type: 'pct' },
+    ] },
   vat:       { label: 'شهادة الزكاة/VAT',      expiryCol: null },
   gosi:      { label: 'شهادة التأمينات',       expiryCol: null },
   natl_addr: { label: 'العنوان الوطني',        expiryCol: null },
@@ -289,6 +297,66 @@ function renewEmail(company, items, link) {
   return { subject, html };
 }
 
+/* دعوة عامّة لرفع شهادة المحتوى المحلي — نبرتها دعوة لا مطالبة بمتأخّر،
+   وتشرح البيانات المطلوبة (الرقم/النسبة/الانتهاء) وأثرها في الأفضلية. */
+function localContentEmail(company, link) {
+  const subject = `شهادة المحتوى المحلي — ${company}`;
+  const row = (n, t, d) => `
+    <tr>
+      <td width="30" valign="top" style="padding:7px 0 7px 10px">
+        <div style="width:23px;height:23px;border-radius:50%;background:${BRAND.navy};color:#fff;font-size:12px;font-weight:800;text-align:center;line-height:23px">${n}</div></td>
+      <td style="padding:7px 0"><div style="font-size:14px;font-weight:700;color:${BRAND.ink}">${esc(t)}</div>
+        <div style="font-size:12.5px;color:${BRAND.muted};line-height:1.7">${esc(d)}</div></td>
+    </tr>`;
+  const html = `<!doctype html><html dir="rtl" lang="ar"><body style="margin:0;background:#f4f6f9;font-family:'Segoe UI',Tahoma,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(11,27,54,.08)">
+        <tr><td style="background:${BRAND.navy};padding:22px 26px">
+          <div style="color:#ffffff;font-size:18px;font-weight:800">مجموعة الذيابي</div>
+          <div style="color:${BRAND.gold};font-size:12px;margin-top:4px">إدارة المشتريات — سجلّ الموردين المعتمدين</div>
+        </td></tr>
+        <tr><td style="padding:26px">
+          <div style="font-size:15px;color:${BRAND.ink};line-height:1.9">
+            السادة / <b>${esc(company)}</b> المحترمين،
+          </div>
+          <div style="font-size:14.5px;color:${BRAND.ink};line-height:1.95;margin-top:10px">
+            دعماً لـ<b>المحتوى المحلي</b> ومنح الأفضلية للمساهمين فيه عند التقييم والترسية،
+            نرجو رفع <b>شهادة المحتوى المحلي</b> إن كانت لديكم — أو إفادتنا بعدم وجودها، بضغطة واحدة.
+          </div>
+          <div style="margin:16px 0;padding:12px 15px;background:#f8fafc;border:1px solid #eef1f6;border-radius:11px">
+            <div style="font-size:12.5px;font-weight:800;color:${BRAND.navy};margin-bottom:5px">المطلوب مع الشهادة</div>
+            <div style="font-size:13px;color:${BRAND.ink};line-height:1.85">
+              صورة الشهادة (PDF أو صورة) · رقم الشهادة · نسبة المحتوى المحلي · تاريخ الانتهاء
+            </div>
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 6px">
+            <tr><td align="center" bgcolor="${BRAND.gold}" style="background:${BRAND.gold};border-radius:12px">
+              <a href="${esc(link)}" style="display:block;padding:15px 18px;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px">لدينا شهادة — رفعها الآن</a>
+            </td></tr>
+          </table>
+          <!-- ⚠️ زرّ «لا يوجد» ليس تجميلاً: بدونه يختلط الصمت (لم يقرأ) بعدم الامتلاك،
+               فنُعيد مراسلة من لا شهادة لديه إلى ما لا نهاية. الإفادة تُنهي السؤال. -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px">
+            <tr><td align="center" style="border:1.5px solid #e2e8f0;border-radius:12px">
+              <a href="${esc(link)}&a=none" style="display:block;padding:12px 18px;color:${BRAND.muted};text-decoration:none;font-weight:700;font-size:13.5px">لا توجد لدينا شهادة محتوى محلي</a>
+            </td></tr>
+          </table>
+          <div style="font-size:12px;color:${BRAND.muted};line-height:1.8;margin-top:12px">
+            الرابط خاصّ بمنشأتكم وصالح ${TOKEN_TTL_DAYS} يوماً، ولا يتطلّب إنشاء حساب.<br>
+            إن لم يعمل الزرّ، انسخ هذا الرابط في المتصفّح:<br>
+            <span style="word-break:break-all;color:${BRAND.ink}">${esc(link)}</span>
+          </div>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:14px 26px;font-size:12px;color:${BRAND.muted};text-align:center">
+          للاستفسار: <a href="mailto:supply@aldeyabi.com" style="color:${BRAND.navy}">supply@aldeyabi.com</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table></body></html>`;
+  return { subject, html };
+}
+
 /* أيام حتى تاريخ (سالب = انتهى) */
 function daysTo(dateStr) {
   if (!dateStr) return null;
@@ -482,11 +550,14 @@ export async function onRequestGet({ request, env }) {
   return json({
     ok: true,
     company: row.legal_name_ar || row.legal_name_en || row.id,
+    // الغرض يُبدّل نصّ الصفحة: تجديد وثيقة منتهية ≠ دعوة لرفع شهادة اختيارية
+    purpose: p.p === 'lc' ? 'local_content' : 'renewal',
     docs: p.d.map(d => ({
       key: d,
       label: DOC_META[d].label,
       has_expiry: !!DOC_META[d].expiryCol,
       current_expiry: DOC_META[d].expiryCol ? (row[DOC_META[d].expiryCol] || null) : null,
+      extra: (DOC_META[d].extra || []).map(f => ({ name: f.name, label: f.label, type: f.type })),
     })),
   });
 }
@@ -497,7 +568,8 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost(ctx) {
   const url = new URL(ctx.request.url);
   if (url.searchParams.get('sweep') === '1') return sweepReminders(ctx.env, ctx.request);
-  return url.searchParams.get('t') ? uploadRenewal(ctx, url) : sendRenewalRequest(ctx);
+  if (!url.searchParams.get('t')) return sendRenewalRequest(ctx);
+  return url.searchParams.get('declare') === 'none' ? declareNoLocalContent(ctx, url) : uploadRenewal(ctx, url);
 }
 
 /* (1) الموظّف يطلب إرسال البريد */
@@ -534,15 +606,20 @@ async function sendRenewalRequest({ request, env }) {
     return { key: d, label: DOC_META[d].label, note, expired: dd != null && dd < 0 };
   });
 
+  /* الغرض: `lc` = دعوة عامّة لرفع شهادة المحتوى المحلي (حملة)، وغيرها = تجديد وثيقة.
+     الفرق في النبرة والقالب: الدعوة لا تُطالب بمتأخّر ولا تفترض وجود الشهادة. */
+  const isLc = String(body.purpose || '') === 'local_content'
+            && valid.length === 1 && valid[0] === 'local_content';
+
   const exp = Math.floor(Date.now() / 1000) + TOKEN_TTL_DAYS * 86400;
-  const token = await signToken(env, { i: regId, d: valid, e: exp });
+  const token = await signToken(env, isLc ? { i: regId, d: valid, e: exp, p: 'lc' } : { i: regId, d: valid, e: exp });
 
   let origin = '';
   try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {}
   origin = publicOrigin(env, origin);
   const link = `${origin}/renew-doc.html?t=${encodeURIComponent(token)}`;
 
-  const { subject, html } = renewEmail(company, items, link);
+  const { subject, html } = isLc ? localContentEmail(company, link) : renewEmail(company, items, link);
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -558,10 +635,51 @@ async function sendRenewalRequest({ request, env }) {
   await audit(env, {
     username: staff.email, display_name: staff.email, user_role: 'staff',
     action: 'notify', entity_type: 'supplier_doc', entity_id: regId,
-    new_value: { docs: valid, to, ttl_days: TOKEN_TTL_DAYS }, meta: { kind: 'doc_renewal_request' },
+    new_value: { docs: valid, to, ttl_days: TOKEN_TTL_DAYS, stage: isLc ? 'lc_campaign' : undefined },
+    meta: { kind: isLc ? 'local_content_campaign' : 'doc_renewal_request' },
   });
 
-  return json({ ok: true, sent_to: to, docs: valid });
+  return json({ ok: true, sent_to: to, docs: valid, purpose: isLc ? 'local_content' : 'renewal' });
+}
+
+/* (2-ب) المورّد يُفيد بعدم امتلاكه شهادة محتوى محلي — إجابة صريحة بضغطة.
+   بدونها يختلط الصمت بعدم الامتلاك فنُراسل من لا شهادة لديه بلا نهاية.
+   تُكتب في سجلّه (`local_content_has=false` + وقت الإفادة) فيظهر «لا يوجد». */
+async function declareNoLocalContent({ request, env }, url) {
+  const p = await verifyToken(env, url.searchParams.get('t'));
+  if (!p) return json({ error: 'الرابط غير صالح أو انتهت صلاحيته' }, 403);
+  if (!configured(env)) return json({ error: 'الخدمة غير مهيّأة' }, 503);
+  if (!p.d.includes('local_content')) return json({ error: 'هذا الرابط لا يخصّ شهادة المحتوى المحلي' }, 400);
+
+  const row = await fetchReg(env, p.i, 'id,doc_paths,local_content_has');
+  if (!row) return json({ error: 'السجل غير موجود' }, 404);
+  // مَن رفع الشهادة فعلاً لا يُلغيها بضغطة — الدليل المرفوع أقوى من الإفادة
+  if (row.doc_paths && row.doc_paths.local_content) {
+    return json({ error: 'لديكم شهادة مرفوعة في سجلّكم — تواصلوا مع إدارة المشتريات لتعديلها', reason: 'has_cert' }, 409);
+  }
+
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+  const patchRow = async (obj) => fetch(
+    `${base}/rest/v1/proc_supplier_registrations?id=eq.${encodeURIComponent(p.i)}`,
+    { method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(obj) });
+  const full = { local_content_has: false, local_content_none_at: new Date().toISOString() };
+  try {
+    let r = await patchRow(full);
+    // العمود ترقية اختيارية: إن لم تُشغَّل بعد، احفظ الإفادة نفسها بلا وقتها
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      if (/42703|column|does not exist/i.test(txt)) r = await patchRow({ local_content_has: false });
+      else { console.error('[doc-renew] declare_failed', r.status, txt.slice(0, 200)); return json({ error: 'تعذّر تحديث السجل' }, 502); }
+    }
+    if (!r.ok) return json({ error: 'تعذّر تحديث السجل' }, 502);
+  } catch (_) { return json({ error: 'تعذّر الاتصال بقاعدة البيانات' }, 502); }
+
+  await audit(env, {
+    username: 'supplier', display_name: p.i, user_role: 'supplier',
+    action: 'edit', entity_type: 'supplier_doc', entity_id: p.i,
+    new_value: { local_content_has: false }, meta: { kind: 'local_content_none' },
+  });
+  return json({ ok: true, declared: 'none' });
 }
 
 /* (2) المورّد يرفع النسخة الجديدة */
@@ -583,6 +701,21 @@ async function uploadRenewal({ request, env }, url) {
     if (dd == null) return json({ error: 'تاريخ غير صالح' }, 400);
     if (dd < 0) return json({ error: 'تاريخ الانتهاء الجديد يجب أن يكون مستقبليّاً' }, 400);
     if (dd > 365 * 10) return json({ error: 'تاريخ الانتهاء بعيد بشكل غير منطقيّ' }, 400);
+  }
+
+  /* الحقول المرافقة (رقم الشهادة/النسبة) — تُتحقَّق قبل لمس التخزين */
+  const extras = {};
+  for (const f of (DOC_META[doc].extra || [])) {
+    const raw = String(url.searchParams.get(f.name) || '').trim();
+    if (!raw) return json({ error: `${f.label} مطلوب` }, 400);
+    if (f.type === 'pct') {
+      const n = Number(raw);
+      if (!isFinite(n) || n < 0 || n > 100) return json({ error: `${f.label} يجب أن يكون رقماً بين 0 و100` }, 400);
+      extras[f.col] = n.toFixed(2);
+    } else {
+      if (raw.length > (f.max || 120)) return json({ error: `${f.label} أطول من المسموح` }, 400);
+      extras[f.col] = raw;
+    }
   }
 
   if (await recentUploadCount(env, p.i) >= MAX_UPLOADS_PER_DAY) {
@@ -608,8 +741,9 @@ async function uploadRenewal({ request, env }, url) {
   // استبدال منطقيّ: الصفّ يشير للجديد؛ القديم يبقى في المخزن ومساره في التدقيق.
   const prevPaths = (row.doc_paths && typeof row.doc_paths === 'object') ? row.doc_paths : {};
   const oldPath = prevPaths[doc] || null;
-  const patch = { doc_paths: { ...prevPaths, [doc]: path } };
+  const patch = { doc_paths: { ...prevPaths, [doc]: path }, ...extras };
   if (expiryCol) patch[expiryCol] = expiry;
+  if (DOC_META[doc].setTrue) patch[DOC_META[doc].setTrue] = true;
 
   const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
   const patchRow = async (obj) => fetch(

@@ -8821,6 +8821,8 @@ async function _loadSupplierRegLink(sup) {
         ['المستند المرفق', !reg.local_content_has ? null
           : (reg.doc_paths && reg.doc_paths.local_content) ? 'مرفق ✓ (ضمن المستندات)'
           : '⚠️ غير مرفق — لم تُحفَظ نسخة الشهادة'],
+        ['إفادة المورّد', reg.local_content_none_at
+          ? 'أفاد بعدم وجود شهادة محتوى محلي — ' + String(reg.local_content_none_at).slice(0,10) : null],
       ]),
     ].join('');
     box.innerHTML = `<div style="margin:8px 0 16px">
@@ -24197,6 +24199,11 @@ function supDocRow(reg){
   const lcPct  = (reg.local_content_percentage == null || reg.local_content_percentage === '')
                  ? null : Number(reg.local_content_percentage);
   const lcCert = (reg.local_content_cert_no || '').trim();
+  /* ثلاث حالات لا اثنتان: أفاد بعدم وجودها (`false`) ≠ لم يُجب قطّ (`null`).
+     من أفاد لا يُراسَل ثانيةً؛ ومن لم يُجب هو وحده هدف الحملة. */
+  const lcNone    = reg.local_content_has === false;
+  const lcNoneAt  = reg.local_content_none_at || null;
+  const lcUnknown = reg.local_content_has == null;
   /* ما يُطلَب من المورّد رفعه: كل وثيقة إلزامية ناقصة + كل شهادة منتهية أو تقارب
      الانتهاء + شهادة المحتوى المحلي الناقصة. حمولة بريد التجديد (`/api/doc-renew`). */
   const renew = [
@@ -24210,7 +24217,7 @@ function supDocRow(reg){
     cr: reg.commercial_reg || '',
     status: reg.status,
     present, total: SUP_REQUIRED_DOCS.length, missing,
-    expiries: exp, worst, renew, lcGap, lcDeclared, lcFile, lcPct, lcCert,
+    expiries: exp, worst, renew, lcGap, lcDeclared, lcFile, lcPct, lcCert, lcNone, lcNoneAt, lcUnknown,
     email: (reg.contact_email || reg.email || '').trim(),
     expired: worst != null && worst < 0,
     soon: worst != null && worst >= 0 && worst <= SUP_EXPIRY_SOON_DAYS,
@@ -24247,7 +24254,7 @@ async function loadSupDocs(){
                     + 'local_content_has,local_content_cert_no,local_content_percentage';
     let rows;
     try {
-      rows = await regFetchAll(BASE_COLS + ',local_content_expiry', (q) => q.eq('status', 'approved'));
+      rows = await regFetchAll(BASE_COLS + ',local_content_expiry,local_content_none_at', (q) => q.eq('status', 'approved'));
     } catch(e){
       rows = await regFetchAll(BASE_COLS, (q) => q.eq('status', 'approved'));
     }
@@ -24285,7 +24292,9 @@ function renderSupDocs(){
   /* خلية المحتوى المحلي: النسبة ورقم الشهادة محفوظان لكل من أعلنها، والمرفق قد ينقص.
      الفصل مقصود — «معلَن بلا مرفق» ليس «غير معلَن»، والخلط بينهما يُخفي المتضرّرين. */
   const lcCell = (r) => {
-    if(!r.lcDeclared) return '<span style="color:#cbd5e1;font-size:11.5px">—</span>';
+    if(r.lcNone) return `<span title="${escapeAttr(r.lcNoneAt ? 'أفاد بذلك في ' + String(r.lcNoneAt).slice(0,10) : 'بإفادة المورّد')}"
+      style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;border-radius:7px;padding:4px 9px;font-size:11.5px;font-weight:600">لا توجد — بإفادتهم</span>`;
+    if(!r.lcDeclared) return '<span style="color:#cbd5e1;font-size:11.5px" title="لم يُجب المورّد بعد">—</span>';
     const pct  = r.lcPct != null && isFinite(r.lcPct) ? r.lcPct.toFixed(2).replace(/\.00$/,'') + '%' : '';
     const cert = r.lcCert ? `<div style="font-size:10.5px;color:#94a3b8;font-family:'IBM Plex Mono',monospace">${escapeHtml(r.lcCert)}</div>` : '';
     if(r.lcFile){
@@ -24313,6 +24322,8 @@ function renderSupDocs(){
       ${tab('lc','شهادة محتوى محلي',F.lc.length,'#7c3aed')}
       ${tab('all','كل المعتمدين',F.all.length,'#0B1B36')}
       <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="supDocLcCampaign()" id="supdoc-lc-btn" title="${escapeAttr('دعوة عامّة: ارفع شهادة المحتوى المحلي إن وُجدت أو أفِدنا بعدمها — تُستثنى الشهادات المرفوعة ومن أفاد سابقاً (' + supDocLcTargets().length + ' مستهدَف)')}"
+          style="cursor:pointer;font-family:inherit;background:#6d28d9;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">📄 طلب شهادات المحتوى المحلي (${supDocLcTargets().length})</button>
         <button onclick="supDocVerify()" id="supdoc-verify-btn" title="يتأكّد أن كل وثيقة مُشار إليها موجودة فعلاً في مخزن النظام (R2 أو المخزن القديم)"
           style="cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#334155;border:1.5px solid #e2e8f0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">🔍 فحص سلامة الوثائق</button>
         ${(() => { const n = list.filter(r => r.renew.length).length; return n
@@ -24357,6 +24368,35 @@ function renderSupDocs(){
     <div style="font-size:11px;color:#94a3b8;margin-top:8px">يشمل الموردين المعتمدين فقط. الوثائق تُفتح داخل النظام بعارض المستندات.
       «طلب تجديد» يُرسل للمورّد بريداً برابط خاصّ يرفع منه النسخة الجديدة بتاريخها، فتحلّ محلّ القديمة تلقائياً.</div>`;
 }
+/* ── حملة شهادة المحتوى المحلي ────────────────────────────────────────────
+   دعوة عامّة لكل مورّد معتمد: ارفع شهادتك إن كانت لديك، أو أفِدنا بعدم وجودها.
+   **المستهدَف = من لم يحسم أمره بعد** — نستثني من رفع الشهادة فعلاً (لا داعي)
+   ومن أفاد صراحةً بعدم وجودها (`local_content_has=false`)، فلا نُلحّ بلا سبب.
+   ⚠️ بريد خارجيّ لموردين حقيقيين: تأكيد صريح بالعدد قبل الإرسال، وتسلسل مُباعَد. */
+function supDocLcTargets(){
+  return SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcNone && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || ''));
+}
+async function supDocLcCampaign(){
+  const targets = supDocLcTargets();
+  if(!targets.length){ toast('info','لا يوجد مستهدَف','كل مورّد إمّا رفع شهادته أو أفاد بعدم وجودها'); return; }
+  const noMail = SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcNone && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || '')).length;
+  if(!confirm(`سيُرسَل بريد «شهادة المحتوى المحلي» إلى ${targets.length} مورّداً معتمداً.\n\n`
+    + `يُستثنى: من رفع شهادته، ومن أفاد بعدم وجودها${noMail?`، و${noMail} بلا بريد صالح`:''}.\n`
+    + `يحتوي البريد زرَّين: «لدينا شهادة — رفعها» و«لا توجد لدينا شهادة».\n\nمتابعة الإرسال؟`)) return;
+  const btn = document.getElementById('supdoc-lc-btn');
+  if(btn){ btn.disabled = true; }
+  let sent = 0; const failed = [];
+  for(const r of targets){
+    if(btn) btn.textContent = `جارٍ الإرسال… ${sent + failed.length + 1}/${targets.length}`;
+    const res = await supDocRenewSend(r.id, ['local_content'], 'local_content');
+    if(res.ok) sent++; else failed.push(r.name + ' — ' + (res.error||''));
+    await new Promise(z => setTimeout(z, 350));      // مباعدة: لا نُغرق مزوّد البريد
+  }
+  if(btn){ btn.disabled = false; btn.textContent = '📄 طلب شهادات المحتوى المحلي'; }
+  if(failed.length) toast('warn', `أُرسل ${sent} وفشل ${failed.length}`, failed.slice(0,3).join(' · '));
+  else toast('success','تمّ الإرسال', `${sent} مورّداً — سيصلهم رابط الرفع أو الإفادة`);
+}
+
 /* ── فحص سلامة الوثائق ────────────────────────────────────────────────────
    صفّ التسجيل يحمل **مؤشّراً** (`doc_paths`) لا الملف نفسه، فقد يشير لملف غير
    موجود دون أن يظهر ذلك في أي عدّاد — العدّاد يقول «6/6» والوثيقة لا تُفتح.
@@ -24432,10 +24472,11 @@ async function supDocVerify(){
    يُرسل النظام رابطاً خاصّاً بالمورّد يرفع منه النسخة الجديدة بتاريخها الجديد،
    فتستبدل القديمة في ملفّه فوراً (الاستبدال منطقيّ: القديمة تبقى محفوظة كدليل).
    الصلاحية والتحقّق كلّها على الخادم (`functions/api/doc-renew.js`). */
-async function supDocRenewSend(regId){
+async function supDocRenewSend(regId, docsOverride, purpose){
   const row = SUPDOC_ROWS.find(r => r.id === regId);
   if(!row) return { ok:false, error:'الصفّ غير موجود' };
-  if(!row.renew.length) return { ok:false, error:'لا توجد وثائق تحتاج تجديداً' };
+  const docs = docsOverride && docsOverride.length ? docsOverride : row.renew;
+  if(!docs.length) return { ok:false, error:'لا توجد وثائق تحتاج تجديداً' };
   if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return { ok:false, error:'يتطلب اتصالاً سحابياً' };
   const tok = await regDocToken();
   if(!tok) return { ok:false, error:'انتهت الجلسة — أعِد تسجيل الدخول' };
@@ -24443,11 +24484,11 @@ async function supDocRenewSend(regId){
     const r = await fetch('/api/doc-renew', {
       method:'POST',
       headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + tok },
-      body: JSON.stringify({ reg_id: regId, docs: row.renew }),
+      body: JSON.stringify({ reg_id: regId, docs, purpose: purpose || undefined }),
     });
     const out = await r.json().catch(()=>({}));
     if(!r.ok || !out.ok) return { ok:false, error: out.error || ('تعذّر الإرسال (HTTP ' + r.status + ')') };
-    try{ logAudit('notify','supplier_doc',regId,{docs:row.renew, to:out.sent_to}); }catch(e){}
+    try{ logAudit('notify','supplier_doc',regId,{docs, to:out.sent_to, purpose: purpose||'renewal'}); }catch(e){}
     return { ok:true, to: out.sent_to };
   }catch(e){ return { ok:false, error: e.message || 'تعذّر الاتصال' }; }
 }
@@ -25388,6 +25429,9 @@ async function openRegDetail(jsonStr) {
       ['المستند', !r.local_content_has ? null
         : (r.doc_paths && r.doc_paths.local_content) ? 'مرفق ✓ (انظر الوثائق أدناه)'
         : '⚠️ غير مرفق — لم تُحفَظ نسخة الشهادة'],
+      // إفادة المورّد بعدم وجود شهادة: تُعرض في سجلّه فلا يبقى الأمر مجهولاً
+      ['إفادة المورّد', r.local_content_none_at
+        ? 'أفاد بعدم وجود شهادة محتوى محلي — ' + String(r.local_content_none_at).slice(0,10) : null],
     ]),
   ].join('');
 

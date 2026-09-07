@@ -104,30 +104,74 @@ async function boot(){
 
 function render(data){
   const today = new Date().toISOString().slice(0,10);
+  const isLc = data.purpose === 'local_content';
   const docs = data.docs.map((d,i) => `
     <div class="doc" id="doc-${i}">
       <h2>${esc(d.label)}</h2>
       <p class="cur">${d.has_expiry ? expiryNote(d.current_expiry) : 'مستند بلا تاريخ انتهاء'}</p>
+      ${(d.extra||[]).map(f => `
+        <label for="x-${i}-${esc(f.name)}">${esc(f.label)} *</label>
+        <input type="${f.type==='pct'?'number':'text'}" id="x-${i}-${esc(f.name)}"
+               ${f.type==='pct'?'min="0" max="100" step="0.01" inputmode="decimal" placeholder="مثال: 61.00"':'placeholder="كما هو في الشهادة"'}>`).join('')}
       ${d.has_expiry ? `
-        <label for="exp-${i}">تاريخ الانتهاء الجديد *</label>
+        <label for="exp-${i}">تاريخ الانتهاء ${isLc?'':'الجديد '}*</label>
         <input type="date" id="exp-${i}" min="${today}" lang="en-GB">` : ''}
-      <label for="file-${i}">النسخة الجديدة (PDF أو صورة، حتى 10 ميغابايت) *</label>
+      <label for="file-${i}">${isLc?'صورة الشهادة':'النسخة الجديدة'} (PDF أو صورة، حتى 10 ميغابايت) *</label>
       <input type="file" id="file-${i}" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
-      <button id="btn-${i}" type="button">رفع واستبدال النسخة القديمة</button>
+      <button id="btn-${i}" type="button" data-label="${isLc?'رفع الشهادة':'رفع واستبدال النسخة القديمة'}">${isLc?'رفع الشهادة':'رفع واستبدال النسخة القديمة'}</button>
       <div class="msg" id="msg-${i}"></div>
     </div>`).join('');
 
+  /* ⚠️ زرّ «لا توجد لدينا شهادة» — إجابة صريحة تُنهي المراسلة. بدونه لا نفرّق
+     بين من لا شهادة لديه ومن لم يقرأ البريد، فنُلحّ على الأول بلا داعٍ. */
+  const none = isLc ? `
+    <div class="doc" id="doc-none">
+      <h2>لا توجد لدينا شهادة محتوى محلي</h2>
+      <p class="cur">اضغط الزرّ فنُثبت ذلك في سجلّكم ولا نعاود مراسلتكم بشأنها.</p>
+      <button id="btn-none" type="button" style="background:#fff;color:#475569;border:1.5px solid #e2e8f0">إفادة: لا توجد لدينا شهادة</button>
+      <div class="msg" id="msg-none"></div>
+    </div>` : '';
+
   el('content').className = 'body';
-  el('content').innerHTML =
-    `<p class="co">السادة / <b>${esc(data.company)}</b> المحترمين،</p>
-     <p class="lead">يُرجى رفع النسخة الجديدة لكل مستند أدناه مع تاريخ انتهائه الجديد.
-        تحلّ النسخة الجديدة محلّ القديمة في ملفّكم لدينا فور الرفع.</p>
-     ${docs}
-     <p class="hint">لا تُطلب منكم إعادة التسجيل، ولا إرسال المستندات بالبريد أو الواتساب.</p>`;
+  el('content').innerHTML = isLc
+    ? `<p class="co">السادة / <b>${esc(data.company)}</b> المحترمين،</p>
+       <p class="lead">دعماً للمحتوى المحلي ومنح الأفضلية للمساهمين فيه، يُرجى رفع
+          <b>شهادة المحتوى المحلي</b> إن كانت لديكم — أو إفادتنا بعدم وجودها بضغطة واحدة.</p>
+       ${docs}${none}
+       <p class="hint">لا تُطلب منكم إعادة التسجيل، ولا إرسال المستندات بالبريد أو الواتساب.</p>`
+    : `<p class="co">السادة / <b>${esc(data.company)}</b> المحترمين،</p>
+       <p class="lead">يُرجى رفع النسخة الجديدة لكل مستند أدناه مع تاريخ انتهائه الجديد.
+          تحلّ النسخة الجديدة محلّ القديمة في ملفّكم لدينا فور الرفع.</p>
+       ${docs}
+       <p class="hint">لا تُطلب منكم إعادة التسجيل، ولا إرسال المستندات بالبريد أو الواتساب.</p>`;
 
   data.docs.forEach((d,i) => {
     el('btn-'+i).addEventListener('click', () => upload(d, i));
   });
+  if (isLc && el('btn-none')) el('btn-none').addEventListener('click', declareNone);
+  // الرابط قد يصل بـ&a=none من زرّ البريد ⇒ ركّز على الإفادة مباشرةً
+  try{ if (isLc && new URLSearchParams(location.search).get('a') === 'none' && el('doc-none'))
+    el('doc-none').scrollIntoView({block:'center'}); }catch(e){}
+}
+
+let NONE_BUSY = false;
+async function declareNone(){
+  const btn = el('btn-none'), msg = el('msg-none');
+  if (NONE_BUSY) return;
+  NONE_BUSY = true; btn.disabled = true;
+  const show = (cls, t) => { msg.className = 'msg ' + cls; msg.textContent = t; };
+  btn.textContent = 'جارٍ الإرسال…';
+  try{
+    const r = await fetch('/api/doc-renew?declare=none&t=' + encodeURIComponent(TOKEN), { method:'POST' });
+    const out = await r.json().catch(()=>({}));
+    if(!r.ok || !out.ok) throw new Error(out.error || 'تعذّر إرسال الإفادة');
+    el('doc-none').classList.add('done');
+    show('ok','شكراً لكم — أُثبتت الإفادة في سجلّكم ولن تصلكم رسائل بشأن هذه الشهادة.');
+    btn.textContent = 'تمّت الإفادة ✓';
+  }catch(e){
+    show('err', e.message || 'تعذّر الإرسال، حاول مرّة أخرى.');
+    btn.disabled = false; btn.textContent = 'إفادة: لا توجد لدينا شهادة';
+  }finally{ NONE_BUSY = false; }
 }
 
 const BUSY = new Set();   // منع الرفع المزدوج
@@ -156,11 +200,23 @@ async function doUpload(d, i, btn, msg, fileEl){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(expiry)){ show('err','أدخل تاريخ الانتهاء الجديد.'); release(); return; }
     if(daysTo(expiry) < 0){ show('err','تاريخ الانتهاء يجب أن يكون مستقبليّاً.'); release(); return; }
   }
+  /* الحقول المرافقة (رقم الشهادة/النسبة): الشهادة بلا رقمها ونسبتها لا تُفيد
+     التقييم، فالخادم يرفضها — والتحقّق هنا يوفّر رحلة فاشلة على المورّد. */
+  const extraQs = [];
+  for (const f of (d.extra || [])){
+    const v = (el('x-'+i+'-'+f.name).value || '').trim();
+    if(!v){ show('err','أدخل ' + f.label + '.'); release(); return; }
+    if(f.type === 'pct'){
+      const n = Number(v);
+      if(!isFinite(n) || n < 0 || n > 100){ show('err', f.label + ' يجب أن يكون رقماً بين 0 و100.'); release(); return; }
+    }
+    extraQs.push('&' + encodeURIComponent(f.name) + '=' + encodeURIComponent(v));
+  }
 
   show('', ''); msg.className = 'msg'; btn.textContent = 'جارٍ الرفع…';
   try{
     const qs = '?t=' + encodeURIComponent(TOKEN) + '&doc=' + encodeURIComponent(d.key) +
-               (expiry ? '&expiry=' + encodeURIComponent(expiry) : '');
+               (expiry ? '&expiry=' + encodeURIComponent(expiry) : '') + extraQs.join('');
     const r = await fetch('/api/doc-renew' + qs, { method:'POST', body: file });
     const out = await r.json().catch(() => ({}));
     if(!r.ok || !out.ok) throw new Error(out.error || 'تعذّر الرفع');
@@ -169,9 +225,11 @@ async function doUpload(d, i, btn, msg, fileEl){
     btn.textContent = 'تم الرفع ✓';
     fileEl.disabled = true;
     if(d.has_expiry) el('exp-'+i).disabled = true;
+    (d.extra||[]).forEach(f => { const e2 = el('x-'+i+'-'+f.name); if(e2) e2.disabled = true; });
+    const noneBox = el('doc-none'); if(noneBox) noneBox.style.display = 'none';   // رفع الشهادة يُغني عن الإفادة
   }catch(e){
     show('err', e.message || 'تعذّر الرفع، حاول مرّة أخرى.');
-    release(); btn.textContent = 'رفع واستبدال النسخة القديمة';
+    release(); btn.textContent = btn.dataset.label || 'رفع واستبدال النسخة القديمة';
   }
 }
 

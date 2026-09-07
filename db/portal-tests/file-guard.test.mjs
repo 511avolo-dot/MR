@@ -163,7 +163,7 @@ function drNet(opts = {}) {
         : new Response('{}', { status: 401 });
     }
     if (u.includes('/rest/v1/proc_supplier_registrations') && m === 'GET') {
-      return new Response(JSON.stringify(opts.noRow ? [] : [DR_ROW]), { status: 200 });
+      return new Response(JSON.stringify(opts.noRow ? [] : [opts.row || DR_ROW]), { status: 200 });
     }
     if (u.includes('api.resend.com')) {
       return new Response(JSON.stringify({ id: 'e1' }), { status: opts.mailFail ? 500 : 200 });
@@ -367,7 +367,7 @@ let DR_TOKEN = '';
     const net = drNet();
     try {
       const r = await dr.onRequestPost({
-        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05`,
+        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05&cert_no=M207667&pct=61`,
           { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
       const b = await r.json().catch(()=>({}));
       const patch = net.calls.filter(c => c.method === 'PATCH').pop();
@@ -393,7 +393,7 @@ let DR_TOKEN = '';
     };
     try {
       const r = await dr.onRequestPost({
-        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05`,
+        request: DR_REQ(`?t=${encodeURIComponent(lcToken)}&doc=local_content&expiry=2031-05-05&cert_no=M207667&pct=61`,
           { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
       const b = await r.json().catch(()=>({}));
       const patches = calls.filter(c => c.method === 'PATCH').map(c => JSON.parse(c.body));
@@ -402,6 +402,109 @@ let DR_TOKEN = '';
         r.status === 200 && b.ok && b.expiry_saved === false &&
         !!last.doc_paths.local_content && !('local_content_expiry' in last), 'HTTP ' + r.status);
     } finally { globalThis.fetch = real; }
+  }
+
+  /* ── حملة شهادة المحتوى المحلي (طلب المالك 2026-09-07) ────────────────────
+     الشهادة بلا رقمها ونسبتها لا تُفيد التقييم، ورفعُها يُثبِت الامتلاك.
+     وزرّ «لا توجد» يُنهي السؤال بدل أن يختلط الصمت بعدم الامتلاك. */
+  {
+    const net = drNet();
+    let campToken = '';
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ('', { method:'POST', body: JSON.stringify({
+          reg_id:'DG-ABC123', docs:['local_content'], purpose:'local_content' }) }, STAFF),
+        env: DR_ENV });
+      const b = await r.json().catch(()=>({}));
+      const mail = net.calls.find(c => c.url.includes('api.resend.com'));
+      const body = mail ? JSON.parse(mail.body) : {};
+      const m = /renew-doc\.html\?t=([^"&<\s]+)/.exec(body.html || '');
+      campToken = m ? decodeURIComponent(m[1]) : '';
+      drT('الحملة تستعمل قالباً مستقلّاً بنبرة دعوة لا مطالبة بمتأخّر',
+        r.status===200 && b.purpose==='local_content' &&
+        /شهادة المحتوى المحلي —/.test(body.subject||'') && !/منتهية منذ/.test(body.html||''),
+        body.subject||'');
+      drT('البريد يحمل زرَّي «لدينا شهادة» و«لا توجد لدينا شهادة»',
+        /لدينا شهادة — رفعها الآن/.test(body.html||'') &&
+        /لا توجد لدينا شهادة محتوى محلي/.test(body.html||'') && /&a=none/.test(body.html||''));
+      drT('البريد يذكر البيانات المطلوبة الأربع',
+        /رقم الشهادة/.test(body.html||'') && /نسبة المحتوى المحلي/.test(body.html||'') &&
+        /تاريخ الانتهاء/.test(body.html||''));
+      const aud = net.calls.filter(c => c.url.includes('proc_audit_log') && c.method==='POST').pop();
+      drT('التدقيق يميّز الحملة عن التجديد (فلا تختلط في المتابعة)',
+        !!aud && JSON.parse(aud.body)[0].meta.kind === 'local_content_campaign');
+    } finally { net.restore(); }
+
+    // الرفع بلا رقم الشهادة أو بنسبة خارج المدى يُرفض قبل لمس التخزين
+    {
+      const net = drNet();
+      try {
+        const noCert = await dr.onRequestPost({ request: DR_REQ(
+          `?t=${encodeURIComponent(campToken)}&doc=local_content&expiry=2031-01-01&pct=61`,
+          { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
+        const badPct = await dr.onRequestPost({ request: DR_REQ(
+          `?t=${encodeURIComponent(campToken)}&doc=local_content&expiry=2031-01-01&cert_no=M1&pct=180`,
+          { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
+        drT('رفع الشهادة بلا رقمها يُرفض', noCert.status === 400, 'HTTP ' + noCert.status);
+        drT('نسبة خارج 0–100 تُرفض', badPct.status === 400, 'HTTP ' + badPct.status);
+        drT('الرفض قبل لمس التخزين', net.calls.filter(c=>/r2|put/i.test(c.url)).length === 0);
+      } finally { net.restore(); }
+    }
+    // الرفع الكامل يكتب الرقم والنسبة ويُثبِت الامتلاك
+    {
+      const net = drNet();
+      try {
+        const r = await dr.onRequestPost({ request: DR_REQ(
+          `?t=${encodeURIComponent(campToken)}&doc=local_content&expiry=2031-01-01&cert_no=M307458&pct=70.09`,
+          { method:'POST', body: goodPdfBuf }), env: ENV_R2 });
+        const patch = net.calls.filter(c => c.method === 'PATCH').pop();
+        const p = patch ? JSON.parse(patch.body) : {};
+        drT('الرفع يحفظ الرقم والنسبة ويُثبِت `local_content_has`',
+          r.status===200 && p.local_content_cert_no==='M307458' &&
+          p.local_content_percentage==='70.09' && p.local_content_has === true, JSON.stringify(p));
+      } finally { net.restore(); }
+    }
+    // إفادة «لا توجد شهادة»
+    {
+      const net = drNet();
+      try {
+        const r = await dr.onRequestPost({ request: DR_REQ(
+          `?declare=none&t=${encodeURIComponent(campToken)}`, { method:'POST' }), env: DR_ENV });
+        const b = await r.json().catch(()=>({}));
+        const patch = net.calls.filter(c => c.method === 'PATCH').pop();
+        const p = patch ? JSON.parse(patch.body) : {};
+        drT('إفادة «لا توجد شهادة» تُثبَت في السجلّ بوقتها',
+          r.status===200 && b.ok && p.local_content_has === false && !!p.local_content_none_at,
+          JSON.stringify(p));
+        const aud = net.calls.filter(c => c.url.includes('proc_audit_log') && c.method==='POST').pop();
+        drT('الإفادة تُقيَّد في التدقيق',
+          !!aud && JSON.parse(aud.body)[0].meta.kind === 'local_content_none');
+      } finally { net.restore(); }
+    }
+    // مَن رفع الشهادة فعلاً لا يُلغيها بضغطة — الدليل أقوى من الإفادة
+    {
+      const net = drNet({ row: { ...DR_ROW, doc_paths: { local_content: 'p.pdf' } } });
+      try {
+        const r = await dr.onRequestPost({ request: DR_REQ(
+          `?declare=none&t=${encodeURIComponent(campToken)}`, { method:'POST' }), env: DR_ENV });
+        drT('من لديه شهادة مرفوعة لا يُلغيها بزرّ «لا توجد»', r.status === 409, 'HTTP ' + r.status);
+      } finally { net.restore(); }
+    }
+    // رمز تجديد عاديّ (بلا local_content) لا يُستعمَل للإفادة
+    {
+      const net = drNet();
+      try {
+        const mk = await dr.onRequestPost({ request: DR_REQ('', { method:'POST',
+          body: JSON.stringify({ reg_id:'DG-ABC123', docs:['cr'] }) }, STAFF), env: DR_ENV });
+        const mail = net.calls.find(c => c.url.includes('api.resend.com'));
+        const m = /renew-doc\.html\?t=([^"&<\s]+)/.exec(mail ? JSON.parse(mail.body).html : '');
+        const crToken = m ? decodeURIComponent(m[1]) : '';
+        const r = await dr.onRequestPost({ request: DR_REQ(
+          `?declare=none&t=${encodeURIComponent(crToken)}`, { method:'POST' }), env: DR_ENV });
+        drT('رمز لا يشمل شهادة المحتوى المحلي لا يُفيد بعدمها',
+          mk.status===200 && r.status === 400, 'HTTP ' + r.status);
+      } finally { net.restore(); }
+    }
   }
 }
 
