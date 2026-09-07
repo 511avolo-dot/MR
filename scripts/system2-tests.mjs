@@ -1089,6 +1089,23 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('الوثائق الإلزامية الستّ هي مرجع العدّ',
     api.SUP_REQUIRED_DOCS.length === 6 && api.SUP_EXPIRY_SOON_DAYS === 30);
 
+  /* ── ما يُطلَب تجديده: أساس بريد التجديد (مفاتيح لا أسماء) ── */
+  T('الصفّ المكتمل السارية شهاداته لا يطلب تجديداً',
+    api.supDocRow({id:'x', doc_paths:full, cr_expiry_date: iso(400), chamber_expiry: iso(400)}).renew.length === 0);
+  T('الشهادة المنتهية تُدرَج للتجديد بمفتاحها',
+    api.supDocRow({id:'x', doc_paths:full, cr_expiry_date: iso(-5)}).renew.join() === 'cr');
+  T('المقاربة على الانتهاء تُدرَج أيضاً',
+    api.supDocRow({id:'x', doc_paths:full, chamber_expiry: iso(12)}).renew.join() === 'chamber');
+  {
+    const r = api.supDocRow({id:'x', doc_paths:{cr:'a.pdf'}, cr_expiry_date: iso(-2)});
+    T('الوثيقة الناقصة تُطلَب من المورّد كذلك (بلا تكرار)',
+      r.renew.includes('vat') && r.renew.includes('iban_cert') && r.renew.includes('cr') &&
+      r.renew.length === new Set(r.renew).size);
+  }
+  T('بريد المراسلة يُقرأ من الصفّ (الأولوية لمسؤول التواصل)',
+    api.supDocRow({id:'x', doc_paths:full, contact_email:'a@b.com', email:'c@d.com'}).email === 'a@b.com' &&
+    api.supDocRow({id:'x', doc_paths:full, email:'c@d.com'}).email === 'c@d.com');
+
   // اللوحة مربوطة: تحميل، مرشّحات، فتح بالعارض، بطاقة مهام
   T('لوحة المتابعة مربوطة بالشاشة والعارض',
     CODE.includes('async function loadSupDocs') && CODE.includes('function renderSupDocs') &&
@@ -1122,6 +1139,49 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     !/fetchDocBlob[\s\S]{0,300}createSignedUrl/.test(CODE));
   T('لوحة السعة تقارن بخطط R2',
     /Cloudflare R2 المجاني/.test(CODE) && /gb:10/.test(CODE) && CODE.includes('async function regDocSize'));
+}
+
+/* ── ١٥) تجديد المستندات المنتهية ببريد ورابط رفع ──────────────
+   قرار المالك (2026-09-07): «يُرسَل بريد من Resend برفع المستند الجديد بتاريخه
+   الجديد واستبدال القديم». الحرّاس هنا على الربط والعقد — والسلوك الخادميّ
+   مُختبَر في `db/portal-tests/file-guard.test.mjs` (20 تأكيداً). */
+{
+  const RENEW_API = fs.readFileSync(path.join(ROOT, 'functions/api/doc-renew.js'), 'utf8');
+  const RENEW_PAGE = fs.readFileSync(path.join(ROOT, 'renew-doc.html'), 'utf8');
+
+  T('زرّ طلب التجديد في صفّ المتابعة مربوط بالنقطة',
+    CODE.includes('async function supDocRenew(') && CODE.includes('async function supDocRenewSend(') &&
+    /supDocRenew\('/.test(CODE) && /fetch\('\/api\/doc-renew'/.test(CODE));
+  T('الإرسال الجماعي للتصنيف المعروض موجود ومربوط',
+    CODE.includes('async function supDocRenewAll(') && /supDocRenewAll\(\)/.test(CODE));
+  T('الطلب يحمل رمز جلسة الموظّف (لا نقطة مفتوحة)',
+    /supDocRenewSend[\s\S]{0,900}Authorization:\s*'Bearer '/.test(CODE));
+  T('المتابعة تجلب بريد المورّد كي يُرسَل إليه',
+    /loadSupDocs[\s\S]{0,700}contact_email,email/.test(CODE));
+
+  // العقد الخادميّ: تاريخ لكل وثيقة في عمودها الصحيح، ولا حذف لأي ملف.
+  T('عمودا الانتهاء مربوطان بالوثيقتين الصحيحتين',
+    /cr:\s*\{[^}]*expiryCol:\s*'cr_expiry_date'/.test(RENEW_API) &&
+    /chamber:\s*\{[^}]*expiryCol:\s*'chamber_expiry'/.test(RENEW_API));
+  T('التجديد لا يحذف أي ملف مورّد (استبدال منطقيّ)',
+    !/\.delete\(/.test(RENEW_API) && !/method:\s*'DELETE'/.test(RENEW_API) && !/storage\/v1\/object\/list/.test(RENEW_API));
+  T('الرفع يمرّ بحارس الملفات الطبقي',
+    RENEW_API.includes("from './_file-guard.js'") && /inspectUpload\(buf\)/.test(RENEW_API));
+  T('الرمز موقَّع ويُتحقَّق منه بمقارنة ثابتة الزمن',
+    RENEW_API.includes('function timingSafeEq') && /HMAC/.test(RENEW_API) &&
+    /verifyToken/.test(RENEW_API));
+  T('حاوية البوابة ممنوعة في نقطة التجديد (فصل الأنظمة)',
+    !/env\.QUOTES_BUCKET/.test(RENEW_API) && RENEW_API.includes('env.SUPPLIER_DOCS'));
+
+  // صفحة المورّد: عامّة بلا حساب — فلا تُفهرَس، ولا تحمّل أي سكربت خارجيّ (CSP).
+  T('صفحة التجديد غير مفهرَسة',
+    /name="robots"[^>]*noindex/.test(RENEW_PAGE));
+  T('صفحة التجديد بلا أي مصدر خارجيّ (آمنة CSP)',
+    !/<script[^>]+src=/i.test(RENEW_PAGE) && !/https?:\/\/(?!suppliers\.aldeyabi\.com)[^"'\s]*\.(js|css)/i.test(RENEW_PAGE));
+  T('صفحة التجديد ترفع للنقطة الخادمية لا للتخزين مباشرةً',
+    RENEW_PAGE.includes("fetch('/api/doc-renew'") && !/storage\/v1\/object/.test(RENEW_PAGE));
+  T('الصفحة تُلزِم تاريخ الانتهاء الجديد للوثائق ذات التاريخ',
+    /has_expiry/.test(RENEW_PAGE) && /تاريخ الانتهاء الجديد/.test(RENEW_PAGE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

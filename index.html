@@ -24106,17 +24106,24 @@ function supDocRow(reg){
   const missing = SUP_REQUIRED_DOCS.filter(([k]) => !paths[k]).map(([,l]) => l);
   const present = SUP_REQUIRED_DOCS.filter(([k]) => !!paths[k]).length;
   const exp = [
-    ['السجل التجاري', reg.cr_expiry_date],
-    ['عضوية الغرفة',  reg.chamber_expiry],
-  ].map(([label, d]) => ({label, d, n: supDaysTo(d)})).filter(x => x.n != null);
+    ['cr',      'السجل التجاري', reg.cr_expiry_date],
+    ['chamber', 'عضوية الغرفة',  reg.chamber_expiry],
+  ].map(([key, label, d]) => ({key, label, d, n: supDaysTo(d)})).filter(x => x.n != null);
   const worst = exp.length ? Math.min(...exp.map(x => x.n)) : null;
+  /* ما يُطلَب من المورّد رفعه: كل وثيقة إلزامية ناقصة + كل شهادة منتهية أو تقارب
+     الانتهاء. هذه بالضبط حمولة بريد التجديد (`/api/doc-renew`) — مفاتيح لا أسماء. */
+  const renew = [
+    ...SUP_REQUIRED_DOCS.filter(([k]) => !paths[k]).map(([k]) => k),
+    ...exp.filter(x => x.n <= SUP_EXPIRY_SOON_DAYS).map(x => x.key),
+  ].filter((k, i, a) => a.indexOf(k) === i);
   return {
     id: reg.id,
     name: reg.legal_name_ar || reg.legal_name_en || reg.id,
     cr: reg.commercial_reg || '',
     status: reg.status,
     present, total: SUP_REQUIRED_DOCS.length, missing,
-    expiries: exp, worst,
+    expiries: exp, worst, renew,
+    email: (reg.contact_email || reg.email || '').trim(),
     expired: worst != null && worst < 0,
     soon: worst != null && worst >= 0 && worst <= SUP_EXPIRY_SOON_DAYS,
     docCount: Object.keys(paths).length,
@@ -24131,7 +24138,7 @@ async function loadSupDocs(){
   box.innerHTML = '<div style="padding:22px;text-align:center;color:#64748b;font-size:13px">جارٍ التحميل…</div>';
   try {
     const rows = await regFetchAll(
-      'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry',
+      'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email',
       (q) => q.eq('status', 'approved'));
     SUPDOC_ROWS = rows.map(supDocRow);
     renderSupDocs();
@@ -24178,6 +24185,8 @@ function renderSupDocs(){
       ${tab('expired','وثائق منتهية',F.expired.length,'#b91c1c')}
       ${tab('soon','تقارب الانتهاء',F.soon.length,'#c2410c')}
       ${tab('all','كل المعتمدين',F.all.length,'#0B1B36')}
+      ${(() => { const n = list.filter(r => r.renew.length).length; return n
+        ? `<button onclick="supDocRenewAll()" title="إرسال بريد تجديد لكل مورّد في هذا التصنيف تنقصه وثيقة أو تقارب شهادته الانتهاء" style="cursor:pointer;font-family:inherit;margin-inline-start:auto;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">✉ إرسال طلبات التجديد (${n})</button>` : ''; })()}
     </div>
     ${list.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -24199,13 +24208,71 @@ function renderSupDocs(){
           </td>
           <td style="padding:11px 13px"><div style="display:flex;flex-wrap:wrap;gap:5px">${chips(r)}</div></td>
           <td style="padding:11px 13px">${expCell(r)}</td>
-          <td style="padding:11px 13px;text-align:center">
+          <td style="padding:11px 13px;text-align:center;white-space:nowrap">
+            ${r.renew.length ? `<button id="rnw-${escapeAttr(r.id)}" onclick="supDocRenew('${escapeAttr(r.id)}')" title="${escapeAttr('يُرسَل بريد للمورّد برابط رفع النسخة الجديدة بتاريخها الجديد: ' + r.renew.length + ' مستند')}" style="background:#0B1B36;border:0;border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit;color:#fff;margin-inline-end:6px">✉ طلب تجديد</button>` : ''}
             <button onclick="openRegById('${escapeAttr(r.id)}')" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">الطلب</button>
           </td>
         </tr>`).join('')}</tbody>
       </table></div>`
       : `<div style="padding:34px;text-align:center;color:#15803d;font-size:14px;font-weight:600">✓ لا يوجد ما يحتاج متابعة في هذا التصنيف</div>`}
-    <div style="font-size:11px;color:#94a3b8;margin-top:8px">يشمل الموردين المعتمدين فقط. الوثائق تُفتح داخل النظام بعارض المستندات.</div>`;
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px">يشمل الموردين المعتمدين فقط. الوثائق تُفتح داخل النظام بعارض المستندات.
+      «طلب تجديد» يُرسل للمورّد بريداً برابط خاصّ يرفع منه النسخة الجديدة بتاريخها، فتحلّ محلّ القديمة تلقائياً.</div>`;
+}
+/* ── طلب تجديد المستندات: بريد Resend برابط رفع موقَّع ────────────────────
+   قرار المالك (2026-09-07): المستند المنتهي لا يُتابَع بالاتصال ولا بالبريد اليدويّ —
+   يُرسل النظام رابطاً خاصّاً بالمورّد يرفع منه النسخة الجديدة بتاريخها الجديد،
+   فتستبدل القديمة في ملفّه فوراً (الاستبدال منطقيّ: القديمة تبقى محفوظة كدليل).
+   الصلاحية والتحقّق كلّها على الخادم (`functions/api/doc-renew.js`). */
+async function supDocRenewSend(regId){
+  const row = SUPDOC_ROWS.find(r => r.id === regId);
+  if(!row) return { ok:false, error:'الصفّ غير موجود' };
+  if(!row.renew.length) return { ok:false, error:'لا توجد وثائق تحتاج تجديداً' };
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return { ok:false, error:'يتطلب اتصالاً سحابياً' };
+  const tok = await regDocToken();
+  if(!tok) return { ok:false, error:'انتهت الجلسة — أعِد تسجيل الدخول' };
+  try{
+    const r = await fetch('/api/doc-renew', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + tok },
+      body: JSON.stringify({ reg_id: regId, docs: row.renew }),
+    });
+    const out = await r.json().catch(()=>({}));
+    if(!r.ok || !out.ok) return { ok:false, error: out.error || ('تعذّر الإرسال (HTTP ' + r.status + ')') };
+    try{ logAudit('notify','supplier_doc',regId,{docs:row.renew, to:out.sent_to}); }catch(e){}
+    return { ok:true, to: out.sent_to };
+  }catch(e){ return { ok:false, error: e.message || 'تعذّر الاتصال' }; }
+}
+async function supDocRenew(regId){
+  const btn = document.getElementById('rnw-' + regId);
+  const row = SUPDOC_ROWS.find(r => r.id === regId);
+  if(!row) return;
+  if(!confirm(`سيُرسَل بريد إلى «${row.name}» برابط لرفع ${row.renew.length} مستند محدَّث. متابعة؟`)) return;
+  if(btn){ btn.disabled = true; btn.textContent = 'جارٍ الإرسال…'; }
+  const res = await supDocRenewSend(regId);
+  if(res.ok){
+    toast('success','أُرسل طلب التجديد', 'إلى ' + res.to);
+    if(btn){ btn.textContent = '✓ أُرسل'; btn.style.background = '#15803d'; }
+  }else{
+    toast('error','تعذّر الإرسال', res.error);
+    if(btn){ btn.disabled = false; btn.textContent = '✉ طلب تجديد'; }
+  }
+}
+/* إرسال جماعي لكل صفوف التصنيف المعروض — بالتسلسل (لا نُغرق مزوّد البريد) */
+async function supDocRenewAll(){
+  const list = (SUPDOC_ROWS || []).filter(r => r.renew.length);
+  const scope = SUPDOC_FILTER;
+  const target = scope === 'all' ? list : list.filter(r =>
+    scope === 'missing' ? r.missing.length : scope === 'expired' ? r.expired : scope === 'soon' ? r.soon : supDocNeedsAction(r));
+  if(!target.length){ toast('info','لا يوجد','لا توجد وثائق تحتاج تجديداً في هذا التصنيف'); return; }
+  if(!confirm(`سيُرسَل بريد تجديد إلى ${target.length} مورّداً. متابعة؟`)) return;
+  let ok = 0; const failed = [];
+  for(const r of target){
+    const res = await supDocRenewSend(r.id);
+    if(res.ok) ok++; else failed.push(r.name + ' — ' + res.error);
+  }
+  if(failed.length) toast('warn', `أُرسل ${ok} من ${target.length}`, failed.slice(0,3).join(' · '));
+  else toast('success','تمّ الإرسال', `أُرسل طلب التجديد إلى ${ok} مورّداً`);
+  renderSupDocs();
 }
 /* فتح وثيقة بعينها من صفّ المتابعة — يعيد استخدام العارض نفسه */
 function supDocOpen(regId, key){

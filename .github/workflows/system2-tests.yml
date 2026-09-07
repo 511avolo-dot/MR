@@ -10,11 +10,15 @@ on:
     paths:
       - 'index.html'
       - 'scripts/system2-tests.mjs'
+      - 'functions/api/doc-renew.js'
+      - 'renew-doc.html'
       - '.github/workflows/system2-tests.yml'
   pull_request:
     paths:
       - 'index.html'
       - 'scripts/system2-tests.mjs'
+      - 'functions/api/doc-renew.js'
+      - 'renew-doc.html'
       - '.github/workflows/system2-tests.yml'
   workflow_dispatch:
 

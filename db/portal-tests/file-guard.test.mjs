@@ -122,3 +122,166 @@ for (const [name, expect, env, qs, body, hdr] of epCases) {
 if (failed) { console.error('\n❌ فشل في تأكيدات نقطة الرفع'); process.exit(1); }
 const epTotal = epCases.length + 1;   // +1 = تأكيد مسار الرفع الناجح
 console.log(`\n✅ نقطة /api/reg-doc: ${epTotal}/${epTotal} PASS`);
+
+/* ── تأكيدات نقطة تجديد وثائق المورّد (/api/doc-renew) ──────────────────────
+   قرار المالك (2026-09-07): المستند المنتهي يُتابَع ببريد فيه رابط رفع خاصّ،
+   والنسخة الجديدة **تستبدل** القديمة بتاريخها الجديد. الحرّاس المُختبَرة هنا:
+   صلاحية الموظّف · توقيع الرمز · نطاق الوثائق داخل الرمز · إلزام التاريخ
+   وصلاحيته · حارس الملفات · وأن الاستبدال **منطقيّ بلا أي حذف**. */
+const dr = await import('../../functions/api/doc-renew.js');
+
+const DR_ENV = {
+  SUPABASE_URL: 'https://x.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'svc-key',
+  SUPABASE_ANON_KEY: 'anon-key',
+  RESEND_API_KEY: 're_test',
+  DOC_RENEW_SECRET: 'unit-test-secret',
+  PUBLIC_ORIGIN: 'https://suppliers.aldeyabi.com',
+  SUPPLIER_DOCS: null,   // يُضبط في اختبار الرفع
+};
+const DR_ROW = {
+  id: 'DG-ABC123', legal_name_ar: 'شركة الاختبار', legal_name_en: 'Test Co',
+  contact_email: 'buyer@example.com', email: 'info@example.com', status: 'approved',
+  cr_expiry_date: '2020-01-01', chamber_expiry: '2030-01-01',
+  doc_paths: { cr: 'DG-ABC123/cr/old.pdf', vat: 'DG-ABC123/vat/v.pdf' },
+};
+const DR_REQ = (qs, init = {}, headers = {}) => new Request(
+  `https://suppliers.aldeyabi.com/api/doc-renew${qs}`,
+  { headers: { origin: 'https://suppliers.aldeyabi.com', host: 'suppliers.aldeyabi.com', ...headers }, ...init });
+
+/* شبكة مُقلَّدة: تصادق الموظّف · تُعيد الصفّ · تقبل Resend/PATCH/التدقيق وتسجّلها */
+function drNet(opts = {}) {
+  const calls = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, o = {}) => {
+    const u = String(url), m = (o.method || 'GET').toUpperCase();
+    calls.push({ url: u, method: m, body: o.body });
+    if (u.includes('/auth/v1/user')) {
+      const auth = (o.headers && (o.headers.Authorization || o.headers.authorization)) || '';
+      return auth.includes('good-jwt')
+        ? new Response(JSON.stringify({ email: 'staff@aldeyabi.com' }), { status: 200 })
+        : new Response('{}', { status: 401 });
+    }
+    if (u.includes('/rest/v1/proc_supplier_registrations') && m === 'GET') {
+      return new Response(JSON.stringify(opts.noRow ? [] : [DR_ROW]), { status: 200 });
+    }
+    if (u.includes('api.resend.com')) {
+      return new Response(JSON.stringify({ id: 'e1' }), { status: opts.mailFail ? 500 : 200 });
+    }
+    return new Response('{}', { status: 200 });
+  };
+  return { calls, restore: () => { globalThis.fetch = real; } };
+}
+const STAFF = { Authorization: 'Bearer good-jwt' };
+let drFailed = 0, drTotal = 0;
+const drT = (name, cond, extra = '') => {
+  drTotal++; if (!cond) drFailed++;
+  console.log(`${cond ? '✓' : '✗ FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
+};
+
+/* (أ) حرّاس إرسال الطلب */
+{
+  const net = drNet();
+  try {
+    let r = await dr.onRequestPost({ request: DR_REQ('', { method: 'POST', body: '{}' }, { origin: 'https://evil.example' }), env: DR_ENV });
+    drT('أصل مختلف يُرفض عند طلب الإرسال', r.status === 403, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: DR_REQ('', { method: 'POST', body: JSON.stringify({ reg_id: 'DG-ABC123', docs: ['cr'] }) }), env: DR_ENV });
+    drT('بلا رمز جلسة موظّف ⇒ 401 (فشل مغلق)', r.status === 401, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: DR_REQ('', { method: 'POST', body: JSON.stringify({ reg_id: '../etc', docs: ['cr'] }) }, STAFF), env: DR_ENV });
+    drT('رقم تسجيل غير صالح يُرفض', r.status === 400, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: DR_REQ('', { method: 'POST', body: JSON.stringify({ reg_id: 'DG-ABC123', docs: ['passport'] }) }, STAFF), env: DR_ENV });
+    drT('نوع وثيقة خارج القائمة البيضاء يُرفض', r.status === 400, 'HTTP ' + r.status);
+  } finally { net.restore(); }
+}
+
+/* (ب) المسار الناجح: بريد واحد + رابط يحمل رمزاً موقَّعاً */
+let DR_TOKEN = '';
+{
+  const net = drNet();
+  try {
+    const r = await dr.onRequestPost({
+      request: DR_REQ('', { method: 'POST', body: JSON.stringify({ reg_id: 'DG-ABC123', docs: ['cr', 'chamber'] }) }, STAFF),
+      env: DR_ENV });
+    const body = await r.json().catch(() => ({}));
+    const mail = net.calls.find(c => c.url.includes('api.resend.com'));
+    const payload = mail ? JSON.parse(mail.body) : {};
+    const m = /renew-doc\.html\?t=([^"<\s]+)/.exec(payload.html || '');
+    DR_TOKEN = m ? decodeURIComponent(m[1]) : '';
+    drT('إرسال ناجح: بريد واحد إلى بريد مسؤول التواصل',
+      r.status === 200 && body.ok && body.sent_to === 'buyer@example.com' && !!mail,
+      'HTTP ' + r.status);
+    drT('الرابط يشير لصفحة التجديد ويحمل رمزاً موقَّعاً', !!DR_TOKEN && DR_TOKEN.split('.').length === 2);
+    drT('الرابط مبنيّ على PUBLIC_ORIGIN لا على ترويسة الطلب',
+      (payload.html || '').includes('https://suppliers.aldeyabi.com/renew-doc.html'));
+    drT('لا حذف ولا إفراغ لأي مسار عند الإرسال',
+      net.calls.every(c => c.method !== 'DELETE'));
+  } finally { net.restore(); }
+}
+
+/* (ج) قراءة الرمز */
+{
+  const net = drNet();
+  try {
+    let r = await dr.onRequestGet({ request: DR_REQ('?t=' + encodeURIComponent(DR_TOKEN)), env: DR_ENV });
+    const body = await r.json().catch(() => ({}));
+    drT('رمز صالح يفتح البيانات المطلوبة فقط',
+      r.status === 200 && body.ok && body.company === 'شركة الاختبار' && body.docs.length === 2 &&
+      body.docs[0].key === 'cr' && body.docs[0].has_expiry === true &&
+      !('email' in body) && !('contact_email' in body));
+
+    const tampered = DR_TOKEN.slice(0, -3) + 'AAA';
+    r = await dr.onRequestGet({ request: DR_REQ('?t=' + encodeURIComponent(tampered)), env: DR_ENV });
+    drT('رمز معبوث به يُرفض (توقيع HMAC)', r.status === 403, 'HTTP ' + r.status);
+
+    r = await dr.onRequestGet({ request: DR_REQ('?t=' + encodeURIComponent(DR_TOKEN)), env: { ...DR_ENV, DOC_RENEW_SECRET: 'other-secret' } });
+    drT('رمز موقَّع بمفتاح آخر يُرفض', r.status === 403, 'HTTP ' + r.status);
+  } finally { net.restore(); }
+}
+
+/* (د) الرفع: الحرّاس ثم الاستبدال المنطقيّ */
+{
+  const puts = [];
+  const bucket = { put: async (k, b, o) => { puts.push({ key: k, ct: o && o.httpMetadata && o.httpMetadata.contentType }); } };
+  const ENV_R2 = { ...DR_ENV, SUPPLIER_DOCS: bucket };
+  const UP = (qs, body) => DR_REQ(qs, { method: 'POST', body });
+  const tk = encodeURIComponent(DR_TOKEN);
+  const net = drNet();
+  try {
+    let r = await dr.onRequestPost({ request: UP(`?t=${tk}&doc=vat&expiry=2030-01-01`, goodPdfBuf), env: ENV_R2 });
+    drT('وثيقة خارج نطاق الرمز تُرفض', r.status === 400, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: UP(`?t=${tk}&doc=cr`, goodPdfBuf), env: ENV_R2 });
+    drT('السجل التجاري بلا تاريخ انتهاء يُرفض', r.status === 400, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: UP(`?t=${tk}&doc=cr&expiry=2020-01-01`, goodPdfBuf), env: ENV_R2 });
+    drT('تاريخ انتهاء ماضٍ يُرفض', r.status === 400, 'HTTP ' + r.status);
+
+    r = await dr.onRequestPost({ request: UP(`?t=${tk}&doc=cr&expiry=2030-01-01`, evilPdfBuf), env: ENV_R2 });
+    drT('PDF بمحتوى نشِط يُرفض عند التجديد', r.status === 400, 'HTTP ' + r.status);
+
+    const before = net.calls.length;
+    r = await dr.onRequestPost({ request: UP(`?t=${tk}&doc=cr&expiry=2030-06-30`, goodPdfBuf), env: ENV_R2 });
+    const body = await r.json().catch(() => ({}));
+    const after = net.calls.slice(before);
+    const patch = after.find(c => c.method === 'PATCH');
+    const patched = patch ? JSON.parse(patch.body) : {};
+    const auditCall = after.find(c => c.url.includes('proc_audit_log'));
+    const audited = auditCall ? JSON.parse(auditCall.body)[0] : {};
+
+    drT('رفع ناجح ⇒ كائن جديد في R2 بمسار المورّد',
+      r.status === 200 && body.ok && puts.length === 1 && /^DG-ABC123\/cr\//.test(puts[0].key), 'HTTP ' + r.status);
+    drT('المؤشّر يُستبدل بالجديد مع بقاء بقيّة الوثائق',
+      patched.doc_paths && patched.doc_paths.cr === puts[0].key && patched.doc_paths.vat === 'DG-ABC123/vat/v.pdf');
+    drT('تاريخ الانتهاء الجديد يُكتب في عموده الصحيح', patched.cr_expiry_date === '2030-06-30');
+    drT('لا حذف للنسخة القديمة (استبدال منطقيّ لا تدميريّ)',
+      after.every(c => c.method !== 'DELETE') && puts.length === 1);
+    drT('مسار النسخة القديمة محفوظ في التدقيق',
+      audited && audited.old_value && audited.old_value.path === 'DG-ABC123/cr/old.pdf');
+  } finally { net.restore(); }
+}
+
+if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }
+console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);
