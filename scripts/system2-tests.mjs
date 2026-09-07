@@ -1249,8 +1249,18 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     T('الإفادة رداً على الحملة وحدها تحسم السؤال',
       /const lcAnswered = !!reg\.local_content_none_at/.test(CODE));
     T('الإرسال بتأكيد صريح بالعدد ومُباعَد (بريد خارجيّ لموردين حقيقيين)',
-      /supDocLcCampaign[\s\S]{0,1400}confirm\(/.test(CODE) &&
-      /supDocLcCampaign[\s\S]{0,1800}setTimeout\(z, 350\)/.test(CODE));
+      /supDocLcCampaign[\s\S]{0,2200}confirm\(/.test(CODE) &&
+      /supDocLcCampaign[\s\S]{0,2600}setTimeout\(z, 350\)/.test(CODE));
+    /* ملاحظة المالك: «المؤشّر موجود» ≠ «الشهادة محفوظة» — 7 شهادات فُقدت فعلاً،
+       ومؤشّر معطوب كان سيستثني صاحبها فلا يُسأل عن شهادته الضائعة أبداً. */
+    T('الاستثناء بالتحقّق من وجود الملف لا بوجود المؤشّر',
+      /async function supDocLcTargetsVerified/.test(CODE) &&
+      /supDocLcTargetsVerified[\s\S]{0,700}await supDocPathExists\(path\)\) !== 'missing'/.test(CODE) &&
+      /supDocLcCampaign[\s\S]{0,400}await supDocLcTargetsVerified\(\)/.test(CODE));
+    T('صاحب الشهادة المفقودة يُدرَج في الحملة لا يُستثنى',
+      /broken\.push\(r\); out\.push\(r\)/.test(CODE));
+    T('تعذّر الفحص لا يُزعج المورّد (يُعامَل كموجود)',
+      /catch\(e\)\{ ok = true; \}/.test(CODE));
     T('الحملة تمرّر الغرض للخادم فيختار القالب الصحيح',
       /supDocRenewSend\(r\.id, \['local_content'\], 'local_content'\)/.test(CODE) &&
       /purpose: purpose \|\| undefined/.test(CODE));

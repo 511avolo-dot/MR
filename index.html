@@ -24385,6 +24385,24 @@ function renderSupDocs(){
 function supDocLcTargets(){
   return SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcAnswered && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || ''));
 }
+/* ⚠️ ملاحظة المالك (2026-09-07): «المؤشّر موجود» ≠ «الشهادة محفوظة». سبع شهادات
+   فُقدت فعلاً بعيب القائمة البيضاء، ومؤشّر معطوب يجعلنا نستثني مورّداً شهادته
+   ضائعة **فلا يُسأل عنها أبداً**. لذا الاستثناء يُبنى على **تحقّق فعليّ** من وجود
+   الملف في المخزن، لا على وجود المؤشّر. الكلفة: طلب HEAD واحد لكل مورّد لديه
+   مؤشّر (وهم اليوم صفر بين المعتمدين)، فالفحص شبه مجّانيّ. */
+async function supDocLcTargetsVerified(){
+  const base = SUPDOC_ROWS.filter(r => !r.lcAnswered && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || ''));
+  const out = [], broken = [];
+  for (const r of base){
+    if (!r.lcFile){ out.push(r); continue; }
+    const path = ((r.reg && r.reg.doc_paths) || {}).local_content;
+    let ok = false;
+    try { ok = (await supDocPathExists(path)) !== 'missing'; } catch(e){ ok = true; }  // تعذّر الفحص ⇒ لا نُزعجه
+    if (ok) continue;                       // شهادته محفوظة فعلاً ⇒ لا داعي لسؤاله
+    broken.push(r); out.push(r);            // المؤشّر معطوب ⇒ شهادته ضائعة ⇒ يُسأل
+  }
+  return { targets: out, broken };
+}
 /* مَن أُرسِلت له الحملة خلال المدّة — من سجلّ التدقيق الخادميّ (`stage=lc_campaign`).
    ⚠️ ضرورة مُثبَتة: دفعة التجديد السابقة (2026-09-07) وصلت **مرّتين** إلى 7 موردين
    لأن الزرّ ضُغِط مرّتين بفارق 40 ثانية ولا شيء يمنع ذلك. الإزعاج يُفقِد الثقة. */
@@ -24401,9 +24419,15 @@ async function supDocLcSentRecently(days){
   return out;
 }
 async function supDocLcCampaign(){
-  let targets = supDocLcTargets();
-  if(!targets.length){ toast('info','لا يوجد مستهدَف','كل مورّد إمّا رفع شهادته أو أفادنا بعدمها'); return; }
-  const noMail = SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcAnswered && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || '')).length;
+  const btn0 = document.getElementById('supdoc-lc-btn');
+  if(btn0){ btn0.disabled = true; btn0.textContent = 'جارٍ التحقّق…'; }
+  // الاستثناء بالتحقّق لا بالمؤشّر: شهادة ضائعة ⇒ صاحبها يُسأل عنها
+  const { targets: verified, broken } = await supDocLcTargetsVerified();
+  if(btn0){ btn0.disabled = false; btn0.textContent = `📄 طلب شهادات المحتوى المحلي (${supDocLcTargets().length})`; }
+  let targets = verified;
+  if(!targets.length){ toast('info','لا يوجد مستهدَف','كل مورّد إمّا شهادته محفوظة أو أفادنا بعدمها'); return; }
+  if(broken.length) toast('warn', `${broken.length} شهادة مفقودة من المخزن`, 'أُدرِج أصحابها في الحملة لإعادة رفعها');
+  const noMail = SUPDOC_ROWS.filter(r => !r.lcAnswered && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || '')).length;
   const alreadySent = await supDocLcSentRecently(14);
   const dup = targets.filter(r => alreadySent.has(r.id));
   if(dup.length){
@@ -24417,7 +24441,9 @@ async function supDocLcCampaign(){
     } else return;
   }
   if(!confirm(`سيُرسَل بريد «شهادة المحتوى المحلي» إلى ${targets.length} مورّداً معتمداً.\n\n`
-    + `يُستثنى: من رفع شهادته، ومن أفادنا سابقاً بعدمها رداً على هذه الحملة${noMail?`، و${noMail} بلا بريد صالح`:''}.\n`
+    + `يُستثنى: من شهادته **محفوظة فعلاً** في المخزن (لا مجرّد مُسجَّلة)، ومن أفادنا بعدمها`
+    + `${noMail?`، و${noMail} بلا بريد صالح`:''}.\n`
+    + `${broken.length?`⚠ ${broken.length} مورّداً شهادته مفقودة من المخزن — أُدرِجوا لإعادة الرفع.\n`:''}`
     + `يحتوي البريد زرَّين: «لدينا شهادة — رفعها» و«لا توجد لدينا شهادة».\n\nمتابعة الإرسال؟`)) return;
   const btn = document.getElementById('supdoc-lc-btn');
   if(btn){ btn.disabled = true; }
