@@ -1244,6 +1244,17 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     T('الحملة تمرّر الغرض للخادم فيختار القالب الصحيح',
       /supDocRenewSend\(r\.id, \['local_content'\], 'local_content'\)/.test(CODE) &&
       /purpose: purpose \|\| undefined/.test(CODE));
+    /* دفعة التجديد السابقة (2026-09-07) وصلت **مرّتين** إلى 7 موردين لأن الزرّ
+       ضُغِط مرّتين بفارق 40 ثانية — مُثبَت في سجلّ Resend. الحارس يمنع تكرارها. */
+    T('منع التكرار: من وصلته الحملة خلال 14 يوماً يُستثنى',
+      /async function supDocLcSentRecently/.test(CODE) &&
+      /eq\('new_value->>stage','lc_campaign'\)/.test(CODE) &&
+      /supDocLcCampaign[\s\S]{0,900}alreadySent\.has\(r\.id\)/.test(CODE));
+    T('الخادم يسم إرسال الحملة في التدقيق (أساس منع التكرار)',
+      /stage: isLc \? 'lc_campaign' : undefined/.test(
+        fs.readFileSync(path.join(ROOT, 'functions/api/doc-renew.js'), 'utf8')));
+    T('تعذّر قراءة التدقيق لا يمنع الإرسال (فشل مفتوح مقصود للتنبيه لا للحجب)',
+      /supDocLcSentRecently[\s\S]{0,700}catch\(e\)\{[^}]*\}\s*\n\s*return out;/.test(CODE));
     T('خلية «لا توجد — بإفادتهم» تُميَّز عن «لم يُجب»',
       /لا توجد — بإفادتهم/.test(CODE) && /لم يُجب المورّد بعد/.test(CODE));
     T('سجلّ المورد يعرض الإفادة صراحةً',

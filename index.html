@@ -24376,10 +24376,37 @@ function renderSupDocs(){
 function supDocLcTargets(){
   return SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcNone && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || ''));
 }
+/* مَن أُرسِلت له الحملة خلال المدّة — من سجلّ التدقيق الخادميّ (`stage=lc_campaign`).
+   ⚠️ ضرورة مُثبَتة: دفعة التجديد السابقة (2026-09-07) وصلت **مرّتين** إلى 7 موردين
+   لأن الزرّ ضُغِط مرّتين بفارق 40 ثانية ولا شيء يمنع ذلك. الإزعاج يُفقِد الثقة. */
+async function supDocLcSentRecently(days){
+  const out = new Set();
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return out;
+  try{
+    const since = new Date(Date.now() - (days||14)*864e5).toISOString();
+    const {data, error} = await CLOUD.client.from('proc_audit_log')
+      .select('entity_id').eq('entity_type','supplier_doc').eq('action','notify')
+      .eq('new_value->>stage','lc_campaign').gte('ts', since).limit(2000);
+    if(!error && Array.isArray(data)) data.forEach(r => r.entity_id && out.add(r.entity_id));
+  }catch(e){ /* تعذّرت القراءة ⇒ لا نمنع الإرسال، لكن التأكيد يُنبّه */ }
+  return out;
+}
 async function supDocLcCampaign(){
-  const targets = supDocLcTargets();
+  let targets = supDocLcTargets();
   if(!targets.length){ toast('info','لا يوجد مستهدَف','كل مورّد إمّا رفع شهادته أو أفاد بعدم وجودها'); return; }
   const noMail = SUPDOC_ROWS.filter(r => !r.lcFile && !r.lcNone && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email || '')).length;
+  const alreadySent = await supDocLcSentRecently(14);
+  const dup = targets.filter(r => alreadySent.has(r.id));
+  if(dup.length){
+    const fresh = targets.filter(r => !alreadySent.has(r.id));
+    if(!fresh.length){
+      if(!confirm(`وصلت الحملة إلى كل الـ${dup.length} مورّداً خلال آخر 14 يوماً.\n\nإعادة الإرسال لهم جميعاً؟`)) return;
+    } else if(confirm(`${dup.length} مورّداً وصلتهم الحملة خلال آخر 14 يوماً.\n\n`
+        + `«موافق» = الإرسال إلى ${fresh.length} الجدد فقط (المُوصى به)\n`
+        + `«إلغاء» = إيقاف العملية للمراجعة`)){
+      targets = fresh;
+    } else return;
+  }
   if(!confirm(`سيُرسَل بريد «شهادة المحتوى المحلي» إلى ${targets.length} مورّداً معتمداً.\n\n`
     + `يُستثنى: من رفع شهادته، ومن أفاد بعدم وجودها${noMail?`، و${noMail} بلا بريد صالح`:''}.\n`
     + `يحتوي البريد زرَّين: «لدينا شهادة — رفعها» و«لا توجد لدينا شهادة».\n\nمتابعة الإرسال؟`)) return;
