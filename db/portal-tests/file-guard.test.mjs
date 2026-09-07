@@ -405,5 +405,99 @@ let DR_TOKEN = '';
   }
 }
 
+/* (ز) التذكير المجدوَل: صلاحية الكرون · اختيار المستحقّين · منع التكرار بالمرحلة · الخانق */
+{
+  const iso = (d) => new Date(Date.now() + d*86400000).toISOString().slice(0,10);
+  const REGS = [
+    { id:'DG-EXPIRED', legal_name_ar:'منتهية', contact_email:'a@b.com', doc_paths:{},
+      cr_expiry_date: iso(-9), chamber_expiry: iso(500) },
+    { id:'DG-SOON7',   legal_name_ar:'خلال أسبوع', contact_email:'c@d.com', doc_paths:{},
+      cr_expiry_date: iso(5), chamber_expiry: iso(500) },
+    { id:'DG-SOON30',  legal_name_ar:'خلال شهر', contact_email:'e@f.com', doc_paths:{},
+      cr_expiry_date: iso(25), chamber_expiry: iso(500) },
+    { id:'DG-FAR',     legal_name_ar:'بعيدة', contact_email:'g@h.com', doc_paths:{},
+      cr_expiry_date: iso(200), chamber_expiry: iso(500) },
+    { id:'DG-NOMAIL',  legal_name_ar:'بلا بريد', contact_email:null, email:null, doc_paths:{},
+      cr_expiry_date: iso(-3), chamber_expiry: iso(500) },
+    { id:'DG-LCGAP',   legal_name_ar:'شهادة محتوى ناقصة', contact_email:'i@j.com', doc_paths:{},
+      cr_expiry_date: iso(400), chamber_expiry: iso(400), local_content_has:true },
+  ];
+  const ENV_CRON = { ...DR_ENV, CRON_SECRET: 'cron-secret' };
+  const net = (opts={}) => {
+    const calls = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = async (url, o={}) => {
+      const u = String(url), m = (o.method||'GET').toUpperCase();
+      calls.push({ url:u, method:m, body:o.body });
+      if (u.includes('action=eq.sweep')) return new Response(JSON.stringify(opts.throttled ? [{id:1}] : []), {status:200});
+      if (u.includes('action=eq.notify')) return new Response(JSON.stringify(opts.alreadySent || []), {status:200});
+      if (u.includes('/rest/v1/proc_supplier_registrations')) return new Response(JSON.stringify(REGS), {status:200});
+      if (u.includes('api.resend.com')) return new Response('{"id":"e"}', {status:200});
+      return new Response('{}', {status:200});
+    };
+    return { calls, restore: () => { globalThis.fetch = real; } };
+  };
+  const REQ_SWEEP = (hdr={}, qs='?sweep=1') => new Request('https://suppliers.aldeyabi.com/api/doc-renew'+qs,
+    { headers: { host:'suppliers.aldeyabi.com', ...hdr } });
+
+  // صلاحية
+  {
+    const n = net();
+    try {
+      let r = await dr.onRequestGet({ request: REQ_SWEEP(), env: ENV_CRON });
+      drT('التذكير المجدوَل بلا سرّ الكرون ⇒ 401', r.status === 401, 'HTTP ' + r.status);
+      r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer wrong-secret' }), env: ENV_CRON });
+      drT('سرّ خاطئ ⇒ 401 (مقارنة ثابتة الزمن)', r.status === 401, 'HTTP ' + r.status);
+      r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }), env: DR_ENV });
+      drT('بلا CRON_SECRET مضبوط ⇒ 503 لا إرسال', r.status === 503, 'HTTP ' + r.status);
+    } finally { n.restore(); }
+  }
+  // الاختيار الصحيح
+  {
+    const n = net();
+    try {
+      const r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }), env: ENV_CRON });
+      const b = await r.json();
+      const mails = n.calls.filter(c => c.url.includes('api.resend.com')).map(c => JSON.parse(c.body).to[0]);
+      drT('يرسل للمنتهي وللمقارب (7 و30) وللنقص فقط',
+        r.status===200 && b.sent===4 &&
+        mails.includes('a@b.com') && mails.includes('c@d.com') &&
+        mails.includes('e@f.com') && mails.includes('i@j.com'), 'أُرسل: ' + mails.join('،'));
+      drT('لا يُزعج البعيد ولا من بلا بريد صالح',
+        !mails.includes('g@h.com') && !mails.includes(undefined) && mails.length === 4);
+      const stages = n.calls.filter(c => c.url.includes('proc_audit_log') && c.method==='POST')
+        .map(c => { try { return JSON.parse(c.body)[0].new_value.stage; } catch(_) { return null; } }).filter(Boolean);
+      drT('كل إرسال يُقيَّد بوسم مرحلته (أساس منع التكرار)',
+        stages.some(s => s.startsWith('exp')) && stages.includes('d7') && stages.includes('d30') &&
+        stages.some(s => s.startsWith('gap')), stages.join('،'));
+    } finally { n.restore(); }
+  }
+  // منع التكرار
+  {
+    const n = net({ alreadySent: [
+      { entity_id:'DG-SOON7',  new_value:{ stage:'d7'  } },
+      { entity_id:'DG-SOON30', new_value:{ stage:'d30' } },
+    ]});
+    try {
+      const r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }), env: ENV_CRON });
+      const b = await r.json();
+      const mails = n.calls.filter(c => c.url.includes('api.resend.com')).map(c => JSON.parse(c.body).to[0]);
+      drT('من أُرسِل له في هذه المرحلة لا يُرسَل له ثانيةً',
+        b.sent === 2 && !mails.includes('c@d.com') && !mails.includes('e@f.com'), 'أُرسل: ' + mails.join('،'));
+    } finally { n.restore(); }
+  }
+  // الخانق
+  {
+    const n = net({ throttled: true });
+    try {
+      const r = await dr.onRequestGet({ request: REQ_SWEEP({ Authorization:'Bearer cron-secret' }), env: ENV_CRON });
+      const b = await r.json();
+      const mails = n.calls.filter(c => c.url.includes('api.resend.com'));
+      drT('تشغيلة خلال 20 ساعة ⇒ تخطٍّ بلا أي بريد',
+        r.status===200 && b.skipped==='throttled' && mails.length===0);
+    } finally { n.restore(); }
+  }
+}
+
 if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);

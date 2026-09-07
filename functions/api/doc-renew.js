@@ -297,10 +297,152 @@ function daysTo(dateStr) {
   return Math.round((t - Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')) / 86400000);
 }
 
+/* ══════════════════ التذكير المجدوَل (30/14/7 يوماً ثم دوريّاً) ══════════════
+   بلا هذا يبقى التذكير يدويّاً: يتذكّر أحدهم فتح اللوحة والضغط. الآن يمرّ الكرون
+   يوميّاً فيرسل التذكير في موعده تلقائيّاً.
+
+   ── منع التكرار بلا جدول ولا عمود ──
+   كل إرسال يُقيَّد أصلاً في `proc_audit_log` (action=notify · entity_type=supplier_doc)
+   ومعه **وسم المرحلة**. فقبل أي إرسال نقرأ قيود آخر 60 يوماً ونتخطّى ما أُرسِل
+   لنفس (التسجيل + المرحلة). فالمورّد يصله تذكير واحد لكل مرحلة، لا رسالة كل يوم.
+
+   المراحل: d30 (≤30 يوماً) · d14 · d7 · exp<n> (بعد الانتهاء، كل أسبوعين)
+   · gap<n> (نقص بلا تاريخ — تذكير شهريّ). الأعجل يحكم بريد المورّد الواحد. */
+const SWEEP_MAX_PER_RUN = 40;      // سقف رسائل التشغيلة الواحدة
+const SWEEP_MIN_HOURS = 20;        // لا تشغيلتان في اليوم ولو نُودي كل دقيقة
+const SWEEP_LOOKBACK_DAYS = 60;
+
+function stageFor(days) {
+  if (days == null) return 'gap' + Math.floor(Date.now() / (30 * 86400000)); // نقص بلا تاريخ: شهريّاً
+  if (days < 0) return 'exp' + Math.floor(-days / 14);                       // منتهٍ: كل أسبوعين
+  if (days <= 7) return 'd7';
+  if (days <= 14) return 'd14';
+  if (days <= 30) return 'd30';
+  return null;                                                              // بعيد — لا تذكير
+}
+/* الأعجل يحكم: منتهٍ ثمّ d7 ثمّ d14 ثمّ d30 ثمّ النقص */
+const STAGE_RANK = (s) => s.startsWith('exp') ? 0 : s === 'd7' ? 1 : s === 'd14' ? 2 : s === 'd30' ? 3 : 4;
+
+async function sweepReminders(env, request) {
+  const secret = String(env.CRON_SECRET || '').trim();
+  if (!secret) return json({ error: 'غير مهيّأ', reason: 'no_cron_secret' }, 503);
+  const url = new URL(request.url);
+  const auth = request.headers.get('authorization') || '';
+  const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : String(url.searchParams.get('key') || '');
+  if (!timingSafeEq(given, secret)) return json({ error: 'غير مصرّح' }, 401);
+  if (!configured(env) || !env.RESEND_API_KEY || !tokenSecret(env)) {
+    return json({ error: 'الخدمة غير مهيّأة', reason: 'not_configured' }, 503);
+  }
+
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+  const since = new Date(Date.now() - SWEEP_LOOKBACK_DAYS * 86400000).toISOString();
+
+  /* خانق التشغيل: قيد تدقيق واحد لكل تشغيلة — يمنع الإغراق لو نُودي كل دقيقة */
+  const force = url.searchParams.get('force') === '1';
+  if (!force) {
+    try {
+      const r = await fetch(`${base}/rest/v1/proc_audit_log?entity_type=eq.supplier_doc&action=eq.sweep` +
+        `&ts=gte.${encodeURIComponent(new Date(Date.now() - SWEEP_MIN_HOURS * 3600000).toISOString())}` +
+        `&select=id&limit=1`, { headers: svcHeaders(env) });
+      const rows = r.ok ? await r.json() : [];
+      if (Array.isArray(rows) && rows.length) return json({ ok: true, skipped: 'throttled' });
+    } catch (_) { /* تعذّر القراءة ⇒ تابع (التكرار أهون من صمت دائم) */ }
+  }
+
+  // (1) الموردون المعتمدون + (2) ما سبق إرساله
+  let regs = [], sentKeys = new Set();
+  try {
+    const cols = 'id,legal_name_ar,legal_name_en,email,contact_email,doc_paths,' +
+                 'cr_expiry_date,chamber_expiry,local_content_has,local_content_expiry';
+    const get = (c) => fetch(`${base}/rest/v1/proc_supplier_registrations?status=eq.approved&select=${c}&limit=2000`,
+      { headers: svcHeaders(env) });
+    let r = await get(cols);
+    if (!r.ok) r = await get(cols.split(',').filter(c => !OPTIONAL_COLS.includes(c)).join(','));
+    if (!r.ok) return json({ error: 'تعذّر جلب الموردين' }, 502);
+    regs = await r.json();
+
+    const ar = await fetch(`${base}/rest/v1/proc_audit_log?entity_type=eq.supplier_doc&action=eq.notify` +
+      `&ts=gte.${encodeURIComponent(since)}&select=entity_id,new_value&limit=5000`, { headers: svcHeaders(env) });
+    if (ar.ok) {
+      for (const row of await ar.json()) {
+        const st = row && row.new_value && row.new_value.stage;
+        if (row && row.entity_id && st) sentKeys.add(row.entity_id + ':' + st);
+      }
+    }
+  } catch (_) { return json({ error: 'تعذّر الاتصال بقاعدة البيانات' }, 502); }
+
+  // (3) من يستحقّ تذكيراً الآن
+  const due = [];
+  for (const row of (Array.isArray(regs) ? regs : [])) {
+    const paths = (row.doc_paths && typeof row.doc_paths === 'object') ? row.doc_paths : {};
+    const items = [];
+    for (const [key, meta] of Object.entries(DOC_META)) {
+      if (!meta.expiryCol) continue;
+      if (key === 'local_content' && row.local_content_has !== true) continue;
+      const d = row[meta.expiryCol];
+      const days = daysTo(d);
+      // مُعلَنة/مطلوبة لكن بلا تاريخ أو بلا مرفق ⇒ نقص (days = null)
+      const missing = (key === 'local_content') ? (!paths.local_content || !d) : !d;
+      const st = stageFor(missing ? null : days);
+      if (!st) continue;
+      items.push({ key, label: meta.label, days: missing ? null : days, stage: st });
+    }
+    if (!items.length) continue;
+    items.sort((a, b) => STAGE_RANK(a.stage) - STAGE_RANK(b.stage));
+    const stage = items[0].stage;
+    if (sentKeys.has(row.id + ':' + stage)) continue;
+    const to = String(row.contact_email || row.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) continue;
+    due.push({ row, to, stage, items });
+  }
+
+  // (4) الإرسال (بسقف ومباعدة — مزوّد البريد يحدّ المعدّل)
+  let sent = 0; const failures = [];
+  const exp = Math.floor(Date.now() / 1000) + TOKEN_TTL_DAYS * 86400;
+  for (const d of due.slice(0, SWEEP_MAX_PER_RUN)) {
+    const company = d.row.legal_name_ar || d.row.legal_name_en || d.row.id;
+    const docs = d.items.map(i => i.key);
+    const mailItems = d.items.map(i => ({
+      label: i.label,
+      note: i.days == null ? 'بيانات ناقصة' : (i.days < 0 ? `منتهية منذ ${Math.abs(i.days)} يوماً`
+            : i.days === 0 ? 'تنتهي اليوم' : `تنتهي خلال ${i.days} يوماً`),
+      expired: i.days != null && i.days < 0,
+    }));
+    const token = await signToken(env, { i: d.row.id, d: docs, e: exp });
+    const link = `${publicOrigin(env, '')}/renew-doc.html?t=${encodeURIComponent(token)}`;
+    const { subject, html } = renewEmail(company, mailItems, link);
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: fromAddress(env), to: [d.to], subject, html, text: htmlToText(html), reply_to: replyTo(env) }),
+      });
+      if (!r.ok) { failures.push(d.row.id); continue; }
+    } catch (_) { failures.push(d.row.id); continue; }
+    sent++;
+    await audit(env, {
+      username: 'system', display_name: 'تذكير مجدوَل', user_role: 'system',
+      action: 'notify', entity_type: 'supplier_doc', entity_id: d.row.id,
+      new_value: { docs, to: d.to, stage: d.stage }, meta: { kind: 'doc_renewal_request', scheduled: true },
+    });
+    await new Promise(z => setTimeout(z, 300));
+  }
+
+  await audit(env, {
+    username: 'system', display_name: 'تذكير مجدوَل', user_role: 'system',
+    action: 'sweep', entity_type: 'supplier_doc', entity_id: 'sweep',
+    new_value: { candidates: due.length, sent, failed: failures.length }, meta: { kind: 'doc_renewal_sweep' },
+  });
+  return json({ ok: true, candidates: due.length, sent, failed: failures.length,
+                capped: due.length > SWEEP_MAX_PER_RUN });
+}
+
 /* ══════════════════════════════ GET ══════════════════════════════════════
-   بلا مُعامِلات = فحص صحّة · `?t=` = بيانات الطلب لصفحة المورّد. */
+   بلا مُعامِلات = فحص صحّة · `?t=` = بيانات الطلب لصفحة المورّد
+   · `?sweep=1` = التذكير المجدوَل (كرون بـCRON_SECRET). */
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
+  if (url.searchParams.get('sweep') === '1') return sweepReminders(env, request);
   const t = url.searchParams.get('t');
 
   if (!t) {
@@ -314,6 +456,7 @@ export async function onRequestGet({ request, env }) {
         resend: !!env.RESEND_API_KEY,
         token_secret: !!tokenSecret(env),
         public_origin: !!publicOrigin(env, ''),
+        cron_secret: !!String(env.CRON_SECRET || '').trim(),
       },
     });
   }
@@ -342,6 +485,7 @@ export async function onRequestGet({ request, env }) {
    بلا `t` ⇒ طلب موظّف بإرسال بريد التجديد. */
 export async function onRequestPost(ctx) {
   const url = new URL(ctx.request.url);
+  if (url.searchParams.get('sweep') === '1') return sweepReminders(ctx.env, ctx.request);
   return url.searchParams.get('t') ? uploadRenewal(ctx, url) : sendRenewalRequest(ctx);
 }
 

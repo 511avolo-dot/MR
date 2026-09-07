@@ -1224,6 +1224,18 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /can_review_registrations/.test(RENEW_API));
   T('الإرسال الجماعي مُباعَد (حدّ معدّل مزوّد البريد)',
     /supDocRenewAll[\s\S]{0,900}setTimeout\(z, 350\)/.test(CODE));
+  /* التذكير المجدوَل: يعمل بلا تدخّل، ولا يُرسل مرّتين لنفس المرحلة، ولا يُفتح لأحد. */
+  T('نقطة التذكير المجدوَل محميّة بسرّ الكرون',
+    /sweep=1/.test(RENEW_API) && /CRON_SECRET/.test(RENEW_API) &&
+    /timingSafeEq\(given, secret\)/.test(RENEW_API));
+  T('مراحل التذكير 30/14/7 ثم دوريّاً بعد الانتهاء',
+    /function stageFor/.test(RENEW_API) && /'d30'/.test(RENEW_API) &&
+    /'d14'/.test(RENEW_API) && /'d7'/.test(RENEW_API) && /'exp'/.test(RENEW_API));
+  T('منع التكرار بوسم المرحلة في سجلّ التدقيق (بلا جدول جديد)',
+    /sentKeys\.has\(row\.id \+ ':' \+ stage\)/.test(RENEW_API) && /stage: d\.stage/.test(RENEW_API));
+  T('خانق يمنع تشغيلتين في اليوم وسقف لكل تشغيلة',
+    /SWEEP_MIN_HOURS/.test(RENEW_API) && /throttled/.test(RENEW_API) &&
+    /SWEEP_MAX_PER_RUN/.test(RENEW_API));
 
   // صفحة المورّد: عامّة بلا حساب — فلا تُفهرَس، ولا تحمّل أي سكربت خارجيّ (CSP).
   T('صفحة التجديد غير مفهرَسة',
