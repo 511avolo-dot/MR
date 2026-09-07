@@ -24895,7 +24895,14 @@ async function regDocToken(){
    • `regDocSignBatch` — يسكّ روابط **كل وثائق الطلب دفعةً واحدة** بنداء واحد.
    • النتيجة: أوّل وثيقة برحلتين، وكل ما بعدها برحلة واحدة (التنزيل فقط).
    ملاحظة: الكاش كلّه في الذاكرة ولمدّة الجلسة — لا شيء يُحفَظ على الجهاز. */
-const REGDOC_R2_MISS = new Set();          // أرقام تسجيل ثبت أنّ وثائقها ليست على R2
+/* ⚠️ الكاش السالب **بالمسار لا بالتسجيل** — درس من بلاغ إنتاج (2026-09-07):
+   منذ ميزة التجديد صار المورّد الواحد **مختلط المخزنَين**: وثائقه القديمة على
+   Supabase والمُجدَّدة على R2. وكان الكاش يسم **رقم التسجيل كلّه** بأنه قديم عند
+   أوّل 404، فتُوجَّه الوثيقة المُجدَّدة (وهي على R2 فعلاً) للمخزن القديم ⇒ لا ملف
+   ⇒ «تعذّر إنشاء رابط الملف». الآن: المسار وحده يُوسَم، ورقم التسجيل يُعطي
+   **تلميح ترتيب فقط** (جرّب القديم أوّلاً) مع **سقوط عكسيّ إلى R2** إن أخفق. */
+const REGDOC_R2_MISS = new Set();          // مسارات ثبت أنّها ليست على R2 (بالمسار)
+const REGDOC_LEGACY_HINT = new Set();      // أرقام تسجيل أغلب وثائقها قديمة ⇒ رتّب القديم أوّلاً
 const REGDOC_SIGNED  = new Map();          // path → {url, exp}
 const REGDOC_SIGN_TTL = 300;               // ثانية (نفس صلاحية الرابط الموقّع)
 function regDocRegId(path){ return String(path||'').split('/')[0] || ''; }
@@ -24919,35 +24926,51 @@ async function regDocSignBatch(paths){
     });
   }catch(e){ /* الرجوع للسكّ المفرد */ }
 }
-async function regDocFetch(path){
-  if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)) throw new Error('يتطلب اتصالاً سحابياً');
-  const regId = regDocRegId(path);
-  if (!REGDOC_R2_MISS.has(regId)){
-    const tok = await regDocToken();
-    if (tok){
-      try{
-        const r = await fetch('/api/reg-doc?key=' + encodeURIComponent(path), {
-          headers: { Authorization: 'Bearer ' + tok },
-        });
-        if (r.ok) return await r.blob();
-        // 404 = ملف قديم قبل النقل · 503 = R2 غير مربوط بعد ⇒ المخزن القديم
-        if (r.status !== 404 && r.status !== 503){
-          throw new Error('تعذّر جلب الملف (HTTP ' + r.status + ')');
-        }
-        if (regId) REGDOC_R2_MISS.add(regId);   // لا تُعِد المحاولة لبقيّة وثائقه
-      }catch(e){ if (/HTTP/.test(e.message||'')) throw e; /* شبكة ⇒ جرّب القديم */ }
-    }
-  }
+/* R2 — يُرجع blob، أو null إن لم يكن الملف هناك (404/503/تعذّر شبكة).
+   الأخطاء الحقيقية (401/500…) تُرمى: تسريب الخطأ أفضل من إخفائه بسقوط صامت. */
+async function regDocFromR2(path){
+  const tok = await regDocToken();
+  if (!tok) return null;
+  try{
+    const r = await fetch('/api/reg-doc?key=' + encodeURIComponent(path), {
+      headers: { Authorization: 'Bearer ' + tok },
+    });
+    if (r.ok) return await r.blob();
+    // 404 = ملف قديم قبل النقل · 503 = R2 غير مربوط بعد ⇒ المخزن القديم
+    if (r.status !== 404 && r.status !== 503) throw new Error('تعذّر جلب الملف (HTTP ' + r.status + ')');
+    REGDOC_R2_MISS.add(path);                              // هذا المسار وحده
+    const regId = regDocRegId(path);
+    if (regId) REGDOC_LEGACY_HINT.add(regId);              // تلميح ترتيب لبقيّة وثائقه
+    return null;
+  }catch(e){ if (/HTTP/.test(e.message||'')) throw e; return null; }
+}
+/* المخزن القديم (Supabase) — يُرجع blob أو null إن لم يُعثر على الملف */
+async function regDocFromLegacy(path){
   let url = regDocSignedGet(path);
   if (!url){
-    const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, REGDOC_SIGN_TTL);
-    if (error || !data || !data.signedUrl) throw new Error('تعذّر إنشاء رابط الملف');
-    url = data.signedUrl;
-    REGDOC_SIGNED.set(path, {url, exp: Date.now() + REGDOC_SIGN_TTL*1000});
+    try{
+      const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, REGDOC_SIGN_TTL);
+      if (error || !data || !data.signedUrl) return null;
+      url = data.signedUrl;
+      REGDOC_SIGNED.set(path, {url, exp: Date.now() + REGDOC_SIGN_TTL*1000});
+    }catch(e){ return null; }
   }
   const resp = await fetch(url);
-  if (!resp.ok){ REGDOC_SIGNED.delete(path); throw new Error('تعذّر جلب الملف (HTTP ' + resp.status + ')'); }
+  if (!resp.ok){ REGDOC_SIGNED.delete(path); return null; }
   return await resp.blob();
+}
+/* يجرّب المخزنَين — الترتيب تحسين، و**كلاهما يُجرَّب دائماً** قبل الإخفاق. */
+async function regDocFetch(path){
+  if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)) throw new Error('يتطلب اتصالاً سحابياً');
+  const tryR2 = !REGDOC_R2_MISS.has(path);
+  const legacyFirst = REGDOC_LEGACY_HINT.has(regDocRegId(path));
+  let blob = null;
+  if (tryR2 && !legacyFirst) blob = await regDocFromR2(path);
+  if (!blob) blob = await regDocFromLegacy(path);
+  // ⚠️ الوثيقة المُجدَّدة داخل تسجيل قديم: التلميح وجّهها للقديم فلم تُوجَد ⇒ اسأل R2
+  if (!blob && tryR2 && legacyFirst) blob = await regDocFromR2(path);
+  if (!blob) throw new Error('تعذّر العثور على الملف في مخزن النظام');
+  return blob;
 }
 /* يجلب الملف مرّة واحدة ويحتفظ بـblob URL في الجلسة (تبديل التبويبات فوريّ) */
 async function docvBlobUrl(path){

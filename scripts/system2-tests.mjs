@@ -143,8 +143,9 @@ T('حركة .page.active بلا fill مُبقٍ للـtransform (both/forwards)'
   !/\.page\.active\s*\{[^}]*animation:[^;]*\b(both|forwards)\b/.test(HTML));
 
 /* ── سرعة فتح المستندات: الوثيقة القديمة كانت ثلاث رحلات في كل مرّة ── */
-T('أوّل 404 من R2 يسم رقم التسجيل فلا تُعاد المحاولة لبقيّة وثائقه',
-  CODE.includes('REGDOC_R2_MISS') && /REGDOC_R2_MISS\.has\(/.test(CODE) && /REGDOC_R2_MISS\.add\(/.test(CODE));
+T('الكاش السالب بالمسار لا برقم التسجيل (المورّد صار مختلط المخزنَين)',
+  /REGDOC_R2_MISS\.add\(path\)/.test(CODE) && /REGDOC_R2_MISS\.has\(path\)/.test(CODE) &&
+  CODE.includes('REGDOC_LEGACY_HINT'));
 T('روابط وثائق الطلب تُسكّ دفعةً واحدة عند فتح العارض',
   CODE.includes('function regDocSignBatch(') && /createSignedUrls\(/.test(CODE) &&
   /docvOpen\([\s\S]{0,600}regDocSignBatch\(/.test(CODE));
@@ -194,6 +195,7 @@ const NEEDED_FNS = [
   'repList', 'repFilterProjects', 'repDescList',
   'arNorm', 'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction',
+  'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
@@ -221,7 +223,9 @@ function grabLet(name){
 }
 const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
-  'RT_MAP'];
+  'RT_MAP',
+  // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
+  'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -249,7 +253,9 @@ function saveUserEntry(){}
 function deleteUserEntry(){}
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 const localStorage = { getItem:()=>null, setItem(){}, removeItem(){} };
-const window = {};
+/* الكود يقرأ \`CLOUD\` مجرّداً و\`window.CLOUD\` معاً — فليكونا المرجع نفسه */
+let CLOUD = null;
+const window = { get CLOUD(){ return CLOUD; }, set CLOUD(v){ CLOUD = v; } };
 let __captured = null;
 async function printDocOpen(opts, body){ __captured = {opts, body}; }
 const document = {
@@ -260,7 +266,7 @@ const document = {
 `;
 
 const body = [stubs, ...NEEDED_LETS.map(grabLet), ...NEEDED_CONSTS.map(grabConst), ...NEEDED_FNS.map(grab)].join('\n\n');
-const exportLine = `; return {${[...NEEDED_FNS, ...NEEDED_CONSTS].join(',')}, STATE, get captured(){return __captured;}};`;
+const exportLine = `; return {${[...NEEDED_FNS, ...NEEDED_CONSTS].join(',')}, STATE, window, get captured(){return __captured;}};`;
 let M;
 try {
   M = new Function(body + exportLine)();
@@ -1185,13 +1191,82 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('الواجهة تقرأ R2 أولاً وتسقط للمخزن القديم',
     CODE.includes('async function regDocFetch') && /\/api\/reg-doc\?key=/.test(CODE) &&
     /r\.status !== 404 && r\.status !== 503/.test(CODE) &&
-    /regDocFetch[\s\S]{0,900}createSignedUrl/.test(CODE));
+    /regDocFromLegacy[\s\S]{0,900}createSignedUrl/.test(CODE));
   T('كل مسارات الجلب توحّدت على regDocFetch',
     (CODE.match(/regDocFetch\(/g) || []).length >= 3 &&
     !/fetchDocBlob[\s\S]{0,300}createSignedUrl/.test(CODE));
   T('لوحة السعة تقارن بخطط R2',
     /Cloudflare R2 المجاني/.test(CODE) && /gb:10/.test(CODE) && CODE.includes('async function regDocSize'));
 }
+
+/* ── جلب الوثيقة عبر المخزنَين — اختبار **سلوكيّ** (بلاغ إنتاج 2026-09-07) ──
+   منذ ميزة التجديد صار المورّد الواحد مختلط المخزنَين: القديم على Supabase
+   والمُجدَّد على R2. الحرّاس النصّية لم تلتقط ذلك، فهذه تُشغِّل `regDocFetch`
+   فعلاً على شبكة مُقلَّدة. ⚠️ لا تُبدِّلها بفحص نصّيّ. */
+await (async () => {
+  const OLD = 'DG-MIX001/cr/old.pdf', NEW = 'DG-MIX001/chamber/new-uuid.pdf';
+  const realFetch = globalThis.fetch;
+  // شبكة مُقلَّدة: R2 يحمل ما في r2Set · المخزن القديم يحمل ما في legacySet
+  const wire = (r2Set, legacySet, opts = {}) => {
+    const calls = { r2: [], sign: [] };
+    globalThis.fetch = async (u) => {
+      const s = String(u);
+      if (s.startsWith('/api/reg-doc')) {
+        const key = decodeURIComponent(new URL(s, 'http://x').searchParams.get('key') || '');
+        calls.r2.push(key);
+        if (opts.r2Status) return new Response('{}', { status: opts.r2Status });
+        return r2Set.has(key) ? new Response('R2:' + key, { status: 200 })
+                              : new Response('{}', { status: 404 });
+      }
+      if (s.startsWith('legacy://')) return new Response('LEGACY:' + s.slice(9), { status: 200 });
+      return new Response('{}', { status: 500 });
+    };
+    api.window.CLOUD = { enabled: true, client: {
+      auth: { getSession: async () => ({ data: { session: { access_token: 'jwt' } } }) },
+      storage: { from: () => ({
+        createSignedUrl: async (path) => { calls.sign.push(path);
+          return legacySet.has(path) ? { data: { signedUrl: 'legacy://' + path } }
+                                     : { error: { message: 'Object not found' } }; },
+      }) },
+    } };
+    api.REGDOC_R2_MISS.clear(); api.REGDOC_LEGACY_HINT.clear(); api.REGDOC_SIGNED.clear();
+    return calls;
+  };
+  const text = async (pr) => { try { return await (await pr).text(); } catch (e) { return 'ERR:' + e.message; } };
+  try {
+    // (1) العلّة نفسها: وثيقة قديمة ثمّ وثيقة مُجدَّدة لنفس المورّد
+    let c = wire(new Set([NEW]), new Set([OLD]));
+    const oldRes = await text(api.regDocFetch(OLD));
+    const newRes = await text(api.regDocFetch(NEW));
+    T('الوثيقة القديمة تُفتح من المخزن القديم', oldRes === 'LEGACY:' + OLD, oldRes);
+    T('الوثيقة المُجدَّدة تُفتح من R2 رغم أنّ وثيقة سابقة للمورّد نفسه ليست عليه',
+      newRes === 'R2:' + NEW, newRes);
+    T('R2 سُئل عن المسار المُجدَّد (لم يحجبه كاش التسجيل)', c.r2.includes(NEW), JSON.stringify(c.r2));
+
+    // (2) التحسين محفوظ: تسجيل كلّه قديم ⇒ رحلة R2 واحدة مهما تعدّدت وثائقه
+    const olds = ['DG-OLD002/cr/a.pdf', 'DG-OLD002/vat/b.pdf', 'DG-OLD002/gosi/c.pdf'];
+    c = wire(new Set(), new Set(olds));
+    for (const p of olds) await text(api.regDocFetch(p));
+    T('تسجيل كلّه قديم ⇒ رحلة R2 واحدة لا ثلاث (التلميح يحفظ التحسين)',
+      c.r2.length === 1, c.r2.length + ' رحلة');
+
+    // (3) تسجيل كلّه على R2 ⇒ لا سكّ روابط للمخزن القديم إطلاقاً
+    const news = ['DG-NEW003/cr/a.pdf', 'DG-NEW003/vat/b.pdf'];
+    c = wire(new Set(news), new Set());
+    for (const p of news) await text(api.regDocFetch(p));
+    T('تسجيل كلّه على R2 ⇒ صفر سكّ روابط للمخزن القديم', c.sign.length === 0, JSON.stringify(c.sign));
+
+    // (4) خطأ حقيقيّ (لا 404/503) يُرمى ولا يُخفى بسقوط صامت
+    c = wire(new Set(), new Set([OLD]), { r2Status: 401 });
+    T('خطأ R2 حقيقيّ (401) يُرمى لا يُبتلع', (await text(api.regDocFetch(OLD))).startsWith('ERR:'));
+
+    // (5) مفقود في المخزنَين ⇒ رسالة واضحة بعد تجربتهما معاً
+    c = wire(new Set(), new Set());
+    const gone = await text(api.regDocFetch('DG-GONE04/cr/x.pdf'));
+    T('المفقود في المخزنَين يُبلَّغ بوضوح بعد تجربتهما', /ERR:.*مخزن النظام/.test(gone), gone);
+    T('وقد جُرِّب المخزنان فعلاً قبل الإخفاق', c.r2.length === 1 && c.sign.length === 1);
+  } finally { globalThis.fetch = realFetch; api.window.CLOUD = null; }
+})();
 
 /* ── ١٥) تجديد المستندات المنتهية ببريد ورابط رفع ──────────────
    قرار المالك (2026-09-07): «يُرسَل بريد من Resend برفع المستند الجديد بتاريخه
