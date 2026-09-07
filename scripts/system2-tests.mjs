@@ -1440,6 +1440,39 @@ await (async () => {
   T('حاوية البوابة ممنوعة في نقطة التجديد (فصل الأنظمة)',
     !/env\.QUOTES_BUCKET/.test(RENEW_API) && RENEW_API.includes('env.SUPPLIER_DOCS'));
 
+  /* ⚠️ رأس الجدول الداكن (بلاغ المالك 2026-09-07): القاعدتان العامّتان
+     `th{color:var(--ink-2)}` و`td{color:var(--ink-2)}` **تتغلّبان على اللون
+     المورَّث من `<tr>`** (مُحدِّد العنصر يسبق الوراثة، ولو كانت من نمط سطريّ
+     على الأب)، فيصير عنوان العمود شبه أسود على كحليّ ولا يُقرأ نهاراً.
+     مقيس في Chromium: بلا العلاج `rgb(58,51,48)`، ومعه أبيض.
+     الحارس **يحسب الإضاءة** ولا يعتمد قائمة ألوان مثبَّتة — فأي صفّ داكن
+     جديد يُضاف بلا تغطية يُفشِل البناء. */
+  {
+    // ⚠️ الملف فيه أكثر من كتلة <style> (كتلة الخطوط أوّلاً) — فلا تقصّ عند أوّل إغلاق.
+    // ولا تمسح 2.4MB بتعبير نمطيّ مفتوح (تراجع كارثيّ): اقتطع حول موضع القاعدة.
+    const at = HTML.indexOf('tr.thead-navy');
+    const rule = at < 0 ? '' : HTML.slice(at, HTML.indexOf('}', at) + 1);
+    const lum = h => {
+      const n = parseInt(h.slice(1), 16);
+      return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+    };
+    const darkRows = [...HTML.matchAll(/<tr\b[^>]*>/g)].map(m => m[0]).filter(tag => {
+      const st = (tag.match(/style="([^"]*)"/) || [, ''])[1];
+      if (!/background/.test(st)) return false;
+      return (st.match(/#[0-9a-fA-F]{6}/g) || []).some(h => lum(h) < 0.4);
+    });
+    const uncovered = darkRows.filter(tag => {
+      if (/class="[^"]*thead-navy/.test(tag)) return false;
+      const st = (tag.match(/style="([^"]*)"/) || [, ''])[1];
+      return !(st.match(/#[0-9a-fA-F]{6}/g) || []).some(h =>
+        rule.toLowerCase().includes(`tr[style*="${h.toLowerCase()}"]`));
+    });
+    T('قاعدة الصفوف الداكنة موجودة وتُعيد اللون المورَّث (color:inherit) لـth وtd',
+      /tr\.thead-navy th/.test(rule) && /tr\.thead-navy td/.test(rule));
+    T(`كل صفّ داكن مُغطّى بالقاعدة (${darkRows.length} صفّاً · بلا تغطية: ${uncovered.length})`,
+      darkRows.length >= 4 && uncovered.length === 0);
+  }
+
   /* ⚠️ الجذر الذي أنتج عيب «شهادة المحتوى المحلي» (2026-09-07): قائمة الوثائق
      في `register.html` وقائمة الخادم البيضاء تنفصلان بصمت، فيُرفَض الرفع 400
      و`register.html` يعامله رفضاً نهائيّاً ⇒ الوثيقة تُفقد. هذا التأكيد يستخرج

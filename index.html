@@ -314,6 +314,16 @@ h2.section-title .count{
 .table-scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 thead{background:var(--surface-2);position:sticky;top:0;z-index:1}
+/* ⚠️ رأس جدول داكن: القاعدة العامة `th{color:var(--ink-2)}` أدناه **تتغلّب على اللون
+   المورَّث من `<tr>`** (مُحدِّد العنصر يسبق الوراثة، ولو كانت من نمط سطريّ على الأب)،
+   فيصير العنوان داكناً على خلفية داكنة ولا يُقرأ في الوضع النهاري — بلاغ المالك
+   2026-09-07. ونفس العلّة في `td{color:var(--ink-2)}` أدناه لصفوف التجميع الداكنة.
+   `color:inherit` يُعيد اللون الذي وضعه الصفّ نفسه (أبيض/كريميّ) بدل كسره.
+   أي صفّ داكن جديد: أعطِه `class="thead-navy"` (والمُحدِّدات السطريّة تلتقط القائم). */
+tr.thead-navy th, tr.thead-navy td,
+tr[style*="#0B1B36"] th, tr[style*="#0B1B36"] td,
+tr[style*="#0b1b36"] th, tr[style*="#0b1b36"] td,
+tr[style*="#231F20"] th, tr[style*="#231F20"] td{ color:inherit; }
 th{
   text-align:start;padding:12px 16px;font-weight:600;
   color:var(--ink-2);font-size:12px;letter-spacing:0.02em;
@@ -3789,7 +3799,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
           <div id="reg-table-wrap" style="display:none;overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:14px;background:var(--surface,#fff)">
             <table style="width:100%;border-collapse:collapse;font-size:13px">
               <thead>
-                <tr style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
+                <tr class="thead-navy" style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
                   <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px;letter-spacing:.02em">المنشأة</th>
                   <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px">الهاتف</th>
                   <th style="padding:13px 14px;text-align:right;font-weight:600;font-size:12px">تاريخ الطلب</th>
@@ -24347,7 +24357,7 @@ function renderSupDocs(){
         <b style="color:${lcOk?'#15803d':'#b45309'}">${lcOk} مُرفَقة</b>${F.lc.length-lcOk?` · <b style="color:#b45309">${F.lc.length-lcOk} معلَنة بلا مرفق</b>` : ''}.</div>` : ''; })()}
     ${list.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
+        <thead><tr class="thead-navy" style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
           <th style="padding:11px 13px;text-align:right;font-size:12px">المورد</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">الوثائق الإلزامية</th>
           <th style="padding:11px 13px;text-align:right;font-size:12px">الحالة التفصيلية</th>
