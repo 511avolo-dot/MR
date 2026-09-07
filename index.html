@@ -15578,17 +15578,38 @@ function prjLev(a,b){
 }
 // أرقام الاسم مميِّزة لا إملائية: «فرع الرياض 3» و«فرع الرياض 4» مشروعان مختلفان
 function prjDigits(normalized){ return (String(normalized||'').match(/\d+/g)||[]); }
+/* تشابه خام بين نصّين **مُطبَّعين** — بلا أي كاسر. يُستعمل داخلياً لمقارنة
+   الكلمة بالكلمة، فلا يُستدعى `prjSim` من نفسه (لا تكرار لانهائي). */
+function prjRawSim(x,y){
+  if(!x||!y) return 0;
+  if(x===y) return 1;
+  return Math.max(prjDice(x,y), 1-(prjLev(x,y)/Math.max(x.length,y.length)));
+}
+/* الكلمات المميِّزة: ما يتبقّى لكل جانب بعد إسقاط الكلمات المشتركة (فرق مجموعات
+   يحترم التكرار). «مباني جمركيه بمطار طاءف» × «… حاءل» ⇒ (['طاءف'],['حاءل']). */
+function prjDistinctWords(x,y){
+  const ax=String(x||'').split(' ').filter(Boolean);
+  const rest=String(y||'').split(' ').filter(Boolean), dx=[];
+  for(const w of ax){ const i=rest.indexOf(w); if(i>=0) rest.splice(i,1); else dx.push(w); }
+  return { dx, dy: rest };
+}
 /* تشابه 0..1 — الأعلى بين تشابه الثنائيات ونسبة مسافة التحرير.
    الثنائيات تلتقط اختلاف ترتيب الكلمات، ومسافة التحرير تلتقط الحرف الواحد
    المختلف في الأسماء القصيرة (وهو الخطأ الإملائي الأشيع).
-   ⚠️ الأرقام تكسر التشابه: اسمان بأرقام مختلفة مشروعان متمايزان مهما تشابه نصّهما
-   (وإلّا صار «فرع الرياض 3» و«فرع الرياض 4» مرشّحَي دمج بنسبة 90%). */
+   ⚠️ كاسران يمنعان معاملة المتمايز كخطأ إملائي:
+   (1) **الأرقام:** اسمان بأرقام مختلفة مشروعان متمايزان مهما تشابه نصّهما
+       (وإلّا صار «فرع الرياض 3» و«فرع الرياض 4» مرشّحَي دمج بنسبة 90%).
+   (2) **الكلمة المميِّزة:** اسمان يتطابقان في كل كلماتهما عدا واحدة، والكلمتان
+       المختلفتان **غير متشابهتين ببعضهما** ⇒ مشروعان متمايزان. هذا ما كان يجعل
+       «المباني الجمركية بمطار الطائف» و«… بمطار حائل» مرشّحَي دمج بـ91% لمجرّد
+       اشتراك السابقة الطويلة. القياس يفصل بوضوح: مدن مختلفة ≤50% (طاءف×حاءل=50،
+       ابها×تبوك=25) مقابل خطأ إملائي بحرف =75% (دمام×دمم، شمال×شمل، رياض×ريان)،
+       فعتبة `PRJ_SIM_WEAK` تفصلهما بهامش — والخطأ الإملائي يبقى مكشوفاً. */
 function prjSim(a,b){
   const x=prjNorm(a), y=prjNorm(b);
   if(!x||!y) return 0;
   if(x===y) return 1;
-  const lev=1-(prjLev(x,y)/Math.max(x.length,y.length));
-  const score=Math.max(prjDice(x,y), lev);
+  const score=prjRawSim(x,y);
   const dx=prjDigits(x), dy=prjDigits(y);
   const sx=dx.slice().sort().join(','), sy=dy.slice().sort().join(',');
   if(sx!==sy){
@@ -15597,6 +15618,13 @@ function prjSim(a,b){
     // رقم على جانب واحد ⇒ لا يُقترح تلقائياً، لكنه يبقى مرشّحاً يراه المستخدم
     return Math.min(score, PRJ_SIM_STRONG-0.01);
   }
+  const w=prjDistinctWords(x,y);
+  // كلمة مقابل كلمة، وغير متشابهتين ⇒ كيانان مختلفان (مدينة/موقع لا خطأ إملائي)
+  if(w.dx.length===1 && w.dy.length===1 && prjRawSim(w.dx[0],w.dy[0])<PRJ_SIM_WEAK)
+    return Math.min(score, PRJ_SIM_WEAK-0.01);
+  // كلمة زائدة على جانب واحد ⇒ لا يُقترح تلقائياً، ويبقى مرشّحاً مرئيّاً
+  if((w.dx.length===1 && !w.dy.length) || (!w.dx.length && w.dy.length===1))
+    return Math.min(score, PRJ_SIM_STRONG-0.01);
   return score;
 }
 const PRJ_SIM_STRONG=0.86;   // تشابه قويّ ⇒ اقتراح «هل تقصد…؟» (لا يُطبَّق تلقائياً)

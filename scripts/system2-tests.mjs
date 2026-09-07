@@ -203,7 +203,8 @@ const NEEDED_FNS = [
   'poPriceRef', 'poPriceRefPrefix', 'poItemIndex', 'poMatchItem', 'poPriceEligible',
   'poSyncPriceHistory', 'recomputeItemStats', 'siNormalize', 'poMatchLine',
   // سجل المشاريع المعتمد
-  'prjNorm', 'prjClean', 'prjBigrams', 'prjDice', 'prjLev', 'prjDigits', 'prjSim', 'prjActive', 'prjById', 'prjNames',
+  'prjNorm', 'prjClean', 'prjBigrams', 'prjDice', 'prjLev', 'prjDigits', 'prjRawSim', 'prjDistinctWords',
+  'prjSim', 'prjActive', 'prjById', 'prjNames',
   'prjNewId', 'prjIndex', 'prjInvalidate', 'prjResolve', 'prjCanonical',
   'prjPersistLocal', 'prjPersistCloud', 'prjPersist', 'prjSeedFromOrders',
   'prjAdd', 'prjAddAlias', 'prjRemoveAlias', 'prjRename', 'prjRewriteOrders', 'prjSetActive',
@@ -651,6 +652,38 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   ]);
   T('لا زوج دمج كاذب بين رقمين مختلفين', api.prjDuplicatePairs().length === 0);
   T('كلٌّ يُحلّ لنفسه', api.prjResolve('فرع الرياض 4').project.id === 'N2');
+
+  /* ── الكلمة المميِّزة (بلاغ كاذب حقيقيّ رآه المالك على الإنتاج) ────────────
+     ثمانية «مشاريع متشابهة» بنسبة 87–91% كانت في الحقيقة مطارات مختلفة تشترك
+     في السابقة «المباني الجمركية بمطار». الكاسر يفصلها **دون** أن يُخفي الخطأ
+     الإملائي الحقيقي — والشقّان محروسان معاً: إسقاط أحدهما يُفشِل البناء. */
+  const AIRPORT = (c) => 'المباني الجمركية بمطار ' + c;
+  for (const [a, b] of [['الطائف','حائل'], ['جدة','الجوف'], ['ابها','تبوك'],
+                        ['الرياض','الدمام'], ['القصيم','الدمام']])
+    T(`مطاران مختلفان لا يُقترحان للدمج (${a}/${b})`,
+      api.prjSim(AIRPORT(a), AIRPORT(b)) < api.PRJ_SIM_WEAK,
+      (api.prjSim(AIRPORT(a), AIRPORT(b)) * 100).toFixed(0) + '%');
+  T('كلمة مميِّزة مختلفة تكسر التشابه ولو طال المشترك',
+    api.prjSim('محطة المعالجة', 'محطة التحلية') < api.PRJ_SIM_WEAK);
+  // ⚠️ الشقّ المقابل: خطأ إملائي بحرف واحد داخل الكلمة **يبقى مكشوفاً**
+  for (const [a, b] of [['مستودع الدمام','مستودع الدمم'], ['برج الشمال','برج الشمل'],
+                        ['فرع الرياض','فرع الريان']])
+    T(`خطأ إملائي بحرف يبقى مقترحاً (${a}/${b})`,
+      api.prjSim(a, b) >= api.PRJ_SIM_STRONG, (api.prjSim(a, b) * 100).toFixed(0) + '%');
+  T('كلمة زائدة على جانب واحد لا تُقترح تلقائياً',
+    api.prjSim('مستودع الخرج', 'مستودع الخرج الجنوبي') < api.PRJ_SIM_STRONG);
+  T('فرق الكلمات يحترم التكرار ويعطي كلمة لكل جانب',
+    JSON.stringify(api.prjDistinctWords('مباني جمركيه بمطار طاءف', 'مباني جمركيه بمطار حاءل'))
+      === JSON.stringify({ dx:['طاءف'], dy:['حاءل'] }));
+  T('التشابه الخام بلا كواسر (أساس مقارنة الكلمة بالكلمة)',
+    api.prjRawSim('دمام','دمم') >= api.PRJ_SIM_WEAK && api.prjRawSim('طاءف','حاءل') < api.PRJ_SIM_WEAK);
+  reset([
+    { id:'A1', name:AIRPORT('الطائف'), aliases:[], active:true },
+    { id:'A2', name:AIRPORT('حائل'),   aliases:[], active:true },
+    { id:'A3', name:AIRPORT('جدة'),    aliases:[], active:true },
+  ]);
+  T('شاشة التوحيد لا تعرض مطارات مختلفة كمرشّحات دمج',
+    api.prjDuplicatePairs().length === 0, api.prjDuplicatePairs().length + ' زوج');
 
   // المسافات الزائدة: قيمة مخزَّنة مختلفة ⇒ مجموعة منفصلة في كل تجميع يقرأ po.project
   reset([]);
