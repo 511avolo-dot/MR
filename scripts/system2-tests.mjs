@@ -1172,6 +1172,14 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /verifyToken/.test(RENEW_API));
   T('حاوية البوابة ممنوعة في نقطة التجديد (فصل الأنظمة)',
     !/env\.QUOTES_BUCKET/.test(RENEW_API) && RENEW_API.includes('env.SUPPLIER_DOCS'));
+  T('سقف يوميّ للرفع يمنع إغراق المخزن برابط مسرَّب',
+    /MAX_UPLOADS_PER_DAY/.test(RENEW_API) && /recentUploadCount/.test(RENEW_API) &&
+    /rate_limited/.test(RENEW_API));
+  T('رفع المورّد يُشعِر المراجعين داخل النظام (لا يمرّ صامتاً)',
+    /function notifyReviewers/.test(RENEW_API) && /proc_notifications/.test(RENEW_API) &&
+    /can_review_registrations/.test(RENEW_API));
+  T('الإرسال الجماعي مُباعَد (حدّ معدّل مزوّد البريد)',
+    /supDocRenewAll[\s\S]{0,900}setTimeout\(z, 350\)/.test(CODE));
 
   // صفحة المورّد: عامّة بلا حساب — فلا تُفهرَس، ولا تحمّل أي سكربت خارجيّ (CSP).
   T('صفحة التجديد غير مفهرَسة',
@@ -1182,6 +1190,12 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     RENEW_PAGE.includes("fetch('/api/doc-renew'") && !/storage\/v1\/object/.test(RENEW_PAGE));
   T('الصفحة تُلزِم تاريخ الانتهاء الجديد للوثائق ذات التاريخ',
     /has_expiry/.test(RENEW_PAGE) && /تاريخ الانتهاء الجديد/.test(RENEW_PAGE));
+  /* النقر المزدوج على الجوال كان يرفع الملف مرّتين أو ثلاثاً: التعطيل كان **بعد**
+     فحص التوقيع غير المتزامن. القفل الآن قبل أيّ await — ويُحرَس هنا. */
+  T('قفل الرفع المزدوج قبل أي await (لا رفع مكرّر بالنقر المتلاحق)',
+    /const BUSY = new Set\(\)/.test(RENEW_PAGE) &&
+    /if\(BUSY\.has\(i\)\) return;[\s\S]{0,80}BUSY\.add\(i\); btn\.disabled = true;/.test(RENEW_PAGE) &&
+    /async function doUpload\(/.test(RENEW_PAGE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

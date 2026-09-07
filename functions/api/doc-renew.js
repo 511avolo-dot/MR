@@ -33,6 +33,7 @@ import { inspectUpload } from './_file-guard.js';
 
 const REG_RE = /^DG-[A-Z0-9]{4,12}$/;
 const TOKEN_TTL_DAYS = 21;
+const MAX_UPLOADS_PER_DAY = 20;   // سقف مضادّ للإغراق لكل تسجيل (راجع recentUploadCount)
 
 /* الوثائق التي تحمل تاريخ انتهاء في نموذج التسجيل — العمود مقصود وصريح لكل نوع.
    الأنواع الأخرى تُجدَّد بلا تاريخ (رفع نسخة أحدث فقط). */
@@ -157,6 +158,49 @@ async function fetchReg(env, id, cols) {
   const rows = await r.json();
   return Array.isArray(rows) && rows[0] ? rows[0] : null;
 }
+/* عدد عمليات التجديد لهذا التسجيل خلال 24 ساعة — سقف مضادّ للإغراق.
+   الرابط قد يُعاد توجيهه، فبلا سقف يمكن ملء المخزن برفع متكرّر طوال صلاحيته.
+   يستعمل سجلّ التدقيق القائم (لا جدول ولا عمود جديد). فشل العدّ ⇒ نسمح
+   (السقف حماية من الإساءة لا بوّابة أمنية؛ الأمن في الرمز والحارس). */
+async function recentUploadCount(env, regId) {
+  try {
+    const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const r = await fetch(
+      `${base}/rest/v1/proc_audit_log?entity_type=eq.supplier_doc&entity_id=eq.${encodeURIComponent(regId)}` +
+      `&action=eq.edit&ts=gte.${encodeURIComponent(since)}&select=id`,
+      { headers: { ...svcHeaders(env), Prefer: 'count=exact', Range: '0-0' } });
+    const cr = r.headers.get('content-range') || '';
+    const n = parseInt(String(cr).split('/')[1], 10);
+    return isFinite(n) ? n : 0;
+  } catch (_) { return 0; }
+}
+
+/* إشعار داخليّ للمراجعين بأن مورّداً حدّث وثيقة — يُغلق الحلقة:
+   بلا هذا يمرّ الرفع صامتاً ولا يراه أحد إلا بزيارة اللوحة صدفةً. */
+async function notifyReviewers(env, regId, company, docLabel, expiry) {
+  try {
+    const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+    const ur = await fetch(`${base}/rest/v1/proc_users?select=username,role,active,permissions&active=eq.true`,
+      { headers: svcHeaders(env) });
+    if (!ur.ok) return;
+    const users = await ur.json();
+    const recips = (Array.isArray(users) ? users : []).filter(
+      u => u.username && (u.role === 'admin' || !u.permissions || u.permissions.can_review_registrations !== false));
+    if (!recips.length) return;
+    const rows = recips.map(u => ({
+      id: 'ntf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + u.username,
+      recipient: u.username, type: 'system',
+      title: 'مورّد حدّث مستنداً',
+      body: `${company} — ${docLabel}${expiry ? ` (ينتهي ${expiry})` : ''}`,
+      link: 'registrations', read: false,
+    }));
+    await fetch(`${base}/rest/v1/proc_notifications`, {
+      method: 'POST', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(rows),
+    });
+  } catch (_) { /* أفضل جهد — لا يُعطّل الرفع */ }
+}
+
 async function audit(env, entry) {
   try {
     const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
@@ -258,6 +302,7 @@ export async function onRequestGet({ request, env }) {
         api_key: !!apiKey(env),
         resend: !!env.RESEND_API_KEY,
         token_secret: !!tokenSecret(env),
+        public_origin: !!publicOrigin(env, ''),
       },
     });
   }
@@ -374,11 +419,15 @@ async function uploadRenewal({ request, env }, url) {
     if (dd > 365 * 10) return json({ error: 'تاريخ الانتهاء بعيد بشكل غير منطقيّ' }, 400);
   }
 
+  if (await recentUploadCount(env, p.i) >= MAX_UPLOADS_PER_DAY) {
+    return json({ error: 'تجاوزت الحدّ المسموح لليوم — تواصل مع إدارة المشتريات', reason: 'rate_limited' }, 429);
+  }
+
   const buf = await request.arrayBuffer();
   const check = inspectUpload(buf);
   if (!check.ok) return json({ error: check.error, reason: 'rejected' }, 400);
 
-  const row = await fetchReg(env, p.i, 'id,doc_paths');
+  const row = await fetchReg(env, p.i, 'id,legal_name_ar,legal_name_en,doc_paths');
   if (!row) return json({ error: 'السجل غير موجود' }, 404);
 
   const rand = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('r' + Date.now() + Math.random().toString(36).slice(2, 10));
@@ -414,6 +463,8 @@ async function uploadRenewal({ request, env }, url) {
     old_value: { doc, path: oldPath }, new_value: { doc, path, expiry: expiryCol ? expiry : null },
     meta: { kind: 'doc_renewal_upload' },
   });
+  await notifyReviewers(env, p.i, row.legal_name_ar || row.legal_name_en || p.i,
+    DOC_META[doc].label, expiryCol ? expiry : '');
 
   return json({ ok: true, doc, label: DOC_META[doc].label, expiry: expiryCol ? expiry : null });
 }

@@ -24269,6 +24269,8 @@ async function supDocRenewAll(){
   for(const r of target){
     const res = await supDocRenewSend(r.id);
     if(res.ok) ok++; else failed.push(r.name + ' — ' + res.error);
+    // مباعدة بين الرسائل: مزوّد البريد يحدّ المعدّل، والإرسال المتلاحق يُرفض بعضه صامتاً
+    if(target.length > 1) await new Promise(z => setTimeout(z, 350));
   }
   if(failed.length) toast('warn', `أُرسل ${ok} من ${target.length}`, failed.slice(0,3).join(' · '));
   else toast('success','تمّ الإرسال', `أُرسل طلب التجديد إلى ${ok} مورّداً`);

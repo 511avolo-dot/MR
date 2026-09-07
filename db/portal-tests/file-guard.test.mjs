@@ -268,7 +268,8 @@ let DR_TOKEN = '';
     const after = net.calls.slice(before);
     const patch = after.find(c => c.method === 'PATCH');
     const patched = patch ? JSON.parse(patch.body) : {};
-    const auditCall = after.find(c => c.url.includes('proc_audit_log'));
+    // ⚠️ يوجد الآن نداءان لسجلّ التدقيق: عدّ السقف (GET) ثمّ القيد نفسه (POST)
+    const auditCall = after.find(c => c.url.includes('proc_audit_log') && c.method === 'POST');
     const audited = auditCall ? JSON.parse(auditCall.body)[0] : {};
 
     drT('رفع ناجح ⇒ كائن جديد في R2 بمسار المورّد',
@@ -281,6 +282,65 @@ let DR_TOKEN = '';
     drT('مسار النسخة القديمة محفوظ في التدقيق',
       audited && audited.old_value && audited.old_value.path === 'DG-ABC123/cr/old.pdf');
   } finally { net.restore(); }
+}
+
+/* (هـ) سقف الإغراق + إشعار المراجعين + عدم كسر الحقول الأخرى */
+{
+  const puts = [];
+  const bucket = { put: async (k) => { puts.push(k); } };
+  const ENV_R2 = { ...DR_ENV, SUPPLIER_DOCS: bucket };
+  const tk = encodeURIComponent(DR_TOKEN);
+
+  // سقف 20 رفعاً/24س: نُقلّد عدّاداً بلغ الحدّ
+  {
+    const real = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('proc_audit_log') && u.includes('select=id'))
+        return new Response('[]', { status: 200, headers: { 'content-range': '0-0/25' } });
+      if (u.includes('/rest/v1/proc_supplier_registrations')) return new Response(JSON.stringify([DR_ROW]), { status: 200 });
+      return new Response('{}', { status: 200 });
+    };
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ(`?t=${tk}&doc=cr&expiry=2031-01-01`, { method: 'POST', body: goodPdfBuf }), env: ENV_R2 });
+      const b = await r.json().catch(() => ({}));
+      drT('تجاوز سقف الرفع اليوميّ يُرفض قبل لمس التخزين',
+        r.status === 429 && b.reason === 'rate_limited' && puts.length === 0, 'HTTP ' + r.status);
+    } finally { globalThis.fetch = real; }
+  }
+
+  // إشعار داخليّ للمراجعين بعد رفع ناجح
+  {
+    const net = drNet();
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (url, o = {}) => {
+      const u = String(url);
+      if (u.includes('proc_audit_log') && u.includes('select=id'))
+        return new Response('[]', { status: 200, headers: { 'content-range': '0-0/0' } });
+      if (u.includes('/rest/v1/proc_users'))
+        return new Response(JSON.stringify([
+          { username: 'admin', role: 'admin', active: true, permissions: {} },
+          { username: 'buyer', role: 'user', active: true, permissions: { can_review_registrations: true } },
+          { username: 'store', role: 'user', active: true, permissions: { can_review_registrations: false } },
+        ]), { status: 200 });
+      return realFetch(url, o);
+    };
+    try {
+      const r = await dr.onRequestPost({
+        request: DR_REQ(`?t=${tk}&doc=chamber&expiry=2032-02-02`, { method: 'POST', body: goodPdfBuf }), env: ENV_R2 });
+      const notif = net.calls.find(c => c.url.includes('proc_notifications'));
+      const rows = notif ? JSON.parse(notif.body) : [];
+      drT('رفع المورّد يُشعِر المراجعين داخل النظام',
+        r.status === 200 && rows.length === 2 &&
+        rows.every(x => x.link === 'registrations' && /شركة الاختبار/.test(x.body)) &&
+        !rows.some(x => x.recipient === 'store'), 'مستلمون: ' + rows.map(x => x.recipient).join('،'));
+      const patch = net.calls.filter(c => c.method === 'PATCH').pop();
+      const patched = patch ? JSON.parse(patch.body) : {};
+      drT('تجديد الغرفة يكتب عمودها ولا يمسّ عمود السجل',
+        patched.chamber_expiry === '2032-02-02' && !('cr_expiry_date' in patched));
+    } finally { globalThis.fetch = realFetch; net.restore(); }
+  }
 }
 
 if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }

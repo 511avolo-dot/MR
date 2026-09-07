@@ -130,24 +130,34 @@ function render(data){
   });
 }
 
+const BUSY = new Set();   // منع الرفع المزدوج
 async function upload(d, i){
   const btn = el('btn-'+i), msg = el('msg-'+i), fileEl = el('file-'+i);
+  /* ⚠️ القفل **قبل أي await**: فحص التوقيع دالة غير متزامنة، فلولا هذا القفل
+     ينزلق النقر المزدوج (شائع على الجوال) قبل تعطيل الزرّ ⇒ رفعان أو ثلاثة. */
+  if(BUSY.has(i)) return;
+  BUSY.add(i); btn.disabled = true;
+  try { await doUpload(d, i, btn, msg, fileEl); }
+  finally { BUSY.delete(i); }
+}
+async function doUpload(d, i, btn, msg, fileEl){
   const file = fileEl.files && fileEl.files[0];
   const show = (cls, text) => { msg.className = 'msg ' + cls; msg.textContent = text; };
+  const release = () => { btn.disabled = false; };
 
-  if(!file){ show('err','اختر الملف أولاً.'); return; }
-  if(file.size > MAX){ show('err','حجم الملف يتجاوز 10 ميغابايت.'); return; }
+  if(!file){ show('err','اختر الملف أولاً.'); release(); return; }
+  if(file.size > MAX){ show('err','حجم الملف يتجاوز 10 ميغابايت.'); release(); return; }
   const kind = await sniff(file);
-  if(!kind){ show('err','الصيغة غير مقبولة — يُقبل PDF أو صورة JPG/PNG فقط.'); return; }
+  if(!kind){ show('err','الصيغة غير مقبولة — يُقبل PDF أو صورة JPG/PNG فقط.'); release(); return; }
 
   let expiry = '';
   if(d.has_expiry){
     expiry = (el('exp-'+i).value || '').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(expiry)){ show('err','أدخل تاريخ الانتهاء الجديد.'); return; }
-    if(daysTo(expiry) < 0){ show('err','تاريخ الانتهاء يجب أن يكون مستقبليّاً.'); return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(expiry)){ show('err','أدخل تاريخ الانتهاء الجديد.'); release(); return; }
+    if(daysTo(expiry) < 0){ show('err','تاريخ الانتهاء يجب أن يكون مستقبليّاً.'); release(); return; }
   }
 
-  btn.disabled = true; show('', ''); msg.className = 'msg'; btn.textContent = 'جارٍ الرفع…';
+  show('', ''); msg.className = 'msg'; btn.textContent = 'جارٍ الرفع…';
   try{
     const qs = '?t=' + encodeURIComponent(TOKEN) + '&doc=' + encodeURIComponent(d.key) +
                (expiry ? '&expiry=' + encodeURIComponent(expiry) : '');
@@ -161,7 +171,7 @@ async function upload(d, i){
     if(d.has_expiry) el('exp-'+i).disabled = true;
   }catch(e){
     show('err', e.message || 'تعذّر الرفع، حاول مرّة أخرى.');
-    btn.disabled = false; btn.textContent = 'رفع واستبدال النسخة القديمة';
+    release(); btn.textContent = 'رفع واستبدال النسخة القديمة';
   }
 }
 
