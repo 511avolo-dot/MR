@@ -1231,13 +1231,23 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
       contact_email:'a@b.com', ...o});
     const has  = mk({ doc_paths:{cr:'a',local_content:'lc.pdf'}, local_content_has:true });
     const none = mk({ local_content_has:false, local_content_none_at:'2026-09-07T10:00:00Z' });
+    const regNo = mk({ local_content_has:false });   // «لا» في نموذج التسجيل فقط
     const unknown = mk({});
-    T('ثلاث حالات لا اثنتان: مُرفِق · أفاد بعدمها · لم يُجب',
-      has.lcFile === true && none.lcNone === true && none.lcUnknown === false &&
-      unknown.lcUnknown === true && unknown.lcNone === false);
+    T('أربع حالات: مُرفِق · أفاد رداً على الحملة · «لا» بالتسجيل · لم يُجب',
+      has.lcFile === true && none.lcAnswered === true &&
+      regNo.lcNone === true && regNo.lcAnswered === false &&
+      unknown.lcUnknown === true && unknown.lcAnswered === false);
+    T('«لا» بالتسجيل تبقى ضمن المستهدَفين (قد يكون حصل عليها بعدها)',
+      regNo.lcAnswered === false && has.lcFile === true && none.lcAnswered === true);
     T('وقت الإفادة يُقرأ فيظهر في السجلّ', none.lcNoneAt === '2026-09-07T10:00:00Z');
-    T('الحملة تستهدف من لم يحسم أمره فقط (لا مُرفِق ولا مُفيد)',
-      /supDocLcTargets[\s\S]{0,260}!r\.lcFile && !r\.lcNone/.test(CODE));
+    /* ⚠️ تصحيح المالك: «الجميع» تعني كل المعتمدين — و«لا» في نموذج التسجيل ليست
+       إجابةً على سؤال الحملة (قد يكون حصل على الشهادة بعد تسجيله). الاستثناء
+       الوحيد المشروع: من رفع شهادته، أو أفادنا بعدمها **رداً على الحملة**. */
+    T('الحملة تسأل الجميع — لا تستثني «لا» نموذج التسجيل',
+      /supDocLcTargets[\s\S]{0,260}!r\.lcFile && !r\.lcAnswered/.test(CODE) &&
+      !/supDocLcTargets[\s\S]{0,260}!r\.lcNone/.test(CODE));
+    T('الإفادة رداً على الحملة وحدها تحسم السؤال',
+      /const lcAnswered = !!reg\.local_content_none_at/.test(CODE));
     T('الإرسال بتأكيد صريح بالعدد ومُباعَد (بريد خارجيّ لموردين حقيقيين)',
       /supDocLcCampaign[\s\S]{0,1400}confirm\(/.test(CODE) &&
       /supDocLcCampaign[\s\S]{0,1800}setTimeout\(z, 350\)/.test(CODE));
