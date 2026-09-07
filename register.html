@@ -4277,6 +4277,18 @@ async function submitForm() {
       return;
     }
 
+    /* ⚠️ شهادة المحتوى المحلي ليست ضمن `REQUIRED_DOCS`، فكان فشل رفعها يمرّ بتنبيه
+       عابر ثمّ **يكتمل الإرسال** بـ`local_content_has=true` ورقم الشهادة والنسبة
+       **بلا أي مرفق** — وهو ما حدث فعلاً لسبعة موردين حين كان الخادم يرفض النوع
+       (400) قبل إضافته للقائمة البيضاء. الادّعاء بلا دليل أسوأ من غيابه: من أعلن
+       امتلاكها يجب أن يصل ملفها أو لا يُرسَل الطلب. (بلاغ المالك 2026-09-07) */
+    if (document.getElementById('lc-yes')?.checked && !docPaths['local_content']) {
+      hideProc();
+      toast('error','لا يمكن إتمام الإرسال — لم يُرفَع مرفق شهادة المحتوى المحلي. أعِد إرفاقها، أو اختر «لا» إن لم تكن متوفّرة.');
+      goStep(2);
+      return;
+    }
+
     // 2. Collect form data
     const getVal = id => document.getElementById(id)?.value?.trim() || null;
     const entity  = document.querySelector('input[name=entity]:checked')?.value || null;

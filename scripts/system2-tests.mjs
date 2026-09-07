@@ -107,10 +107,30 @@ T('عارض المستندات داخل النظام موجود ومربوط ب�
   HTML.includes('id="modal-doc-viewer"'));
 // (د) العارض يعتمد blob محلّي داخل <iframe> — وسياسة CSP في _headers تسمح به
 //     وتمنع <object>/<embed> (object-src 'none')، فلا يُستبدَل بهما.
+/* المقصد كما هو: الملف يُعرَض من نسخة محليّة لا من رابط تخزين خارجيّ. تغيّرت
+   الآليّة فقط — الرسم صار canvas بـpdf.js بدل `<iframe>` لأن iOS Safari لا
+   يرسم PDF داخل إطار مضمّن (بلاغ 2026-09-07). */
 T('العارض يستعمل blob محلّياً لا رابطاً خارجياً',
-  /createObjectURL/.test(CODE) && /docv-stage[\s\S]{0,4000}<iframe/.test(CODE));
+  /createObjectURL/.test(CODE) && /docvBlobUrl\(d\.path\)/.test(CODE) &&
+  !/docv-stage[\s\S]{0,4000}src="https?:/.test(CODE));
 T('العارض لا يستعمل object/embed اللذين تمنعهما CSP',
   !/docvShow[\s\S]{0,2500}<(object|embed)\b/.test(CODE));
+
+/* ── عرض PDF: لا إطار مضمّن، ومكتبة محلّية لا CDN ─────────────────────────────
+   iOS Safari لا يرسم PDF داخل `<iframe>` (بياض كامل — بلاغ المالك بلقطة
+   2026-09-07)، فأي عودة للإطار تُعيد العطل على كل مستخدمي الآيفون. */
+T('لا `<iframe>` لعرض PDF في مسرح العارض',
+  !/docvShow\([\s\S]{0,2500}<iframe/.test(CODE));
+T('pdf.js يُحمَّل من `/vendor/` المحلّي (بلا CDN ⇒ بلا تعديل CSP)',
+  /import\('\/vendor\/pdf\.min\.mjs'\)/.test(CODE) &&
+  /workerSrc\s*=\s*'\/vendor\/pdf\.worker\.min\.mjs'/.test(CODE) &&
+  fs.existsSync(path.join(ROOT,'vendor/pdf.min.mjs')) &&
+  fs.existsSync(path.join(ROOT,'vendor/pdf.worker.min.mjs')));
+T('التحميل كسول — لا يُجلب pdf.js إلا عند فتح أوّل PDF',
+  /let _PDFJS = null/.test(CODE) && /if \(_PDFJS\) return _PDFJS/.test(CODE) &&
+  !/^import .*pdf\.min\.mjs/m.test(CODE));
+T('سقف دقّة الرسم يمنع انهيار الذاكرة على الجوال',
+  /Math\.min\(window\.devicePixelRatio \|\| 1, 2\)/.test(CODE));
 // (هـ) النافذة يجب أن تكون خارج أي <section class="page">: القسم غير النشط
 //      display:none فيُخفي كل ما بداخله حتى العناصر position:fixed — وقد أُصيب
 //      العارض بذلك فعلاً فلم يفتح من بطاقة المورد (صفحة الموردين).
@@ -153,7 +173,7 @@ T('روابط وثائق الطلب تُسكّ دفعةً واحدة عند فت
   // الترتيب مهمّ: الاستدعاء بعد رسم الوثيقة المطلوبة، وإلا زاحمها التحميل المُسبَق.
   const body = CODE.slice(CODE.indexOf('async function docvShow('));
   const call = body.indexOf('docvPrefetchNeighbors()');
-  const draw = body.indexOf('<iframe');
+  const draw = body.indexOf('docvRenderPdf(');   // نقطة الرسم بعد التحوّل إلى pdf.js
   T('تحميل مُسبَق للتبويب المجاور بعد العرض لا قبله',
     CODE.includes('function docvPrefetchNeighbors(') && call > 0 && draw > 0 && call > draw);
 }
@@ -1548,6 +1568,95 @@ await (async () => {
     /const BUSY = new Set\(\)/.test(RENEW_PAGE) &&
     /if\(BUSY\.has\(i\)\) return;[\s\S]{0,80}BUSY\.add\(i\); btn\.disabled = true;/.test(RENEW_PAGE) &&
     /async function doUpload\(/.test(RENEW_PAGE));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   قشرة الجوال (بلاغ المالك 2026-09-07: «في الجوال سيء جدًا»)
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  /* 🐛 الجذر المقيس: لوحة off-canvas مُغلقة تُخفى بـtransform **وحده** تبقى
+     تُوسّع عرض المستند القابل للتمرير — كانت الصفحة تنزلق أفقياً 220px في كل
+     شاشة بسبب `#po-drawer`. الحارس يمنع عودة النمط لأي لوحة. */
+  T('اللوحة المُغلقة لا تُوسّع عرض الصفحة (visibility لا transform وحده)',
+    /\.po-drawer:not\(\.active\)\{visibility:hidden\}/.test(HTML) &&
+    /\.sidebar:not\(\.open\)\{visibility:hidden\}/.test(HTML));
+  T('حزام أمان: لا تمرير أفقيّ للصفحة',
+    /html\{overflow-x:clip\}/.test(HTML));
+
+  T('viewport-fit=cover مضبوط (شرط عمل env(safe-area-inset-*))',
+    /name="viewport"[^>]*viewport-fit=cover/.test(HTML));
+  T('المناطق الآمنة مُحترَمة في الشريطين العلويّ والسفليّ',
+    /padding-top:calc\(10px \+ env\(safe-area-inset-top\)\)/.test(HTML) &&
+    /\.mnav\{[\s\S]{0,400}padding-bottom:env\(safe-area-inset-bottom\)/.test(HTML));
+  T('تطبيق قابل للتثبيت: manifest + أيقونات + ألوان النظام',
+    /rel="manifest"/.test(HTML) && /name="theme-color"/.test(HTML) &&
+    /apple-mobile-web-app-capable/.test(HTML) &&
+    fs.existsSync(path.join(ROOT,'manifest.webmanifest')) &&
+    ['icon-192.png','icon-512.png','icon-maskable-512.png','apple-touch-icon.png']
+      .every(f => fs.existsSync(path.join(ROOT,'icons',f))));
+  {
+    const mf = JSON.parse(fs.readFileSync(path.join(ROOT,'manifest.webmanifest'),'utf8'));
+    T('المانيفست عربيّ RTL بوضع standalone وأيقونة maskable',
+      mf.dir === 'rtl' && mf.lang === 'ar' && mf.display === 'standalone' &&
+      mf.icons.some(i => i.purpose === 'maskable'));
+  }
+
+  T('شريط تبويبات سفليّ مربوط بالتنقّل ومُزامَن مع الشاشة',
+    /class="mnav"/.test(HTML) && /function mnavSync\(/.test(CODE) &&
+    /navigate\(btn\.dataset\.mpage\)/.test(CODE) &&
+    /function navigate\([\s\S]{0,400}mnavSync\(\)/.test(CODE));
+  /* ⚠️ `body.nav-open` هي ما يُجمّد التمرير خلف الدرج المفتوح؛ إسقاطها يُعيد
+     تمرير المحتوى تحت الدرج (سلوك يكسر الإحساس بالتطبيق الأصيل). */
+  T('الدرج المفتوح يُجمّد تمرير الصفحة خلفه',
+    /function navDrawer\(/.test(CODE) &&
+    /classList\.toggle\('nav-open'/.test(CODE) &&
+    /body\.nav-open\{overflow:hidden\}/.test(HTML));
+  T('نقطة تحكّم واحدة للدرج (لا فتح/إغلاق مبعثر)',
+    /navDrawer\(true\)/.test(CODE) && /navDrawer\(false\)/.test(CODE) &&
+    /function navigate\([\s\S]{0,400}navDrawer\(false\)/.test(CODE));
+
+  /* ⚠️ إخفاء زرّ من الشريط العلويّ على الجوال بلا بديل في الدرج = مستخدم هاتف
+     بلا طريق لتسجيل الخروج أو الإعدادات. الحارس يُلزِم البديل لكل مُخفى. */
+  {
+    const hidden = ['#btn-settings','#btn-goto-portal','#btn-logout','#btn-cloud-reconnect']
+      .filter(sel => new RegExp('\\.topbar '+sel.replace('#','#')).test(HTML));
+    // القصّ حتى تذييل الشريط: الكتلة فيها divs متداخلة فلا يصلح إغلاق كسول
+    const a0 = HTML.indexOf('<div class="sidebar-account">');
+    const acct = a0 < 0 ? '' : HTML.slice(a0, HTML.indexOf('<div class="sidebar-footer">', a0));
+    T(`كل زرّ مُخفى من الشريط العلويّ له بديل في الدرج (${hidden.length} أزرار)`,
+      hidden.length === 4 && hidden.every(sel => acct.includes(`getElementById('${sel.slice(1)}')`)));
+  }
+  T('هوية المستخدم تُعرَض في الدرج (الشارة العلويّة مخفيّة على الجوال)',
+    /id="sa-name"/.test(HTML) && /getElementById\('sa-name'\)/.test(CODE));
+
+  /* الجداول العريضة: حاوية تمرير حولها لا تحويلها إلى block (يُفكّك الأعمدة) */
+  T('الجداول العريضة تُلفّ بحاوية تمرير وقت التشغيل',
+    /function mobileTableWrap\(/.test(CODE) &&
+    /box\.className = 'table-scroll'/.test(CODE) &&
+    !/table\{display:block;overflow-x:auto/.test(HTML));
+  T('لافّ الجداول مربوط بنقاط الرسم الثلاث (وإلّا فاتته الجداول المولَّدة)',
+    (CODE.match(/mobileTableWrap\(/g) || []).length >= 4);
+  T('حقول البحث ≥16px فلا يُقرّب iOS الشاشة عند التركيز',
+    /\.topbar \.search input\{font-size:16px\}/.test(HTML));
+  T('الأزرار العائمة فوق شريط التبويبات لا تحته',
+    /\.ai-fab,#wf-bell\{bottom:calc\(66px \+ env\(safe-area-inset-bottom\)\)\}/.test(HTML));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   شهادة المحتوى المحلي: ادّعاء بلا دليل ممنوع (register.html)
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  const REG = fs.readFileSync(path.join(ROOT,'register.html'),'utf8');
+  /* 🐛 الجذر: الشهادة ليست في `REQUIRED_DOCS`، ففشل رفعها كان يمرّ بتنبيه عابر
+     ثمّ **يكتمل الإرسال** بـhas=true ورقم ونسبة بلا أي مرفق — وهو ما أنتج
+     سبعة موردين «لديهم شهادة» بلا ملف. */
+  T('لا يكتمل الإرسال بادّعاء شهادة محتوى محلي بلا مرفق',
+    /lc-yes'\)\?\.checked && !docPaths\['local_content'\]/.test(REG) &&
+    /toast\('error','لا يمكن إتمام الإرسال — لم يُرفَع مرفق شهادة المحتوى المحلي/.test(REG));
+  T('الحارس يقع بعد حلقة الرفع (على المسار الفعليّ لا على النيّة)',
+    REG.indexOf("!docPaths['local_content']") > REG.indexOf('const uploadFailures = []'));
+  T('التحقّق الأماميّ يُلزِم المرفق أيضاً (رحلة فاشلة أقلّ)',
+    /!uploadedDocs\['local_content'\][\s\S]{0,120}يرجى إرفاق شهادة المحتوى المحلي/.test(REG));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

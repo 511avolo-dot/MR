@@ -23,6 +23,11 @@
   Cache-Control: public, max-age=86400
 /*.woff2
   Cache-Control: public, max-age=604800
+# مكتبة pdf.js المُضمَّنة (إصدار مثبَّت لا يتغيّر) — كاش أسبوع
+/vendor/*
+  Cache-Control: public, max-age=604800
+/manifest.webmanifest
+  Cache-Control: public, max-age=86400
 
 # صفحات HTML — يجب أن تُعاد مراجعتها دائماً كي تصل التحديثات فوراً (لا كاش قديم)
 /index.html

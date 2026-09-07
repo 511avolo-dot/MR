@@ -3,8 +3,19 @@
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ⚠️ `viewport-fit=cover` شرط عمل `env(safe-area-inset-*)` — بدونه يقع الشريط
+     السفليّ تحت شريط الهوم في iPhone ويختفي الشريط العلويّ خلف النوتش. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>نظام المشتريات · AL-DEYABI GROUP</title>
+<!-- تطبيق ويب قابل للتثبيت على الشاشة الرئيسية (iOS و Android) -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#1a1512">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="المشتريات">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2708,6 +2719,153 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .po-ai-summary{background:linear-gradient(135deg,rgba(196,162,101,0.08),rgba(154,122,69,0.04));border:1px solid rgba(196,162,101,0.25);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;font-size:13px;line-height:1.7;color:var(--ink-2)}
 .po-ai-summary .ai-tag{font-size:10px;background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#74c69d;padding:2px 8px;border-radius:8px;font-weight:700;margin-inline-end:8px}
 
+/* ============ عارض المستندات: صفحات pdf.js ============ */
+.docv-pdf{width:100%;height:100%;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.docv-page{display:block;max-width:100%;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.14);border-radius:2px}
+.docv-more{font-size:12px;color:var(--muted);padding:10px 14px;text-align:center}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   الجوال — قشرة تطبيق (بلاغ المالك 2026-09-07: «في الجوال سيء جدًا»)
+   ══════════════════════════════════════════════════════════════════════════
+   🐛 الجذر المقيس على 393×852 (لا تخمين): **الصفحة تنزلق أفقياً 220px في كل
+   شاشة**. المتّهم ليس الشريط الجانبي — بل `#po-drawer`: درج مُغلق يُخفى
+   بـ`transform:translateX(100%)` **وحده بلا `visibility`**، فيبقى صندوقه خارج
+   الشاشة **يُوسّع عرض المستند القابل للتمرير** بعرضه كاملاً. (طبقة التعتيم
+   `.po-drawer-overlay` كانت تفعل الصواب أصلاً بـ`visibility:hidden` — الدرج نفسه
+   هو من نسيها.) ⚠️ قاعدة: **أي لوحة off-canvas تُخفى بـtransform يجب أن تحمل
+   `visibility:hidden` وهي مُغلقة**، وإلّا انزلقت الصفحة كلّها.
+   والباقي: شريط تبويبات سفليّ + مناطق آمنة + أهداف لمس 44px + نوافذ كأوراق.
+   ⚠️ كله داخل @media — سطح المكتب لا يتغيّر بايتاً واحداً. */
+
+/* (١) اللوحات المُغلقة لا تُنشئ تمريراً — على كل المقاسات لا الجوال وحده */
+.po-drawer:not(.active){visibility:hidden}
+.po-drawer{transition:transform .28s cubic-bezier(.4,0,.2,1),visibility .28s}
+.sidebar{transition:transform .3s,visibility .3s}
+@media (max-width:900px){ .sidebar:not(.open){visibility:hidden} }
+/* حزام أمان: لا تمرير أفقيّ للصفحة مهما أضيفت لوحة لاحقاً.
+   `clip` لا يُنشئ حاوية تمرير (خلافاً لـhidden) فلا يكسر `position:sticky`. */
+html{overflow-x:clip}
+
+.mnav{display:none}
+
+/* كتلة الحساب في الدرج: للجوال وحده (سطح المكتب يعرضها في الشريط العلويّ) */
+.sidebar-account{display:none;margin-top:auto;padding:14px 20px 6px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar-account .sa-name{font-size:13.5px;font-weight:700;color:#f0ece0}
+.sidebar-account .sa-role{font-size:11px;color:#C4A265;margin-top:2px}
+.sidebar-account .sa-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.sidebar-account .sa-btn{
+  min-height:44px;padding:8px 10px;border-radius:10px;cursor:pointer;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+  color:#e8e4d8;font-family:inherit;font-size:12px;font-weight:600;
+}
+.sidebar-account .sa-btn.danger{grid-column:1/-1;background:rgba(192,57,43,.16);border-color:rgba(192,57,43,.4);color:#f3b5ae}
+
+@media (max-width:900px){
+  /* ── الشريط العلوي: مضغوط ومنطقة آمنة للنوتش ────────────────────────── */
+  .topbar{
+    padding:10px 14px;gap:10px;
+    padding-top:calc(10px + env(safe-area-inset-top));
+    flex-wrap:nowrap;overflow:hidden;                    /* لا يدفع الصفحة أفقياً */
+  }
+  .mobile-toggle{width:44px;height:44px;border-radius:12px}   /* هدف لمس مطابق للإرشادات */
+  .topbar .search{flex:1;min-width:0;max-width:none}
+  .topbar .search input{font-size:16px}  /* ⚠️ دون 16px يُقرِّب iOS الشاشة تلقائياً عند التركيز */
+  .topbar-actions{gap:6px;flex:0 0 auto}
+  /* الشريط العلويّ على الهاتف = بحث + وصولان اثنان + قائمة. البقيّة كلّها
+     متاحة داخل الدرج/الإعدادات، فحشرها هنا يُنتج صفّاً مزدحماً غير قابل للنقر.
+     ⚠️ لا تُخفِ زرّاً ليس له بديل في الدرج — راجع القائمة قبل الإضافة. */
+  .topbar .kbd,.topbar .date-pill,.topbar .cloud-pill,.topbar .hijri-pill,
+  .topbar #btn-cloud-reconnect,.topbar #btn-cmd-palette,
+  .topbar #btn-settings,.topbar #btn-goto-portal,
+  .topbar .user-badge,.topbar #btn-logout{display:none}
+
+  /* شريط حالة الترطيب: تحت الشريط العلويّ لا فوقه (كان يغطّي أزراره) */
+  .hyd-bar{
+    position:fixed;inset-inline:0;width:auto;max-width:none;
+    top:calc(env(safe-area-inset-top) + 62px);
+    transform:none;border-radius:0;font-size:11.5px;text-align:center;
+    justify-content:center;z-index:870;
+  }
+
+  /* الأزرار العائمة ترتفع فوق شريط التبويبات (وإلّا غطّت «الرئيسية») */
+  .ai-fab,#wf-bell{bottom:calc(66px + env(safe-area-inset-bottom))}
+
+  /* كتلة الحساب داخل الدرج — بديل ما أُخفي من الشريط العلويّ */
+  .sidebar-account{display:block}
+
+  /* الدرج الجانبي: عرض مريح + منطقة آمنة */
+  .sidebar{
+    width:min(86vw,300px);height:100dvh;z-index:1200;
+    padding-top:max(18px,env(safe-area-inset-top));
+    padding-bottom:max(18px,env(safe-area-inset-bottom));
+    overscroll-behavior:contain;
+  }
+  .overlay{z-index:1100}
+  body.nav-open{overflow:hidden}                        /* لا تمرير خلف الدرج */
+
+  /* ── المحتوى ────────────────────────────────────────────────────────── */
+  .content{
+    padding:16px 14px calc(84px + env(safe-area-inset-bottom));  /* مساحة للشريط السفليّ */
+    max-width:100%;
+  }
+  .page-header{margin-bottom:18px}
+
+  /* ── شريط التبويبات السفليّ (نمط التطبيقات الأصيلة) ──────────────────── */
+  .mnav{
+    display:flex;position:fixed;inset-inline:0;bottom:0;z-index:880;
+    background:rgba(253,251,246,.94);backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    padding-bottom:env(safe-area-inset-bottom);          /* شريط الهوم على iPhone */
+  }
+  .mnav-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;padding:8px 2px 7px;min-height:52px;
+    background:none;border:0;font-family:inherit;cursor:pointer;
+    color:var(--muted);font-size:10.5px;font-weight:600;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mnav-item svg{width:22px;height:22px;stroke-width:1.9}
+  .mnav-item.active{color:var(--accent-2,#9A7A45)}
+  .mnav-item.active svg{stroke-width:2.3}
+  .mnav-badge{
+    position:absolute;transform:translate(-14px,-6px);
+    min-width:16px;height:16px;padding:0 4px;border-radius:9px;
+    background:#c0392b;color:#fff;font-size:9.5px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* ── أهداف اللمس: 44px حدّ أدنى (Apple HIG / Material) ───────────────── */
+  .btn,button:not(.mnav-item):not(.nav-toggle),
+  select,input:not([type=checkbox]):not([type=radio]),
+  .tab,.chip,.seg-btn{min-height:44px}
+  .btn-sm,.btn.btn-sm{min-height:38px}
+
+  /* ── الجداول: تمرير أفقيّ داخل حاويتها لا في الصفحة كلّها ────────────── */
+  .table-scroll,.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-scroll table,.table-wrap table{min-width:640px}
+
+  /* أشرطة الأدوات تلتفّ بدل أن تدفع الصفحة (صفّ أزرار الأصناف = 402px على 393px) */
+  .toolbar,.toolbar>div{flex-wrap:wrap}
+  .toolbar .btn{flex:0 1 auto}
+
+  /* ── النوافذ: ورقة تغطّي الشاشة (سلوك التطبيقات) ─────────────────────── */
+  .modal-box,.modal-content{
+    width:100%!important;max-width:100%!important;
+    max-height:100dvh;border-radius:16px 16px 0 0;
+    margin-top:auto;                                     /* تلتصق بالأسفل كـsheet */
+    padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  }
+  .modal{align-items:flex-end}
+
+  /* الشبكات متعدّدة الأعمدة تنهار لعمود واحد */
+  .kpi-grid,.stats-grid,.po-alert-grid,.form-grid{grid-template-columns:1fr!important}
+}
+
+/* شاشة الدخول على الجوال */
+@media (max-width:520px){
+  .login-card{padding:26px 20px;margin:0 14px}
+  .login-screen{padding-top:max(24px,env(safe-area-inset-top))}
+}
 </style>
 <template id="__bundler_thumbnail" data-bg-color="#0a1814">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
@@ -2913,6 +3071,22 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
         <span style="margin-inline-start:auto;font-size:9px;background:linear-gradient(135deg,#2d6a4f,#1b4332);color:#74c69d;padding:2px 6px;border-radius:8px;font-weight:700;border:1px solid rgba(45,106,79,0.3)">AI</span>
       </a>
     </nav>
+    <!-- كتلة الحساب: تظهر على الجوال فقط، لأن هذه الأفعال تُخفى من الشريط العلويّ
+         هناك. ⚠️ لا تُخفِ زرّاً من الشريط العلويّ دون بديل هنا — بلا هذه الكتلة
+         لا يجد مستخدم الهاتف طريقاً لتسجيل الخروج ولا للإعدادات.
+         الأزرار تنقر الأصليّة نفسها فلا يتكرّر أي معالج ولا تنفصل السلوكيات. -->
+    <div class="sidebar-account">
+      <div class="sa-who">
+        <div class="sa-name" id="sa-name">—</div>
+        <div class="sa-role" id="sa-role"></div>
+      </div>
+      <div class="sa-actions">
+        <button type="button" class="sa-btn" onclick="document.getElementById('btn-settings')?.click()">⚙ الإعدادات</button>
+        <button type="button" class="sa-btn" onclick="document.getElementById('btn-cloud-reconnect')?.click()">⟳ مزامنة</button>
+        <button type="button" class="sa-btn" onclick="document.getElementById('btn-goto-portal')?.click()">↗ بوابة الطلبات</button>
+        <button type="button" class="sa-btn danger" onclick="document.getElementById('btn-logout')?.click()">⏻ تسجيل الخروج</button>
+      </div>
+    </div>
     <div class="sidebar-footer">
       <div style="font-family:'NeoSansArabic',sans-serif">نظام المشتريات الموحد</div>
       <div><span class="tag" style="color:#C4A265">إصدار 5.1</span> · مجموعة الذيابي</div>
@@ -5382,6 +5556,25 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
 <div class="toast-container" id="toast-container"></div>
 
 <!-- AI ASSISTANT -->
+<!-- شريط التبويبات السفليّ للجوال (يظهر بـCSS عند ≤900px فقط؛ خارج أي section.page) -->
+<nav class="mnav" id="mnav" aria-label="التنقّل السريع">
+  <button class="mnav-item" type="button" data-mpage="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/></svg>الرئيسية
+  </button>
+  <button class="mnav-item" type="button" data-mpage="purchase-orders">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 2h6v4H9zM5 6h14v16H5z"/><path d="M9 12h6M9 16h6"/></svg>الأوامر
+  </button>
+  <button class="mnav-item" type="button" data-mpage="items">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>الأصناف
+  </button>
+  <button class="mnav-item" type="button" data-mpage="suppliers">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>الموردون
+  </button>
+  <button class="mnav-item" type="button" id="mnav-more">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>المزيد
+  </button>
+</nav>
+
 <button class="ai-fab" id="ai-fab" title="المساعد الذكي">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a10 10 0 0110 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
 </button>
@@ -5971,6 +6164,10 @@ function applyUserRoleToUI(){
       roleEl.classList.remove('admin');
     }
     badge.style.display = '';
+    // مرآة الهوية في كتلة حساب الدرج (الشارة العلويّة مخفيّة على الجوال)
+    const saN = document.getElementById('sa-name'), saR = document.getElementById('sa-role');
+    if (saN) saN.textContent = nameEl.textContent;
+    if (saR) saR.textContent = roleEl.textContent;
   }
   if(logoutBtn) logoutBtn.style.display = '';
 }
@@ -6384,12 +6581,34 @@ const fmtDate = d => d||'—';
 const todayStr = () => new Date().toISOString().slice(0,10);
 
 /* ========== NAVIGATION ========== */
+/* ── الدرج الجانبي على الجوال: نقطة تحكّم واحدة ───────────────────────────────
+   ⚠️ `body.nav-open` ليست تجميلاً: هي التي تُجمّد تمرير الصفحة خلف الدرج
+   (وإلّا مرّر إصبعُ المستخدم المحتوى تحت الدرج المفتوح — سلوك يكسر الإحساس
+   بالتطبيق الأصيل). ولا تُخفِ الدرج بـtransform وحده: `visibility` في CSS هي
+   ما يمنعه من توسيع عرض الصفحة وهو مُغلق. */
+function navDrawer(open){
+  const sb = document.getElementById('sidebar'), ov = document.getElementById('overlay');
+  if (sb) sb.classList.toggle('open', !!open);
+  if (ov) ov.classList.toggle('active', !!open);
+  document.body.classList.toggle('nav-open', !!open);
+  const more = document.getElementById('mnav-more');
+  if (more) more.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+/* مزامنة الشريط السفليّ مع الشاشة الحالية — الصفحات غير المُمثَّلة فيه تُبقي
+   «المزيد» بلا تحديد بدل إبراز تبويب خاطئ. */
+function mnavSync(){
+  const cur = STATE.page;
+  document.querySelectorAll('.mnav-item[data-mpage]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.mpage === cur);
+    b.setAttribute('aria-current', b.dataset.mpage === cur ? 'page' : 'false');
+  });
+}
 function navigate(page){
   STATE.page = page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.page===page));
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page));
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('overlay').classList.remove('active');
+  navDrawer(false);
+  mnavSync();
   window.scrollTo({top:0,behavior:'smooth'});
   if(page==='dashboard')renderDashboard();
   if(page==='items')renderItems();
@@ -6404,6 +6623,7 @@ function navigate(page){
   if(page==='reports')renderReportsCenter();
   if(page==='pr')renderPRPortal();
   a11yWire();   // الشاشات تُرسَم بـinnerHTML فتُفقد سمات الوصولية — يُعاد ربطها بعد الرسم
+  mobileTableWrap();   // جداول عريضة ⇒ حاوية تمرير، وإلّا دفعت الصفحة أفقياً على الجوال
 }
 
 /* ========== DASHBOARD ========== */
@@ -8530,7 +8750,28 @@ function a11yWire(root){
   }catch(e){ reportError('a11yWire', e); }
 }
 
-function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); } }
+/* ── جدول عريض على شاشة ضيّقة: حاوية تمرير بدل دفع الصفحة كلّها ───────────────
+   ⚠️ لا تُعالِج هذا بـ`table{display:block;overflow:auto}` — تحويل الجدول إلى
+   block يُلغي خوارزمية أعمدة الجدول فتنفكّ محاذاة الرؤوس عن الخلايا. الحلّ
+   الصحيح: حاوية `overflow-x:auto` **حول** الجدول مع إبقائه جدولاً.
+   يُنادى من نقاط `a11yWire` نفسها لأن الجداول تُرسَم بـinnerHTML وقت التشغيل. */
+function mobileTableWrap(root){
+  try{
+    if (!matchMedia('(max-width:900px)').matches) return;
+    (root || document).querySelectorAll('.content table, .modal table').forEach(t => {
+      const par = t.parentElement;
+      if (!par || par.classList.contains('table-scroll')) return;
+      // الأب يمرّر أفقياً أصلاً؟ اتركه — لا نُضاعف حاويات التمرير
+      if (getComputedStyle(par).overflowX === 'auto' || getComputedStyle(par).overflowX === 'scroll') return;
+      const box = document.createElement('div');
+      box.className = 'table-scroll';
+      par.insertBefore(box, t);
+      box.appendChild(t);
+    });
+  }catch(e){ reportError('mobileTableWrap', e); }
+}
+
+function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); mobileTableWrap(el); } }
 function closeModal(id){
   const el=document.getElementById(id);
   if(el) el.classList.remove('active');
@@ -17704,16 +17945,20 @@ function init(){
     n.addEventListener('click',e=>{e.preventDefault();navigate(n.dataset.page)});
   });
   
-  // Mobile toggle
-  document.getElementById('mobile-toggle').addEventListener('click',()=>{
-    document.getElementById('sidebar').classList.add('open');
-    document.getElementById('overlay').classList.add('active');
+  // Mobile toggle — مصدر واحد للفتح/الإغلاق يستعمله زرّ القائمة وشريط التبويبات معاً
+  document.getElementById('mobile-toggle').addEventListener('click', ()=>navDrawer(true));
+  document.getElementById('overlay').addEventListener('click', ()=>navDrawer(false));
+  // الإغلاق بمفتاح الهروب، وبالتنقّل من داخل الدرج (سلوك التطبيقات: اختيار ⇒ إغلاق)
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') navDrawer(false); });
+  document.querySelectorAll('.sidebar .nav-item[data-page]').forEach(a=>a.addEventListener('click',()=>navDrawer(false)));
+  // شريط التبويبات السفليّ
+  document.querySelectorAll('.mnav-item[data-mpage]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ navDrawer(false); navigate(btn.dataset.mpage); });
   });
-  document.getElementById('overlay').addEventListener('click',()=>{
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('overlay').classList.remove('active');
-  });
-  
+  const mMore = document.getElementById('mnav-more');
+  if (mMore) mMore.addEventListener('click', ()=>navDrawer(!document.body.classList.contains('nav-open')));
+  mnavSync();
+
   // Topbar buttons
   document.getElementById('btn-cmd-palette').addEventListener('click',openCmdPalette);
   document.getElementById('btn-dark-toggle').addEventListener('click',toggleDarkMode);
@@ -19105,6 +19350,7 @@ function startApp(){
   init();
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
   try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
+  try{ mobileTableWrap(); }catch(e){}
   startCloudAutoReconnect();
   try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
 }
@@ -25257,7 +25503,11 @@ async function docvShow(i){
     if (DOCV.list[DOCV.i] !== d) return;   // بدّل المستخدم التبويب أثناء الجلب
     const kind = docvKind(d.path);
     if (kind === 'pdf'){
-      stage.innerHTML = `<iframe src="${url}#view=FitH" title="${escapeAttr(d.label)}" style="width:100%;height:100%;border:0;background:#fff"></iframe>`;
+      /* ⚠️ لا تُعِد الـ`<iframe>` هنا: **iOS Safari لا يرسم PDF داخل إطار مضمّن
+         إطلاقاً** فيظهر بياضاً كاملاً (بلاغ المالك بلقطة 2026-09-07)، وكذلك
+         WebView أندرويد في حالات كثيرة. الرسم بـpdf.js على canvas يعمل على
+         الأنظمة الثلاثة بسلوك واحد. والسقوط إلى الإطار محفوظ لسطح المكتب فقط. */
+      await docvRenderPdf(stage, url, d);
     } else if (kind === 'img'){
       stage.innerHTML = `<img src="${url}" alt="${escapeAttr(d.label)}" style="max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12)">`;
     } else {
@@ -25274,6 +25524,50 @@ async function docvShow(i){
       <div style="margin-top:12px"><button onclick="docvShow(${DOCV.i})" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 16px;font-size:12px;cursor:pointer;font-family:inherit">إعادة المحاولة</button></div>
     </div>`;
     reportError('docvShow', e, {path: d.path});
+  }
+}
+/* ── عرض PDF بـpdf.js (محلّي، بلا أي مصدر خارجيّ فلا يمسّ CSP) ────────────────
+   المكتبة والعامل مُضمَّنان في `/vendor/` فـ`script-src 'self'` و`worker-src`
+   (يسقط إلى `default-src 'self'`) يسمحان بهما دون تعديل الترويسات. التحميل
+   **كسول**: لا يُجلب شيء إلا عند فتح أوّل PDF، فصفحة الدخول لا تحمل بايتاً زائداً. */
+let _PDFJS = null;
+async function docvPdfLib(){
+  if (_PDFJS) return _PDFJS;
+  const lib = await import('/vendor/pdf.min.mjs');
+  lib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+  _PDFJS = lib;
+  return lib;
+}
+async function docvRenderPdf(stage, url, d){
+  const lib = await docvPdfLib();
+  const doc = await lib.getDocument({ url }).promise;
+  if (DOCV.list[DOCV.i] !== d) { try{ doc.destroy(); }catch(e){} return; }   // بدّل التبويب أثناء الجلب
+  const wrap = document.createElement('div');
+  wrap.className = 'docv-pdf';
+  stage.innerHTML = '';
+  stage.appendChild(wrap);
+  /* الدقّة = عرض الحاوية × كثافة الشاشة، بسقف 2 كي لا نفجّر الذاكرة على الجوال
+     (صفحة A4 عند DPR=3 تتجاوز 20 مليون بكسل فتنهار تبويبة iOS). */
+  const dpr  = Math.min(window.devicePixelRatio || 1, 2);
+  const boxW = Math.max(280, wrap.clientWidth || stage.clientWidth || 360);
+  const n = Math.min(doc.numPages, 40);   // سقف أمان لمستند ضخم
+  for (let pn = 1; pn <= n; pn++){
+    if (DOCV.list[DOCV.i] !== d) break;
+    const page  = await doc.getPage(pn);
+    const base  = page.getViewport({ scale: 1 });
+    const vp    = page.getViewport({ scale: (boxW / base.width) * dpr });
+    const cv    = document.createElement('canvas');
+    cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    cv.style.width = '100%'; cv.style.height = 'auto';
+    cv.className = 'docv-page';
+    wrap.appendChild(cv);
+    await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+  }
+  if (doc.numPages > n){
+    const more = document.createElement('div');
+    more.className = 'docv-more';
+    more.textContent = `عُرضت ${n} صفحة من ${doc.numPages} — نزّل الملف لعرضه كاملاً.`;
+    wrap.appendChild(more);
   }
 }
 function docvFileName(d){
@@ -25299,11 +25593,7 @@ function docvPrint(){
   const url = DOCV.urls.get(d.path);
   if (!url){ toast('info', 'انتظر', 'لم يكتمل تحميل المستند بعد'); return; }
   const kind = docvKind(d.path);
-  if (kind === 'pdf'){
-    const f = document.querySelector('#docv-stage iframe');
-    try { f.contentWindow.focus(); f.contentWindow.print(); return; }
-    catch(e){ /* المتصفّح يمنع الطباعة عبر الإطار — نسقط للنافذة */ }
-  }
+  // ⚠️ لم يعُد في المسرح إطار (صار canvas بـpdf.js) — الطباعة عبر نافذة مستقلّة للجميع.
   const w = window.open('', '_blank');
   if (!w){ toast('info', 'مانع النوافذ', 'اسمح بالنوافذ المنبثقة للطباعة'); return; }
   w.document.write(`<html dir="rtl"><head><title>${escapeHtml(docvFileName(d))}</title></head>
