@@ -194,7 +194,7 @@ const NEEDED_FNS = [
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
   'arNorm', 'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
-  'regFmtBytes', 'supDocRow', 'supDocNeedsAction',
+  'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
@@ -1163,6 +1163,67 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
   T('بريد المراسلة يُقرأ من الصفّ (الأولوية لمسؤول التواصل)',
     api.supDocRow({id:'x', doc_paths:full, contact_email:'a@b.com', email:'c@d.com'}).email === 'a@b.com' &&
     api.supDocRow({id:'x', doc_paths:full, email:'c@d.com'}).email === 'c@d.com');
+
+  /* ── تحديد مَن أرفق شهادة المحتوى المحلي (طلب المالك 2026-09-07) ──────────
+     القياس على الإنتاج: 8 مورّدين أعلنوها ورقم الشهادة والنسبة محفوظان لهم جميعاً،
+     بينما المرفق موجود لواحد فقط. فالفصل الثلاثيّ (معلَن / مُرفَق / بيانات) واجب —
+     ولا يجوز أن يُخفي «غير معلَن» و«معلَن بلا مرفق» بعضهما. */
+  {
+    const withFile = api.supDocRow({id:'x', doc_paths:{...full, local_content:'lc.pdf'},
+      local_content_has:true, local_content_percentage:'61.00', local_content_cert_no:'M207667'});
+    const noFile = api.supDocRow({id:'y', doc_paths:full,
+      local_content_has:true, local_content_percentage:'25.67', local_content_cert_no:'7018067004'});
+    const none = api.supDocRow({id:'z', doc_paths:full});
+    T('المُرفِق يُميَّز عن المُعلِن بلا مرفق',
+      withFile.lcFile === true && noFile.lcFile === false &&
+      withFile.lcDeclared === true && noFile.lcDeclared === true);
+    T('النسبة ورقم الشهادة يُقرآن حتى بلا مرفق (محفوظان على الإنتاج)',
+      noFile.lcPct === 25.67 && noFile.lcCert === '7018067004' && withFile.lcPct === 61);
+    T('من لم يُعلِن: لا نسبة ولا رقم ولا مرفق',
+      none.lcDeclared === false && none.lcFile === false && none.lcPct === null && none.lcCert === '');
+    T('عمودا رقم الشهادة والنسبة يُجلبان من القاعدة (وإلّا فرغت الخلية)',
+      /BASE_COLS[\s\S]{0,400}local_content_cert_no,local_content_percentage/.test(CODE));
+    T('مرشّح «شهادة محتوى محلي» يعرض كل من أعلنها لا المُرفِقين فقط',
+      /lc:\s*all\.filter\(r => r\.lcDeclared\)/.test(CODE) && /tab\('lc'/.test(CODE));
+    T('خلية المحتوى المحلي تفصل «مُرفَقة» عن «معلَنة — بلا مرفق»',
+      /const lcCell/.test(CODE) && /✓ مُرفَقة/.test(CODE) && /معلَنة — بلا مرفق/.test(CODE) &&
+      /lcCell\(r\)/.test(CODE));
+    T('بطاقة المورد تُظهر المحتوى المحلي حتى بلا تاريخ انتهاء',
+      /supExpiryStrip[\s\S]{0,1400}lcChip/.test(CODE) && /محتوى محلي بلا مرفق/.test(CODE));
+    /* شاشة تفاصيل الطلب كانت تحذف صفّ «المستند» عند غيابه (القيمة null) فيبدو
+       القسم مكتملاً بينما الشهادة غير محفوظة — بلاغ المالك الفعليّ. */
+    T('تفاصيل الطلب تُعلن نقص مرفق الشهادة صراحةً لا بحذف الصفّ',
+      (CODE.match(/⚠️ غير مرفق — لم تُحفَظ نسخة الشهادة/g) || []).length >= 2 &&
+      !/\['المستند', \(r\.doc_paths && r\.doc_paths\.local_content\) \? '[^']*' : null\]/.test(CODE));
+  }
+
+  /* ── ترتيب الإلحاح: ما يستحقّ التصرّف الآن أعلى الجدول ── */
+  {
+    const rows = [
+      api.supDocRow({id:'A', legal_name_ar:'سليم', doc_paths:full, cr_expiry_date: iso(400)}),
+      api.supDocRow({id:'B', legal_name_ar:'ناقص', doc_paths:{cr:'a'}}),
+      api.supDocRow({id:'C', legal_name_ar:'منتهٍ', doc_paths:full, cr_expiry_date: iso(-9)}),
+      api.supDocRow({id:'D', legal_name_ar:'يقارب', doc_paths:full, cr_expiry_date: iso(11)}),
+    ];
+    const order = api.supDocSort(rows).map(r => r.id).join('');
+    T('الترتيب: منتهٍ ← يقارب ← ناقص ← سليم', order === 'CDBA', order);
+    T('الفرز لا يُغيّر المصفوفة الأصلية', rows.map(r=>r.id).join('') === 'ABCD');
+    T('الجدول يعرض القائمة مرتّبة بالإلحاح', /const list = supDocSort\(/.test(CODE));
+  }
+
+  /* ── فحص سلامة الوثائق: المؤشّر قد يشير لملف غير موجود والعدّاد يقول «6/6» ── */
+  T('فحص السلامة يسأل المخزنَين ولا يحكم بالفقد إلا بخيبتهما',
+    /async function supDocPathExists/.test(CODE) &&
+    /supDocPathExists[\s\S]{0,700}api\/reg-doc\?meta=1/.test(CODE) &&
+    /supDocPathExists[\s\S]{0,900}createSignedUrl/.test(CODE) &&
+    /return 'missing'/.test(CODE));
+  T('الفحص وجود فقط — لا تنزيل بايتات', /meta=1&key=/.test(CODE));
+  T('زرّ الفحص مربوط ونتيجته تُعرض في اللوحة',
+    /id="supdoc-verify-btn"[\s\S]{0,200}supDocVerify\(\)/.test(CODE) ||
+    /supDocVerify\(\)[\s\S]{0,200}id="supdoc-verify-btn"/.test(CODE));
+  T('المكسور يُعرَض بزرّ طلب تجديد مباشر (لا تشخيص بلا علاج)',
+    /supDocVerify[\s\S]{0,2600}supDocRenew\('/.test(CODE));
+  T('الفحص محدود التزامن فلا يُغرق الشبكة', /const CONC = \d+;/.test(CODE));
 
   // اللوحة مربوطة: تحميل، مرشّحات، فتح بالعارض، بطاقة مهام
   T('لوحة المتابعة مربوطة بالشاشة والعارض',

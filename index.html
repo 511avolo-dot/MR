@@ -8817,7 +8817,10 @@ async function _loadSupplierRegLink(sup) {
         ['رقم الشهادة', reg.local_content_cert_no],
         ['نسبة المحتوى المحلي', reg.local_content_percentage != null ? reg.local_content_percentage + '%' : null],
         ['تاريخ انتهاء الشهادة', reg.local_content_expiry],
-        ['المستند المرفق', (reg.doc_paths && reg.doc_paths.local_content) ? 'مرفق ✓ (ضمن المستندات)' : null],
+        // النقص يُعلَن صراحةً — القيمة `null` تحذف الصفّ فيبدو القسم مكتملاً (انظر sect أعلاه)
+        ['المستند المرفق', !reg.local_content_has ? null
+          : (reg.doc_paths && reg.doc_paths.local_content) ? 'مرفق ✓ (ضمن المستندات)'
+          : '⚠️ غير مرفق — لم تُحفَظ نسخة الشهادة'],
       ]),
     ].join('');
     box.innerHTML = `<div style="margin:8px 0 16px">
@@ -8848,7 +8851,18 @@ function supExpiryStrip(reg){
     ['عضوية الغرفة', reg.chamber_expiry],
     ['المحتوى المحلي', reg.local_content_expiry],
   ].map(([label, d]) => ({label, d, n: supDaysTo(d)})).filter(x => x.n != null);
-  if(!items.length) return '';
+  /* المحتوى المحلي بُعد تفضيليّ في التعاقد — يظهر بنسبته حتى بلا تاريخ انتهاء،
+     ونقص المرفق يُعلَن صراحةً (النسبة ورقم الشهادة محفوظان دائماً لمن أعلنها). */
+  let lcChip = '';
+  if (reg.local_content_has === true){
+    const pct = (reg.local_content_percentage == null || reg.local_content_percentage === '')
+      ? '' : ' ' + String(Number(reg.local_content_percentage).toFixed(2)).replace(/\.00$/,'') + '%';
+    const has = !!((reg.doc_paths||{}).local_content);
+    lcChip = `<span title="${escapeAttr(reg.local_content_cert_no ? 'رقم الشهادة: ' + reg.local_content_cert_no : 'شهادة المحتوى المحلي')}"
+      style="display:inline-flex;align-items:center;gap:6px;background:${has?'#f5f3ff':'#fffbeb'};color:${has?'#6d28d9':'#b45309'};padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:700">
+      ${has?'🇸🇦 محتوى محلي':'⚠ محتوى محلي بلا مرفق'}${escapeHtml(pct)}</span>`;
+  }
+  if(!items.length) return lcChip ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${lcChip}</div>` : '';
   const chip = (x) => {
     const st = x.n < 0 ? {c:'#b91c1c', bg:'#fee2e2', t:`منتهٍ منذ ${poDays(Math.abs(x.n))}`}
              : x.n <= 30 ? {c:'#b45309', bg:'#fef3c7', t:`ينتهي خلال ${poDays(x.n)}`}
@@ -8859,7 +8873,7 @@ function supExpiryStrip(reg){
   const worst = Math.min(...items.map(x => x.n));
   const head = worst < 0 ? '⚠️ وثيقة نظامية منتهية' : worst <= 30 ? '⏳ وثيقة تقارب الانتهاء' : '✓ الوثائق النظامية سارية';
   return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 12px;border:1px solid ${worst<0?'#fecaca':worst<=30?'#fde68a':'#e2e8f0'};background:${worst<0?'#fff5f5':worst<=30?'#fffbeb':'#f8fafc'};border-radius:10px">
-    <span style="font-size:12px;font-weight:800;color:#1a3a5c">${head}</span>${items.map(chip).join('')}</div>`;
+    <span style="font-size:12px;font-weight:800;color:#1a3a5c">${head}</span>${items.map(chip).join('')}${lcChip}</div>`;
 }
 function _openSupplierReg() {
   if (!_supplierRegCache) return;
@@ -24177,6 +24191,12 @@ function supDocRow(reg){
      بسبب عيب القائمة البيضاء (2026-08-26 → 2026-09-07)، فبقيت غير مرئية للمتابعة. */
   const lcDeclared = reg.local_content_has === true;
   const lcGap = lcDeclared && (!paths.local_content || !reg.local_content_expiry);
+  /* بيانات الشهادة المعروضة: النسبة ورقم الشهادة مخزَّنان دائماً لمن أعلنها،
+     والمرفق قد ينقص (عيب القائمة البيضاء) — فنعرض الثلاثة منفصلةً لا مجموعة. */
+  const lcFile = !!paths.local_content;
+  const lcPct  = (reg.local_content_percentage == null || reg.local_content_percentage === '')
+                 ? null : Number(reg.local_content_percentage);
+  const lcCert = (reg.local_content_cert_no || '').trim();
   /* ما يُطلَب من المورّد رفعه: كل وثيقة إلزامية ناقصة + كل شهادة منتهية أو تقارب
      الانتهاء + شهادة المحتوى المحلي الناقصة. حمولة بريد التجديد (`/api/doc-renew`). */
   const renew = [
@@ -24190,13 +24210,29 @@ function supDocRow(reg){
     cr: reg.commercial_reg || '',
     status: reg.status,
     present, total: SUP_REQUIRED_DOCS.length, missing,
-    expiries: exp, worst, renew, lcGap, lcDeclared,
+    expiries: exp, worst, renew, lcGap, lcDeclared, lcFile, lcPct, lcCert,
     email: (reg.contact_email || reg.email || '').trim(),
     expired: worst != null && worst < 0,
     soon: worst != null && worst >= 0 && worst <= SUP_EXPIRY_SOON_DAYS,
     docCount: Object.keys(paths).length,
     reg,
   };
+}
+/* ترتيب الإلحاح: منتهٍ ← يقارب ← ناقص وثيقة ← نقص محتوى محلي ← سليم؛
+   وداخل كل فئة الأقرب انتهاءً أولاً. فأعلى الجدول دائماً ما يستحقّ التصرّف الآن. */
+function supDocUrgency(r){
+  if (r.expired) return 0;
+  if (r.soon) return 1;
+  if (r.missing.length) return 2;
+  if (r.lcGap) return 3;
+  return 4;
+}
+function supDocSort(list){
+  return list.slice().sort((a,b) =>
+    supDocUrgency(a) - supDocUrgency(b) ||
+    (a.worst == null ? 1e9 : a.worst) - (b.worst == null ? 1e9 : b.worst) ||
+    b.missing.length - a.missing.length ||
+    String(a.name).localeCompare(String(b.name), 'ar'));
 }
 function supDocNeedsAction(r){ return r.missing.length > 0 || r.expired || r.soon || r.lcGap; }
 
@@ -24207,7 +24243,8 @@ async function loadSupDocs(){
   try {
     /* `local_content_expiry` عمود ترقية: طلبه قبل تشغيلها يُفشِل الاستعلام كلّه في
        PostgREST فتُشلّ اللوحة — لذا نحاول به ونسقط إلى الأعمدة الأساسية عند الفشل. */
-    const BASE_COLS = 'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email,local_content_has';
+    const BASE_COLS = 'id,legal_name_ar,legal_name_en,commercial_reg,status,doc_paths,cr_expiry_date,chamber_expiry,contact_email,email,'
+                    + 'local_content_has,local_content_cert_no,local_content_percentage';
     let rows;
     try {
       rows = await regFetchAll(BASE_COLS + ',local_content_expiry', (q) => q.eq('status', 'approved'));
@@ -24230,9 +24267,11 @@ function renderSupDocs(){
     missing: all.filter(r => r.missing.length > 0),
     expired: all.filter(r => r.expired),
     soon:    all.filter(r => r.soon),
+    // مَن أعلن شهادة المحتوى المحلي (سواء اكتمل مرفقها أو نقص) — طلب المالك
+    lc:      all.filter(r => r.lcDeclared),
     all,
   };
-  const list = F[SUPDOC_FILTER] || F.issues;
+  const list = supDocSort(F[SUPDOC_FILTER] || F.issues);
   const tab = (k, label, n, color) => `<button onclick="supDocSetFilter('${k}')" style="cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;border:1.5px solid ${SUPDOC_FILTER===k?color:'var(--border,#e6e8ee)'};background:${SUPDOC_FILTER===k?color+'14':'var(--surface,#fff)'};border-radius:11px;padding:8px 14px">
     <span style="font-size:17px;font-weight:800;color:${color};line-height:1">${n}</span>
     <span style="font-size:12px;font-weight:600;color:${SUPDOC_FILTER===k?color:'var(--muted,#64748b)'}">${label}</span></button>`;
@@ -24242,6 +24281,18 @@ function renderSupDocs(){
       ? `<button onclick="supDocOpen('${escapeAttr(r.id)}','${escapeAttr(k)}')" title="فتح داخل النظام" style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:inherit">✓ ${escapeHtml(l)}</button>`
       : `<span style="background:#fff5f5;color:#b91c1c;border:1px dashed #fecaca;border-radius:6px;padding:3px 8px;font-size:11px">✕ ${escapeHtml(l)}</span>`
     ).join(' ');
+  };
+  /* خلية المحتوى المحلي: النسبة ورقم الشهادة محفوظان لكل من أعلنها، والمرفق قد ينقص.
+     الفصل مقصود — «معلَن بلا مرفق» ليس «غير معلَن»، والخلط بينهما يُخفي المتضرّرين. */
+  const lcCell = (r) => {
+    if(!r.lcDeclared) return '<span style="color:#cbd5e1;font-size:11.5px">—</span>';
+    const pct  = r.lcPct != null && isFinite(r.lcPct) ? r.lcPct.toFixed(2).replace(/\.00$/,'') + '%' : '';
+    const cert = r.lcCert ? `<div style="font-size:10.5px;color:#94a3b8;font-family:'IBM Plex Mono',monospace">${escapeHtml(r.lcCert)}</div>` : '';
+    if(r.lcFile){
+      return `<button onclick="supDocOpen('${escapeAttr(r.id)}','local_content')" title="فتح الشهادة داخل النظام"
+        style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:7px;padding:4px 9px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">✓ مُرفَقة${pct?' · '+escapeHtml(pct):''}</button>${cert}`;
+    }
+    return `<span style="background:#fffbeb;color:#b45309;border:1px dashed #fde68a;border-radius:7px;padding:4px 9px;font-size:11.5px;font-weight:700">⚠ معلَنة — بلا مرفق${pct?' · '+escapeHtml(pct):''}</span>${cert}`;
   };
   const expCell = (r) => {
     const lc = r.lcGap ? '<div style="font-size:11.5px;color:#b45309;font-weight:600">المحتوى المحلي: بيانات ناقصة</div>' : '';
@@ -24259,10 +24310,21 @@ function renderSupDocs(){
       ${tab('missing','تنقصها وثيقة',F.missing.length,'#b91c1c')}
       ${tab('expired','وثائق منتهية',F.expired.length,'#b91c1c')}
       ${tab('soon','تقارب الانتهاء',F.soon.length,'#c2410c')}
+      ${tab('lc','شهادة محتوى محلي',F.lc.length,'#7c3aed')}
       ${tab('all','كل المعتمدين',F.all.length,'#0B1B36')}
-      ${(() => { const n = list.filter(r => r.renew.length).length; return n
-        ? `<button onclick="supDocRenewAll()" title="إرسال بريد تجديد لكل مورّد في هذا التصنيف تنقصه وثيقة أو تقارب شهادته الانتهاء" style="cursor:pointer;font-family:inherit;margin-inline-start:auto;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">✉ إرسال طلبات التجديد (${n})</button>` : ''; })()}
+      <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="supDocVerify()" id="supdoc-verify-btn" title="يتأكّد أن كل وثيقة مُشار إليها موجودة فعلاً في مخزن النظام (R2 أو المخزن القديم)"
+          style="cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#334155;border:1.5px solid #e2e8f0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">🔍 فحص سلامة الوثائق</button>
+        ${(() => { const n = list.filter(r => r.renew.length).length; return n
+          ? `<button onclick="supDocRenewAll()" title="إرسال بريد تجديد لكل مورّد في هذا التصنيف تنقصه وثيقة أو تقارب شهادته الانتهاء" style="cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">✉ إرسال طلبات التجديد (${n})</button>` : ''; })()}
+      </div>
     </div>
+    <div id="supdoc-verify-out"></div>
+    ${(() => {
+      const lcOk = F.lc.filter(r => r.lcFile).length;
+      return F.lc.length ? `<div style="font-size:12px;color:#475569;margin-bottom:10px;padding:8px 12px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:9px">
+        <b style="color:#6d28d9">المحتوى المحلي:</b> ${F.lc.length} مورّد أعلن امتلاك الشهادة —
+        <b style="color:${lcOk?'#15803d':'#b45309'}">${lcOk} مُرفَقة</b>${F.lc.length-lcOk?` · <b style="color:#b45309">${F.lc.length-lcOk} معلَنة بلا مرفق</b>` : ''}.</div>` : ''; })()}
     ${list.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
@@ -24270,6 +24332,7 @@ function renderSupDocs(){
           <th style="padding:11px 13px;text-align:center;font-size:12px">الوثائق الإلزامية</th>
           <th style="padding:11px 13px;text-align:right;font-size:12px">الحالة التفصيلية</th>
           <th style="padding:11px 13px;text-align:right;font-size:12px">صلاحية الشهادات</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">المحتوى المحلي</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">فتح</th>
         </tr></thead>
         <tbody>${list.map(r => `<tr style="border-top:1px solid var(--border,#eef1f6)">
@@ -24283,6 +24346,7 @@ function renderSupDocs(){
           </td>
           <td style="padding:11px 13px"><div style="display:flex;flex-wrap:wrap;gap:5px">${chips(r)}</div></td>
           <td style="padding:11px 13px">${expCell(r)}</td>
+          <td style="padding:11px 13px;white-space:nowrap">${lcCell(r)}</td>
           <td style="padding:11px 13px;text-align:center;white-space:nowrap">
             ${r.renew.length ? `<button id="rnw-${escapeAttr(r.id)}" onclick="supDocRenew('${escapeAttr(r.id)}')" title="${escapeAttr('يُرسَل بريد للمورّد برابط رفع النسخة الجديدة بتاريخها الجديد: ' + r.renew.length + ' مستند')}" style="background:#0B1B36;border:0;border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit;color:#fff;margin-inline-end:6px">✉ طلب تجديد</button>` : ''}
             <button onclick="openRegById('${escapeAttr(r.id)}')" style="background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;color:#334155">الطلب</button>
@@ -24293,6 +24357,76 @@ function renderSupDocs(){
     <div style="font-size:11px;color:#94a3b8;margin-top:8px">يشمل الموردين المعتمدين فقط. الوثائق تُفتح داخل النظام بعارض المستندات.
       «طلب تجديد» يُرسل للمورّد بريداً برابط خاصّ يرفع منه النسخة الجديدة بتاريخها، فتحلّ محلّ القديمة تلقائياً.</div>`;
 }
+/* ── فحص سلامة الوثائق ────────────────────────────────────────────────────
+   صفّ التسجيل يحمل **مؤشّراً** (`doc_paths`) لا الملف نفسه، فقد يشير لملف غير
+   موجود دون أن يظهر ذلك في أي عدّاد — العدّاد يقول «6/6» والوثيقة لا تُفتح.
+   وقد صار المورّد الواحد **مختلط المخزنَين** (قديم على Supabase ومُجدَّد على R2)،
+   فالفحص يسأل المخزنَين معاً لكل مسار ولا يحكم بالفقد إلا بعد أن يخيبا معاً.
+   ⚠️ فحص وجود فقط — لا يُنزّل بايتات (R2 بـ`meta=1`، والقديم بسكّ رابط). */
+let SUPDOC_VERIFY_BUSY = false;
+async function supDocPathExists(path){
+  const tok = await regDocToken();
+  if (tok && !REGDOC_R2_MISS.has(path)){
+    try{
+      const r = await fetch('/api/reg-doc?meta=1&key=' + encodeURIComponent(path), { headers:{ Authorization:'Bearer ' + tok } });
+      if (r.ok) return 'r2';
+      if (r.status !== 404 && r.status !== 503) return 'error';
+    }catch(e){ /* شبكة ⇒ جرّب القديم */ }
+  }
+  try{
+    const {data, error} = await CLOUD.client.storage.from(REG_BUCKET).createSignedUrl(path, 60);
+    if (!error && data && data.signedUrl) return 'legacy';
+  }catch(e){}
+  return 'missing';
+}
+async function supDocVerify(){
+  const out = document.getElementById('supdoc-verify-out');
+  const btn = document.getElementById('supdoc-verify-btn');
+  if (!out || SUPDOC_VERIFY_BUSY) return;
+  if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)){ toast('warn','غير متصل','يتطلّب الفحص اتصالاً سحابياً'); return; }
+  SUPDOC_VERIFY_BUSY = true;
+  if (btn){ btn.disabled = true; btn.textContent = 'جارٍ الفحص…'; }
+  // كل مسار مُشار إليه في التصنيف المعروض (بما فيه الوثائق الاختيارية)
+  const jobs = [];
+  for (const r of supDocSort((SUPDOC_FILTER === 'all' ? SUPDOC_ROWS : SUPDOC_ROWS))){
+    const paths = (r.reg && r.reg.doc_paths) || {};
+    for (const k of Object.keys(paths)) if (paths[k]) jobs.push({ row:r, doc:k, path:paths[k] });
+  }
+  const draw = (done, broken) => { out.innerHTML = `<div style="margin-bottom:12px;padding:10px 13px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:10px;font-size:12.5px;color:#334155">
+    جارٍ فحص الوثائق… <b>${done}</b> من <b>${jobs.length}</b>${broken?` · <b style="color:#b91c1c">${broken} مفقودة</b>`:''}</div>`; };
+  draw(0, 0);
+  const broken = [], stores = { r2:0, legacy:0 };
+  let done = 0, errors = 0;
+  const CONC = 6;                                   // لا نُغرق الشبكة ولا الخادم
+  let next = 0;
+  await Promise.all(Array.from({length: Math.min(CONC, jobs.length)}, async () => {
+    while (next < jobs.length){
+      const j = jobs[next++];
+      const st = await supDocPathExists(j.path);
+      if (st === 'missing') broken.push(j);
+      else if (st === 'error') errors++;
+      else stores[st]++;
+      draw(++done, broken.length);
+    }
+  }));
+  const rows = broken.map(j => `<tr style="border-top:1px solid #fee2e2">
+      <td style="padding:8px 11px;font-weight:700">${escapeHtml(j.row.name)}</td>
+      <td style="padding:8px 11px">${escapeHtml((SUP_REQUIRED_DOCS.find(([k])=>k===j.doc)||[,j.doc])[1] || j.doc)}</td>
+      <td style="padding:8px 11px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#64748b">${escapeHtml(j.path)}</td>
+      <td style="padding:8px 11px;text-align:center"><button onclick="supDocRenew('${escapeAttr(j.row.id)}')" style="background:#0B1B36;color:#fff;border:0;border-radius:7px;padding:5px 10px;font-size:11.5px;cursor:pointer;font-family:inherit">✉ طلب تجديد</button></td>
+    </tr>`).join('');
+  out.innerHTML = broken.length
+    ? `<div style="margin-bottom:12px;border:1px solid #fecaca;background:#fff5f5;border-radius:11px;overflow:hidden">
+        <div style="padding:10px 13px;font-size:13px;font-weight:800;color:#b91c1c">⚠️ ${broken.length} وثيقة مُشار إليها غير موجودة في أي مخزن — من ${jobs.length} وثيقة مفحوصة</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;background:#fff"><tbody>${rows}</tbody></table>
+        <div style="padding:8px 13px;font-size:11px;color:#64748b">اطلب من المورّد رفع نسخة جديدة برابط التجديد — الصفّ يشير لملف غير موجود.</div></div>`
+    : `<div style="margin-bottom:12px;padding:11px 14px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;font-size:13px;color:#15803d;font-weight:700">
+        ✓ كل الوثائق سليمة — فُحِصت ${jobs.length} وثيقة، كلّها موجودة
+        <span style="font-weight:500;color:#166534">(${stores.r2} على R2 · ${stores.legacy} على المخزن القديم${errors?` · ${errors} تعذّر فحصها`:''})</span></div>`;
+  if (btn){ btn.disabled = false; btn.textContent = '🔍 فحص سلامة الوثائق'; }
+  SUPDOC_VERIFY_BUSY = false;
+}
+
 /* ── طلب تجديد المستندات: بريد Resend برابط رفع موقَّع ────────────────────
    قرار المالك (2026-09-07): المستند المنتهي لا يُتابَع بالاتصال ولا بالبريد اليدويّ —
    يُرسل النظام رابطاً خاصّاً بالمورّد يرفع منه النسخة الجديدة بتاريخها الجديد،
@@ -25248,7 +25382,12 @@ async function openRegDetail(jsonStr) {
       ['رقم الشهادة', r.local_content_cert_no],
       ['نسبة المحتوى المحلي', r.local_content_percentage != null ? r.local_content_percentage + '%' : null],
       ['تاريخ انتهاء الشهادة', r.local_content_expiry],
-      ['المستند', (r.doc_paths && r.doc_paths.local_content) ? 'مرفق ✓ (انظر الوثائق أدناه)' : null],
+      /* ⚠️ لا تجعل القيمة `null` عند غياب المرفق: الصفّ يُحذَف كلّه فيبدو القسم
+         مكتملاً («نعم ✓» + رقم + نسبة) بينما الشهادة غير محفوظة — وهو ما أربك
+         المالك فعلاً. النقص يُعلَن صراحةً، والسكوت عنه أسوأ من إظهاره. */
+      ['المستند', !r.local_content_has ? null
+        : (r.doc_paths && r.doc_paths.local_content) ? 'مرفق ✓ (انظر الوثائق أدناه)'
+        : '⚠️ غير مرفق — لم تُحفَظ نسخة الشهادة'],
     ]),
   ].join('');
 
