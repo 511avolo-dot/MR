@@ -1638,6 +1638,59 @@ await (async () => {
     (CODE.match(/mobileTableWrap\(/g) || []).length >= 4);
   T('حقول البحث ≥16px فلا يُقرّب iOS الشاشة عند التركيز',
     /\.topbar \.search input\{font-size:16px\}/.test(HTML));
+
+  /* 🐛 عيب وقعتُ فيه فعلاً (2026-09-08): كتبتُ قواعد «النوافذ كأوراق سفليّة» على
+     `.modal-box`/`.modal-content` — **وهما غير موجودين** في هذا الملف؛ فلم تُطبَّق،
+     والقاعدة الوحيدة التي أصابت (`.modal{align-items:flex-end}`) ضربت **الصندوق**
+     لا الغلاف فانكمش رأس كل نافذة (قياس: 260px داخل 345px).
+     الحارس يستخرج **كل صنف** في كتلة الجوال ويُلزِم وجوده في الترميز — فأي قاعدة
+     تُكتب على اسم متوهَّم تُفشِل البناء بدل أن تمرّ صامتة. */
+  {
+    // ⚠️ الملف فيه أكثر من كتلة `@media (max-width:900px)` — امسحها كلّها لا الأولى
+    let block = '', from = 0, at;
+    while ((at = HTML.indexOf('@media (max-width:900px){', from)) > -1){
+      let depth = 0, end = at;
+      for (let i = HTML.indexOf('{', at); i < HTML.length; i++){
+        if (HTML[i] === '{') depth++;
+        else if (HTML[i] === '}'){ depth--; if (!depth){ end = i; break; } }
+      }
+      block += HTML.slice(at, end);
+      from = end;
+    }
+    // أصناف تُنشَأ في الكتلة نفسها أو تُضاف بـJS وقت التشغيل — لا تُطلَب في الترميز الثابت
+    const ownClasses = new Set(['mnav','mnav-item','mnav-badge','sidebar-account','sa-who','sa-name',
+      'sa-role','sa-actions','sa-btn','danger','table-scroll','nav-open','docv-pdf','docv-page','docv-more',
+      'open','active','btn-sm']);
+    const used = [...new Set([...block.matchAll(/\.([a-zA-Z][\w-]*)/g)].map(m => m[1]))]
+      .filter(c => !ownClasses.has(c));
+    // الصنف «حيّ» إن ورد في ترميز ثابت أو أُسنِد وقت التشغيل (className/classList/قالب نصّي)
+    const alive = c => new RegExp(`class="[^"]*\\b${c}\\b`).test(HTML)
+                    || new RegExp(`className\\s*=\\s*['"\`][^'"\`]*\\b${c}\\b`).test(HTML)
+                    || new RegExp(`classList\\.(add|toggle)\\(['"\`]${c}['"\`]`).test(HTML)
+                    || new RegExp(`class=\\\\?"[^"]*\\b${c}\\b`).test(HTML);
+    const dead = used.filter(c => !alive(c));
+    T(`لا مُحدِّد صنف ميّت في كتلة الجوال (${used.length} صنفاً · ميّت: ${dead.join('،') || 'لا شيء'})`,
+      used.length > 10 && dead.length === 0);
+  }
+  T('ورقة النافذة تستهدف الغلاف لا الصندوق (وإلّا انكمش رأسها)',
+    /\.modal-overlay\{align-items:flex-end/.test(HTML) &&
+    !/\.modal\{align-items:flex-end\}/.test(HTML));
+  T('بطاقات المؤشّرات تبقى عمودين على الجوال (لا تُفرَض عموداً)',
+    !/\.stats-grid[^}]*grid-template-columns:1fr!important/.test(HTML));
+  T('روابط الاتصال هدف لمس مريح على الجوال',
+    /a\[href\^="tel:"\][\s\S]{0,120}min-height:40px/.test(HTML));
+
+  /* ⚠️ pdf.js يفتح عاملاً ومخازن صفحات لكل مستند — بلا destroy تتراكم حتى تُقتل
+     التبويبة (قياس: 3 وثائق ⇒ 3 عمّال). النقطة الوحيدة للإغلاق محروسة هنا. */
+  /* ⚠️ لا تُثبِّت التأكيد على تعليق — `CODE` يُجرّد التعليقات فيفشل دائماً.
+     البنية وحدها: الدالة موجودة، وتُنادى داخل الرسم **قبل** getDocument، وداخل الإغلاق. */
+  T('مستند PDF السابق يُدمَّر قبل فتح جديد وعند الإغلاق (لا تسريب عمّال)',
+    /function docvDestroyPdf\(/.test(CODE) &&
+    /DOCV\._pdf\.destroy\(\)/.test(CODE) &&
+    /function docvRenderPdf\([\s\S]{0,300}docvDestroyPdf\(\)[\s\S]{0,200}getDocument\(/.test(CODE) &&
+    /function docvClose\(\)[\s\S]{0,400}docvDestroyPdf\(\)/.test(CODE));
+  T('تصليب pdf.js: eval معطَّل صراحةً',
+    /isEvalSupported: false/.test(CODE));
   T('الأزرار العائمة فوق شريط التبويبات لا تحته',
     /\.ai-fab,#wf-bell\{bottom:calc\(66px \+ env\(safe-area-inset-bottom\)\)\}/.test(HTML));
 }

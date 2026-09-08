@@ -5,3 +5,7 @@
 # اعتماديات Node المحلية (لا تُلتزَم — بيئة عابرة)
 node_modules/
 design/workflow-designer-redesign.html
+
+# ملفات اختبار مؤقّتة
+audit.pdf
+test.pdf

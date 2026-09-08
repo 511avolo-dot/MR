@@ -2774,7 +2774,7 @@ html{overflow-x:clip}
   /* الشريط العلويّ على الهاتف = بحث + وصولان اثنان + قائمة. البقيّة كلّها
      متاحة داخل الدرج/الإعدادات، فحشرها هنا يُنتج صفّاً مزدحماً غير قابل للنقر.
      ⚠️ لا تُخفِ زرّاً ليس له بديل في الدرج — راجع القائمة قبل الإضافة. */
-  .topbar .kbd,.topbar .date-pill,.topbar .cloud-pill,.topbar .hijri-pill,
+  .topbar .date-pill,.topbar .cloud-pill,
   .topbar #btn-cloud-reconnect,.topbar #btn-cmd-palette,
   .topbar #btn-settings,.topbar #btn-goto-portal,
   .topbar .user-badge,.topbar #btn-logout{display:none}
@@ -2835,9 +2835,8 @@ html{overflow-x:clip}
   }
 
   /* ── أهداف اللمس: 44px حدّ أدنى (Apple HIG / Material) ───────────────── */
-  .btn,button:not(.mnav-item):not(.nav-toggle),
-  select,input:not([type=checkbox]):not([type=radio]),
-  .tab,.chip,.seg-btn{min-height:44px}
+  .btn,button:not(.mnav-item):not(.mobile-toggle),
+  select,input:not([type=checkbox]):not([type=radio]){min-height:44px}
   .btn-sm,.btn.btn-sm{min-height:38px}
 
   /* ── الجداول: تمرير أفقيّ داخل حاويتها لا في الصفحة كلّها ────────────── */
@@ -2848,17 +2847,34 @@ html{overflow-x:clip}
   .toolbar,.toolbar>div{flex-wrap:wrap}
   .toolbar .btn{flex:0 1 auto}
 
-  /* ── النوافذ: ورقة تغطّي الشاشة (سلوك التطبيقات) ─────────────────────── */
-  .modal-box,.modal-content{
-    width:100%!important;max-width:100%!important;
-    max-height:100dvh;border-radius:16px 16px 0 0;
-    margin-top:auto;                                     /* تلتصق بالأسفل كـsheet */
-    padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  /* ── النوافذ: ورقة سفليّة (سلوك التطبيقات) ────────────────────────────
+     ⚠️ الأسماء الصحيحة: `.modal-overlay` هو الغلاف الثابت و`.modal` هو الصندوق
+     (`display:flex;flex-direction:column`). استهداف الصندوق بـ`align-items`
+     يُحاذي **أبناءه** في المحور المتعارض فينكمش الرأس والتذييل — عيب حقيقيّ
+     وقعتُ فيه وقيس: رأس 260px داخل صندوق 345px. المحاذاة تخصّ الغلاف وحده. */
+  .modal-overlay{align-items:flex-end;padding:0}
+  .modal{
+    width:100%;max-width:100%;
+    max-height:92dvh;border-radius:16px 16px 0 0;
+    padding-bottom:env(safe-area-inset-bottom);
   }
-  .modal{align-items:flex-end}
 
-  /* الشبكات متعدّدة الأعمدة تنهار لعمود واحد */
-  .kpi-grid,.stats-grid,.po-alert-grid,.form-grid{grid-template-columns:1fr!important}
+  /* شبكات النماذج لعمود واحد. ⚠️ `.stats-grid` **مستثناة عمداً**: القاعدة
+     القائمة تجعلها عمودين على الجوال وهو أفضل استغلال لبطاقات المؤشّرات —
+     لا تفرض عليها عموداً واحداً. */
+  .form-grid{grid-template-columns:1fr}
+
+  /* ── روابط الاتصال في بطاقة المورد ───────────────────────────────────────
+     قياس: كانت 77×20px — وهي **أكثر ما يُنقَر على الهاتف** في دليل الموردين
+     (اتصال/بريد بضغطة). التوسعة بالحشو لا بتكبير الخطّ فيبقى الشكل كما هو.
+     ⚠️ الاتصال يعمل بفضل روابط `tel:` الصريحة في بطاقة المورد — وهي ما يجعل
+     `format-detection: telephone=no` آمناً (المفتاح يمنع iOS من تحويل أرقام
+     السجل التجاري والضريبي وأوامر الشراء إلى روابط هاتف زائفة). لا تحذف
+     الروابط الصريحة اتّكالاً على الاكتشاف التلقائيّ. */
+  .supplier-details{gap:2px}
+  .supplier-detail a[href^="tel:"],.supplier-detail a[href^="mailto:"]{
+    display:inline-flex;align-items:center;min-height:40px;padding:8px 6px;margin:-8px -6px;
+  }
 }
 
 /* شاشة الدخول على الجوال */
@@ -25336,6 +25352,7 @@ function docvClose(){
   if (el) el.style.display = 'none';
   document.removeEventListener('keydown', docvKeys);
   docvRevoke();
+  docvDestroyPdf();          // وإلّا بقي العامل ومخازن الصفحات حيّةً بعد الإغلاق
   const stage = document.getElementById('docv-stage'); if (stage) stage.innerHTML = '';
   // نافذة تفاصيل الطلب قد تكون مفتوحة تحته — لا نُعيد التمرير إلا إن أُغلق كل شيء
   const reg = document.getElementById('modal-reg-detail');
@@ -25538,10 +25555,23 @@ async function docvPdfLib(){
   _PDFJS = lib;
   return lib;
 }
+/* ⚠️ كل `getDocument` يفتح **عاملاً (Worker) مستقلّاً** ويحتفظ بمخازن الصفحات
+   المفكوكة. بلا `destroy` يبقى ذلك حيّاً حتى تُقتل التبويبة — فعشر وثائق مورّد
+   على هاتف = عشرة عمّال ومخازنهم. هذه الدالة هي **النقطة الوحيدة** التي تُغلق
+   المستند السابق، وتُنادى أيضاً من `docvClose`. */
+function docvDestroyPdf(){
+  if (DOCV._pdf){ try{ DOCV._pdf.destroy(); }catch(e){} DOCV._pdf = null; }
+}
 async function docvRenderPdf(stage, url, d){
   const lib = await docvPdfLib();
-  const doc = await lib.getDocument({ url }).promise;
-  if (DOCV.list[DOCV.i] !== d) { try{ doc.destroy(); }catch(e){} return; }   // بدّل التبويب أثناء الجلب
+  docvDestroyPdf();                       // أغلِق سابقه قبل فتح جديد
+  const doc = await lib.getDocument({
+    url,
+    isEvalSupported: false,               // تصليب: CSP تمنع eval أصلاً، فنُعلنها صراحةً
+    disableAutoFetch: true, disableStream: false,
+  }).promise;
+  DOCV._pdf = doc;
+  if (DOCV.list[DOCV.i] !== d) { docvDestroyPdf(); return; }   // بدّل التبويب أثناء الجلب
   const wrap = document.createElement('div');
   wrap.className = 'docv-pdf';
   stage.innerHTML = '';
