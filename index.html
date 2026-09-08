@@ -2840,8 +2840,28 @@ html{overflow-x:clip}
   .btn-sm,.btn.btn-sm{min-height:38px}
 
   /* ── الجداول: تمرير أفقيّ داخل حاويتها لا في الصفحة كلّها ────────────── */
-  .table-scroll,.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-scroll,.table-wrap,.prj-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .table-scroll table,.table-wrap table{min-width:640px}
+
+  /* ⚠️ عمود الهوية يبقى ثابتاً عند التمرير الأفقيّ — وإلّا انزلق اسم المشروع/
+     الصنف خارج الشاشة وبقيت أرقام بلا صاحب (بلاغ المالك بلقطة 2026-09-08:
+     جدول «سجلّ المشاريع» يعرض «أوامر · القيمة · أزرار» بلا اسم المشروع).
+     في RTL يعني `inset-inline-start:0` الحافة اليمنى — بداية القراءة. */
+  .table-scroll table th:first-child,.table-scroll table td:first-child,
+  .prj-wrap table th:first-child,.prj-wrap table td:first-child{
+    position:sticky;inset-inline-start:0;z-index:2;
+    background:var(--surface);
+    box-shadow:1px 0 0 var(--border);
+  }
+  .table-scroll table thead th:first-child,.prj-wrap table thead th:first-child{
+    z-index:3;background:var(--surface-2);
+  }
+
+  /* جدول المشاريع على الهاتف: أعمدة الرمز والمرادفات ثانويّة — إخفاؤها يُبقي
+     الاسم والأرقام والإجراءات ضمن الشاشة بلا تمرير أصلاً. */
+  .prj-table th:nth-child(2),.prj-table td:nth-child(2),
+  .prj-table th:nth-child(3),.prj-table td:nth-child(3){display:none}
+  .prj-wrap{max-height:60vh}
 
   /* أشرطة الأدوات تلتفّ بدل أن تدفع الصفحة (صفّ أزرار الأصناف = 402px على 393px) */
   .toolbar,.toolbar>div{flex-wrap:wrap}
@@ -8839,8 +8859,36 @@ function a11yWire(root){
    block يُلغي خوارزمية أعمدة الجدول فتنفكّ محاذاة الرؤوس عن الخلايا. الحلّ
    الصحيح: حاوية `overflow-x:auto` **حول** الجدول مع إبقائه جدولاً.
    يُنادى من نقاط `a11yWire` نفسها لأن الجداول تُرسَم بـinnerHTML وقت التشغيل. */
+/* ── بداية التمرير في حاوية RTL ───────────────────────────────────────────────
+   ⚠️ المحرّكات تختلف في أصل `scrollLeft` عند `direction:rtl`: كروميوم يجعل 0 =
+   البداية (اليمين)، وWebKit تاريخيّاً يجعل 0 = أقصى اليسار = **نهاية** المحتوى.
+   فيفتح جدولٌ على الآيفون وقد انزلق عمود الاسم خارج الشاشة (بلاغ المالك 2026-09-08)
+   بينما يبدو سليماً في كروميوم — لذا لا يكفي القياس على محرّك واحد.
+   العلاج بلا افتراض اصطلاح: اضبط ثم **تحقّق** من أنّ أوّل خليّة صارت عند الحافة
+   الابتدائيّة، وإن لم تكن فجرّب الاصطلاح الآخر. */
+function scrollInlineStart(el){
+  try{
+    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+    const rtl = getComputedStyle(el).direction === 'rtl';
+    if (!rtl){ el.scrollLeft = 0; return; }
+    const first = el.querySelector('th,td'); if (!first) { el.scrollLeft = 0; return; }
+    const atStart = () => Math.abs(first.getBoundingClientRect().right - el.getBoundingClientRect().right) < 3;
+    el.scrollLeft = 0;                      // اصطلاح المعيار/كروميوم
+    if (atStart()) return;
+    el.scrollLeft = el.scrollWidth;         // اصطلاح WebKit القديم
+    if (atStart()) return;
+    el.scrollLeft = -(el.scrollWidth);      // اصطلاح فَيرفُكس القديم (سالب)
+  }catch(e){}
+}
+/* كل حاويات التمرير الأفقيّ المعروفة — تُنادى بعد أي رسم */
+function scrollersToStart(root){
+  (root || document).querySelectorAll('.table-scroll,.table-wrap,.prj-wrap').forEach(scrollInlineStart);
+}
+
 function mobileTableWrap(root){
   try{
+    // ⚠️ بدايةُ التمرير مسألة محرّك لا مقاس — تُضبط على كل العروض لا الجوال وحده
+    scrollersToStart(root);
     if (!matchMedia('(max-width:900px)').matches) return;
     (root || document).querySelectorAll('.content table, .modal table').forEach(t => {
       const par = t.parentElement;
@@ -8852,10 +8900,26 @@ function mobileTableWrap(root){
       par.insertBefore(box, t);
       box.appendChild(t);
     });
+    scrollersToStart(root);
   }catch(e){ reportError('mobileTableWrap', e); }
 }
 
-function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); mobileTableWrap(el); } }
+function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); mobileTableWrap(el); modalRenderWatch(el); } }
+
+/* ⚠️ النافذة تُعيد رسم محتواها **بعد** فتحها (تبديل تبويب · إجراء · بحث)، فاللفّة
+   التي تجري عند الفتح وحدها تفوت كل جدول لاحق — وهو ما جعل «سجلّ المشاريع» يظهر
+   مكسوراً بعد التنقّل داخله. مُراقب واحد لكل نافذة، مؤجَّل، يُعيد الضبط عند أي رسم. */
+const _modalWatch = new WeakMap();
+function modalRenderWatch(el){
+  if (_modalWatch.has(el)) return;
+  let t = null;
+  const mo = new MutationObserver(() => {
+    clearTimeout(t);
+    t = setTimeout(() => { try{ mobileTableWrap(el); a11yWire(el); }catch(e){} }, 120);
+  });
+  mo.observe(el, { childList:true, subtree:true });
+  _modalWatch.set(el, mo);
+}
 function closeModal(id){
   const el=document.getElementById(id);
   if(el) el.classList.remove('active');

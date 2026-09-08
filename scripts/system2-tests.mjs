@@ -1723,6 +1723,32 @@ await (async () => {
 
   /* «النظام يظهر صغيراً جداً»: التخطيط سليم مقيساً، والسبب خارج سيطرة الصفحة
      (تكبير سفاري المحفوظ / وضع سطح المكتب). الصفحة تقيسه وتقوله بدل التخمين. */
+  /* 🐛 «بعض النوافذ بالجوال مضروبة» (بلاغ بلقطة 2026-09-08): جدول «سجلّ المشاريع»
+     يعرض «أوامر · القيمة · أزرار» **بلا عمود اسم المشروع**.
+     سببان: (أ) اصطلاح `scrollLeft` في حاوية RTL يختلف بين المحرّكات — كروميوم
+     يجعل 0 = البداية، وWebKit تاريخيّاً 0 = نهاية المحتوى، فيفتح الجدول على
+     الآيفون منزلقاً؛ (ب) لا شيء يُبقي عمود الهوية ظاهراً عند التمرير. */
+  T('بداية تمرير RTL مضبوطة بالتحقّق لا بافتراض اصطلاح محرّك',
+    /function scrollInlineStart\(/.test(CODE) &&
+    /const atStart = \(\)/.test(CODE) &&
+    /el\.scrollLeft = el\.scrollWidth/.test(CODE) &&        // اصطلاح WebKit
+    /el\.scrollLeft = -\(el\.scrollWidth\)/.test(CODE));    // اصطلاح فَيرفُكس
+  T('ضبط بداية التمرير يجري على كل العروض لا الجوال وحده',
+    /function mobileTableWrap\(root\)\{[\s\S]{0,200}scrollersToStart\(root\);[\s\S]{0,120}matchMedia/.test(CODE));
+  T('عمود الهوية لاصق فلا تبقى أرقام بلا صاحب',
+    /table th:first-child,[\s\S]{0,140}position:sticky;inset-inline-start:0/.test(HTML) &&
+    /\.prj-wrap table th:first-child/.test(HTML));
+  T('حاوية جدول المشاريع مشمولة بقواعد التمرير على الجوال',
+    /\.table-scroll,\.table-wrap,\.prj-wrap\{overflow-x:auto/.test(HTML));
+  /* النافذة تُعيد رسم محتواها بعد الفتح (تبويب/إجراء)، فاللفّة عند الفتح وحدها تفوت
+     كل جدول لاحق — مُراقب مؤجَّل يُعيد الضبط. ⚠️ يراقب childList فقط: مراقبة
+     السمات ستُعيد إطلاقه من a11yWire فتدور بلا نهاية. */
+  T('إعادة رسم النافذة بعد الفتح تُعيد ضبط الجداول',
+    /function modalRenderWatch\(/.test(CODE) &&
+    /openModal\([\s\S]{0,180}modalRenderWatch\(el\)/.test(CODE) &&
+    /observe\(el, \{ childList:true, subtree:true \}\)/.test(CODE) &&
+    !/observe\(el, \{[^}]*attributes:\s*true/.test(CODE));
+
   T('كشف التصغير يُبلِّغ بالأرقام الفعلية ولا يظهر على عرض سليم',
     /function mobileViewportCheck\(/.test(CODE) &&
     /documentElement\.clientWidth/.test(CODE) && /screen\.width/.test(CODE) &&
