@@ -2877,6 +2877,21 @@ html{overflow-x:clip}
   }
 }
 
+/* شريط تشخيص التصغير — يظهر فقط عند اكتشاف تكبير محفوظ/وضع سطح مكتب */
+#vp-hint{
+  position:fixed;inset-inline:8px;z-index:1700;
+  bottom:calc(60px + env(safe-area-inset-bottom));
+  display:flex;align-items:flex-start;gap:10px;
+  background:#231F20;color:#fff7e8;border:1px solid rgba(196,162,101,.5);
+  border-radius:12px;padding:11px 13px;font-size:12px;line-height:1.65;
+  box-shadow:0 8px 28px rgba(0,0,0,.32);
+}
+#vp-hint b{color:#E3C88B}
+#vp-hint button{
+  background:none;border:0;color:#fff7e8;font-size:16px;cursor:pointer;
+  padding:0 4px;line-height:1;flex:0 0 auto;
+}
+
 /* شاشة الدخول على الجوال */
 @media (max-width:520px){
   .login-card{padding:26px 20px;margin:0 14px}
@@ -6620,6 +6635,38 @@ function navDrawer(open){
        فقط) فيعود الانزلاق الأفقيّ — قياس: 12 جدولاً عارياً و173px انزلاقاً.
    ⚠️ الاستماع لـ`resize` وحده لا يكفي على iOS: دوران الشاشة قد لا يُطلقه فوراً،
    لذا `orientationchange` أيضاً. والتأجيل يمنع عشرات النداءات أثناء السحب. */
+/* ── «النظام يظهر صغيراً جداً على الهاتف» (بلاغ إنتاج 2026-09-08) ──────────────
+   الانزلاق الأفقيّ صفر مقيساً، فالتخطيط سليم — لكن **مساحة العرض المنطقية**
+   (`clientWidth`) قد تكون أوسع بكثير من عرض الجهاز، فيُصغّر المتصفّح كل شيء
+   ليُظهر تخطيطاً أعرض. سببه على iOS عادةً: تكبير الصفحة المحفوظ لكل موقع في
+   قائمة «aA» (سفاري يتذكّره — وقد ضُبِط حين كانت الصفحة فعلاً أعرض قبل الإصلاح)،
+   أو «طلب موقع سطح المكتب».
+   ⚠️ لا يمكن للصفحة تغيير تكبير سفاري برمجيّاً — لكنّها **تستطيع كشفه وقول
+   الرقم**، فيتحوّل البلاغ من انطباع إلى قياس بدل التخمين عن بُعد. */
+function mobileViewportCheck(){
+  try{
+    const lw = document.documentElement.clientWidth;         // عرض التخطيط بالبكسل المنطقيّ
+    const sw = (window.screen && screen.width) || lw;         // عرض الجهاز
+    const ratio = sw ? lw / sw : 1;
+    const el = document.getElementById('vp-hint');
+    // نافذة سطح مكتب ضيّقة ليست هاتفاً مُصغَّراً — نشترط شاشة صغيرة فعليّاً
+    const shrunk = ratio > 1.3 && sw <= 1024 && !sessionStorage.getItem('proc_vp_hint_off');
+    if (!shrunk){ if (el) el.remove(); return; }
+    const pct = Math.round(100 / ratio) + '%';   // ما يراه المستخدم فعلاً (لا نسبة التخطيط)
+    if (el) { el.querySelector('.vp-n').textContent = pct; return; }
+    const bar = document.createElement('div');
+    bar.id = 'vp-hint';
+    bar.innerHTML = `<div>الصفحة معروضة بتصغير <b class="vp-n">${pct}</b> تقريباً
+      (تخطيط ${lw}px على شاشة ${sw}px). اضبط التكبير من زرّ <b>aA</b> في شريط العنوان إلى 100%،
+      أو أوقِف «طلب موقع سطح المكتب».</div><button type="button" aria-label="إغلاق">✕</button>`;
+    bar.querySelector('button').onclick = () => {
+      try{ sessionStorage.setItem('proc_vp_hint_off','1'); }catch(e){}
+      bar.remove();
+    };
+    document.body.appendChild(bar);
+  }catch(e){ /* تشخيصيّ بحت — لا يُعطّل شيئاً */ }
+}
+
 let _bpTimer = null;
 function onBreakpointChange(){
   clearTimeout(_bpTimer);
@@ -6627,6 +6674,7 @@ function onBreakpointChange(){
     const mobile = matchMedia('(max-width:900px)').matches;
     if (!mobile) navDrawer(false);   // لا يبقى غطاء الدرج على سطح المكتب
     else mobileTableWrap();          // الجداول المرسومة قبل الدوران تُلفّ الآن
+    mobileViewportCheck();           // كشف التصغير المحفوظ بعد الدوران أيضاً
   }, 150);
 }
 addEventListener('resize', onBreakpointChange);
@@ -15029,7 +15077,14 @@ async function tryAutoConnectCloud(){
       catch(e){ console.warn('Supabase library failed to load:', e.message); return false; }
     }
     await CLOUD.init(url, key);
+    /* ⚠️ `CLOUD.enabled` صار true داخل init() — أي **قبل** وصول البيانات. فلو فشل
+       التحميل (شبكة جوّال بطيئة/متقطّعة) بقي الاتصال «مُفعّلاً» بلا بيانات، وحارس
+       إعادة الاتصال التلقائي شرطه `!CLOUD.enabled` فلا يُعيد المحاولة **أبداً** —
+       فيضطرّ المستخدم للضغط على المزامنة مرّةً بعد مرّة (بلاغ إنتاج 2026-09-08).
+       العَلَم أدناه يفصل «متّصل» عن «البيانات وصلت» فيصير التعافي تلقائيّاً. */
+    CLOUD.dataLoaded = false;
     await refreshFromCloud();
+    CLOUD.dataLoaded = true;
     CLOUD.setupRealtime();
     updateCloudStatus('connected');
     // Auto-seed empty cloud (admin only, on first connection after this update)
@@ -19387,6 +19442,7 @@ function startApp(){
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
   try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
   try{ mobileTableWrap(); }catch(e){}
+  try{ mobileViewportCheck(); }catch(e){}   // بلاغ «النظام صغير جداً»: يقيس ويُخبر
   startCloudAutoReconnect();
   try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
 }
@@ -19443,14 +19499,37 @@ function startCloudAutoReconnect(){
   __cloudReconnectTimer = setInterval(async ()=>{
     try{
       // Only attempt if we have a saved cloud config but cloud is currently NOT enabled
-      if(window.CLOUD && !CLOUD.enabled && CLOUD.config && CLOUD.config.url && CLOUD.config.key){
-        if(navigator.onLine !== false){
-          console.log('[auto-reconnect] attempting cloud reconnection...');
-          await tryAutoConnectCloud();
-        }
+      if(!window.CLOUD || navigator.onLine === false) return;
+      const cfg = CLOUD.config && CLOUD.config.url && CLOUD.config.key;
+      if(!cfg) return;
+      if(!CLOUD.enabled){
+        console.log('[auto-reconnect] attempting cloud reconnection...');
+        await tryAutoConnectCloud();
+      } else if(CLOUD.dataLoaded === false){
+        // متّصل لكن البيانات لم تصل — أعِد التحميل وحده (لا حاجة لإعادة التهيئة)
+        console.log('[auto-reconnect] connected but data never loaded — retrying fetch...');
+        try{ await refreshFromCloud(); CLOUD.dataLoaded = true; updateCloudStatus('connected'); }
+        catch(e){ /* المحاولة التالية بعد 10 ثوانٍ */ }
       }
     }catch(e){ /* silent */ }
   }, 10000); // every 10 seconds
+
+  /* على الجوال تحديداً: الشبكة تعود، أو يعود المستخدم للتبويبة بعد تبديل تطبيق —
+     الانتظار 10 ثوانٍ عندها يبدو «معلّقاً». هذان الحدثان يُسرّعان التعافي فوراً. */
+  const kick = () => { try{ if(navigator.onLine !== false) __cloudRetryNow(); }catch(e){} };
+  addEventListener('online', kick);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) kick(); });
+}
+/* محاولة فورية واحدة بخانق بسيط (لا تُغرِق الشبكة عند تكرار الأحداث) */
+let __cloudRetryAt = 0;
+async function __cloudRetryNow(){
+  if(!window.CLOUD || !CLOUD.config || !CLOUD.config.url) return;
+  if(CLOUD.enabled && CLOUD.dataLoaded !== false) return;   // كل شيء سليم
+  const now = Date.now(); if(now - __cloudRetryAt < 5000) return; __cloudRetryAt = now;
+  try{
+    if(!CLOUD.enabled) await tryAutoConnectCloud();
+    else { await refreshFromCloud(); CLOUD.dataLoaded = true; updateCloudStatus('connected'); }
+  }catch(e){ /* الدورة الدوريّة تتكفّل */ }
 }
 
 async function manualReconnectCloud(){
@@ -25329,7 +25408,7 @@ const DOCV_NAMES = {cr:'السجل التجاري', vat:'شهادة الزكاة
   quality:'شهادات الجودة', safety:'شهادات السلامة', clients:'قائمة العملاء', brochure:'البروشور',
   local_content:'شهادة المحتوى المحلي',
 };
-const DOCV = { list: [], i: 0, urls: new Map(), reg: null, title: '' };
+const DOCV = { list: [], i: 0, urls: new Map(), blobs: new Map(), reg: null, title: '' };
 
 function docvLabel(key){ return DOCV_NAMES[key] || key; }
 function docvExt(path){ return String(path||'').split('?')[0].split('.').pop().toLowerCase(); }
@@ -25372,6 +25451,7 @@ function docvClose(){
   if (el) el.style.display = 'none';
   document.removeEventListener('keydown', docvKeys);
   docvRevoke();
+  DOCV.blobs.clear();
   docvDestroyPdf();          // وإلّا بقي العامل ومخازن الصفحات حيّةً بعد الإغلاق
   const stage = document.getElementById('docv-stage'); if (stage) stage.innerHTML = '';
   // نافذة تفاصيل الطلب قد تكون مفتوحة تحته — لا نُعيد التمرير إلا إن أُغلق كل شيء
@@ -25540,11 +25620,17 @@ async function docvShow(i){
     if (DOCV.list[DOCV.i] !== d) return;   // بدّل المستخدم التبويب أثناء الجلب
     const kind = docvKind(d.path);
     if (kind === 'pdf'){
+      /* ⚠️ pdf.js يجلب أي `url` تُعطيه **عبر طبقة الشبكة** — و`connect-src` في CSP
+         الإنتاج لا تسمح بـ`blob:` فيُرفَض الطلب ويظهر
+         «Unexpected server response (0) while retrieving PDF blob:…»
+         (بلاغ إنتاج 2026-09-08؛ اختباري المحلّي مرّ لأنّه بلا ترويسات الإنتاج).
+         العلاج الجذريّ: **لا تُعطِه رابطاً إطلاقاً** — نمرّر البايتات مباشرةً
+         (`data`) فلا طلب شبكة ولا علاقة لـCSP بالأمر أصلاً. */
       /* ⚠️ لا تُعِد الـ`<iframe>` هنا: **iOS Safari لا يرسم PDF داخل إطار مضمّن
          إطلاقاً** فيظهر بياضاً كاملاً (بلاغ المالك بلقطة 2026-09-07)، وكذلك
          WebView أندرويد في حالات كثيرة. الرسم بـpdf.js على canvas يعمل على
          الأنظمة الثلاثة بسلوك واحد. والسقوط إلى الإطار محفوظ لسطح المكتب فقط. */
-      await docvRenderPdf(stage, url, d);
+      await docvRenderPdf(stage, await docvBytes(d.path), d);
     } else if (kind === 'img'){
       stage.innerHTML = `<img src="${url}" alt="${escapeAttr(d.label)}" style="max-width:100%;max-height:100%;object-fit:contain;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.12)">`;
     } else {
@@ -25582,13 +25668,23 @@ async function docvPdfLib(){
 function docvDestroyPdf(){
   if (DOCV._pdf){ try{ DOCV._pdf.destroy(); }catch(e){} DOCV._pdf = null; }
 }
-async function docvRenderPdf(stage, url, d){
+/* بايتات الوثيقة نفسها (لا رابط) — تُعاد من الذاكرة المؤقّتة إن كانت محمّلة */
+async function docvBytes(path){
+  const blob = DOCV.blobs.get(path) || await regDocFetch(path);
+  DOCV.blobs.set(path, blob);
+  while (DOCV.blobs.size > 3){                 // سقف ذاكرة كسقف الروابط
+    const oldest = [...DOCV.blobs.keys()].find(k => k !== (DOCV.list[DOCV.i]||{}).path);
+    if (!oldest) break;
+    DOCV.blobs.delete(oldest);
+  }
+  return new Uint8Array(await blob.arrayBuffer());
+}
+async function docvRenderPdf(stage, bytes, d){
   const lib = await docvPdfLib();
   docvDestroyPdf();                       // أغلِق سابقه قبل فتح جديد
   const doc = await lib.getDocument({
-    url,
+    data: bytes,                          // ⚠️ بايتات لا رابط — فلا يمسّها connect-src
     isEvalSupported: false,               // تصليب: CSP تمنع eval أصلاً، فنُعلنها صراحةً
-    disableAutoFetch: true, disableStream: false,
   }).promise;
   DOCV._pdf = doc;
   if (DOCV.list[DOCV.i] !== d) { docvDestroyPdf(); return; }   // بدّل التبويب أثناء الجلب

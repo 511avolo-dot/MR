@@ -1692,6 +1692,42 @@ await (async () => {
   T('تصليب pdf.js: eval معطَّل صراحةً',
     /isEvalSupported: false/.test(CODE));
 
+  /* 🐛 بلاغ إنتاج 2026-09-08: «Unexpected server response (0) while retrieving PDF blob:…»
+     pdf.js يجلب أي `url` **عبر طبقة الشبكة**، و`connect-src` في CSP الإنتاج لا تسمح
+     بـ`blob:` فيُرفَض. اختباري المحلّي مرّ لأنّه كان **بلا ترويسات الإنتاج** — وهذا
+     خطأ منهجيّ. العلاج: تمرير البايتات (`data`) فلا طلب شبكة أصلاً.
+     ⚠️ الحارس مزدوج: لا `url` في getDocument، **و**`connect-src` تبقى بلا `blob:`
+     (فلو عاد أحدهم للرابط انكشف فوراً بدل أن يُخفيه توسيعُ CSP). */
+  T('pdf.js يستقبل بايتات لا رابطاً (مناعة من connect-src)',
+    /getDocument\(\{[\s\S]{0,80}data: bytes/.test(CODE) &&
+    !/getDocument\(\{[\s\S]{0,60}\burl\b\s*[,:]/.test(CODE) &&
+    /async function docvBytes\(/.test(CODE) &&
+    /blob\.arrayBuffer\(\)/.test(CODE));
+  {
+    const HEADERS = fs.readFileSync(path.join(ROOT,'_headers'),'utf8');
+    const connect = (HEADERS.match(/connect-src([^;]*)/)||[,''])[1];
+    T('CSP تبقى مشدّدة — لم نُوسّعها لتمرير blob',
+      !/blob:/.test(connect));
+  }
+
+  /* 🐛 «يحتاج مزامنة أكثر من مرة ليتصل» — `CLOUD.enabled=true` يُضبط داخل init()
+     أي **قبل** وصول البيانات، وحارس إعادة الاتصال شرطه `!CLOUD.enabled`، فلو فشل
+     تحميل البيانات على شبكة الجوال بقي «متّصلاً» بلا بيانات ولا يُعيد المحاولة أبداً. */
+  T('«متّصل بلا بيانات» حالة معروفة ويُعاد تحميلها تلقائياً',
+    /CLOUD\.dataLoaded = false;\s*\n\s*await refreshFromCloud\(\);\s*\n\s*CLOUD\.dataLoaded = true/.test(CODE) &&
+    /CLOUD\.dataLoaded === false/.test(CODE));
+  T('تعافٍ فوريّ عند عودة الشبكة أو الرجوع للتبويبة (لا انتظار 10 ثوانٍ)',
+    /addEventListener\('online', kick\)/.test(CODE) &&
+    /visibilitychange[\s\S]{0,60}kick\(\)/.test(CODE) &&
+    /function __cloudRetryNow\(/.test(CODE));
+
+  /* «النظام يظهر صغيراً جداً»: التخطيط سليم مقيساً، والسبب خارج سيطرة الصفحة
+     (تكبير سفاري المحفوظ / وضع سطح المكتب). الصفحة تقيسه وتقوله بدل التخمين. */
+  T('كشف التصغير يُبلِّغ بالأرقام الفعلية ولا يظهر على عرض سليم',
+    /function mobileViewportCheck\(/.test(CODE) &&
+    /documentElement\.clientWidth/.test(CODE) && /screen\.width/.test(CODE) &&
+    /ratio > 1\.3/.test(CODE) && /id="vp-hint"|id = 'vp-hint'/.test(CODE));
+
   /* عبور نقطة الانكسار (دوران/طيّ/تغيير حجم) — عيبان مقيسان كانا كامنَين:
      غطاء الدرج يبقى فوق سطح المكتب (قاعدته خارج @media)، والجداول المرسومة
      قبل الدوران تبقى بلا لافّ فيعود الانزلاق (12 جدولاً عارياً · 173px). */
