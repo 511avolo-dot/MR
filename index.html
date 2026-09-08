@@ -15138,8 +15138,15 @@ async function refreshFromCloud(){
              && !cloudSupHard.has(supKeyStrong(s.name))));
   STATE.suppliers = [...data.suppliers.map(x=>({...x,_cloud:true,_user:true})), ...baseSups];
 
+  /* المطابقة بالرقم وحده لا تكفي: السحابة نُقّيت من سجلات مكرّرة (نفس الصنف والسعر
+     والمورد والتاريخ برقمين مختلفين)، فالبذرة كانت **تعيد إدراج المحذوف** في كل جهاز
+     ⇒ عدّاد عروض منتفخ. مُقاس: ستّة سجلات ترجع هكذا. فنُسقِط أيضاً ما يطابق سجلاً
+     سحابياً في محتواه (صنف+مورد+سعر+تاريخ) مهما اختلف رقمه. */
+  const histSig = h => [h.code||h.name||'', arNorm(h.supplier||''), h.price, h.date].join(' ');
   const cloudHistNums = new Set(data.history.map(h=>h.num));
-  const baseHist = (SEED.history||[]).filter(h=>!cloudHistNums.has(h.num));
+  const cloudHistSigs = new Set(data.history.map(histSig));
+  const baseHist = (SEED.history||[])
+    .filter(h=>!cloudHistNums.has(h.num) && !cloudHistSigs.has(histSig(h)));
   STATE.history = [...data.history.map(x=>({...x,_cloud:true,_user:true})), ...baseHist];
 
   // أوامر الشراء: السحابة مصدر الحقيقة + دمج الإضافات المحلية غير المرفوعة
