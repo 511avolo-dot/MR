@@ -521,6 +521,17 @@ textarea.form-input{min-height:70px;resize:vertical;font-family:inherit}
   font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:10px;
   font-family:'IBM Plex Mono',monospace;
 }
+/* شارة نقص البيانات — تُظهر ما ينقص المورد وتفتح نموذج التعديل بنقرة.
+   هدف لمس ≥28px ارتفاعاً كي تصلح للجوال (بقيّة الشارات للعرض لا للنقر). */
+.sup-gap-badge{
+  display:inline-flex;align-items:center;gap:4px;margin-bottom:8px;
+  background:rgba(180,83,9,0.10);color:#b45309;border:1px solid rgba(180,83,9,0.22);
+  font-size:11px;font-weight:600;padding:5px 10px;border-radius:9px;cursor:pointer;
+  min-height:28px;line-height:1;
+}
+.sup-gap-badge:hover{background:rgba(180,83,9,0.18)}
+.sup-gap-badge.crit{background:rgba(185,28,28,0.10);color:#b91c1c;border-color:rgba(185,28,28,0.25)}
+.sup-gap-badge.crit:hover{background:rgba(185,28,28,0.18)}
 
 /* ============ TOAST ============ */
 /* ============ MODE TOGGLE ============ */
@@ -3680,6 +3691,15 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
           <input type="text" class="input" id="sup-search" placeholder="ابحث: الاسم · التخصص · جهة الاتصال · الهاتف · البريد · السجل التجاري" style="flex:1;max-width:400px">
           <select class="select" id="sup-specialty">
             <option value="">كل التخصصات</option>
+          </select>
+          <select class="select" id="sup-gaps" onchange="renderSuppliers()" data-tooltip="تصفية حسب اكتمال البيانات">
+            <option value="">كل الموردين</option>
+            <option value="any">⚠ بيانات ناقصة</option>
+            <option value="contact">بلا وسيلة تواصل</option>
+            <option value="identity">بلا سجل تجاري/ضريبي</option>
+            <option value="specialty">بلا تخصص</option>
+            <option value="city">بلا مدينة</option>
+            <option value="ok">✓ بيانات مكتملة</option>
           </select>
           <select class="select" id="sup-sort" onchange="renderSuppliers()">
             <option value="offers">الأكثر عروضاً</option>
@@ -6931,7 +6951,7 @@ function renderDashboard(){
   // Top suppliers
   const topSup = [...STATE.suppliers].sort((a,b)=>(b.offers_count||0)-(a.offers_count||0)).slice(0,6);
   document.getElementById('top-sup-count').textContent = `${topSup.length} من أصل ${STATE.suppliers.length}`;
-  document.getElementById('top-suppliers').innerHTML = topSup.map(s=>supplierCard(s)).join('');
+  document.getElementById('top-suppliers').innerHTML = topSup.map(s=>supplierCard(s, true)).join('');
 
   // Last update indicator
   const lastUpdateEl = document.getElementById('dashboard-last-update');
@@ -7659,7 +7679,8 @@ function renderSuppliers(more){
   const raw = (document.getElementById('sup-search')?.value||'').trim();
   const specFilter = sel ? sel.value : '';
   const sort = document.getElementById('sup-sort')?.value || 'offers';
-  const key = raw + '\u0000' + specFilter + '\u0000' + sort;
+  const gapFilter = document.getElementById('sup-gaps')?.value || '';
+  const key = raw + '\u0000' + specFilter + '\u0000' + sort + '\u0000' + gapFilter;
   if(!more || key !== _supLast) _supShown = SUP_PAGE;   // أي تغيير للمرشّح يعيد الدفعة الأولى
   _supLast = key;
 
@@ -7668,6 +7689,7 @@ function renderSuppliers(more){
   const digits = supQueryDigits(raw);
   if(terms.length || digits) list = list.filter(s => supMatches(s, terms, digits));
   if(specFilter) list = list.filter(s=>s.specialty===specFilter);
+  if(gapFilter) list = list.filter(s=>supGapMatch(s, gapFilter));
   if(sort === 'name') list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
   else if(sort === 'recent') list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
   else list.sort((a,b)=>(b.offers_count||0)-(a.offers_count||0));
@@ -7685,6 +7707,8 @@ function renderSuppliers(more){
       // تركيب العدد: يجيب «كيف صار العدد كذا؟» بلا تخمين — والبذرة غير المرفوعة تُميَّز
       + (!filtered && bd.seed ? ` · <b>${bd.cloud}</b> من السحابة · <b>${bd.seed}</b> من بذرة الإكسل <span style="opacity:.75">(لم تُرفع للسحابة بعد)</span>` : '')
       + (bd.dupGroups ? ` · <a href="#" onclick="event.preventDefault();supShowDupes()" style="color:#b45309">⚠ ${bd.dupGroups} اسماً مكرّراً</a>` : '')
+      // ملخّص النقص + روابط تُفعّل المرشّح مباشرةً (لا بحث يدويّ عمّن ينقصه ماذا)
+      + (!gapFilter ? supGapSummaryHtml() : '')
     : '';
   const moreBox = document.getElementById('sup-more');
   if(moreBox){
@@ -7696,6 +7720,66 @@ function renderSuppliers(more){
   }
 }
 function supShowMore(){ _supShown += SUP_PAGE; renderSuppliers(true); }
+
+/* ============================================================
+   اكتمال بيانات المورد — «من تنقصه بيانات وماذا ينقصه»
+   ------------------------------------------------------------
+   بعد استكمال الدليل من كل مصادر النظام (2026-09-08) بقي موردون بلا وسيلة
+   تواصل — منهم من له **114 عرض سعر**. لا مصدر لهم في أي جدول، فالإكمال
+   إدخال بشريّ؛ ودور الشاشة أن تُظهر من ينقصه ماذا، مرتَّبين بأهميتهم
+   (عدد العروض)، وأن تفتح نموذج التعديل بنقرة واحدة.
+   ⚠️ «—» و«-» وسطور الشرطات تُعامَل **فراغاً**: كانت مخزَّنة كقيم نائبة
+   فتبدو بيانات وتمنع رصد النقص (نُظِّفت في القاعدة، والحارس يبقى هنا). */
+function supVal(v){
+  const t = String(v == null ? '' : v).trim();
+  return (!t || t === '—' || t === '-' || /^ـ+$/.test(t)) ? '' : t;
+}
+const SUP_GAP_FIELDS = [
+  { key:'contact',   label:'وسيلة تواصل',            has:s=>['phone','mobile','email'].some(k=>supVal(s[k])) },
+  { key:'identity',  label:'سجل تجاري أو رقم ضريبي', has:s=>['commercial_reg','tax_id'].some(k=>supVal(s[k])) },
+  { key:'specialty', label:'التخصص',                 has:s=>!!supVal(s.specialty) },
+  { key:'city',      label:'المدينة',                has:s=>!!supVal(s.city) },
+];
+function supDataGaps(s){ const o = s || {}; return SUP_GAP_FIELDS.filter(f=>!f.has(o)); }
+function supGapMatch(s, mode){
+  const g = supDataGaps(s);
+  if(mode === 'any')  return g.length > 0;
+  if(mode === 'ok')   return g.length === 0;
+  if(!mode) return true;
+  return g.some(f=>f.key === mode);            // نقص بعينه: تواصل · هويّة · تخصص · مدينة
+}
+/* فتح نموذج التعديل مباشرةً من الشارة — أقصر طريق لضبط البيانات */
+function supFixSupplier(name){
+  const s = (STATE.suppliers||[]).find(x=>x.name === name);
+  if(s) openEditSupplier(s);
+}
+/* ملخّص النقص أسفل شريط الأدوات — كل رقم رابط يضبط المرشّح */
+function supSetGapFilter(mode){
+  const el = document.getElementById('sup-gaps');
+  if(el){ el.value = mode; renderSuppliers(); }
+}
+function supGapSummaryHtml(){
+  const all = STATE.suppliers || [];
+  const counts = {};
+  SUP_GAP_FIELDS.forEach(f=>{ counts[f.key] = all.filter(s=>!f.has(s||{})).length; });
+  const incomplete = all.filter(s=>supDataGaps(s).length).length;
+  if(!incomplete) return ' · <span style="color:#15803d">✓ بيانات كل الموردين مكتملة</span>';
+  const parts = SUP_GAP_FIELDS.filter(f=>counts[f.key])
+    .map(f=>`<a href="#" onclick="event.preventDefault();supSetGapFilter('${f.key}')" style="color:#b45309">${counts[f.key]} بلا ${escapeHtml(f.label)}</a>`);
+  return ` · <a href="#" onclick="event.preventDefault();supSetGapFilter('any')" style="color:#b45309">⚠ ${incomplete} بيانات ناقصة</a>`
+       + (parts.length ? ` <span style="opacity:.8">(${parts.join(' · ')})</span>` : '');
+}
+/* `criticalOnly`: بطاقات «أعلى الموردين» في لوحة التحكم تعرض النقص **الحرِج فقط**
+   (لا وسيلة تواصل) — نقص المدينة أو التخصص شأن شاشة الدليل لا لوحة التحكم. */
+function supGapBadge(s, criticalOnly){
+  let g = supDataGaps(s);
+  if(criticalOnly) g = g.filter(f=>f.key === 'contact');
+  if(!g.length) return '';
+  const critical = g.some(f=>f.key === 'contact');
+  const safe = escapeAttr(s.name||'').replace(/'/g,"\\'");
+  return `<span class="sup-gap-badge${critical?' crit':''}" title="ينقصه: ${escapeAttr(g.map(f=>f.label).join(' · '))} — اضغط للتعديل"
+    onclick="event.stopPropagation();supFixSupplier('${safe}')">⚠ ${g.length === 1 ? escapeHtml(g[0].label) : 'ينقصه '+g.length}</span>`;
+}
 
 /* أسماء تتكرّر بعد التطبيع = المورد نفسه ببطاقتين (كتابة مختلفة أو صفّ سحابي
    وصفّ بذرة). نعرضها ولا ندمج تلقائياً: الدمج قرار بيانات يخصّ المالك.
@@ -7726,7 +7810,7 @@ function supShowDupes(){
 }
 function supCloseDupes(){ const m=document.getElementById('modal-sup-dupes'); if(m) m.remove(); }
 
-function supplierCard(s){
+function supplierCard(s, criticalGapsOnly){
   const initial = (s.name||'—').trim().charAt(0);
   const safeName = escapeAttr(s.name||'');
   return `
@@ -7734,6 +7818,7 @@ function supplierCard(s){
       ${s.offers_count? `<div class="supplier-tag">${s.offers_count} عرض</div>`:''}
       <div class="avatar">${initial}</div>
       <div class="supplier-name">${escapeHtml(s.name||'—')}${s._user?'<span class="user-badge">مضاف</span>':''}</div>
+      ${supGapBadge(s, criticalGapsOnly)}
       ${s.contact?`<div class="supplier-contact-name">جهة الاتصال: ${escapeHtml(s.contact)}</div>`:''}
       <div class="supplier-details">
         ${s.phone && s.phone!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:${normalizeSaudiPhone(s.phone)}" dir="ltr" style="unicode-bidi:isolate">${escapeHtml(normalizeSaudiPhone(s.phone))}</a></div>`:''}

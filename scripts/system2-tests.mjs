@@ -213,7 +213,7 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
-  'arNorm', 'supKey', 'supKeyStrong', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
+  'arNorm', 'supKey', 'supKeyStrong', 'supVal', 'supDataGaps', 'supGapMatch', 'supGapBadge', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
   'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
@@ -246,7 +246,7 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
-  'SUP_ENTITY_RE', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
+  'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1878,6 +1878,45 @@ G('٢٦) تركيب قائمة الموردين');
     /!cloudHistNums\.has\(h\.num\)\s*&&\s*!cloudHistSigs\.has\(histSig\(h\)\)/.test(CODE));
   T('بصمة السجل تشمل الصنف والمورد والسعر والتاريخ',
     /histSig\s*=\s*h\s*=>\s*\[h\.code\|\|h\.name\|\|'',\s*arNorm\(h\.supplier\|\|''\),\s*h\.price,\s*h\.date\]/.test(CODE));
+  /* ── اكتمال بيانات المورد ────────────────────────────────────────────────
+     بعد استكمال الدليل من كل مصادر النظام بقي موردون بلا وسيلة تواصل، منهم
+     من له 114 عرض سعر. الشاشة تُظهر من ينقصه ماذا وتفتح التعديل بنقرة. */
+  T('«—» و«-» تُعامَل فراغاً لا بيانات',
+    api.supVal('—') === '' && api.supVal('-') === '' && api.supVal('ـــ') === '' && api.supVal('0501') === '0501');
+  T('المورد المكتمل بلا نقص',
+    api.supDataGaps({ name:'x', phone:'0501', commercial_reg:'1010', specialty:'كهرباء', city:'الرياض' }).length === 0);
+  T('غياب الهاتف والجوال والبريد = نقص وسيلة تواصل',
+    api.supDataGaps({ name:'x', commercial_reg:'1010', specialty:'a', city:'b' }).map(f=>f.key).join() === 'contact');
+  T('البريد وحده يكفي كوسيلة تواصل',
+    !api.supDataGaps({ name:'x', email:'a@b.c', commercial_reg:'1', specialty:'a', city:'b' }).some(f=>f.key==='contact'));
+  T('السجل التجاري أو الرقم الضريبي — أيّهما يكفي للهويّة',
+    !api.supDataGaps({ name:'x', phone:'1', tax_id:'3', specialty:'a', city:'b' }).some(f=>f.key==='identity') &&
+     api.supDataGaps({ name:'x', phone:'1', specialty:'a', city:'b' }).some(f=>f.key==='identity'));
+  T('القيمة النائبة لا تُحسَب بياناتٍ فيبقى النقص مرصوداً',
+    api.supDataGaps({ name:'x', phone:'—', mobile:'-', email:'—' }).some(f=>f.key==='contact'));
+  T('المرشّح: any و ok و نقص بعينه',
+    api.supGapMatch({ name:'x' }, 'any') && !api.supGapMatch({ name:'x' }, 'ok') &&
+    api.supGapMatch({ name:'x', phone:'1', specialty:'a', city:'b' }, 'identity') &&
+    api.supGapMatch({ name:'x', phone:'1', tax_id:'1', specialty:'a', city:'b' }, 'ok'));
+  T('مرشّح فارغ = لا تصفية', api.supGapMatch({ name:'x' }, '') === true);
+  T('الشاشة مربوطة: مُنتقي + تصفية + مفتاح إعادة الرسم',
+    /id="sup-gaps"/.test(HTML) && /gapFilter\s*=\s*document\.getElementById\('sup-gaps'\)/.test(CODE) &&
+    /list = list\.filter\(s=>supGapMatch\(s, gapFilter\)\)/.test(CODE) &&
+    /key = raw \+ '\\u0000' \+ specFilter \+ '\\u0000' \+ sort \+ '\\u0000' \+ gapFilter/.test(CODE));
+  T('الشارة تفتح نموذج التعديل مباشرةً ولا تفتح بطاقة المورد',
+    /function supFixSupplier\(name\)\{[\s\S]{0,200}openEditSupplier\(s\)/.test(CODE) &&
+    /event\.stopPropagation\(\);supFixSupplier\(/.test(CODE));
+  T('الشارة معروضة في بطاقة المورد وملخّص النقص في سطر العدّاد',
+    /\$\{supGapBadge\(s, criticalGapsOnly\)\}/.test(CODE) && /supGapSummaryHtml\(\)/.test(CODE));
+  /* لوحة التحكم تعرض «أعلى الموردين» بالبطاقة نفسها — النقص غير الحرِج ضجيج هناك. */
+  T('لوحة التحكم تُظهر النقص الحرِج فقط (لا وسيلة تواصل)',
+    /top-suppliers'\)\.innerHTML = topSup\.map\(s=>supplierCard\(s, true\)\)/.test(CODE) &&
+    /criticalOnly\) g = g\.filter\(f=>f\.key === 'contact'\)/.test(CODE));
+  T('وضع «الحرِج فقط» يُسكِت نقص المدينة ويُبقي نقص التواصل',
+    api.supGapBadge({ name:'x', phone:'1', commercial_reg:'1', specialty:'a' }, true) === '' &&
+    api.supGapBadge({ name:'x', commercial_reg:'1', specialty:'a', city:'b' }, true) !== '');
+  T('الشارة هدف لمس صالح للجوال (≥28px)',
+    /\.sup-gap-badge\{[^}]*min-height:28px/.test(HTML));
   T('بذرة موردي أوامر الشراء لم تُحيَ (لا ثابت ولا دمج)',
     !/const PO_SUPPLIER_SEED\s*=/.test(CODE) && !/function mergePOSupplierSeed/.test(CODE) &&
     !/\bmergePOSupplierSeed\(\)/.test(CODE));
