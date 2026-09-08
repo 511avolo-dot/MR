@@ -6612,6 +6612,26 @@ function navDrawer(open){
 }
 /* مزامنة الشريط السفليّ مع الشاشة الحالية — الصفحات غير المُمثَّلة فيه تُبقي
    «المزيد» بلا تحديد بدل إبراز تبويب خاطئ. */
+/* ── عبور نقطة الانكسار (دوران الشاشة · الأجهزة القابلة للطيّ · تغيير حجم النافذة) ──
+   عيبان مقيسان كانا كامنَين هنا:
+   (أ) درج مفتوح ثم دوران لعرض كبير ⇒ `#overlay` يبقى `display:block` **يغطّي
+       سطح المكتب** (قاعدته خارج @media فلا يُلغيها اتّساع الشاشة) والتطبيق مشلول.
+   (ب) جدول رُسِم على عرض كبير ثم دوران للجوال ⇒ لم يُلفّ (اللافّ يعمل وقت الرسم
+       فقط) فيعود الانزلاق الأفقيّ — قياس: 12 جدولاً عارياً و173px انزلاقاً.
+   ⚠️ الاستماع لـ`resize` وحده لا يكفي على iOS: دوران الشاشة قد لا يُطلقه فوراً،
+   لذا `orientationchange` أيضاً. والتأجيل يمنع عشرات النداءات أثناء السحب. */
+let _bpTimer = null;
+function onBreakpointChange(){
+  clearTimeout(_bpTimer);
+  _bpTimer = setTimeout(() => {
+    const mobile = matchMedia('(max-width:900px)').matches;
+    if (!mobile) navDrawer(false);   // لا يبقى غطاء الدرج على سطح المكتب
+    else mobileTableWrap();          // الجداول المرسومة قبل الدوران تُلفّ الآن
+  }, 150);
+}
+addEventListener('resize', onBreakpointChange);
+addEventListener('orientationchange', onBreakpointChange);
+
 function mnavSync(){
   const cur = STATE.page;
   document.querySelectorAll('.mnav-item[data-mpage]').forEach(b=>{

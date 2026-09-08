@@ -1691,6 +1691,17 @@ await (async () => {
     /function docvClose\(\)[\s\S]{0,400}docvDestroyPdf\(\)/.test(CODE));
   T('تصليب pdf.js: eval معطَّل صراحةً',
     /isEvalSupported: false/.test(CODE));
+
+  /* عبور نقطة الانكسار (دوران/طيّ/تغيير حجم) — عيبان مقيسان كانا كامنَين:
+     غطاء الدرج يبقى فوق سطح المكتب (قاعدته خارج @media)، والجداول المرسومة
+     قبل الدوران تبقى بلا لافّ فيعود الانزلاق (12 جدولاً عارياً · 173px). */
+  T('عبور نقطة الانكسار يُغلق الدرج ويُعيد لفّ الجداول',
+    /function onBreakpointChange\(/.test(CODE) &&
+    /matchMedia\('\(max-width:900px\)'\)\.matches/.test(CODE) &&
+    /onBreakpointChange[\s\S]{0,300}navDrawer\(false\)[\s\S]{0,120}mobileTableWrap\(\)/.test(CODE));
+  T('يلتقط الدوران لا تغيير الحجم وحده (iOS قد لا يُطلق resize فوراً)',
+    /addEventListener\('resize', onBreakpointChange\)/.test(CODE) &&
+    /addEventListener\('orientationchange', onBreakpointChange\)/.test(CODE));
   T('الأزرار العائمة فوق شريط التبويبات لا تحته',
     /\.ai-fab,#wf-bell\{bottom:calc\(66px \+ env\(safe-area-inset-bottom\)\)\}/.test(HTML));
 }
