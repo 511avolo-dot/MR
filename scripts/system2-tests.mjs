@@ -213,7 +213,8 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
-  'arNorm', 'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
+  'arNorm', 'supKey', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
+  'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
@@ -1783,6 +1784,70 @@ await (async () => {
     REG.indexOf("!docPaths['local_content']") > REG.indexOf('const uploadFailures = []'));
   T('التحقّق الأماميّ يُلزِم المرفق أيضاً (رحلة فاشلة أقلّ)',
     /!uploadedDocs\['local_content'\][\s\S]{0,120}يرجى إرفاق شهادة المحتوى المحلي/.test(REG));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   تركيب قائمة الموردين — لماذا يتغيّر العدد، ولا بطاقات شبح
+   سؤال المالك: «كيف أصبح الموردون من 104 إلى 137؟» — الجواب أنّ القائمة دمج
+   (سحابة + بذرة إكسل غير مرفوعة)، وأنّ إصلاح قراءة البذرة أعاد الجزء الغائب.
+   هذه التأكيدات تحرس: الدمج بالاسم المطبَّع · لا تكرار داخل البذرة · التفكيك.
+   ══════════════════════════════════════════════════════════════════════════ */
+G('٢٦) تركيب قائمة الموردين');
+{
+  const seedRows = [
+    { name:'شركة الأدوات الصحية', contact:'أحمد', phone:null, commercial_reg:'1010587730', tax_id:null },
+    { name:'شركة الادوات الصحيه', contact:null, phone:'0112410019', commercial_reg:null, tax_id:'311197862800003' },
+    { name:'مؤسسة النور', phone:'0500000000' },
+  ];
+  const merged = api.supDedupeByName(seedRows);
+  T('صفّا البذرة لنفس المورد (كتابة مختلفة) يصيران بطاقة واحدة', merged.length === 2,
+    'الناتج ' + merged.length);
+  T('الدمج يجمع الحقول ولا يُتلف مملوءاً',
+    merged[0].commercial_reg === '1010587730' && merged[0].tax_id === '311197862800003' &&
+    merged[0].phone === '0112410019' && merged[0].contact === 'أحمد',
+    JSON.stringify(merged[0]));
+  T('«—» تُعامَل فراغاً فتُملأ بالقيمة الحقيقية',
+    api.supMergeRows({ email:'—', name:'x' }, { email:'a@b.c' }).email === 'a@b.c');
+  T('الاسم المطبَّع مفتاح واحد للكتابتين',
+    api.supKey('شركة الأدوات الصحية') === api.supKey('شركة الادوات الصحيه'));
+
+  // بذرة الملف الحقيقية: كانت تحمل المورد الواحد في صفّين (نحيل + غنيّ)
+  const DATA_SUP = (() => {
+    const i = HTML.indexOf('const DATA = ');
+    let s = HTML.slice(i + 'const DATA = '.length, HTML.indexOf('\n', i));
+    if (s.endsWith(';')) s = s.slice(0, -1);
+    return JSON.parse(s).suppliers;
+  })();
+  const uniq = new Set(DATA_SUP.map(s => api.supKey(s.name))).size;
+  T('بذرة الملف تُنظَّف من صفوفها المكرّرة (بطاقات شبح)',
+    api.supDedupeByName(DATA_SUP).length === uniq && uniq < DATA_SUP.length,
+    `${DATA_SUP.length} صفّاً → ${api.supDedupeByName(DATA_SUP).length} (فريد ${uniq})`);
+
+  const list = [
+    { name:'مورد سحابي', _cloud:true }, { name:'مورد سحابي ثانٍ', _cloud:true },
+    { name:'مورد بذرة' },
+  ];
+  const bd = api.supSourceBreakdown(list);
+  T('التفكيك يفصل صفوف السحابة عن البذرة',
+    bd.total === 3 && bd.cloud === 2 && bd.seed === 1, JSON.stringify(bd));
+  T('التفكيك يرصد الاسم المكرّر عبر المصدرين',
+    api.supSourceBreakdown([{ name:'مورد', _cloud:true }, { name:'مورد' }]).dupGroups === 1);
+  T('قائمة نظيفة = صفر تكرار', bd.dupGroups === 0 && bd.dupRows === 0);
+  T('المورد بلا اسم لا يُبتلع في مجموعة واحدة',
+    api.supDedupeByName([{ name:'' }, { name:null }]).length === 2);
+
+  // الدمج مع السحابة يجب أن يطابق بالمفتاح المطبَّع أيضاً، وإلا ظهر المورد مرّتين
+  T('دمج البذرة مع السحابة يستبعد الكتابات المطبَّعة المطابقة',
+    /cloudSupKeys\s*=\s*new Set\(data\.suppliers\.map\(s=>supKey\(s\.name\)\)\)/.test(CODE) &&
+    /supDedupeByName\(\(SEED\.suppliers\|\|\[\]\)[\s\S]{0,160}!cloudSupKeys\.has\(supKey\(s\.name\)\)/.test(CODE));
+  T('البذرة تُنظَّف عند الإقلاع أيضاً (قبل الاتصال بالسحابة)',
+    /mergePOSupplierSeed\(\);\s*\n\s*STATE\.suppliers = supDedupeByName\(STATE\.suppliers\)/.test(CODE));
+  T('شاشة الموردين تعرض تركيب العدد (سحابة/بذرة) بلا مرشّح',
+    /supSourceBreakdown\(\)/.test(CODE) && /من السحابة/.test(HTML) && /من بذرة الإكسل/.test(HTML));
+  T('التكرار يُعرَض ولا يُدمَج تلقائياً (قرار بيانات يخصّ المالك)',
+    /function supShowDupes\(\)/.test(CODE) && !/supAutoMerge|autoMergeSuppliers/.test(CODE));
+  T('نافذة التكرار تُلحَق بـbody لا داخل قسم صفحة',
+    /modal-sup-dupes[\s\S]{0,2000}document\.body\.appendChild\(m\)/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

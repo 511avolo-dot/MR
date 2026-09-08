@@ -7576,6 +7576,51 @@ function supMatches(s, terms, digits){
   const words = terms.filter(t => !/^\d+$/.test(t));
   return words.every(t => hay.includes(t)) && (!digits || hay.includes(digits));
 }
+/* ============================================================
+   تركيب قائمة الموردين — من أين جاء كل مورد، ولماذا يتغيّر العدد
+   ------------------------------------------------------------
+   قائمة الموردين ليست جدولاً واحداً بل دمج ثلاثة مصادر:
+     (١) صفوف السحابة `proc_suppliers` — مصدر الحقيقة.
+     (٢) بذرة الإكسل `DATA.suppliers` — الموردون التاريخيون الذين لم يُرفعوا
+         للسحابة بعد. يُضاف منهم من لا يوجد اسمه في السحابة.
+     (٣) موردو أوامر الشراء `PO_SUPPLIER_SEED` (قبل الاتصال بالسحابة فقط).
+   ⚠️ لهذا يقفز العدد بعد المزامنة: قبل إصلاح 2026-09-01 كانت البذرة تُقرأ عبر
+   `window.DATA` (undefined دائماً) فيُحسب أساس الدمج صفراً، فيعرض النظام صفوف
+   السحابة وحدها. بعد الإصلاح عادت البذرة للظهور فارتفع العدد بمقدار موردي
+   البذرة غير الموجودين في السحابة. العدد الجديد صحيح — والقديم كان ناقصاً.
+   ============================================================ */
+function supKey(name){ return arNorm(name); }
+/* البذرة نفسها تحمل المورد الواحد في صفّين أحياناً (مصدرا إكسل: صفّ نحيل يحمل
+   السجل التجاري، وصفّ غنيّ يحمل الهاتف والتخصص وعدد العروض) — فيظهر بطاقتين
+   إحداهما شبه فارغة، وكلتاهما تفتح التفاصيل نفسها لأن الفتح بالاسم. ندمجهما
+   بجمع الحقول: لا يُستبدَل حقل مملوء، وإنما تُملأ الفراغات فقط. */
+function supIsEmptyVal(v){ return v===null || v===undefined || v==='' || v==='—'; }
+function supMergeRows(a, b){
+  const out = {...a};
+  Object.keys(b||{}).forEach(k=>{ if(supIsEmptyVal(out[k]) && !supIsEmptyVal(b[k])) out[k] = b[k]; });
+  return out;
+}
+function supDedupeByName(list){
+  const idx = new Map(), out = [];
+  (list||[]).forEach(s=>{
+    if(!s) return;
+    const k = supKey(s.name);
+    if(!k){ out.push(s); return; }
+    if(idx.has(k)) out[idx.get(k)] = supMergeRows(out[idx.get(k)], s);
+    else { idx.set(k, out.length); out.push({...s}); }
+  });
+  return out;
+}
+/* تفكيك العدد المعروض لمصادره — يجيب «كيف صار العدد كذا؟» من الشاشة نفسها */
+function supSourceBreakdown(list){
+  const arr = Array.isArray(list) ? list : (STATE.suppliers||[]);
+  const cloud = arr.filter(s=>s && s._cloud).length;
+  const groups = new Map();
+  arr.forEach(s=>{ const k = supKey(s && s.name); if(!k) return; groups.set(k, (groups.get(k)||[]).concat([s])); });
+  const dups = [...groups.values()].filter(v=>v.length>1);
+  return { total:arr.length, cloud, seed:arr.length-cloud, dupGroups:dups.length,
+           dupRows:dups.reduce((n,v)=>n+v.length-1,0), dups };
+}
 const SUP_PAGE = 60;          // دفعة العرض — 1000 بطاقة دفعةً تُجمّد الصفحة
 let _supShown = SUP_PAGE, _supLast = '';
 
@@ -7616,8 +7661,13 @@ function renderSuppliers(more){
     : `<div class="empty" style="grid-column:1/-1"><div class="empty-title">لا توجد نتائج</div></div>`;
 
   const cnt = document.getElementById('sup-count');
+  const filtered = !!(terms.length || digits || specFilter);
+  const bd = supSourceBreakdown();
   if(cnt) cnt.innerHTML = list.length
-    ? `عرض <b>${shown.length}</b> من <b>${list.length}</b> مورد${(terms.length||digits||specFilter)?` (من ${STATE.suppliers.length} إجمالاً)`:''}`
+    ? `عرض <b>${shown.length}</b> من <b>${list.length}</b> مورد${filtered?` (من ${STATE.suppliers.length} إجمالاً)`:''}`
+      // تركيب العدد: يجيب «كيف صار العدد كذا؟» بلا تخمين — والبذرة غير المرفوعة تُميَّز
+      + (!filtered && bd.seed ? ` · <b>${bd.cloud}</b> من السحابة · <b>${bd.seed}</b> من بذرة الإكسل <span style="opacity:.75">(لم تُرفع للسحابة بعد)</span>` : '')
+      + (bd.dupGroups ? ` · <a href="#" onclick="event.preventDefault();supShowDupes()" style="color:#b45309">⚠ ${bd.dupGroups} اسماً مكرّراً</a>` : '')
     : '';
   const moreBox = document.getElementById('sup-more');
   if(moreBox){
@@ -7629,6 +7679,35 @@ function renderSuppliers(more){
   }
 }
 function supShowMore(){ _supShown += SUP_PAGE; renderSuppliers(true); }
+
+/* أسماء تتكرّر بعد التطبيع = المورد نفسه ببطاقتين (كتابة مختلفة أو صفّ سحابي
+   وصفّ بذرة). نعرضها ولا ندمج تلقائياً: الدمج قرار بيانات يخصّ المالك.
+   ⚠️ النافذة تُلحَق بـbody لا داخل قسم صفحة (القسم يحمل transform فيكسر fixed). */
+function supShowDupes(){
+  const bd = supSourceBreakdown();
+  if(!bd.dupGroups) return;
+  const rows = bd.dups.map(g=>`<tr>
+      <td>${escapeHtml(g[0].name||'—')}</td>
+      <td class="center">${g.length}</td>
+      <td>${g.map(s=>s._cloud?'السحابة':'بذرة الإكسل').join(' + ')}</td>
+    </tr>`).join('');
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-sup-dupes';
+  m.innerHTML=`<div class="modal" style="max-width:680px;width:96vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
+      <h3 style="margin:0;font-size:16px">أسماء موردين مكرّرة</h3>
+      <button class="modal-close" onclick="supCloseDupes()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:16px 20px;max-height:60vh;overflow:auto">
+      <p style="font-size:12.5px;color:var(--muted,#777);margin:0 0 12px"><b>${bd.dupGroups}</b> اسماً يتكرّر في <b>${bd.dupGroups + bd.dupRows}</b> بطاقة. فتح البطاقة بالاسم، فالبطاقة الثانية تعرض التفاصيل نفسها. راجعها واحذف الزائد من بطاقة المورد.</p>
+      <table class="data-table" style="width:100%"><thead><tr class="thead-navy"><th>الاسم</th><th class="center">بطاقات</th><th>المصدر</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border,#eee)">
+      <button class="btn btn-ghost btn-sm" onclick="supCloseDupes()">إغلاق</button>
+    </div></div>`;
+  document.body.appendChild(m);
+  try{ a11yWire(m); mobileTableWrap(m); }catch(e){}
+}
+function supCloseDupes(){ const m=document.getElementById('modal-sup-dupes'); if(m) m.remove(); }
 
 function supplierCard(s){
   const initial = (s.name||'—').trim().charAt(0);
@@ -15031,8 +15110,13 @@ async function refreshFromCloud(){
   const baseItems = (SEED.items||[]).filter(i=>!cloudItemCodes.has(i.code));
   STATE.items = [...data.items.map(x=>({...x,_cloud:true})), ...baseItems];
 
+  // البذرة تُضاف لمن ليس له صفّ في السحابة. المطابقة بالاسم **المطبَّع** لا الخام:
+  // «الأدوات» و«الادوات» مورد واحد، ومطابقة خام تُظهره بطاقتين. والبذرة تُدمَج
+  // على نفسها كذلك (صفّاها النحيل والغنيّ) — تفاصيل القاعدة في supDedupeByName.
   const cloudSupNames = new Set(data.suppliers.map(s=>s.name));
-  const baseSups = (SEED.suppliers||[]).filter(s=>!cloudSupNames.has(s.name));
+  const cloudSupKeys  = new Set(data.suppliers.map(s=>supKey(s.name)));
+  const baseSups = supDedupeByName((SEED.suppliers||[])
+    .filter(s=>!cloudSupNames.has(s.name) && !cloudSupKeys.has(supKey(s.name))));
   STATE.suppliers = [...data.suppliers.map(x=>({...x,_cloud:true,_user:true})), ...baseSups];
 
   const cloudHistNums = new Set(data.history.map(h=>h.num));
@@ -18081,6 +18165,7 @@ function init(){
   loadUserItems();
   loadUserSuppliers();
   mergePOSupplierSeed();
+  STATE.suppliers = supDedupeByName(STATE.suppliers);   // صفوف البذرة المكرّرة = بطاقات شبح
   loadUserEntries();
   loadUserPOs();
   prjLoadLocal();       // سجل المشاريع المعتمد (النسخة المحلية — السحابة تُحدّثه لاحقاً)
