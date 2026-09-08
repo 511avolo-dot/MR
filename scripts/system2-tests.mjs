@@ -1850,6 +1850,39 @@ G('٢٦) تركيب قائمة الموردين');
     /modal-sup-dupes[\s\S]{0,2000}document\.body\.appendChild\(m\)/.test(CODE));
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   موارد خطوط pdf.js — نصّ المستندات العربية كان يخرج مفكّكاً ومتداخلاً
+   بلاغ إنتاج بلقطة: شهادة المحتوى المحلي تُعرَض بحروف عربية منفصلة مقلوبة
+   وكلمات لاتينية متداخلة. الجذر: `getDocument` كان بلا أي مورد خطوط، فيستبدل
+   pdf.js الخطّ غير المُضمَّن بخطّ الجهاز (عروض محارف مختلفة) ولا يملك جداول
+   cMap لخطوط CID (وكل مستند عربي مُنسَّق تقريباً منها).
+   ══════════════════════════════════════════════════════════════════════════ */
+G('٢٧) موارد خطوط pdf.js');
+{
+  const cmapDir = path.join(ROOT, 'vendor', 'cmaps');
+  const fontDir = path.join(ROOT, 'vendor', 'standard_fonts');
+  const cmaps = fs.existsSync(cmapDir) ? fs.readdirSync(cmapDir) : [];
+  const fonts = fs.existsSync(fontDir) ? fs.readdirSync(fontDir) : [];
+  T('جداول cMap مُضمَّنة في المستودع', cmaps.length > 100, 'العدد ' + cmaps.length);
+  T('بيانات الخطوط القياسية مُضمَّنة', fonts.some(f => /LiberationSans-Regular\.ttf$/.test(f)) && fonts.length >= 10,
+    'العدد ' + fonts.length);
+  T('جداول cMap المُرمَّزة موجودة بصيغتها المضغوطة', cmaps.includes('UniGB-UCS2-H.bcmap') && cmaps.includes('UniJIS-UCS2-H.bcmap'));
+
+  // كتلة خيارات العارض
+  const opts = (CODE.match(/getDocument\(\{[\s\S]{0,600}?\}\)\.promise/g) || []).join('\n');
+  T('العارض يمرّر بيانات الخطوط القياسية', /standardFontDataUrl:\s*'\/vendor\/standard_fonts\/'/.test(opts));
+  T('العارض يمرّر جداول cMap مضغوطة', /cMapUrl:\s*'\/vendor\/cmaps\/'/.test(opts) && /cMapPacked:\s*true/.test(opts));
+  T('العارض لا يعتمد على خطوط الجهاز (عرض واحد على كل جهاز)', /useSystemFonts:\s*false/.test(opts));
+  T('استخراج النصّ من PDF يحمل جداول cMap كذلك',
+    /getDocument\(\{\s*data,\s*cMapUrl:\s*'\/vendor\/cmaps\/',\s*cMapPacked:\s*true\s*\}\)/.test(CODE));
+  // كل الموارد من نفس الأصل — وإلّا رفضتها connect-src وعاد التشوّه صامتاً
+  T('كل موارد الخطوط من نفس الأصل لا من CDN',
+    !/(standardFontDataUrl|cMapUrl):\s*'https?:/.test(CODE));
+  // الكاش: أصول ثابتة بإصدار مثبَّت — لا تُعاد في كل فتح
+  const HDRS = fs.readFileSync(path.join(ROOT, '_headers'), 'utf8');
+  T('`/vendor/*` مكاشة (تشمل الخطوط وجداول cMap)', /\/vendor\/\*\s*\n\s*Cache-Control:/.test(HDRS));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

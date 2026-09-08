@@ -21618,7 +21618,8 @@ async function siExtractFromPDF(file){
 
   siShowProcessing('استخراج النص من PDF...', file.name);
   const data = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  // جداول cMap من نفس الأصل: بدونها يخرج نصّ المستندات العربية (خطوط CID) مفكّكاً
+  const pdf = await pdfjsLib.getDocument({ data, cMapUrl: '/vendor/cmaps/', cMapPacked: true }).promise;
 
   let fullText = '';
   const pageTexts = []; // text per page, lets us detect mixed PDFs (some digital, some scanned)
@@ -25831,9 +25832,24 @@ async function docvBytes(path){
 async function docvRenderPdf(stage, bytes, d){
   const lib = await docvPdfLib();
   docvDestroyPdf();                       // أغلِق سابقه قبل فتح جديد
+  /* ⚠️ موارد الخطوط ليست رفاهية — بدونها يتشوّه النصّ العربي:
+     - `standardFontDataUrl`: مستند يستعمل أحد الخطوط الأربعة عشر القياسية بلا تضمين،
+       فبلا بيانات الخطّ يستبدله pdf.js بخطّ الجهاز فتختلف عروض المحارف ⇒ حروف
+       متداخلة ومسافات داخل الكلمة الواحدة.
+     - `cMapUrl`+`cMapPacked`: خطوط CID/Type0 (وكل مستند عربي مُنسَّق تقريباً منها)
+       تحتاج جداول cMap لربط رموز الخطّ بالمحارف ⇒ بلا هذه الجداول تظهر الحروف
+       العربية مفكّكة وبترتيب مقلوب.
+     - `useSystemFonts:false`: لا نعتمد على خطوط الجهاز إطلاقاً، فيكون العرض واحداً
+       على الآيفون والأندرويد وسطح المكتب بدل أن يتبع ما هو مُثبَّت على الجهاز.
+     الثلاثة تُجلب من `/vendor/` أي من نفس الأصل — يغطّيها `connect-src 'self'` بلا
+     أي تعديل على CSP. */
   const doc = await lib.getDocument({
     data: bytes,                          // ⚠️ بايتات لا رابط — فلا يمسّها connect-src
     isEvalSupported: false,               // تصليب: CSP تمنع eval أصلاً، فنُعلنها صراحةً
+    standardFontDataUrl: '/vendor/standard_fonts/',
+    cMapUrl: '/vendor/cmaps/',
+    cMapPacked: true,
+    useSystemFonts: false,
   }).promise;
   DOCV._pdf = doc;
   if (DOCV.list[DOCV.i] !== d) { docvDestroyPdf(); return; }   // بدّل التبويب أثناء الجلب
