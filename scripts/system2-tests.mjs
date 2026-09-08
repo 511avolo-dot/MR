@@ -213,7 +213,7 @@ const NEEDED_FNS = [
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
   'repList', 'repFilterProjects', 'repDescList',
-  'arNorm', 'supKey', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
+  'arNorm', 'supKey', 'supKeyStrong', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
   'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
@@ -246,7 +246,7 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
-  'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
+  'SUP_ENTITY_RE', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1841,13 +1841,33 @@ G('٢٦) تركيب قائمة الموردين');
     /cloudSupKeys\s*=\s*new Set\(data\.suppliers\.map\(s=>supKey\(s\.name\)\)\)/.test(CODE) &&
     /supDedupeByName\(\(SEED\.suppliers\|\|\[\]\)[\s\S]{0,160}!cloudSupKeys\.has\(supKey\(s\.name\)\)/.test(CODE));
   T('البذرة تُنظَّف عند الإقلاع أيضاً (قبل الاتصال بالسحابة)',
-    /mergePOSupplierSeed\(\);\s*\n\s*STATE\.suppliers = supDedupeByName\(STATE\.suppliers\)/.test(CODE));
+    /loadUserSuppliers\(\);\s*\n\s*STATE\.suppliers = supDedupeByName\(STATE\.suppliers\)/.test(CODE));
   T('شاشة الموردين تعرض تركيب العدد (سحابة/بذرة) بلا مرشّح',
     /supSourceBreakdown\(\)/.test(CODE) && /من السحابة/.test(HTML) && /من بذرة الإكسل/.test(HTML));
   T('التكرار يُعرَض ولا يُدمَج تلقائياً (قرار بيانات يخصّ المالك)',
     /function supShowDupes\(\)/.test(CODE) && !/supAutoMerge|autoMergeSuppliers/.test(CODE));
   T('نافذة التكرار تُلحَق بـbody لا داخل قسم صفحة',
     /modal-sup-dupes[\s\S]{0,2000}document\.body\.appendChild\(m\)/.test(CODE));
+
+  /* ── بعد رفع موردي أوامر الشراء للسحابة (2026-09-08) ─────────────────────
+     المفتاح القويّ للمقارنة: يُسقِط كلمة الكيان والمسافات. أثبت عمليّاً أنّ ستّ
+     حالات كانت ستُرفَع نسخاً ثانية لموردين قائمين. */
+  T('المفتاح القويّ يطوي كلمة الكيان', api.supKeyStrong('شركة اكسترا') === api.supKeyStrong('اكسترا'));
+  T('المفتاح القويّ يطوي فرق المسافات داخل الاسم',
+    api.supKeyStrong('مفروشات العبد اللطيف') === api.supKeyStrong('مفروشات العبداللطيف'));
+  T('المفتاح القويّ يطوي «مؤسسة» كذلك',
+    api.supKeyStrong('مؤسسة منزل الياقوت') === api.supKeyStrong('منزل الياقوت'));
+  T('لكنه لا يخلط موردين مختلفين',
+    api.supKeyStrong('شركة الحياة لمواد البناء') !== api.supKeyStrong('شركة الخنيزان'));
+  T('بوّابة دمج البذرة مع السحابة تستعمل المفتاح القويّ',
+    /cloudSupHard\s*=\s*new Set\(data\.suppliers\.map\(s=>supKeyStrong\(s\.name\)\)\)/.test(CODE) &&
+    /!cloudSupHard\.has\(supKeyStrong\(s\.name\)\)/.test(CODE));
+  /* ⛔️ بذرة موردي أوامر الشراء كانت مصدر قفزة 104←137، ورُفِع محتواها للسحابة.
+     إحياؤها يعيد ثماني بطاقات شبح لا تلتقطها أي مطابقة نصّية (منها نقل حرفيّ
+     عربيّ↔لاتينيّ: «شركة اكس سي ام جي» مقابل «شركة XCMG»). */
+  T('بذرة موردي أوامر الشراء لم تُحيَ (لا ثابت ولا دمج)',
+    !/const PO_SUPPLIER_SEED\s*=/.test(CODE) && !/function mergePOSupplierSeed/.test(CODE) &&
+    !/\bmergePOSupplierSeed\(\)/.test(CODE));
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
