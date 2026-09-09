@@ -1968,6 +1968,94 @@ G('٢٧) موارد خطوط pdf.js');
   T('`/vendor/*` مكاشة (تشمل الخطوط وجداول cMap)', /\/vendor\/\*\s*\n\s*Cache-Control:/.test(HDRS));
 }
 
+/* ── ٢٨) قفل التمرير: مصدر واحد مشتقّ من الحالة ───────────────── */
+/* بلاغ المالك «السكرولينق يعلق في بعض الشاشات أحياناً». الجذر المقيس: القفل كان
+   يُضبَط في ثلاثة مواضع ويُفَكّ في أربعة، ونافذتان تُفتَحان بـ`display:flex` بلا
+   مرور بأيٍّ منها — فمسار «تفاصيل الطلب ← عارض المستندات ← إغلاقهما» يترك
+   `body{overflow:hidden}` إلى الأبد. الحرّاس هنا تمنع عودة التفرّق. */
+G('٢٨) قفل التمرير (بلاغ «السكرولينق يعلق»)');
+{
+  const sets = [...CODE.matchAll(/document\.body\.style\.overflow\s*=/g)].length;
+  T('مصدر واحد فقط يضبط `body.style.overflow` (لا تفرّق يعيد التسريب)', sets === 1,
+    'مواضع الضبط: ' + sets);
+  const sync = grab('syncScrollLock');
+  T('`syncScrollLock` هي ذلك المصدر وتشتقّ القفل لا تتراكمه',
+    /document\.body\.style\.overflow\s*=\s*anyOverlayOpen\(\)/.test(sync));
+
+  // معاينة الطباعة صنفها `print-preview-overlay` لا `modal-overlay` — إسقاطها
+  // من الحساب يُلغي قفلها صامتاً (وقع فعلاً في أوّل صياغة، أمسكه القياس).
+  const activeSel = grabConst('SCROLL_LOCK_ACTIVE');
+  T('حساب الطبقات يشمل معاينة الطباعة', /\.print-preview-overlay\.active/.test(activeSel));
+  T('وحساب الطبقات يشمل النوافذ العادية', /\.modal-overlay\.active/.test(activeSel));
+  const layers = grabConst('SCROLL_LOCK_LAYERS');
+  ['#modal-doc-viewer', '#modal-reg-detail', '#modal-email-templates'].forEach(id =>
+    T('طبقة `display:flex` محسوبة: ' + id, layers.includes(id)));
+
+  // كل مسار يفتح أو يغلق طبقةً ينادي المزامنة — وإلّا عاد التسريب من ذلك الباب
+  [['openModal','فتح نافذة'], ['closeModal','إغلاق نافذة'], ['closeAllModals','إغلاق الكل'],
+   ['showPrintPreview','فتح معاينة الطباعة'], ['closePrintPreview','إغلاق المعاينة'],
+   ['docvOpen','فتح عارض المستندات'], ['docvClose','إغلاق العارض'],
+   ['closeRegDetail','إغلاق تفاصيل الطلب'], ['closeEmailTemplates','إغلاق قوالب البريد'],
+   ['supCloseDupes','إغلاق نافذة التكرار'], ['poCloseMissing','إغلاق نافذة الأرقام المفقودة'],
+   ['poReceiveClose','إغلاق نافذة الاستلام']
+  ].forEach(([fn, label]) =>
+    T(label + ' ينادي `syncScrollLock`', /syncScrollLock\(\)/.test(grab(fn))));
+
+  // إغلاق المعاينة كنافذة عادية كان يترك `print-preview-active` والمستند خلفه
+  T('إغلاق معاينة الطباعة يمرّ بمنظّفها الخاصّ',
+    /id===['"]modal-print-preview['"]\s*\)\s*\{\s*try\{\s*closePrintPreview\(\)/.test(CODE));
+
+  // النوافذ المُلحَقة وقت التشغيل: تُوسَم عابرة فتُزال لا تُخفى (وإلّا معرّف مكرَّر)
+  ['modal-sup-dupes', 'modal-po-missing', 'modal-po-receive'].forEach(id =>
+    T('نافذة مُلحَقة موسومة عابرة: ' + id,
+      new RegExp("m\\.id='" + id + "'; m\\.dataset\\.ephemeral='1';").test(CODE)));
+  T('`closeModal` يزيل النوافذ العابرة من DOM',
+    /dataset\.ephemeral === '1'\) el\.remove\(\)/.test(grab('closeModal')));
+
+  /* تأكيد سلوكيّ: المسار المُبلَّغ عنه حرفيّاً على DOM مُقلَّد.
+     ⚠️ لا تُبدِّله بفحص نصّيّ — الفحص النصّيّ هو الذي مرّ عليه العيب أصلاً. */
+  const mkDoc = () => {
+    const L = { '#modal-doc-viewer': { style:{display:'none'} },
+                '#modal-reg-detail': { style:{display:'none'} },
+                '#modal-email-templates': { style:{display:'none'} } };
+    let actives = 0;
+    return { body:{ style:{ overflow:'' } },
+      querySelector(sel){ return sel.includes('.active') ? (actives > 0 ? {} : null) : (L[sel] || null); },
+      _open(id){ L[id].style.display = 'flex'; }, _close(id){ L[id].style.display = 'none'; },
+      _actives(n){ actives = n; } };
+  };
+  const make = new Function('document',
+    grabConst('SCROLL_LOCK_ACTIVE') + '\n' + grabConst('SCROLL_LOCK_LAYERS') + '\n' +
+    grab('anyOverlayOpen') + '\n' + grab('syncScrollLock') + '\n' +
+    'return { anyOverlayOpen, syncScrollLock };');
+  let d = mkDoc(); let api = make(d);
+  d._open('#modal-reg-detail'); api.syncScrollLock();
+  T('تفاصيل طلب التسجيل تقفل التمرير خلفها', d.body.style.overflow === 'hidden');
+  d._open('#modal-doc-viewer'); api.syncScrollLock();
+  d._close('#modal-doc-viewer'); api.syncScrollLock();
+  T('إغلاق عارض المستندات لا يفكّ القفل والتفاصيل مفتوحة', d.body.style.overflow === 'hidden');
+  d._close('#modal-reg-detail'); api.syncScrollLock();
+  T('إغلاق التفاصيل بعده يفكّ القفل (العيب المُبلَّغ عنه)', d.body.style.overflow === '');
+  d = mkDoc(); api = make(d);
+  d._actives(2); api.syncScrollLock();
+  d._actives(1); api.syncScrollLock();
+  T('إغلاق نافذة داخلية لا يفكّ قفل الخارجية', d.body.style.overflow === 'hidden');
+  d._actives(0); api.syncScrollLock();
+  T('إغلاق الأخيرة يفكّ القفل', d.body.style.overflow === '');
+
+  /* الانزلاق الأفقيّ على الهاتف يخطف تمرير الإصبع فيبدو التمرير «معلَّقاً».
+     مقيس قبل الإصلاح: شاشة الإدخال 50px عند 393px، ولوحة التحكم 29px عند 360px —
+     كلاهما من عنصر شبكة لا يصغر دون min-content ابنه غير الملتفّ. */
+  const CSS = [...HTML.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('\n');
+  const mob = (CSS.match(/@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*/) || [''])[0];
+  T('عناصر شبكة شاشة الإدخال تُسمَح بالانكماش على الجوال', /\.entry-layout\s*>\s*\*\{min-width:0\}/.test(mob));
+  T('مبدّل الوضع يلتفّ على الجوال (مقاسه الأدنى كان يدفع الصفحة 429px)',
+    /\.mode-toggle\{display:flex;flex-wrap:wrap;width:100%\}/.test(mob));
+  T('عناصر شبكة لوحة التحكم تُسمَح بالانكماش على الجوال', /\.dash-charts\s*>\s*\*\{min-width:0\}/.test(mob));
+  T('صفّ الرسم الدائريّ يلتفّ على الجوال', /#dash-cat-chart\s*>\s*div\{flex-wrap:wrap\}/.test(mob));
+  T('ما يفيض من بطاقة رسم يمرّر داخلها لا على الصفحة', /\.chart-card\{overflow-x:auto\}/.test(mob));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

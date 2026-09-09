@@ -2821,6 +2821,22 @@ html{overflow-x:clip}
   }
   .page-header{margin-bottom:18px}
 
+  /* ── «التمرير يعلق أحياناً» على الهاتف: انزلاق أفقيّ يخطف الإصبع ────────
+     عنصر الشبكة لا يصغر دون **min-content** ابنه (`min-width:auto` الافتراضيّ)،
+     و«مبدّل الوضع» في شاشة الإدخال صفٌّ من ثلاثة أزرار لا يلتفّ ⇒ مقاسه الأدنى
+     367px يدفع عمود `.entry-layout` إلى 429px على شاشة 393px ⇒ **50px انزلاقاً
+     أفقيّاً** (مقيس). وعلى الهاتف يلتقط التمرير الأفقيّ حركة الإصبع المائلة
+     فيبدو التمرير الرأسيّ متوقّفاً. العلاج عند المصدر: اسمح بالانكماش والالتفاف. */
+  .entry-layout > *{min-width:0}
+  .mode-toggle{display:flex;flex-wrap:wrap;width:100%}
+  .mode-btn{flex:1 1 auto;justify-content:center;padding:9px 10px}
+  /* والعلّة نفسها في لوحة التحكم على شاشة 360px: صفّ «توزيع الإنفاق» (رسم دائريّ
+     100px + مفتاح ألوان) لا يلتفّ ⇒ مقاسه الأدنى 300px يدفع بطاقة الرسم إلى
+     346px ⇒ 29px انزلاقاً. */
+  .dash-charts > *{min-width:0}
+  #dash-cat-chart > div{flex-wrap:wrap}
+  .chart-card{overflow-x:auto}                 /* شبكة أمان: ما يفيض يمرّر داخل بطاقته */
+
   /* ── شريط التبويبات السفليّ (نمط التطبيقات الأصيلة) ──────────────────── */
   .mnav{
     display:flex;position:fixed;inset-inline:0;bottom:0;z-index:880;
@@ -7792,7 +7808,7 @@ function supShowDupes(){
       <td class="center">${g.length}</td>
       <td>${g.map(s=>s._cloud?'السحابة':'بذرة الإكسل').join(' + ')}</td>
     </tr>`).join('');
-  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-sup-dupes';
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-sup-dupes'; m.dataset.ephemeral='1';
   m.innerHTML=`<div class="modal" style="max-width:680px;width:96vw">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
       <h3 style="margin:0;font-size:16px">أسماء موردين مكرّرة</h3>
@@ -7805,10 +7821,10 @@ function supShowDupes(){
     <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border,#eee)">
       <button class="btn btn-ghost btn-sm" onclick="supCloseDupes()">إغلاق</button>
     </div></div>`;
-  document.body.appendChild(m);
+  document.body.appendChild(m); syncScrollLock();
   try{ a11yWire(m); mobileTableWrap(m); }catch(e){}
 }
-function supCloseDupes(){ const m=document.getElementById('modal-sup-dupes'); if(m) m.remove(); }
+function supCloseDupes(){ const m=document.getElementById('modal-sup-dupes'); if(m) m.remove(); syncScrollLock(); }
 
 function supplierCard(s, criticalGapsOnly){
   const initial = (s.name||'—').trim().charAt(0);
@@ -9085,7 +9101,35 @@ function mobileTableWrap(root){
   }catch(e){ reportError('mobileTableWrap', e); }
 }
 
-function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); document.body.style.overflow='hidden'; a11yWire(el); mobileTableWrap(el); modalRenderWatch(el); } }
+/* ── قفل التمرير: يُشتَقّ من الحالة، لا يُتراكم يدويّاً ────────────────────────
+   بلاغ المالك «السكرولينق يعلق في بعض الشاشات أحياناً». الجذر مقيس: كان
+   `body.style.overflow` يُضبَط في **ثلاثة** مواضع (openModal · showPrintPreview ·
+   docvOpen) ويُفَكّ في **أربعة**، ونافذتان تُفتَحان بـ`display:flex` بلا مرور
+   بأيٍّ منها (تفاصيل طلب التسجيل · قوالب البريد). فمسار حقيقيّ يترك الصفحة
+   غير قابلة للتمرير حتى إعادة التحميل:
+     تفاصيل الطلب (لا تقفل) ← عارض المستندات (يقفل) ← إغلاق العارض (يرى
+     التفاصيل مفتوحة فيمتنع عن الفكّ) ← إغلاق التفاصيل (لا تفكّ) ⇒ **معلَّق**.
+   وعيوب مرافقة من التفرّق نفسه: نافذة داخلية تُغلَق فيفكّ القفل والخارجية ما
+   تزال مفتوحة (يمرّر خلفها)، ونوافذ مُلحَقة ديناميكياً لا تقفل إطلاقاً.
+   ⚠️ القاعدة الآن: **لا أحد يضبط `document.body.style.overflow` مباشرةً** —
+   الكلّ ينادي `syncScrollLock()` بعد تغيير حالة أي طبقة. (محروس بتأكيد.) */
+/* طبقات تُفتَح بصنف `active` (معاينة الطباعة صنفها `print-preview-overlay` لا
+   `modal-overlay` — فاتها الحساب أوّل مرّة وهي أشدّ ما يحتاج قفلاً) */
+const SCROLL_LOCK_ACTIVE = '.modal-overlay.active, .print-preview-overlay.active';
+/* وطبقات تُفتَح بـ`style.display='flex'` بلا صنف */
+const SCROLL_LOCK_LAYERS = ['#modal-doc-viewer', '#modal-reg-detail', '#modal-email-templates'];
+function anyOverlayOpen(){
+  if (document.querySelector(SCROLL_LOCK_ACTIVE)) return true;
+  return SCROLL_LOCK_LAYERS.some(sel => {
+    const el = document.querySelector(sel);
+    return !!el && el.style.display === 'flex';
+  });
+}
+function syncScrollLock(){
+  try{ document.body.style.overflow = anyOverlayOpen() ? 'hidden' : ''; }catch(e){}
+}
+
+function openModal(id){ const el=document.getElementById(id); if(el){ el.classList.add('active'); syncScrollLock(); a11yWire(el); mobileTableWrap(el); modalRenderWatch(el); } }
 
 /* ⚠️ النافذة تُعيد رسم محتواها **بعد** فتحها (تبديل تبويب · إجراء · بحث)، فاللفّة
    التي تجري عند الفتح وحدها تفوت كل جدول لاحق — وهو ما جعل «سجلّ المشاريع» يظهر
@@ -9102,16 +9146,24 @@ function modalRenderWatch(el){
   _modalWatch.set(el, mo);
 }
 function closeModal(id){
+  /* معاينة الطباعة تحمل حالةً خاصّة (صنف على body + محتوى المستند) — وإغلاقها
+     كنافذة عادية (Esc · نقر الخلفية · زرّ الإغلاق) كان يترك الاثنين خلفه. */
+  if(id==='modal-print-preview'){ try{ closePrintPreview(); return; }catch(e){} }
   const el=document.getElementById(id);
-  if(el) el.classList.remove('active');
-  document.body.style.overflow='';
+  if(el){
+    el.classList.remove('active');
+    /* النوافذ المُلحَقة وقت التشغيل تُزال لا تُخفى، وإلّا بقيت في DOM بمعرّف
+       مكرَّر فيلتقطها `getElementById` في الفتحة التالية بدل الجديدة. */
+    if(el.dataset && el.dataset.ephemeral === '1') el.remove();
+  }
+  syncScrollLock();
   // Special cleanup for Smart Import: reset state + restore entry mode
   if(id==='modal-smart-import'){
     try{ resetSmartImportState(); }catch(e){}
     try{ if(typeof setEntryMode==='function') setEntryMode('existing'); }catch(e){}
   }
 }
-function closeAllModals(){ document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('active')); document.body.style.overflow=''; try{ resetSmartImportState(); }catch(e){} }
+function closeAllModals(){ document.querySelectorAll('.modal-overlay').forEach(m=>{ m.classList.remove('active'); if(m.dataset && m.dataset.ephemeral==='1') m.remove(); }); syncScrollLock(); try{ resetSmartImportState(); }catch(e){} }
 
 /* ============================================================ */
 /* ========== SVG CHART RENDERER ============================== */
@@ -11549,15 +11601,15 @@ async function showPrintPreview(htmlContent){
     el.style.display = 'block';
   });
   document.getElementById('modal-print-preview').classList.add('active');
-  document.body.style.overflow = 'hidden';
   document.body.classList.add('print-preview-active');
+  syncScrollLock();
 }
 
 function closePrintPreview(){
   document.getElementById('modal-print-preview').classList.remove('active');
   document.getElementById('pp-content').innerHTML = '';
-  document.body.style.overflow = '';
   document.body.classList.remove('print-preview-active');
+  syncScrollLock();
   // Cleanup any leftover print iframe
   const iframe = document.getElementById('__print_iframe');
   if(iframe) iframe.remove();
@@ -16847,7 +16899,7 @@ function poSortBySeq(){ STATE.poSort={col:'po_number',dir:'desc'}; STATE.poPage=
 function poShowMissing(key){
   const s=poSeqSummary(STATE.purchaseOrders).find(x=>x.key===key); if(!s) return;
   const chips=s.missing.map(n=>`<span class="po-seq-chip" style="padding:4px 10px"><b>${escapeHtml(s.prefix+String(n))}</b></span>`).join(' ');
-  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-missing';
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-missing'; m.dataset.ephemeral='1';
   m.innerHTML=`<div class="modal" style="max-width:640px;width:96vw">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
       <h3 style="margin:0;font-size:16px">فجوات تسلسل الأوامر — ${escapeHtml(s.prefix)}</h3>
@@ -16860,9 +16912,9 @@ function poShowMissing(key){
     <div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border,#eee)">
       <button class="btn btn-ghost btn-sm" onclick="poCloseMissing()">إغلاق</button>
     </div></div>`;
-  document.body.appendChild(m);
+  document.body.appendChild(m); syncScrollLock();
 }
-function poCloseMissing(){ const m=document.getElementById('modal-po-missing'); if(m) m.remove(); }
+function poCloseMissing(){ const m=document.getElementById('modal-po-missing'); if(m) m.remove(); syncScrollLock(); }
 
 function renderPOSegments(){
   const el=document.getElementById('po-segments'); if(!el) return;
@@ -17132,7 +17184,7 @@ function poReceiveOpen(num){
       <td style="text-align:center"><input type="number" min="0" max="${remaining}" step="any" value="${remaining}" data-rcv="${idx}" style="width:84px;padding:5px;border:1px solid var(--border,#ddd);border-radius:6px;text-align:center;font-family:inherit"></td>
     </tr>`;
   }).join('');
-  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-receive';
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-po-receive'; m.dataset.ephemeral='1';
   m.innerHTML=`<div class="modal" style="max-width:660px;width:96vw">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
       <h3 style="margin:0;font-size:16px">📦 استلام البضاعة — ${escapeHtml(po.po_number)}</h3>
@@ -17150,9 +17202,9 @@ function poReceiveOpen(num){
       <button class="btn btn-ghost btn-sm" onclick="poReceiveClose()">إلغاء</button>
       <button class="btn btn-accent btn-sm" onclick="poReceiveSave('${escapeAttr(po.po_number)}')">حفظ الاستلام</button>
     </div></div>`;
-  document.body.appendChild(m);
+  document.body.appendChild(m); syncScrollLock();
 }
-function poReceiveClose(){ const m=document.getElementById('modal-po-receive'); if(m) m.remove(); }
+function poReceiveClose(){ const m=document.getElementById('modal-po-receive'); if(m) m.remove(); syncScrollLock(); }
 function poReceiveSave(num){
   const po=poFind(num); if(!po) return;
   const m=document.getElementById('modal-po-receive'); if(!m) return;
@@ -25465,6 +25517,7 @@ async function openEmailTemplates() {
   document.getElementById('et-status').textContent = '';
   etRenderTabs(); etFillInputs(); etPreview();
   document.getElementById('modal-email-templates').style.display = 'flex';
+  syncScrollLock();
   etHealthCheck();
 }
 // مؤشّر صحّة بريد الإشعارات: يستفتي /api/notify (GET) ويعرض شارة حمراء إن كان أي متغيّر
@@ -25490,7 +25543,7 @@ async function etHealthCheck() {
     }
   } catch (_) { /* لا نُعطّل المحرّر إن تعذّر الفحص */ }
 }
-function closeEmailTemplates() { const m = document.getElementById('modal-email-templates'); if (m) m.style.display = 'none'; }
+function closeEmailTemplates() { const m = document.getElementById('modal-email-templates'); if (m) m.style.display = 'none'; syncScrollLock(); }
 function etRenderTabs() {
   const wrap = document.getElementById('et-tabs'); if (!wrap) return;
   wrap.innerHTML = ET_ORDER.map(k => {
@@ -25691,7 +25744,7 @@ function docvOpen(list, index, title, reg){
   docvRevoke();
   DOCV.list = list; DOCV.reg = reg || null; DOCV.title = title || 'مستندات المورد';
   const el = document.getElementById('modal-doc-viewer');
-  if (el){ el.style.display = 'flex'; document.body.style.overflow = 'hidden'; a11yWire(el); }
+  if (el){ el.style.display = 'flex'; syncScrollLock(); a11yWire(el); }
   document.getElementById('docv-zip').style.display = reg ? '' : 'none';
   // سكّ روابط كل وثائق الطلب دفعةً واحدة (لا ينتظره العرض — يسبق تبديل التبويبات)
   regDocSignBatch(list.map(d => d.path));
@@ -25714,10 +25767,8 @@ function docvClose(){
   DOCV.blobs.clear();
   docvDestroyPdf();          // وإلّا بقي العامل ومخازن الصفحات حيّةً بعد الإغلاق
   const stage = document.getElementById('docv-stage'); if (stage) stage.innerHTML = '';
-  // نافذة تفاصيل الطلب قد تكون مفتوحة تحته — لا نُعيد التمرير إلا إن أُغلق كل شيء
-  const reg = document.getElementById('modal-reg-detail');
-  const anyOpen = (reg && reg.style.display === 'flex') || document.querySelector('.modal-overlay.active');
-  if (!anyOpen) document.body.style.overflow = '';
+  // نافذة تفاصيل الطلب قد تكون مفتوحة تحته — `syncScrollLock` تحسبها ولا تفكّ قبلها
+  syncScrollLock();
 }
 function docvRevoke(){
   DOCV.urls.forEach(u => { try{ URL.revokeObjectURL(u); }catch(e){} });
@@ -26063,6 +26114,7 @@ async function openRegDetail(jsonStr) {
   if (!modal) return;
   title.textContent = r.legal_name_ar || 'تفاصيل الطلب';
   modal.style.display = 'flex';
+  syncScrollLock();
 
   const statusMap = {pending:'قيد المراجعة', approved:'مقبول', rejected:'مرفوض', needs_revision:'يحتاج تعديل'};
   const statusColor = {pending:'#f59e0b', approved:'#16a34a', rejected:'#dc2626', needs_revision:'#d97706'};
@@ -26376,6 +26428,7 @@ async function govVerifyRun(cr, vat){
 }
 function closeRegDetail() {
   document.getElementById('modal-reg-detail').style.display = 'none';
+  syncScrollLock();
 }
 
 // إشعار بريد المورد بتغيّر حالة طلبه (إن كان البريد مُفعّلاً على الخادم) — fire & forget
