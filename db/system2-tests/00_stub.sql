@@ -1,0 +1,133 @@
+-- ════════════════════════════════════════════════════════════════════════════
+--  كعب Supabase للنظام 2 — يحاكي ما يعتمد عليه db/system2-staff-scope.sql
+-- ----------------------------------------------------------------------------
+--  الغرض: تشغيل الهجرة وتأكيداتها على PostgreSQL محلّي بنفس دلالات Supabase:
+--  دور `authenticated` + `auth.jwt()` تقرأ `request.jwt.claims` + الجداول
+--  والدوال القائمة التي تبني عليها الهجرة (pr_username / pr_has_perm / …).
+--  ⚠️ هذا كعب اختبار فقط — ليس مصدر حقيقة لمخطّط الإنتاج.
+-- ════════════════════════════════════════════════════════════════════════════
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
+    CREATE ROLE anon NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN
+    CREATE ROLE service_role NOLOGIN BYPASSRLS;
+  END IF;
+END $$;
+GRANT USAGE ON SCHEMA public TO authenticated, anon, service_role;
+
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
+$$;
+GRANT USAGE ON SCHEMA auth TO authenticated, anon, service_role;
+
+-- ── الجداول (الأعمدة التي تلمسها الهجرة أو تأكيداتها فقط) ──
+CREATE TABLE IF NOT EXISTS proc_users (
+  username TEXT PRIMARY KEY, display_name TEXT, email TEXT, password_hash TEXT,
+  role TEXT DEFAULT 'user', permissions JSONB DEFAULT '{}'::jsonb, active BOOLEAN DEFAULT true,
+  department_id TEXT, manager_user TEXT, delegate_to TEXT, is_away BOOLEAN DEFAULT false,
+  job_title TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(), last_login TIMESTAMPTZ, notes TEXT
+);
+CREATE TABLE IF NOT EXISTS proc_purchase_orders (
+  po_number TEXT PRIMARY KEY, issue_date TEXT, sector TEXT, project TEXT, supplier TEXT,
+  subtotal NUMERIC, vat NUMERIC, total NUMERIC, officer TEXT, payment_method TEXT,
+  priority TEXT, expected_delivery TEXT, actual_delivery TEXT, status TEXT,
+  days_delayed NUMERIC, delay_reason TEXT, notes TEXT, category TEXT, lead_time_days NUMERIC,
+  items JSONB, status_history JSONB, receipts JSONB, source JSONB,
+  created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
+  updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT);
+CREATE TABLE IF NOT EXISTS proc_suppliers(id TEXT PRIMARY KEY, name TEXT, phone TEXT, iban TEXT);
+CREATE TABLE IF NOT EXISTS proc_history  (num BIGINT PRIMARY KEY, code TEXT, supplier TEXT, price NUMERIC, date TEXT, reference TEXT);
+CREATE TABLE IF NOT EXISTS proc_purchase_requests (
+  id TEXT PRIMARY KEY, title TEXT, department_id TEXT, sector TEXT, project TEXT,
+  requester TEXT, status TEXT DEFAULT 'draft', current_seq INT DEFAULT 0,
+  est_total NUMERIC DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS proc_pr_items     (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, name TEXT, qty NUMERIC, price NUMERIC);
+CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);
+CREATE TABLE IF NOT EXISTS proc_audit_log (
+  id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), username TEXT NOT NULL,
+  display_name TEXT, user_role TEXT, action TEXT NOT NULL, entity_type TEXT,
+  entity_id TEXT, old_value JSONB, new_value JSONB, meta JSONB
+);
+
+-- ── الدوال القائمة التي تبني عليها الهجرة (منقولة من db/pr-portal.sql
+--    و db/proc-users-hardening.sql بنصّها) ──
+CREATE OR REPLACE FUNCTION pr_username() RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE v_email text := lower(coalesce(auth.jwt() ->> 'email','')); v_uname text;
+BEGIN
+  IF v_email = '' THEN RETURN NULL; END IF;
+  v_uname := CASE v_email
+    WHEN 'supply@aldeyabi.com'   THEN 'mostafa'
+    WHEN 'abdullah@aldeyabi.com' THEN 'abdullah'
+    WHEN 'mahmoud@aldeyabi.com'  THEN 'mahmoud'
+    ELSE split_part(v_email,'@',1) END;
+  RETURN (SELECT username FROM proc_users
+            WHERE lower(username)=lower(v_uname) AND coalesce(active,true) LIMIT 1);
+END $fn$;
+
+CREATE OR REPLACE FUNCTION pr_is_admin() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT EXISTS(SELECT 1 FROM proc_users
+                WHERE lower(username)=lower(pr_username()) AND role='admin' AND coalesce(active,true));
+$fn$;
+
+CREATE OR REPLACE FUNCTION pr_is_service() RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT coalesce(auth.jwt() ->> 'role','') = 'service_role';
+$fn$;
+
+CREATE OR REPLACE FUNCTION pr_has_perm(p_key text) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
+  SELECT EXISTS(
+    SELECT 1 FROM proc_users
+    WHERE lower(username) = lower(pr_username())
+      AND coalesce(active, true)
+      AND (role = 'admin' OR coalesce((permissions ->> p_key)::boolean, false)));
+$fn$;
+
+CREATE OR REPLACE FUNCTION proc_users_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF pr_is_service() THEN RETURN COALESCE(NEW, OLD); END IF;
+  IF TG_OP = 'UPDATE'
+     AND NEW.permissions   IS NOT DISTINCT FROM OLD.permissions
+     AND NEW.role          IS NOT DISTINCT FROM OLD.role
+     AND NEW.active        IS NOT DISTINCT FROM OLD.active
+     AND NEW.is_away       IS NOT DISTINCT FROM OLD.is_away
+     AND NEW.delegate_to   IS NOT DISTINCT FROM OLD.delegate_to
+     AND NEW.username      IS NOT DISTINCT FROM OLD.username
+     AND NEW.email         IS NOT DISTINCT FROM OLD.email
+     AND NEW.password_hash IS NOT DISTINCT FROM OLD.password_hash
+  THEN RETURN NEW; END IF;
+  IF pr_has_perm('can_manage_users') THEN RETURN COALESCE(NEW, OLD); END IF;
+  RAISE EXCEPTION 'تعديل المستخدمين أو صلاحياتهم يتطلّب صلاحية «إدارة المستخدمين»';
+END $fn$;
+DROP TRIGGER IF EXISTS trg_proc_users_guard ON proc_users;
+CREATE TRIGGER trg_proc_users_guard BEFORE INSERT OR UPDATE OR DELETE ON proc_users
+  FOR EACH ROW EXECUTE FUNCTION proc_users_guard();
+
+-- الحالة قبل الهجرة: كل جدول مفتوح للمصادَق عليهم (وهو واقع الإنتاج اليوم).
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['proc_users','proc_purchase_orders','proc_items','proc_suppliers',
+                           'proc_history','proc_purchase_requests','proc_pr_items',
+                           'proc_pr_approvals','proc_audit_log'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_all" ON %I', t);
+    EXECUTE format('CREATE POLICY "auth_all" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', t);
+  END LOOP;
+END $$;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
