@@ -4082,6 +4082,14 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             <div id="supdoc-body"><div style="padding:16px;text-align:center;color:#94a3b8;font-size:12.5px">اضغط «تحديث» لعرض متابعة المستندات.</div></div>
           </div>
           <div style="margin-top:22px;border-top:1px solid var(--border,#e6e8ee);padding-top:16px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:800;color:var(--navy,#1a3a5c)">حملة تسجيل الموردين غير المسجَّلين</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadRegCampaign()" style="gap:6px">تحديث</button>
+              <span style="font-size:11.5px;color:var(--muted,#64748b)">موردون أُدخِلوا يدويّاً أو من عروض الأسعار — دعوتهم برابط شخصيّ يُكمِل بطاقتهم الحالية.</span>
+            </div>
+            <div id="regcamp-body"><div style="padding:16px;text-align:center;color:#94a3b8;font-size:12.5px">اضغط «تحديث» لعرض الموردين غير المسجَّلين.</div></div>
+          </div>
+          <div style="margin-top:22px;border-top:1px solid var(--border,#e6e8ee);padding-top:16px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
               <div style="font-size:13px;font-weight:800;color:var(--navy,#1a3a5c)">سعة التخزين داخل النظام</div>
               <button class="btn btn-ghost btn-sm" onclick="regMeasureStorage()" style="gap:6px">قِس السعة الآن</button>
@@ -9389,14 +9397,22 @@ async function _loadSupplierRegLink(sup) {
   if (!CLOUD || !CLOUD.enabled || !sup) return;
   try {
     let reg = null;
-    if (sup.commercial_reg) {
+    /* الأقوى أولاً: طلب سُجِّل عبر رابط دعوة يحمل معرّف هذه البطاقة — يعمل حتى
+       لمن لا سجل تجاري له (وهم أغلب من أُدخِلوا يدويّاً أو من عروض الأسعار). */
+    if (sup.id) {
+      const { data } = await CLOUD.client.from(REG_TABLE).select('*')
+        .eq('link_supplier_id', sup.id).order('submitted_at', { ascending: false }).limit(1);
+      reg = (Array.isArray(data) && data[0]) || null;
+    }
+    if (!reg && sup.commercial_reg) {
       const { data } = await CLOUD.client.from(REG_TABLE).select('*')
         .eq('commercial_reg', sup.commercial_reg).order('submitted_at', { ascending: false }).limit(1).maybeSingle();
       reg = data || null;
     }
     if (!reg && sup.notes) {
-      const m = String(sup.notes).match(/(DG-[A-Z0-9]+)/i);
-      if (m) { const { data } = await CLOUD.client.from(REG_TABLE).select('*').eq('id', m[1]).maybeSingle(); reg = data || null; }
+      // الملاحظات قد تحمل أكثر من رقم طلب (يُلحَق عند كل اعتماد) — الأحدث آخِرها
+      const m = String(sup.notes).match(/DG-[A-Z0-9]+/ig);
+      if (m && m.length) { const { data } = await CLOUD.client.from(REG_TABLE).select('*').eq('id', m[m.length-1]).maybeSingle(); reg = data || null; }
     }
     if (!reg) return;
     _supplierRegCache = reg;
@@ -24931,6 +24947,228 @@ function supDocSort(list){
 }
 function supDocNeedsAction(r){ return r.missing.length > 0 || r.expired || r.soon || r.lcGap; }
 
+/* ============================================================
+   حملة تسجيل الموردين غير المسجَّلين  (طلب المالك 2026-09-10)
+   ------------------------------------------------------------
+   الحالة المقيسة على القاعدة الحيّة: **117 من 155 مورداً** في الدليل بلا طلب
+   تسجيل — أُدخِلوا يدويّاً أو استُخرِجوا من أوامر الشراء وعروض الأسعار، و90
+   منهم لديهم رقم يصلح للواتساب. الهدف: يسجّلون بأنفسهم فتُكمَل بطاقتهم
+   **القائمة** بدل إدخال بياناتهم يدويّاً وبدل إنشاء بطاقة ثانية.
+
+   ⚠️ الرابط شخصيّ لكل مورد (`/api/supplier-invite-link` يسكّ رمزاً موقَّعاً
+   بمعرّف بطاقته) — وهو ما يجعل الربط قاطعاً لمن لا سجل تجاري له، وهم الأغلبية.
+   ⚠️ الواتساب لا يُرسَل خادميّاً بلا Business API: نفتح `wa.me` بالنصّ مُعبّأً،
+   فيبقى الإرسال بيد الموظّف (وهو الأنسب لرسالة علاقات موردين). */
+let REGCAMP_ROWS = [];          // [{id,name,phone,waPhone,offers,gaps}]
+let REGCAMP_LINKS = {};         // supplier_id → url (مسكوك عند الطلب، يُخبَّأ للجلسة)
+
+/* رقم بصيغة واتساب الدولية (9665XXXXXXXX) — الجوال فقط، فالأرضيّ لا واتساب له */
+function regCampWaPhone(sup){
+  const pick = [sup.mobile, sup.phone].map(v => normalizeSaudiPhone(supVal(v))).filter(Boolean);
+  for (const p of pick){
+    const d = String(p).replace(/\D/g, '');
+    if (/^05\d{8}$/.test(d)) return '966' + d.slice(1);
+    if (/^9665\d{8}$/.test(d)) return d;
+  }
+  return '';
+}
+
+/* نصّ رسالة الواتساب — بتنسيق واتساب (*عريض*) ونبرة علاقات موردين لا مطالبة.
+   ⚠️ الرابط في سطر مستقلّ: واتساب لا يُحوِّله رابطاً قابلاً للنقر إن التصق بنصّ عربيّ. */
+function regCampMessage(sup, url){
+  const name = supVal(sup.name) || 'شركاءنا الكرام';
+  return [
+    'السلام عليكم ورحمة الله وبركاته',
+    '',
+    `*${name}*`,
+    '',
+    'يسرّ *مجموعة الذيابي* أن تشكر لكم تعاملكم معنا، وتدعوكم لاستكمال تسجيلكم في *سجل الموردين المعتمدين* لدى إدارة المشتريات.',
+    '',
+    'أنتم مسجَّلون لدينا كمورد بالفعل، والرابط أدناه *خاصّ بمنشأتكم* ويحدّث ملفكم الحالي — لن يُنشأ ملف جديد، ولن تفقدوا تعاملاتكم السابقة.',
+    '',
+    '*ما المطلوب؟*',
+    '• تعبئة نموذج قصير (نحو ١٠ دقائق) — عبّأنا لكم ما لدينا من بيانات',
+    '• إرفاق: السجل التجاري · الشهادة الضريبية · شهادة التأمينات · الغرفة التجارية · العنوان الوطني · شهادة الآيبان',
+    '',
+    '*ولماذا؟*',
+    '• اعتماد بياناتكم البنكية يُسرّع صرف مستحقاتكم',
+    '• إدراجكم ضمن الموردين المعتمدين لطلبات التسعير والمناقصات',
+    '• تنبيهكم قبل انتهاء سجلاتكم وشهاداتكم',
+    '',
+    '*رابط التسجيل الخاصّ بكم:*',
+    url,
+    '',
+    'ولأي استفسار نسعد بخدمتكم:',
+    '📞 920000194  ·  ✉️ supply@aldeyabi.com',
+    '',
+    '_إدارة المشتريات — مجموعة الذيابي_',
+  ].join('\n');
+}
+
+/* من لم يُسجّل؟ مطابقة الدليل بالتسجيلات: سجل تجاري · رقم ضريبي · مفتاح الاسم
+   القويّ. ⚠️ المطابقة **متساهلة عمداً** هنا (عكس الاعتماد): إدراج مورد مسجَّل
+   في الحملة يُرسل له دعوة لا يحتاجها — إزعاج؛ أهون بكثير من بطاقة مكرّرة. */
+function regCampBuild(regs){
+  const crs  = new Set(), taxes = new Set(), keys = new Set();
+  (regs || []).forEach(r => {
+    if (supVal(r.commercial_reg)) crs.add(String(r.commercial_reg).trim());
+    if (supVal(r.vat_number))     taxes.add(String(r.vat_number).trim());
+    const k = supKeyStrong(r.legal_name_ar || ''); if (k) keys.add(k);
+    if (supVal(r.link_supplier_id)) keys.add('#id:' + String(r.link_supplier_id).trim());
+  });
+  const registered = (s) => {
+    if (keys.has('#id:' + s.id)) return true;
+    if (supVal(s.commercial_reg) && crs.has(String(s.commercial_reg).trim())) return true;
+    if (supVal(s.tax_id) && taxes.has(String(s.tax_id).trim())) return true;
+    const k = supKeyStrong(s.name || '');
+    return !!(k && keys.has(k));
+  };
+  return (STATE.suppliers || [])
+    .filter(s => supVal(s.name) && !registered(s))
+    .map(s => ({
+      id: s.id, name: s.name, sup: s,
+      wa: regCampWaPhone(s),
+      phone: supVal(s.mobile) || supVal(s.phone) || '',
+      email: supVal(s.email),
+      offers: s.offers_count || 0,
+      gaps: supDataGaps(s).length,
+    }))
+    .sort((a, b) => (b.offers - a.offers) || String(a.name).localeCompare(String(b.name), 'ar'));
+}
+
+async function loadRegCampaign(){
+  const box = document.getElementById('regcamp-body');
+  if (!box || !(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  box.innerHTML = '<div style="padding:22px;text-align:center;color:#64748b;font-size:13px">جارٍ التحميل…</div>';
+  try {
+    let regs;
+    try { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar,link_supplier_id'); }
+    catch(_) { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar'); }
+    REGCAMP_ROWS = regCampBuild(regs);
+    renderRegCampaign();
+  } catch(e){
+    box.innerHTML = `<div style="padding:18px;color:#b91c1c;font-size:13px">تعذّر التحميل: ${escapeHtml(e.message||'')}</div>`;
+    reportError('loadRegCampaign', e);
+  }
+}
+
+/* سكّ الرابط الشخصيّ (خادميّ — السرّ لا يغادر Cloudflare) */
+async function regCampLink(id){
+  if (REGCAMP_LINKS[id]) return REGCAMP_LINKS[id];
+  const {data:{session}} = await CLOUD.client.auth.getSession();
+  const jwt = session && session.access_token;
+  if (!jwt) throw new Error('الجلسة منتهية — أعد تسجيل الدخول');
+  const r = await fetch('/api/supplier-invite-link', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + jwt },
+    body: JSON.stringify({ supplier_ids:[id] }),
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok || !j.ok || !j.links?.[0]?.url) throw new Error(j.error || ('HTTP ' + r.status));
+  REGCAMP_LINKS[id] = j.links[0].url;
+  return j.links[0].url;
+}
+async function regCampSend(id){
+  const row = REGCAMP_ROWS.find(r => r.id === id);
+  if (!row) return;
+  try {
+    const url = await regCampLink(id);
+    const msg = regCampMessage(row.sup, url);
+    // نافذة الواتساب تُفتح فوراً من نقرة المستخدم؟ لا — بعد await، فقد يحجبها
+    // المتصفّح؛ لذا ننسخ النصّ دائماً أولاً كي لا تضيع الرسالة إن حُجِبت.
+    try { await navigator.clipboard.writeText(msg); } catch(_) {}
+    const w = window.open(`https://wa.me/${row.wa}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+    logAudit('supplier_invite_wa', 'supplier', id, { name: row.name });
+    toast(w ? 'success' : 'info',
+      w ? 'فُتحت محادثة الواتساب' : 'نُسخت الرسالة — الصقها في الواتساب',
+      row.name);
+  } catch(e){ toast('error', 'تعذّر تجهيز الدعوة', e.message || ''); }
+}
+async function regCampCopy(id){
+  const row = REGCAMP_ROWS.find(r => r.id === id);
+  if (!row) return;
+  try {
+    const url = await regCampLink(id);
+    await navigator.clipboard.writeText(regCampMessage(row.sup, url));
+    toast('success', 'نُسخت الرسالة مع الرابط الخاصّ', row.name);
+  } catch(e){ toast('error', 'تعذّر النسخ', e.message || ''); }
+}
+/* تصدير الحملة: اسم · جوال · رابط شخصيّ · نصّ الرسالة — لمن يرسل بأداة بثّ.
+   ⚠️ سكّ دفعيّ بنداء واحد (سقف الخادم 200) لا نداء لكل مورد. */
+async function regCampExport(){
+  const rows = REGCAMP_ROWS.filter(r => r.wa);
+  if (!rows.length) { toast('info','لا يوجد من لديه رقم جوال صالح'); return; }
+  try {
+    const {data:{session}} = await CLOUD.client.auth.getSession();
+    const jwt = session && session.access_token;
+    if (!jwt) throw new Error('الجلسة منتهية — أعد تسجيل الدخول');
+    const out = [];
+    for (let i = 0; i < rows.length; i += 200){
+      const chunk = rows.slice(i, i + 200);
+      const r = await fetch('/api/supplier-invite-link', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:'Bearer ' + jwt },
+        body: JSON.stringify({ supplier_ids: chunk.map(x => x.id) }),
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      (j.links || []).forEach(l => { REGCAMP_LINKS[l.supplier_id] = l.url; out.push(l); });
+    }
+    const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+    const csv = '﻿' + ['المورد','الجوال (دوليّ)','رابط التسجيل الخاصّ','نصّ الرسالة']
+      .map(q).join(',') + '\n'
+      + rows.map(r => [r.name, r.wa, REGCAMP_LINKS[r.id] || '', regCampMessage(r.sup, REGCAMP_LINKS[r.id] || '')].map(q).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+    a.download = 'حملة-تسجيل-الموردين.csv';
+    a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    toast('success', `صُدِّرت ${rows.length} دعوة`, 'الرابط شخصيّ لكل مورد — لا تُبدِّلها بينهم');
+  } catch(e){ toast('error', 'تعذّر التصدير', e.message || ''); }
+}
+
+function renderRegCampaign(){
+  const box = document.getElementById('regcamp-body'); if(!box) return;
+  const all = REGCAMP_ROWS, wa = all.filter(r => r.wa), noWa = all.length - wa.length;
+  if (!all.length){
+    box.innerHTML = '<div style="padding:16px;text-align:center;color:#15803d;font-size:13px">✓ كل الموردين في الدليل لهم طلب تسجيل</div>';
+    return;
+  }
+  box.innerHTML = `
+    <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:12.5px;color:#475569">
+        <b style="color:#b45309;font-size:16px">${all.length}</b> مورد بلا تسجيل ·
+        <b style="color:#15803d">${wa.length}</b> يمكن مراسلتهم واتساب${noWa?` · <b style="color:#b91c1c">${noWa}</b> بلا رقم جوال`:''}
+      </span>
+      <button onclick="regCampExport()" style="margin-inline-start:auto;cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">⬇ تصدير الحملة (${wa.length})</button>
+    </div>
+    <div style="font-size:11.5px;color:#64748b;margin-bottom:10px;padding:8px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px">
+      رابط كل مورد <b>خاصّ به</b>: يفتح النموذج مُعبّأً ببياناته، وعند اعتماد طلبه تُكمَّل <b>بطاقته الحالية</b> — لا بطاقة جديدة ولا فقدان لتعاملاته.
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr class="thead-navy" style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
+          <th style="padding:11px 13px;text-align:right;font-size:12px">المورد</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">الجوال</th>
+          <th style="padding:11px 13px;text-align:center;font-size:12px">عروض</th>
+          <th style="padding:11px 13px;text-align:center;font-size:12px">بيانات ناقصة</th>
+          <th style="padding:11px 13px;text-align:center;font-size:12px">الدعوة</th>
+        </tr></thead>
+        <tbody>${all.map(r => `<tr style="border-top:1px solid var(--border,#eef1f6)">
+          <td style="padding:10px 13px;font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}</td>
+          <td style="padding:10px 13px;font-family:'IBM Plex Mono',monospace;font-size:11.5px" dir="ltr">${r.phone?escapeHtml(normalizeSaudiPhone(r.phone)):'<span style="color:#b91c1c;font-family:inherit">— لا رقم</span>'}</td>
+          <td style="padding:10px 13px;text-align:center;color:#64748b">${r.offers||'—'}</td>
+          <td style="padding:10px 13px;text-align:center">${r.gaps?`<span style="color:#b45309;font-weight:700">${r.gaps}</span>`:'<span style="color:#15803d">✓</span>'}</td>
+          <td style="padding:10px 13px;text-align:center;white-space:nowrap">
+            ${r.wa?`<button onclick="regCampSend('${escapeAttr(r.id)}')" title="فتح واتساب برسالة الدعوة ورابطه الخاصّ"
+              style="cursor:pointer;font-family:inherit;background:#25D366;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">واتساب</button> `:''}
+            <button onclick="regCampCopy('${escapeAttr(r.id)}')" title="نسخ نصّ الرسالة مع الرابط الخاصّ"
+              style="cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#334155;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">نسخ</button>
+          </td></tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  try{ a11yWire(box); mobileTableWrap(box); }catch(e){}
+}
+
 async function loadSupDocs(){
   const box = document.getElementById('supdoc-body');
   if (!box || !(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
@@ -26475,30 +26713,107 @@ async function notifyRegEmail(id, event) {
   }
 }
 
+/* ============================================================
+   اعتماد التسجيل ← إكمال بطاقة المورد القائمة (لا بطاقة ثانية)
+   ------------------------------------------------------------
+   ⚠️ لماذا وُسِّعت المطابقة: 117 من 155 مورداً أُدخِلوا يدويّاً أو من عروض
+   الأسعار بلا تسجيل، و**73 فقط لديهم سجل تجاري**. فالمطابقة بالسجل وحدها —
+   وهي ما كان قائماً — تُنشئ بطاقة ثانية لأغلبهم عند تسجيلهم، وتنقسم أوامر
+   الشراء والسجل السعري بين بطاقتين.
+
+   أربع مراتب بترتيب القطعيّة، أوّل ما يُصيب يفوز:
+     ١) `link_supplier_id` — من رابط الدعوة الشخصيّ (رمز HMAC موقَّع) = **قاطع**.
+     ٢) السجل التجاري — هويّة نظامية فريدة.
+     ٣) الرقم الضريبي — كذلك.
+     ٤) مفتاح الاسم القويّ `supKeyStrong` (تطبيع + إسقاط كلمة الكيان والمسافات).
+   ⚠️ المرتبة ٤ **مقيَّدة عمداً**: تُرفَض عند تعارض الهويّة (سجل/ضريبي مختلف
+   على الطرفين) — درس «سراكو»: تشابه الاسم ليس دليلاً، والسجل التجاري هو الفاصل.
+   وتُرفَض إن طابقت أكثر من بطاقة (الاسم ملتبس فلا نُخمّن). */
+const REG_SUP_COLS = 'id,name,specialty,contact,phone,mobile,email,address,city,commercial_reg,tax_id,entity_type,business_scope,business_description,bank_name,account_holder,account_number,iban,notes';
+
+async function regMatchExistingSupplier(reg){
+  const sel = () => CLOUD.client.from('proc_suppliers').select(REG_SUP_COLS);
+  const first = (rows) => (Array.isArray(rows) && rows.length === 1) ? rows[0] : null;
+
+  // ١) رابط الدعوة — قاطع
+  if (reg.link_supplier_id) {
+    const {data} = await sel().eq('id', reg.link_supplier_id).limit(1);
+    const hit = first(data);
+    if (hit) return hit;
+  }
+  // ٢) و٣) الهويّة النظامية
+  for (const [col, val] of [['commercial_reg', reg.commercial_reg], ['tax_id', reg.vat_number || reg.zakat_number]]) {
+    if (!supVal(val)) continue;
+    const {data} = await sel().eq(col, String(val).trim()).limit(2);
+    const hit = first(data);
+    if (hit) return hit;
+  }
+  // ٤) مفتاح الاسم القويّ — بلا تعارض هويّة وبلا التباس
+  const key = supKeyStrong(reg.legal_name_ar || '');
+  if (!key) return null;
+  const cands = (STATE.suppliers || []).filter(s => supKeyStrong(s.name || '') === key);
+  if (cands.length !== 1) return null;
+  const regCr = supVal(reg.commercial_reg), regTax = supVal(reg.vat_number || reg.zakat_number);
+  const supCr = supVal(cands[0].commercial_reg), supTax = supVal(cands[0].tax_id);
+  if ((regCr && supCr && regCr !== supCr) || (regTax && supTax && regTax !== supTax)) return null;
+  const {data} = await sel().eq('id', cands[0].id).limit(1);
+  return first(data);
+}
+
+/* الملء: **الفارغ فقط** — لا يُتلف أي حقل مملوء في البطاقة القائمة.
+   (`supVal` تعامل «—» و«-» فراغاً، فالقيم النائبة القديمة تُستبدل ببيانات حقيقية.) */
+function regSupplierFill(sup, reg){
+  const src = {
+    name:           reg.legal_name_ar,
+    specialty:      (reg.sectors || []).join('، ') || (reg.products_services?.[0]?.category || ''),
+    contact:        reg.contact_name,
+    phone:          reg.phone,
+    mobile:         reg.contact_mobile,
+    email:          reg.email || reg.contact_email,
+    address:        reg.address,
+    city:           reg.city,
+    commercial_reg: reg.commercial_reg,
+    tax_id:         reg.vat_number || reg.zakat_number,
+    entity_type:    reg.entity_type,
+    business_scope: Array.isArray(reg.business_scope) ? reg.business_scope.join('، ') : reg.business_scope,
+    business_description: reg.business_description,
+    bank_name:      reg.bank_name,
+    account_holder: reg.account_holder,
+    account_number: reg.account_number,
+    iban:           reg.iban,
+  };
+  const out = {};
+  Object.keys(src).forEach(k => {
+    // الاسم لا يُستبدَل أبداً: البطاقة مرتبطة بأوامر شراء وسجل سعري بالاسم
+    if (k === 'name') return;
+    if (!supVal(sup[k]) && supVal(src[k])) out[k] = String(src[k]).trim();
+  });
+  // أثر يربط البطاقة بطلب التسجيل (بلا مسح ما كُتب سابقاً)
+  const note = `مسجّل عبر بوابة التسجيل الإلكترونية. رقم الطلب: ${reg.id}`;
+  if (!String(sup.notes || '').includes(reg.id)) {
+    out.notes = supVal(sup.notes) ? `${sup.notes}\n${note}` : note;
+  }
+  return out;
+}
+
 async function approveRegistration(reg) {
   if(!requirePermission('can_review_registrations', 'مراجعة طلبات التسجيل')) return;
   if (!CLOUD || !CLOUD.enabled) return;
   // حماية من الموافقة المزدوجة (نقر مزدوج أو إعادة فتح طلب موافَق عليه)
   if (reg.status === 'approved') { toast('info', 'هذا الطلب موافَق عليه مسبقاً'); return; }
   try {
-    // إن وُجد مورد بنفس السجل التجاري مسبقاً، لا نُنشئ نسخة مكررة — نربط الطلب به
-    let suppId = null, alreadyExisted = false;
-    if (reg.commercial_reg) {
-      const {data: existing} = await CLOUD.client.from('proc_suppliers')
-        .select('id,bank_name,account_holder,account_number,iban').eq('commercial_reg', reg.commercial_reg).maybeSingle();
-      if (existing && existing.id) {
-        suppId = existing.id; alreadyExisted = true;
-        // fill-if-empty: انسخ البنكية من الطلب إلى المورد القائم للحقول الفارغة فقط (لا مسح للقائم)
-        const bankFill = {};
-        if (!existing.bank_name      && reg.bank_name)      bankFill.bank_name      = reg.bank_name;
-        if (!existing.account_holder && reg.account_holder) bankFill.account_holder = reg.account_holder;
-        if (!existing.account_number && reg.account_number) bankFill.account_number = reg.account_number;
-        if (!existing.iban           && reg.iban)           bankFill.iban           = reg.iban;
-        if (Object.keys(bankFill).length) {
-          bankFill.updated_by = STATE.currentUser?.username || null;
-          bankFill.updated_at = new Date().toISOString();
-          await CLOUD.client.from('proc_suppliers').update(bankFill).eq('id', suppId);
-        }
+    // بطاقة قائمة؟ لا نُنشئ نسخة مكرّرة — نُكمِل عليها (regMatchExistingSupplier)
+    let suppId = null, alreadyExisted = false, filledCount = 0;
+    const match = await regMatchExistingSupplier(reg);
+    if (match) {
+      suppId = match.id; alreadyExisted = true;
+      const fill = regSupplierFill(match, reg);
+      filledCount = Object.keys(fill).length;
+      if (filledCount) {
+        fill.updated_by = STATE.currentUser?.username || null;
+        fill.updated_at = new Date().toISOString();
+        const {error: fillErr} = await CLOUD.client.from('proc_suppliers').update(fill).eq('id', suppId);
+        if (fillErr) throw fillErr;   // لا نُعلن نجاحاً وبيانات المورد لم تُحدَّث
       }
     }
     if (!suppId) {
@@ -26545,7 +26860,7 @@ async function approveRegistration(reg) {
     notifyRegEmail(reg.id, 'approved');
     closeRegDetail();
     toast('success', alreadyExisted
-      ? `تمت الموافقة — المورد "${reg.legal_name_ar}" مرتبط بسجل قائم`
+      ? `تمت الموافقة — أُكمِلت بطاقة "${reg.legal_name_ar}" القائمة${filledCount ? ` (${filledCount} حقلاً)` : ' (كانت مكتملة)'}`
       : `تمت الموافقة — تم إضافة "${reg.legal_name_ar}" كمورد معتمد`);
     loadRegistrations(REG_PAGE);
 
