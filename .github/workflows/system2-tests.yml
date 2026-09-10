@@ -12,6 +12,8 @@ on:
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
+      - 'db/system2-staff-scope.sql'
+      - 'db/system2-tests/**'
       - '.github/workflows/system2-tests.yml'
   pull_request:
     paths:
@@ -19,6 +21,8 @@ on:
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
+      - 'db/system2-staff-scope.sql'
+      - 'db/system2-tests/**'
       - '.github/workflows/system2-tests.yml'
   workflow_dispatch:
 
@@ -55,3 +59,31 @@ jobs:
 
       - name: حزمة تأكيدات النظام 2
         run: node scripts/system2-tests.mjs
+
+  # حزمة نطاق موظفي الصيانة (RLS). ⚠️ بلا هذه الوظيفة تبقى **الحدود الأمنية
+  # نفسها** بلا تغطية آلية: تعديلٌ يُسقِط `NOT proc_is_scoped()` من سياسة
+  # يمرّ صامتاً، وتأكيدات الواجهة لا تراه لأنها لا تلمس القاعدة.
+  scope-sql:
+    runs-on: ubuntu-latest
+    name: تأكيدات نطاق الصيانة (RLS)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: حزمة النطاق (كعب Supabase + الهجرة + SC1–SC16 بـRLS فعليّة)
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash db/system2-tests/run.sh
