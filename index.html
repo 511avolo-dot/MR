@@ -26739,19 +26739,20 @@ const REG_SUP_COLS = 'id,name,specialty,contact,phone,mobile,email,address,city,
 async function regMatchExistingSupplier(reg){
   const sel = () => CLOUD.client.from('proc_suppliers').select(REG_SUP_COLS);
   const first = (rows) => (Array.isArray(rows) && rows.length === 1) ? rows[0] : null;
+  const tag = (row, how) => { if(row) row._matchedBy = how; return row; };
 
   // ١) رابط الدعوة — قاطع
   if (reg.link_supplier_id) {
     const {data} = await sel().eq('id', reg.link_supplier_id).limit(1);
     const hit = first(data);
-    if (hit) return hit;
+    if (hit) return tag(hit, 'invite_link');
   }
   // ٢) و٣) الهويّة النظامية
   for (const [col, val] of [['commercial_reg', reg.commercial_reg], ['tax_id', reg.vat_number || reg.zakat_number]]) {
     if (!supVal(val)) continue;
     const {data} = await sel().eq(col, String(val).trim()).limit(2);
     const hit = first(data);
-    if (hit) return hit;
+    if (hit) return tag(hit, col);
   }
   // ٤) مفتاح الاسم القويّ — بلا تعارض هويّة وبلا التباس
   const key = supKeyStrong(reg.legal_name_ar || '');
@@ -26762,7 +26763,7 @@ async function regMatchExistingSupplier(reg){
   const supCr = supVal(cands[0].commercial_reg), supTax = supVal(cands[0].tax_id);
   if ((regCr && supCr && regCr !== supCr) || (regTax && supTax && regTax !== supTax)) return null;
   const {data} = await sel().eq('id', cands[0].id).limit(1);
-  return first(data);
+  return tag(first(data), 'name_key');
 }
 
 /* الملء: **الفارغ فقط** — لا يُتلف أي حقل مملوء في البطاقة القائمة.
@@ -26808,12 +26809,13 @@ async function approveRegistration(reg) {
   if (reg.status === 'approved') { toast('info', 'هذا الطلب موافَق عليه مسبقاً'); return; }
   try {
     // بطاقة قائمة؟ لا نُنشئ نسخة مكرّرة — نُكمِل عليها (regMatchExistingSupplier)
-    let suppId = null, alreadyExisted = false, filledCount = 0;
+    let suppId = null, alreadyExisted = false, filledCount = 0, filledKeys = [];
     const match = await regMatchExistingSupplier(reg);
     if (match) {
       suppId = match.id; alreadyExisted = true;
       const fill = regSupplierFill(match, reg);
-      filledCount = Object.keys(fill).length;
+      filledKeys = Object.keys(fill);
+      filledCount = filledKeys.length;
       if (filledCount) {
         fill.updated_by = STATE.currentUser?.username || null;
         fill.updated_at = new Date().toISOString();
@@ -26861,6 +26863,17 @@ async function approveRegistration(reg) {
     }).eq('id', reg.id);
     if (upErr) throw upErr;
     reg.status = 'approved'; // منع الموافقة المتكررة على نفس الكائن في الذاكرة
+
+    /* أثر دائم لما حدث: أي بطاقة تأثّرت · بأي مرتبة طابقت · وما الحقول التي
+       مُلئت. الاعتماد صار يُعدّل بطاقة قائمة، فبلا هذا الأثر لا سبيل لتتبّع أي
+       تغيير لاحقاً. (يُكتب بعد نجاح كل الكتابات، فلا يُسجَّل ما لم يحدث.) */
+    try {
+      logAudit(alreadyExisted ? 'reg_approve_merge' : 'reg_approve_create', 'supplier', suppId, {
+        reg_id: reg.id, supplier: reg.legal_name_ar,
+        matched_by: match ? (match._matchedBy || 'unknown') : null,
+        filled_fields: filledCount, filled: filledKeys,
+      });
+    } catch(e){ reportError('approveRegistration/audit', e); }
 
     notifyRegEmail(reg.id, 'approved');
     closeRegDetail();
