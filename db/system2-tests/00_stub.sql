@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS proc_purchase_requests (
 CREATE TABLE IF NOT EXISTS proc_pr_items     (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, name TEXT, qty NUMERIC, price NUMERIC);
 CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);
 CREATE TABLE IF NOT EXISTS proc_approval_rules (id BIGSERIAL PRIMARY KEY, priority INT, department_id TEXT, category TEXT, min_total NUMERIC, max_total NUMERIC, stages JSONB, active BOOLEAN DEFAULT true);
+CREATE TABLE IF NOT EXISTS proc_settings (key TEXT PRIMARY KEY, value JSONB);
 CREATE TABLE IF NOT EXISTS proc_audit_log (
   id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), username TEXT NOT NULL,
   display_name TEXT, user_role TEXT, action TEXT NOT NULL, entity_type TEXT,

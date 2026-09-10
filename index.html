@@ -5333,10 +5333,15 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
     <div class="modal-body" style="padding:0">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--surface-2)">
         <div style="font-size:13px;color:var(--muted)">يمكن للمدير إضافة وتعديل وحذف المستخدمين، ومنح أو سحب الصلاحيات التفصيلية.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" id="btn-staff-invite" title="رابط تسجيل ذاتيّ لموظفي قطاع">
+          🔗 رابط دعوة الموظفين
+        </button>
         <button class="btn btn-accent btn-sm" id="btn-user-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
           مستخدم جديد
         </button>
+        </div>
       </div>
       <div class="users-list" id="users-list" style="padding:8px"></div>
       <div style="margin:0 16px 16px;padding:14px;background:rgba(196,162,101,0.07);border:1px solid rgba(196,162,101,0.25);border-radius:10px;font-size:12px;line-height:1.7">
@@ -14707,6 +14712,74 @@ async function renderUsersList(){
   });
 }
 
+/* ══════════ رابط دعوة موظفي القطاع ══════════
+   قرار المالك: رابط **واحد للقطاع** يُنشَر · بريد الشركة حصراً · والحساب
+   **ينتظر التفعيل**. الرابط لا يمنح صلاحية: القطاع من الرمز الموقَّع، والدور
+   والصلاحيات مفروضة خادميّاً، والحساب موقوف — فمسرَّبه لا يفتح النظام.
+   ⚠️ ولذلك الإبطال متاح هنا: نقرة تُسقِط كل الروابط الصادرة. */
+async function staffInviteOpen(){
+  if(!requirePermission('can_manage_users','رابط دعوة الموظفين')) return;
+  const sectors = (PO_ENUMS?.sector||[]);
+  const opts = sectors.map(x=>`<option value="${escapeAttr(x)}">${escapeHtml(x)}</option>`).join('');
+  const el = document.createElement('div');
+  el.className='modal-overlay active'; el.id='modal-staff-invite'; el.dataset.ephemeral='1';
+  el.innerHTML = `<div class="modal" style="max-width:560px">
+    <div class="modal-header"><div class="modal-title">🔗 رابط دعوة الموظفين</div>
+      <button class="modal-close" onclick="closeModal('modal-staff-invite')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:14px">
+        رابط واحد تنشره لموظفي القطاع (ومدير الصيانة والتشغيل) فيسجّلون بياناتهم بأنفسهم.
+        <b>يُشترط بريد الشركة</b> — وهو شرط وصول الإشعارات إليهم.
+        وكل من يسجّل يظهر هنا <b>موقوفاً</b> حتى تُفعّله بنفسك.
+      </div>
+      <div class="rep-field"><label>القطاع</label>
+        <select class="select" id="si-sector">${opts}</select></div>
+      <div class="rep-field" style="margin-top:10px"><label>مدّة صلاحية الرابط (أيام)</label>
+        <input class="input" id="si-days" type="number" min="1" max="60" value="14"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="staffInviteMint()">توليد الرابط</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="staffInviteRevoke()"
+                title="يُسقِط كل الروابط التي وُلِّدت سابقاً">🚫 إبطال كل الروابط</button>
+      </div>
+      <div id="si-out" style="margin-top:14px;font-size:13px"></div>
+    </div></div>`;
+  document.body.appendChild(el); syncScrollLock(); a11yWire(el);
+}
+async function staffInviteMint(){
+  const out = document.getElementById('si-out');
+  const sector = document.getElementById('si-sector')?.value || '';
+  const days = Number(document.getElementById('si-days')?.value) || 14;
+  out.textContent = 'جارٍ التوليد…';
+  try{
+    const r = await fetch('/api/staff-invite', { method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, await prAuthHeader()),
+      body: JSON.stringify({ action:'mint', sector, days }) });
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error(j.error||'تعذّر التوليد');
+    const msg = `دعوة للتسجيل في نظام متابعة المشتريات — قطاع ${sector}\n\nسجّل بياناتك مرّة واحدة لتتابع أوامرك وترفع طلباتك:\n${j.url}\n\nاستخدم بريد الشركة، وسيُفعّل حسابك بعد المراجعة.`;
+    out.innerHTML = `<div style="background:#eef7ee;border:1px solid #cfe3cf;padding:10px;border-radius:8px">
+        <div style="margin-bottom:8px">✅ الرابط جاهز — صالح حتى <b>${escapeHtml(String(j.expires_at).slice(0,10))}</b></div>
+        <input class="input" dir="ltr" readonly value="${escapeAttr(j.url)}" onclick="this.select()" style="font-size:12px">
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(j.url).replace(/"/g,'&quot;')}).then(()=>toast('success','نُسخ الرابط',''))">نسخ الرابط</button>
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+             href="https://wa.me/?text=${encodeURIComponent(msg)}">مشاركة عبر واتساب</a>
+        </div></div>`;
+  }catch(e){ out.innerHTML = `<div style="color:var(--danger)">${escapeHtml(e.message||'تعذّر التوليد')}</div>`; }
+}
+async function staffInviteRevoke(){
+  if(!confirm('إبطال كل روابط الدعوة الصادرة؟ من لم يسجّل بعد سيحتاج رابطاً جديداً.')) return;
+  const out = document.getElementById('si-out');
+  try{
+    const r = await fetch('/api/staff-invite', { method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, await prAuthHeader()),
+      body: JSON.stringify({ action:'revoke' }) });
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error(j.error||'تعذّر الإبطال');
+    out.innerHTML = '<div style="color:var(--danger)">🚫 أُبطلت كل الروابط الصادرة.</div>';
+  }catch(e){ out.innerHTML = `<div style="color:var(--danger)">${escapeHtml(e.message||'')}</div>`; }
+}
+
 async function openUserForm(mode, username){
   __userFormMode = mode;
   __userFormTarget = username || null;
@@ -19519,6 +19592,8 @@ function init(){
   if(btnManageUsers) btnManageUsers.addEventListener('click', openUserManagement);
   const btnUserAdd = document.getElementById('btn-user-add');
   if(btnUserAdd) btnUserAdd.addEventListener('click', () => openUserForm('add'));
+  const btnStaffInv = document.getElementById('btn-staff-invite');
+  if(btnStaffInv) btnStaffInv.addEventListener('click', () => staffInviteOpen());
   // Click-to-copy RLS SQL helper
   const rlsSql = document.getElementById('rls-fix-sql');
   if(rlsSql) rlsSql.addEventListener('click', () => {

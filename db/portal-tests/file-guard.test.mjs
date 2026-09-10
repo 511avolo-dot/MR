@@ -648,3 +648,213 @@ let DR_TOKEN = '';
 
 if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);
+
+/* ── تأكيدات نقطة دعوة موظفي القطاع (/api/staff-invite) ─────────────────────
+   قرار المالك (2026-09-10): **رابط واحد للقطاع** يُنشَر · **بريد الشركة حصراً**
+   · **الحساب ينتظر التفعيل**. المبدأ الحاكم المُختبَر هنا: **الرابط المشترك لا
+   يمنح صلاحية** — القطاع من الرمز لا من العميل، والدور والصلاحيات مفروضة،
+   والحساب موقوف. ولو انعكس أيٌّ من ذلك صار الرابط المسرَّب باباً للنظام. */
+const si = await import('../../functions/api/staff-invite.js');
+
+const SI_ENV = {
+  SUPABASE_URL: 'https://x.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'svc-key',
+  SUPABASE_ANON_KEY: 'anon-key',
+  RESEND_API_KEY: 're_test',
+  STAFF_INVITE_SECRET: 'invite-unit-secret',
+  PUBLIC_ORIGIN: 'https://suppliers.aldeyabi.com',
+};
+const SI_REQ = (qs, init = {}, headers = {}) => new Request(
+  `https://suppliers.aldeyabi.com/api/staff-invite${qs}`,
+  { headers: { origin: 'https://suppliers.aldeyabi.com', host: 'suppliers.aldeyabi.com',
+               'Content-Type': 'application/json', ...headers }, ...init });
+
+/* شبكة مُقلَّدة: تصادق الأدمن · تُعيد صفوف proc_users/settings · تلتقط الكتابات */
+function siNet(opts = {}) {
+  const calls = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, o = {}) => {
+    const u = String(url), m = (o.method || 'GET').toUpperCase();
+    calls.push({ url: u, method: m, body: o.body, headers: o.headers });
+    if (u.includes('/auth/v1/user')) {
+      const a = (o.headers && (o.headers.Authorization || o.headers.authorization)) || '';
+      if (a.includes('admin-jwt')) return new Response(JSON.stringify({ email: 'abdullah@aldeyabi.com' }), { status: 200 });
+      if (a.includes('user-jwt'))  return new Response(JSON.stringify({ email: 'saleh@aldeyabi.com' }), { status: 200 });
+      return new Response('{}', { status: 401 });
+    }
+    if (u.includes('/rest/v1/proc_settings') && m === 'GET') {
+      return new Response(JSON.stringify([{ value: { epoch: opts.epoch || 0 } }]), { status: 200 });
+    }
+    if (u.includes('/rest/v1/proc_users') && m === 'GET') {
+      if (u.includes('role=eq.admin')) return new Response(JSON.stringify([{ username:'admin', email:'abdullah@aldeyabi.com' }]), { status: 200 });
+      if (u.includes('active=eq.false')) return new Response(JSON.stringify(opts.pending || []), { status: 200 });
+      if (u.includes('username=eq.abdullah')) return new Response(JSON.stringify([{ username:'abdullah', role:'admin', active:true }]), { status: 200 });
+      if (u.includes('username=eq.saleh'))    return new Response(JSON.stringify([{ username:'saleh', role:'user', active:true }]), { status: 200 });
+      if (u.includes('or=(')) return new Response(JSON.stringify(opts.existing || []), { status: 200 });
+      return new Response('[]', { status: 200 });
+    }
+    if (u.includes('/auth/v1/admin/users') && m === 'POST') {
+      return new Response(JSON.stringify({ id: 'auth-uid-1' }), { status: opts.authFail ? 500 : 200 });
+    }
+    if (u.includes('/rest/v1/proc_users') && m === 'POST') {
+      return new Response('', { status: opts.profileFail ? 400 : 201 });
+    }
+    if (u.includes('api.resend.com')) return new Response(JSON.stringify({ id: 'e1' }), { status: 200 });
+    return new Response('{}', { status: 200 });
+  };
+  return { calls, restore: () => { globalThis.fetch = real; } };
+}
+const ADMIN = { Authorization: 'Bearer admin-jwt' };
+let siFailed = 0, siTotal = 0;
+const siT = (name, cond, extra = '') => {
+  siTotal++; if (!cond) siFailed++;
+  console.log(`${cond ? '✓' : '✗ FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
+};
+const mint = async (env, headers = ADMIN, body = { action:'mint', sector:'الصيانة والتشغيل' }) => {
+  const r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify(body) }, headers), env });
+  return { status: r.status, j: await r.json() };
+};
+const tokenOf = (u) => new URL(u).searchParams.get('t');
+const REG_BODY = {
+  display_name: 'صالح الميداني', email: 'saleh@aldeyabi.com',
+  password: 'Passw0rd!', mobile: '0500000000', job_title: 'فنّي صيانة',
+};
+
+/* (أ) سكّ الرابط: أدمن فقط، ومن نفس الأصل */
+{
+  const n = siNet();
+  try {
+    let r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body:'{}' }, { origin:'https://evil.example' }), env: SI_ENV });
+    siT('سكّ الرابط يُرفض من أصل مختلف', r.status === 403);
+
+    r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify({action:'mint',sector:'س'}) }), env: SI_ENV });
+    siT('وبلا رمز جلسة يُرفض', r.status === 403);
+
+    const asUser = await mint(SI_ENV, { Authorization: 'Bearer user-jwt' });
+    siT('وموظّف عاديّ لا يسكّ رابط دعوة', asUser.status === 403);
+
+    const ok = await mint(SI_ENV);
+    siT('والأدمن يسكّه برابط الصفحة العامّة',
+      ok.status === 200 && ok.j.ok && ok.j.url.includes('/staff-register.html?t='));
+  } finally { n.restore(); }
+}
+
+/* (ب) الرمز: التوقيع والانتهاء والإبطال */
+{
+  const n = siNet();
+  let url = '';
+  try { url = (await mint(SI_ENV)).j.url; } finally { n.restore(); }
+  const tk = tokenOf(url);
+
+  {
+    const n2 = siNet();
+    try {
+      let r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: SI_ENV });
+      const b = await r.json();
+      siT('الرمز الصحيح يكشف القطاع وشرط النطاق فقط',
+        r.status === 200 && b.sector === 'الصيانة والتشغيل' && b.domain === 'aldeyabi.com'
+        && !('email' in b) && !('users' in b));
+
+      r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}x`), env: SI_ENV });
+      siT('ورمز معبوث يُرفض', r.status === 401);
+
+      r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: { ...SI_ENV, STAFF_INVITE_SECRET:'other' } });
+      siT('ورمز بمفتاح آخر يُرفض', r.status === 401);
+    } finally { n2.restore(); }
+  }
+  // الإبطال: كل رمز صدر قبل epoch يسقط
+  {
+    const n3 = siNet({ epoch: Date.now() + 60000 });
+    try {
+      const r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: SI_ENV });
+      siT('وإبطال المالك يُسقِط كل الروابط الصادرة قبله', r.status === 401);
+    } finally { n3.restore(); }
+  }
+}
+
+/* (ج) التسجيل: الحقول والنطاق — وأنّ الحساب لا يمنح صلاحية */
+{
+  const n0 = siNet();
+  let tk = '';
+  try { tk = tokenOf((await mint(SI_ENV)).j.url); } finally { n0.restore(); }
+  const REG = (body, t = tk) => SI_REQ(`?t=${encodeURIComponent(t)}`, { method:'POST', body: JSON.stringify(body) });
+
+  {
+    const n = siNet();
+    try {
+      let r = await si.onRequestPost({ request: REG({ ...REG_BODY, email:'saleh@gmail.com' }), env: SI_ENV });
+      siT('بريد خارج نطاق الشركة يُرفض (وإلّا لم يصله إشعار أصلاً)', r.status === 400);
+
+      r = await si.onRequestPost({ request: REG({ ...REG_BODY, password:'123' }), env: SI_ENV });
+      siT('وكلمة مرور قصيرة تُرفض', r.status === 400);
+
+      r = await si.onRequestPost({ request: REG({ ...REG_BODY, display_name:'ا' }), env: SI_ENV });
+      siT('واسم ناقص يُرفض', r.status === 400);
+
+      r = await si.onRequestPost({ request: REG(REG_BODY, tk + 'x'), env: SI_ENV });
+      siT('ورمز غير صالح يُرفض قبل أي كتابة', r.status === 401);
+    } finally { n.restore(); }
+  }
+
+  /* ⚠️ جوهر الأمان: القطاع من الرمز، والدور والصلاحيات مفروضة، والحساب موقوف —
+     حتى لو أرسل العميل عكس ذلك صراحةً. */
+  {
+    const n = siNet();
+    try {
+      const r = await si.onRequestPost({ request: REG({
+        ...REG_BODY, role: 'admin', active: true,
+        scope_sectors: ['الإنشاءات','الإدارة العامة'],
+        permissions: { can_view_amounts: true, can_manage_users: true },
+      }), env: SI_ENV });
+      const b = await r.json();
+      const wrote = n.calls.find(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
+      const row = JSON.parse(wrote.body);
+      siT('التسجيل ينجح ويُبلِغ أنّه بانتظار التفعيل', r.status === 200 && b.ok && b.pending === true);
+      siT('الحساب يُنشأ **موقوفاً** (رابط مسرَّب لا يفتح النظام)', row.active === false);
+      siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
+      siT('والقطاع من **الرمز** لا من العميل',
+        JSON.stringify(row.scope_sectors) === JSON.stringify(['الصيانة والتشغيل']));
+      siT('والصلاحيات ميدانية ثابتة (لا مبالغ ولا إدارة مستخدمين)',
+        row.permissions.can_receive_po === true && row.permissions.can_view_amounts === false
+        && !('can_manage_users' in row.permissions));
+      siT('وبياناته تُحفظ كما أدخلها (بريد/جوال/وظيفة)',
+        row.email === 'saleh@aldeyabi.com' && row.mobile === '0500000000' && row.job_title === 'فنّي صيانة');
+      const mail = n.calls.find(c => c.url.includes('api.resend.com'));
+      siT('ويصل المدير تنبيه بالتفعيل (وإلّا انتظر الموظّف بلا علم أحد)',
+        !!mail && JSON.parse(mail.body).to.includes('abdullah@aldeyabi.com'));
+    } finally { n.restore(); }
+  }
+
+  // مسجَّل مسبقاً: لا صفّ ثانٍ، ولا إفشاء لحالته
+  {
+    const n = siNet({ existing: [{ username:'saleh', active:true }] });
+    try {
+      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
+      const b = await r.json();
+      const wrote = n.calls.filter(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
+      siT('ومن له حساب لا يُنشأ له صفّ ثانٍ', r.status === 200 && b.already === true && wrote.length === 0);
+    } finally { n.restore(); }
+  }
+
+  // فشل حفظ الملف ⇒ لا حساب دخول يتيم يمنع إعادة المحاولة
+  {
+    const n = siNet({ profileFail: true });
+    try {
+      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
+      const del = n.calls.find(c => c.url.includes('/auth/v1/admin/users/') && c.method === 'DELETE');
+      siT('وفشل حفظ الملف يحذف حساب الدخول (لا حساب يتيم)', r.status === 400 && !!del);
+    } finally { n.restore(); }
+  }
+
+  // سقف الصفوف المعلّقة
+  {
+    const n = siNet({ pending: Array.from({ length: 41 }, (_, i) => ({ username: 'u' + i })) });
+    try {
+      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
+      siT('وسقف الصفوف المعلّقة يمنع إغراق اللوحة برابط مسرَّب', r.status === 429);
+    } finally { n.restore(); }
+  }
+}
+
+if (siFailed) { console.error(`\n❌ نقطة /api/staff-invite: ${siFailed} فشل`); process.exit(1); }
+console.log(`\n✅ نقطة /api/staff-invite: ${siTotal}/${siTotal} PASS`);

@@ -2681,6 +2681,60 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /filter\(p => p && \/\^\(\?:supplier-docs\\\/\)\?DG-\/\.test\(p\)/.test(CODE));
 }
 
+/* ── ٣٣) رابط دعوة موظفي القطاع ──────────────────────────────────
+   طلب المالك: «رابط لدعوة موظفين ومدير الصيانة والتشغيل للدخول وتسجيل بياناتهم
+   لتوصلهم الإشعارات والمتابعة». وقراراته: رابط واحد للقطاع · بريد الشركة حصراً
+   · الحساب ينتظر التفعيل.
+   ⚠️ سلوك النقطة مُختبَر بـ22 تأكيداً في `db/portal-tests/file-guard.test.mjs`
+   (منها أنّ الحساب يُنشأ موقوفاً والقطاع من الرمز). هنا **ما لا يُمسَك سلوكيّاً**:
+   خصائص زمنية/بنيوية وسلامة الصفحة العامّة. */
+{
+  G('٣٣) رابط دعوة موظفي القطاع');
+
+  const SINV = fs.readFileSync(path.join(ROOT, 'functions/api/staff-invite.js'), 'utf8');
+  const SPAGE = fs.readFileSync(path.join(ROOT, 'staff-register.html'), 'utf8');
+
+  /* ⚠️ خاصيّة **زمنية** لا سلوكية: `===` و`timingSafeEq` يقبلان ويرفضان نفس
+     المدخلات، فلا اختبار وظيفيّ يمسك الفرق — الحارس بنيويّ بالضرورة. */
+  T('توقيع الرمز يُقارَن بمقارنة ثابتة الزمن',
+    /if \(!timingSafeEq\(expect, parts\[1\]\)\) return null;/.test(SINV)
+    && /d \|= x\.charCodeAt\(i\) \^ y\.charCodeAt\(i\)/.test(SINV));
+  T('والرمز يحمل حمولته موقَّعة — لا جدول رموز ولا هجرة له',
+    /crypto\.subtle\.importKey/.test(SINV) && !/proc_invitations/.test(SINV));
+  T('والإبطال بمفتاح epoch في الإعدادات (نقرة تُسقِط كل الروابط)',
+    /key=eq\.staff_invite/.test(SINV) && /action === 'revoke'/.test(SINV));
+  T('ومدّة الصلاحية مسقوفة', /Math\.min\(MAX_DAYS/.test(SINV) && /MAX_DAYS = 60/.test(SINV));
+
+  /* الحقول الحوكمية مفروضة نصّاً في الخادم — لا تُقرأ من جسم الطلب إطلاقاً. */
+  T('الدور والصلاحيات والحالة مفروضة خادميّاً لا من العميل',
+    /role: 'user', permissions: FIELD_PERMISSIONS, active: false,/.test(SINV)
+    && /scope_sectors: \[p\.s\]/.test(SINV)
+    && /FIELD_PERMISSIONS = \{ can_receive_po: true, can_view_amounts: false \}/.test(SINV));
+  T('وسقف الصفوف المعلّقة معرَّف', /MAX_PENDING_PER_SECTOR = \d+/.test(SINV));
+
+  /* الصفحة العامّة: بلا فهرسة وبلا أي مصدر خارجيّ (آمنة CSP كصفحات المورّدين). */
+  T('صفحة التسجيل غير مفهرسة',
+    /<meta name="robots" content="noindex,nofollow">/.test(SPAGE));
+  T('وبلا أي مصدر خارجيّ (آمنة CSP)',
+    !/https?:\/\//.test(SPAGE.replace(/<!--[\s\S]*?-->/g, '')));
+  T('وحقولها 16px فلا يُقرّب iOS الشاشة تلقائياً',
+    /input\{[^}]*font-size:16px/.test(SPAGE));
+  T('وترفع للنقطة الخادمية لا للقاعدة مباشرةً',
+    /fetch\('\/api\/staff-invite/.test(SPAGE) && !/supabase/i.test(SPAGE));
+
+  // الواجهة الإدارية
+  T('زرّ الرابط في لوحة المستخدمين محكوم بصلاحية إدارية',
+    /id="btn-staff-invite"/.test(HTML)
+    && /requirePermission\('can_manage_users','رابط دعوة الموظفين'\)/.test(CODE));
+  T('ويعرض الإبطال بجوار التوليد',
+    /staffInviteMint\(\)/.test(CODE) && /staffInviteRevoke\(\)/.test(CODE));
+  /* ⚠️ النافذة تُلحَق وقت التشغيل ⇒ يجب أن تُوسَم ephemeral وإلّا بقيت في DOM
+     بمعرّف مكرَّر وتسرّب قفل التمرير (سابقة مثبَّتة في هذا الملف). */
+  T('ونافذته المُلحَقة وقت التشغيل تُزال عند الإغلاق',
+    /id='modal-staff-invite'; el\.dataset\.ephemeral='1'/.test(CODE)
+    && /syncScrollLock\(\); a11yWire\(el\);/.test(CODE));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
