@@ -26,4 +26,4 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
   && echo "ok" || { echo "FAILED"; exit 1; }
 
 psql -q -d postgres -c "DROP DATABASE IF EXISTS $DB;" >/dev/null
-echo "✓ تأكيدات النطاق (SC1–SC16) ودورة الطلب (FL1–FL15) — خروج 0"
+echo "✓ تأكيدات النطاق (SC1–SC16) ودورة الطلب (FL1–FL16) — خروج 0"

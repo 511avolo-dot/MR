@@ -142,3 +142,10 @@ BEGIN
   END LOOP;
 END $$;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- ⚠️ **الامتيازات الافتراضية لـSupabase — بلا محاكاتها لا يكون هذا اختباراً.**
+-- Supabase تضبط `ALTER DEFAULT PRIVILEGES` على `public` تمنح ALL لـanon و
+-- authenticated على **كل جدول جديد**. قاعدة محلّية عارية لا تفعل ذلك، فهجرةٌ
+-- تنسى `REVOKE` تمرّ محلّياً وتصل الإنتاج بقفل امتياز ناقص (وقع فعلاً في
+-- `proc_pr_messages`). محاكاتها هنا تجعل الحزمة تمسك ذلك.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;

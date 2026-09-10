@@ -78,8 +78,14 @@ CREATE POLICY "prmsg_select" ON proc_pr_messages FOR SELECT TO authenticated
 -- إعداد بيئة لا عقد. والمنح مقصودة الشكل: **المحادثة تُقرأ ولا تُكتب مباشرةً**
 -- (لا INSERT/UPDATE/DELETE إطلاقاً) فتُضاف طبقة امتياز فوق غياب السياسة،
 -- والكتابة عبر `pr_post_message` وحدها. القوالب بيانات المستخدم فيكتبها بنفسه.
-GRANT SELECT, INSERT, UPDATE, DELETE ON proc_pr_templates TO authenticated;
-GRANT SELECT                         ON proc_pr_messages  TO authenticated;
+-- ⚠️ **السحب صريح لا مُفترَض:** Supabase تضبط امتيازات افتراضية على `public`
+-- تمنح `ALL` لـanon/authenticated على **أي جدول جديد**، فـ`GRANT SELECT` وحده
+-- لا يسحب INSERT/UPDATE/DELETE — يبقيان ممنوحَين ويسقط قفل الامتياز صامتاً.
+-- (مُقاس على الإنتاج: `has_table_privilege('authenticated', 'proc_pr_messages',
+--  'INSERT')` = true بعد GRANT SELECT وحده.)
+GRANT  SELECT, INSERT, UPDATE, DELETE ON proc_pr_templates TO authenticated;
+REVOKE ALL                            ON proc_pr_messages  FROM authenticated;
+GRANT  SELECT                         ON proc_pr_messages  TO   authenticated;
 REVOKE ALL ON proc_pr_templates FROM anon;
 REVOKE ALL ON proc_pr_messages  FROM anon;
 

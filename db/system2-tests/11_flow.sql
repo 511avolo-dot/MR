@@ -182,6 +182,25 @@ BEGIN
   RESET ROLE;
   IF n < 2 THEN RAISE EXCEPTION 'FL15 فشل: المشتريات ترى % قالباً فقط', n; END IF;
 
+  -- ═══ FL16 — قفل الامتياز على المحادثة قائم فعلاً (لا يُفترَض) ═══
+  -- الكعب يمنح ALL افتراضياً كـSupabase، فهذا التأكيد يفشل إن نسيت الهجرة السحب.
+  IF has_table_privilege('authenticated','proc_pr_messages','INSERT')
+  OR has_table_privilege('authenticated','proc_pr_messages','UPDATE')
+  OR has_table_privilege('authenticated','proc_pr_messages','DELETE') THEN
+    RAISE EXCEPTION 'FL16 فشل: امتياز كتابة مباشرة على المحادثة لم يُسحَب';
+  END IF;
+  IF NOT has_table_privilege('authenticated','proc_pr_messages','SELECT') THEN
+    RAISE EXCEPTION 'FL16 فشل: قراءة المحادثة مسحوبة (تكسر عرض الحوار)';
+  END IF;
+  IF has_table_privilege('anon','proc_pr_templates','SELECT')
+  OR has_table_privilege('anon','proc_pr_messages','SELECT') THEN
+    RAISE EXCEPTION 'FL16 فشل: anon يقرأ جداول الطلبات';
+  END IF;
+  -- والقوالب تبقى كاملة الامتياز (بيانات المستخدم يكتبها بنفسه، وRLS تحكمها)
+  IF NOT has_table_privilege('authenticated','proc_pr_templates','INSERT') THEN
+    RAISE EXCEPTION 'FL16 فشل: الموظّف لا يستطيع حفظ قالب';
+  END IF;
+
   PERFORM set_config('request.jwt.claims', '', false);
-  RAISE NOTICE '✓ FL1–FL15 — كل تأكيدات دورة الطلب ناجحة';
+  RAISE NOTICE '✓ FL1–FL16 — كل تأكيدات دورة الطلب ناجحة';
 END $$;
