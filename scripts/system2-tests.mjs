@@ -217,6 +217,8 @@ const NEEDED_FNS = [
   'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
+  // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
+  'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
@@ -246,7 +248,7 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
-  'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
+  'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2054,6 +2056,186 @@ G('٢٨) قفل التمرير (بلاغ «السكرولينق يعلق»)');
   T('عناصر شبكة لوحة التحكم تُسمَح بالانكماش على الجوال', /\.dash-charts\s*>\s*\*\{min-width:0\}/.test(mob));
   T('صفّ الرسم الدائريّ يلتفّ على الجوال', /#dash-cat-chart\s*>\s*div\{flex-wrap:wrap\}/.test(mob));
   T('ما يفيض من بطاقة رسم يمرّر داخلها لا على الصفحة', /\.chart-card\{overflow-x:auto\}/.test(mob));
+}
+
+/* ── ٢٩) حملة التسجيل + إكمال البطاقة القائمة ───────────────────── */
+/* طلب المالك 2026-09-10: مورّدون أُدخِلوا يدويّاً أو من عروض الأسعار يُدعَون
+   للتسجيل، وبعد تسجيلهم **تُكمَل بطاقتهم القائمة** لا تُنشأ بطاقة ثانية.
+   الحالة المقيسة وقتها على القاعدة الحيّة: 117 من 155 بلا تسجيل، 73 فقط لديهم
+   سجل تجاري — فالمطابقة بالسجل وحدها (وهي ما كان قائماً) كانت ستُكرِّر أغلبهم. */
+G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
+{
+  const REGISTER  = fs.readFileSync(path.join(ROOT, 'register.html'), 'utf8');
+  const INVITE_API = fs.readFileSync(path.join(ROOT, 'functions/api/supplier-invite-link.js'), 'utf8');
+  const { regCampWaPhone, regCampMessage, regCampBuild, regSupplierFill, regMatchExistingSupplier } = api;
+
+  // ── رقم الواتساب: الجوال فقط، بصيغة دولية، ومن كل كتابات الرقم السعودي
+  T('جوال 05 يصير 9665…', regCampWaPhone({mobile:'0542057081'}) === '966542057081');
+  T('صيغة +966 مقبولة كما هي', regCampWaPhone({mobile:'+966 54-205-7081'}) === '966542057081');
+  T('الأرقام العربية تُقرأ', regCampWaPhone({mobile:'٠٥٤٢٠٥٧٠٨١'}) === '966542057081');
+  // الأرضيّ لا واتساب له — إرسال دعوة إليه ضياع لا خطأ ظاهر
+  T('الهاتف الأرضيّ لا يُعَدّ رقم واتساب', regCampWaPhone({phone:'0138576550'}) === '');
+  T('الجوال يسبق الأرضيّ', regCampWaPhone({phone:'0112410019', mobile:'0501234567'}) === '966501234567');
+  T('بلا رقم ⇒ فارغ', regCampWaPhone({}) === '');
+  T('القيمة النائبة «—» ليست رقماً', regCampWaPhone({mobile:'—'}) === '');
+
+  // ── الرسالة
+  const URL_ = 'https://suppliers.aldeyabi.com/register?s=AAA.BBB';
+  const msg = regCampMessage({name:'شركة الأنواع الشاملة'}, URL_);
+  T('الرسالة تحمل اسم المنشأة', msg.includes('شركة الأنواع الشاملة'));
+  T('الرسالة تحمل الرابط الخاصّ', msg.includes(URL_));
+  /* ⚠️ واتساب لا يجعل الرابط قابلاً للنقر إن التصق بنصّ عربيّ — سطر مستقلّ شرط */
+  T('الرابط في سطر مستقلّ (وإلّا لم يصر قابلاً للنقر)',
+    msg.split('\n').some(l => l.trim() === URL_));
+  T('الرسالة تذكر الوثائق المطلوبة', /السجل التجاري/.test(msg) && /الآيبان/.test(msg));
+  T('الرسالة تحمل قناة تواصل', msg.includes('920000194') && msg.includes('supply@aldeyabi.com'));
+  T('نصّ خالص بلا HTML (الواتساب لا يعرضه)', !/<[a-z/][^>]*>/i.test(msg));
+  T('اسم فارغ لا يُنتج رسالة مبتورة', /السادة \/ \*المورد\*/.test(regCampMessage({}, URL_)));
+  /* ⚠️ قرار المالك 2026-09-10: لغة مؤسسية لاستكمال البيانات — **لا** نبرة
+     «ملفّكم موجود لدينا والرابط خاصّ بكم» ولا طمأنات متتالية. آليّة الربط شأن
+     داخليّ لا يُشرَح في متن الخطاب. (الحارس على الرسالة والبطاقة معاً.) */
+  const CARD_ = fs.readFileSync(path.join(ROOT, 'supplier-invitation-whatsapp.html'), 'utf8');
+  const CHATTY = /ملف جديد|ملفّ?كم الحالي|مسجَّلون لدينا|لن تفقدوا|خاصّ بمنشأتكم|عبّأنا لكم/;
+  T('الرسالة بلغة مؤسسية بلا نبرة «ملفّكم موجود والرابط لكم»', !CHATTY.test(msg), msg.match(CHATTY)?.[0]);
+  T('البطاقة كذلك بلا تلك النبرة', !CHATTY.test(CARD_.replace(/<!--[\s\S]*?-->/g, '')));
+  T('لافتة النموذج كذلك بلا تلك النبرة',
+    !CHATTY.test((REGISTER.match(/function showInviteBanner\([\s\S]*?\n\}/) || [''])[0]));
+  T('صيغة المراسلات الرسمية (مخاطبة وخاتمة)',
+    /^السادة \//m.test(msg) && /تحية طيبة وبعد/.test(msg) && /وتفضلوا بقبول فائق الاحترام/.test(msg));
+  T('الرسالة تُصرّح بالمطلوب: استكمال البيانات واعتماد الملف',
+    /استكمال بيانات منشأتكم/.test(msg) && /متطلبات استكمال الملف/.test(msg));
+
+  // ── من لم يُسجّل: أربعة مسارات استبعاد
+  const sups = [
+    {id:'s1', name:'شركة ألف للتجارة', commercial_reg:'1010000001', mobile:'0501111111', offers_count:5},
+    {id:'s2', name:'مؤسسة باء',        tax_id:'310000000000003',    mobile:'0502222222', offers_count:9},
+    {id:'s3', name:'شركة جيم للمقاولات', mobile:'0503333333', offers_count:2},
+    {id:'s4', name:'مؤسسة دال',        mobile:'0504444444', offers_count:1},
+    {id:'s5', name:'شركة هاء',         phone:'0114444444', offers_count:7},
+  ];
+  STATE.suppliers = sups;
+  const regs = [
+    {commercial_reg:'1010000001', legal_name_ar:'اسم مختلف تماماً'},   // يستبعد s1 بالسجل
+    {vat_number:'310000000000003', legal_name_ar:'اسم آخر'},           // يستبعد s2 بالضريبي
+    {legal_name_ar:'جيم للمقاولات'},                                   // يستبعد s3 بمفتاح الاسم (كلمة الكيان مُسقَطة)
+    {legal_name_ar:'لا علاقة', link_supplier_id:'s4'},                 // يستبعد s4 برابط الدعوة
+  ];
+  const camp = regCampBuild(regs);
+  T('المسجَّل بالسجل التجاري لا يدخل الحملة', !camp.some(r => r.id === 's1'));
+  T('المسجَّل بالرقم الضريبي لا يدخل الحملة', !camp.some(r => r.id === 's2'));
+  T('«شركة جيم» و«جيم» مورد واحد (المفتاح القويّ)', !camp.some(r => r.id === 's3'));
+  T('من سجّل عبر رابط الدعوة لا يدخل الحملة', !camp.some(r => r.id === 's4'));
+  T('غير المسجَّل يدخل الحملة', camp.length === 1 && camp[0].id === 's5');
+  T('من بلا جوال يُدرَج لكن بلا رقم واتساب', camp[0].wa === '' && camp[0].phone === '0114444444');
+  const camp2 = regCampBuild([]);
+  T('الترتيب بالأهمّية (عدد العروض)', camp2.map(r=>r.id).join() === 's2,s5,s1,s3,s4', camp2.map(r=>r.id).join());
+  T('المورد بلا اسم لا يُدرَج',
+    regCampBuild([]).length === 5 && !regCampBuild([]).some(r => !r.name));
+
+  // ── الملء: الفارغ فقط
+  const reg = { id:'DG-TEST01', legal_name_ar:'الاسم من التسجيل', city:'جدة', phone:'0126666666',
+                contact_name:'خالد', contact_mobile:'0505555555', email:'a@b.com', address:'حيّ',
+                commercial_reg:'1010009999', vat_number:'310000000000099', iban:'SA0000000000000000000000',
+                sectors:['مقاولات'], entity_type:'شركة', business_scope:['توريد'], business_description:'وصف' };
+  const cur = { id:'s9', name:'الاسم القديم في البطاقة', city:'الرياض', phone:'—', notes:'مورد من أوامر الشراء' };
+  const fill = regSupplierFill(cur, reg);
+  /* الاسم مفتاح ربط أوامر الشراء والسجل السعري — استبداله يفصل البطاقة عن تاريخها */
+  T('اسم البطاقة لا يُستبدَل أبداً', !('name' in fill));
+  T('حقل مملوء لا يُتلَف', !('city' in fill));
+  T('«—» تُعامَل فراغاً فتُستبدل ببيانات حقيقية', fill.phone === '0126666666');
+  T('الحقول الفارغة تُملأ', fill.contact === 'خالد' && fill.email === 'a@b.com' && fill.iban === reg.iban);
+  T('الهويّة النظامية تُملأ', fill.commercial_reg === '1010009999' && fill.tax_id === '310000000000099');
+  T('القطاعات تصير تخصّصاً', fill.specialty === 'مقاولات');
+  T('رقم الطلب يُلحَق بالملاحظات بلا مسح', /مورد من أوامر الشراء/.test(fill.notes) && /DG-TEST01/.test(fill.notes));
+  T('إعادة الاعتماد لا تُكرّر رقم الطلب في الملاحظات',
+    !('notes' in regSupplierFill(Object.assign({}, cur, {notes:'... DG-TEST01 ...'}), reg)));
+  T('بطاقة مكتملة ⇒ لا تغيير',
+    Object.keys(regSupplierFill({id:'s9', name:'ن', city:'ج', phone:'1', mobile:'2', email:'e', contact:'c',
+      address:'a', commercial_reg:'1', tax_id:'2', entity_type:'e', business_scope:'b', business_description:'d',
+      specialty:'s', bank_name:'b', account_holder:'h', account_number:'n', iban:'i', notes:'DG-TEST01'}, reg)).length === 0);
+
+  // ── المطابقة الرباعية (سلوكيّ على عميل مُقلَّد — لا فحص نصّيّ)
+  const mkClient = (rows) => ({ client: { from(){ const q = {
+      _col:null, _val:null,
+      select(){ return q; },
+      eq(c, v){ q._col = c; q._val = v; return q; },
+      limit(){ return Promise.resolve({ data: rows.filter(r => String(r[q._col]) === String(q._val)) }); },
+    }; return q; } } });
+  const CARDS = [
+    {id:'s1', name:'شركة ألف للتجارة', commercial_reg:'1010000001'},
+    {id:'s2', name:'مؤسسة باء',        tax_id:'310000000000003'},
+    {id:'s3', name:'شركة جيم للمقاولات'},
+    {id:'s6', name:'اسم ملتبس'}, {id:'s7', name:'شركة اسم ملتبس'},
+    {id:'s8', name:'شركة سراكو',       commercial_reg:'2050007518'},
+  ];
+  api.window.CLOUD = mkClient(CARDS);
+  STATE.suppliers = CARDS;
+  const M = (r) => regMatchExistingSupplier(r);
+  T('المرتبة ١: رابط الدعوة قاطع',
+    (await M({link_supplier_id:'s2', legal_name_ar:'أيّ اسم'}) || {}).id === 's2');
+  T('المرتبة ٢: السجل التجاري',
+    (await M({legal_name_ar:'كتابة أخرى', commercial_reg:'1010000001'}) || {}).id === 's1');
+  T('المرتبة ٣: الرقم الضريبي',
+    (await M({legal_name_ar:'كتابة أخرى', vat_number:'310000000000003'}) || {}).id === 's2');
+  T('المرتبة ٤: مفتاح الاسم القويّ',
+    (await M({legal_name_ar:'جيم للمقاولات'}) || {}).id === 's3');
+  /* درس «سراكو»: تشابه الاسم ليس دليلاً — السجل التجاري هو الفاصل */
+  T('تعارض السجل التجاري يُبطِل مطابقة الاسم',
+    (await M({legal_name_ar:'شركة سراكو', commercial_reg:'2050111360'})) === null);
+  T('الاسم الملتبس (بطاقتان) لا يُخمَّن',
+    (await M({legal_name_ar:'اسم ملتبس'})) === null);
+  T('لا مطابقة ⇒ بطاقة جديدة (السلوك القائم)',
+    (await M({legal_name_ar:'مورد جديد تماماً'})) === null);
+  T('رابط دعوة لبطاقة محذوفة يسقط للمراتب التالية',
+    (await M({link_supplier_id:'sX', commercial_reg:'1010000001'}) || {}).id === 's1');
+  api.window.CLOUD = null;
+  STATE.suppliers = [];
+
+  // ── الربط في الشيفرة (بنيويّ — ما لا يُشغَّل في الصندوق)
+  T('نموذج التسجيل يحفظ معرّف بطاقة الدعوة', /link_supplier_id:\s*_inviteSupplierId/.test(REGISTER));
+  T('وضع الدعوة لا يُتلف حقلاً عبّأه المورّد', /if \(el && val && !String\(el\.value \|\| ''\)\.trim\(\)\)/.test(REGISTER));
+  T('فشل الدعوة يسقط لتسجيل عاديّ بلا تعطيل', /catch \(_\) \{ \/\* تسجيل عاديّ \*\/ \}/.test(REGISTER));
+  T('نقطة الرمز لا تبثّ أي حقل بنكيّ',
+    !/'iban'|'account_number'|'bank_name'|'account_holder'/.test(
+      (INVITE_API.match(/const PREFILL_COLS = \[[\s\S]*?\];/) || [''])[0]));
+  T('سكّ الروابط يتطلّب جلسة موظّف + نفس الأصل',
+    /if \(!sameOrigin\(request\)\) return json/.test(INVITE_API) && /verifyStaff\(env, request\)/.test(INVITE_API));
+  T('الرمز يُقارَن بمقارنة ثابتة الزمن', /timingSafeEq\(expect, parts\[1\]\)/.test(INVITE_API));
+  T('بطاقة المورد تجد طلب التسجيل بمعرّف الدعوة',
+    /\.eq\('link_supplier_id', sup\.id\)/.test(CODE));
+  T('فشل ملء البطاقة يُجهِض الاعتماد (لا نجاح زائف)',
+    /if \(fillErr\) throw fillErr;/.test(CODE));
+
+  /* ⚠️ الاعتماد صار **يُعدّل بطاقة قائمة** لا يُنشئ صفّاً جديداً — فبلا أثر تدقيق
+     لا سبيل لمعرفة أي بطاقة تأثّرت ولا بأي مرتبة طوبقت. (كان غائباً تماماً.) */
+  T('الاعتماد يُسجَّل في التدقيق بالبطاقة والمرتبة والحقول المملوءة',
+    /logAudit\(alreadyExisted \? 'reg_approve_merge' : 'reg_approve_create', 'supplier', suppId/.test(CODE)
+    && /matched_by:/.test(CODE) && /filled_fields: filledCount/.test(CODE));
+  T('كل مرتبة مطابقة تُوسَم باسمها',
+    /tag\(hit, 'invite_link'\)/.test(CODE) && /tag\(hit, col\)/.test(CODE) && /tag\(first\(data\), 'name_key'\)/.test(CODE));
+  /* التدقيق يُكتب **بعد** نجاح الكتابات، وإخفاقه لا يُسقِط الاعتماد */
+  T('فشل التدقيق لا يُسقِط اعتماداً نجح',
+    /reportError\('approveRegistration\/audit', e\)/.test(CODE));
+
+  /* بطاقة الدعوة المصوَّرة: الواتساب لا يعرض HTML، فالبطاقة صورة تُرفَق بالنصّ.
+     ⚠️ فيض المحتوى يقصّ التذييل **صامتاً** (وقع فعلاً: 1552 على بطاقة 1350) —
+     الحارس السلوكيّ لذلك في `scripts/build-invite-card.mjs`، وهنا البنيويّ. */
+  const CARD = fs.readFileSync(path.join(ROOT, 'supplier-invitation-whatsapp.html'), 'utf8');
+  T('البطاقة بمقاس الواتساب 1080×1350', /width:1080px;height:1350px/.test(CARD));
+  T('البطاقة تقصّ ما يفيض (لا تمدّد الصورة)', /#card\{[\s\S]{0,200}overflow:hidden/.test(CARD));
+  T('هويّة الدعوة السابقة محفوظة (كحليّ + ذهبيّ)',
+    CARD.includes('#16243d') && CARD.includes('#c2a063') && CARD.includes('#a37f43'));
+  /* لا مصدر خارجيّ: التوليد يجب أن يُنتج الصورة نفسها بلا شبكة ولا CDN */
+  T('لا مصادر خارجية في البطاقة', !/https?:\/\//.test(CARD.replace(/<!--[\s\S]*?-->/g, '')));
+  T('البطاقة تُصرّح بأثر استكمال الملف (لا طمأنات)',
+    /اعتماد البيانات البنكية/.test(CARD) && /استكمال بيانات منشأتكم/.test(CARD));
+  /* سكربت `<image-slot>` كان مضمَّناً data: URI في صفحة التسجيل: 41KB يُنزَّل مع
+     كل فتح، تحجبه CSP فلا يعمل أصلاً. الحملة تسوق ~90 مورداً لهذه الصفحة. */
+  T('لا سكربت data: URI في صفحة التسجيل (تحجبه CSP ويُثقِلها بلا فائدة)',
+    !/<script[^>]+src="data:/i.test(REGISTER));
+
+  T('مولّد البطاقة يُفشِل البناء على الفيض',
+    /scrollH > m\.h/.test(fs.readFileSync(path.join(ROOT, 'scripts/build-invite-card.mjs'), 'utf8')));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

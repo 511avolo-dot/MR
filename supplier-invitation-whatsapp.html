@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>بطاقة دعوة التسجيل — واتساب — مجموعة الذيابي</title>
+<!--
+  بطاقة دعوة التسجيل المصوَّرة للواتساب (1080×1350).
+  ------------------------------------------------------------------
+  الواتساب لا يعرض HTML، فالبطاقة تُصدَّر **صورة** تُرفَق مع نصّ الرسالة
+  (`regCampMessage` في index.html) الذي يحمل رابط كل مورد الخاصّ به.
+  ⚠️ الهويّة مطابقة لدعوة البريد السابقة (`supplier-invitation-two-boxes.html`):
+     كحليّ #16243d · ذهبيّ #c2a063/#a37f43 · كريميّ #faf8f2.
+  ⚠️ لا مصادر خارجية (خطوط/صور) — الشعار من نفس الأصل، فالتصدير قابل للتكرار
+     ولا يتعلّق بشبكة أو CDN.
+  التصدير: افتح الملف وقِس العنصر #card بـ1080×1350 (أو npm run build:invite-card).
+-->
+<style>
+  @page { size: 1080px 1350px; margin: 0 }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9e5dd;font-family:'Segoe UI',Tahoma,Arial,sans-serif;display:flex;justify-content:center;padding:24px}
+  #card{
+    width:1080px;height:1350px;background:#fff;position:relative;overflow:hidden;
+    display:flex;flex-direction:column;color:#1b2333;
+  }
+  /* الترويسة */
+  .hd{background:linear-gradient(155deg,#0f1a2e 0%,#16243d 55%,#1d2f4d 100%);padding:46px 72px 38px;text-align:center;position:relative}
+  .hd::after{content:'';position:absolute;inset-inline:0;bottom:0;height:6px;background:linear-gradient(90deg,#876734,#c2a063 50%,#876734)}
+  .hd img{height:78px;width:auto;filter:brightness(0) invert(1);opacity:.97}
+  .hd .kick{margin-top:18px;font-size:21px;letter-spacing:6px;color:#c2a063;font-weight:700}
+  .hd h1{margin-top:12px;font-size:45px;font-weight:800;color:#fff;line-height:1.3}
+  .hd .en{margin-top:9px;font-size:18px;color:#8fa0bb;letter-spacing:.6px;direction:ltr}
+  /* المتن */
+  .bd{flex:1;padding:34px 72px 0}
+  .lead{font-size:24px;line-height:1.75;color:#2a3346;text-align:center;font-weight:600}
+  .lead b{color:#16243d}
+  .note{margin-top:20px;background:#faf8f2;border:2px solid #eee6d6;border-radius:18px;padding:18px 26px;text-align:center;font-size:21px;line-height:1.7;color:#2a3346;border-inline-start:6px solid #a37f43}
+  .note b{color:#16243d}
+  .sec{margin-top:26px;font-size:18px;font-weight:800;color:#a37f43;letter-spacing:3px;text-align:center}
+  .steps{margin-top:18px;display:flex;flex-direction:column;gap:14px}
+  .step{display:flex;gap:20px;align-items:flex-start}
+  .num{flex:0 0 42px;height:42px;border-radius:50%;background:linear-gradient(180deg,#c2a063,#a37f43);color:#fff;
+       font-size:22px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .step h3{font-size:23px;font-weight:800;color:#16243d;line-height:1.4}
+  .step p{font-size:19px;color:#5c6678;line-height:1.55;margin-top:4px}
+  .docs{margin-top:24px;margin-bottom:20px;background:#faf8f2;border:2px solid #eee6d6;border-radius:18px;padding:20px 28px}
+  .docs .t{font-size:20px;font-weight:800;color:#16243d;margin-bottom:13px}
+  .docs ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:9px 26px}
+  .docs li{font-size:19px;color:#4a5265;line-height:1.5}
+  .docs li::before{content:'✓';color:#a37f43;font-weight:800;margin-inline-end:9px}
+  /* التذييل */
+  .ft{margin-top:auto;background:#16243d;padding:26px 72px;text-align:center}
+  .ft .n{color:#e9dfca;font-size:23px;font-weight:800}
+  .ft .m{color:#8fa0bb;font-size:18px;margin-top:9px;line-height:1.7}
+  .ft .iso{color:#5f708c;font-size:15px;margin-top:11px;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="hd">
+    <img src="/logo.png" alt="مجموعة الذيابي">
+    <div class="kick">إدارة المشتريات</div>
+    <h1>استكمال بيانات المورد<br>واعتماد الملف</h1>
+    <div class="en">Supplier Data Completion &amp; File Approval</div>
+  </div>
+
+  <div class="bd">
+    <p class="lead">
+      في إطار تحديث <b>سجل الموردين المعتمدين</b>، تدعوكم إدارة المشتريات<br>
+      في <b>مجموعة الذيابي</b> إلى استكمال بيانات منشأتكم واعتماد ملفّها.
+    </p>
+
+    <div class="note">
+      يترتّب على استكمال الملف <b>اعتماد البيانات البنكية</b> ضمن دورة صرف المستحقات،
+      و<b>الإدراج</b> في قوائم طلبات التسعير والمناقصات.
+    </div>
+
+    <div class="sec">إجراءات استكمال الملف</div>
+    <div class="steps">
+      <div class="step"><div class="num">١</div><div>
+        <h3>فتح رابط استكمال الملف</h3>
+        <p>المرفق مع هذه الرسالة، ويفتح نموذج تسجيل الموردين مباشرةً.</p></div></div>
+      <div class="step"><div class="num">٢</div><div>
+        <h3>تعبئة بيانات المنشأة</h3>
+        <p>البيانات النظامية وجهات التواصل والحساب البنكيّ.</p></div></div>
+      <div class="step"><div class="num">٣</div><div>
+        <h3>إرفاق الوثائق وإرسال الطلب</h3>
+        <p>يصدر الإشعار فور اعتماد الملف من إدارة المشتريات.</p></div></div>
+    </div>
+
+    <div class="docs">
+      <div class="t">الوثائق النظامية المطلوبة</div>
+      <ul>
+        <li>السجل التجاري</li>
+        <li>الشهادة الضريبية</li>
+        <li>شهادة التأمينات الاجتماعية</li>
+        <li>عضوية الغرفة التجارية</li>
+        <li>العنوان الوطني</li>
+        <li>شهادة الآيبان</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="ft">
+    <div class="n">مجموعة الذيابي للمقاولات</div>
+    <div class="m">إدارة المشتريات · نبني مستقبلاً آمناً ومزدهراً<br>
+      <span dir="ltr">920000194</span> &nbsp;·&nbsp; supply@aldeyabi.com &nbsp;·&nbsp; <span dir="ltr">aldeyabi.com</span></div>
+    <div class="iso">ISO 9001 · ISO 45001 · ISO 41001</div>
+  </div>
+</div>
+</body>
+</html>
