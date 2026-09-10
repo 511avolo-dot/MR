@@ -2238,6 +2238,130 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /scrollH > m\.h/.test(fs.readFileSync(path.join(ROOT, 'scripts/build-invite-card.mjs'), 'utf8')));
 }
 
+/* ── ٣٠) نطاق موظفي الصيانة والتشغيل ─────────────────────────────
+   المُنطَّق = مستخدم له قطاعات في `scope_sectors`. الحدّ الحقيقيّ في RLS
+   (db/system2-staff-scope.sql + db/system2-tests/)، وهذه التأكيدات تحرس
+   **طبقة الواجهة**: ألّا تطلب ما لا يخصّه، وألّا تعرض مبلغاً، وألّا تكتب
+   الصفّ مباشرةً. ⚠️ صندوق مستقلّ يحمّل `fmtPrice`/`hasPermission`
+   **الحقيقيّتين** — صندوق القسم 2 يكعّبهما فلا يصلح لاختبار البوّابة نفسها. */
+{
+  G('٣٠) نطاق موظفي الصيانة والتشغيل');
+
+  // ── بنيويّ ──
+  T('مصدر واحد للوجهات المسموحة (SCOPED_PAGES) يخدم القائمتين و navigate',
+    /const SCOPED_PAGES\s*=/.test(CODE)
+    && /function pageAllowed\(/.test(CODE)
+    && /applyScopedNav[\s\S]{0,700}\.nav-item\[data-page\][\s\S]{0,400}\.mnav-item\[data-mpage\]/.test(CODE)
+    && /function navigate\(page\)\{\s*[\s\S]{0,200}?if\(!pageAllowed\(page\)\)/.test(CODE));
+
+  T('السقوط المحلّي لا يصكّ حساباً مُنطَّقاً أبداً',
+    !/AUTH_BOOTSTRAP_USERS\s*=[\s\S]{0,900}scope/i.test(CODE)
+    && /validScope\s*=\s*profile\s*\?/.test(CODE));
+
+  T('المُنطَّق يقرأ الأوامر من العرض لا من الجدول',
+    /scoped\s*\?\s*'proc_po_visible'\s*:\s*'proc_purchase_orders'/.test(CODE));
+
+  T('المُنطَّق لا يطلب الكتالوج ولا الموردين ولا السجل',
+    /const\s+\[items,\s*suppliers,\s*history\]\s*=\s*scoped\s*\?\s*\[\[\],\[\],\[\]\]/.test(CODE));
+
+  T('لا دمج بذرة للمُنطَّق (وإلّا وصلته الأسعار من الملف نفسه)',
+    /const SEED\s*=\s*\(typeof DATA[^;]*!isScopedUser\(\)\)\s*\?\s*DATA/.test(CODE));
+
+  T('المُنطَّق لا يُشغّل توحيد المشاريع (لا صلاحية كتابة له على الأوامر)',
+    /if\(!isScopedUser\(\)\)\{[\s\S]{0,200}prjAutoUnify\(\)/.test(CODE));
+
+  T('استلام المُنطَّق يمرّ بـRPC لا بـpoSave',
+    /if\(isScopedUser\(\)\)\s*return poReceiveSaveScoped/.test(CODE)
+    && /rpc\('po_record_receipt'/.test(CODE)
+    && !/poReceiveSaveScoped[\s\S]{0,1200}poSave\(/.test(CODE));
+
+  T('التعليق يمرّ بـRPC خادميّة', /rpc\('po_add_comment'/.test(CODE));
+
+  T('الاستلام صلاحية مستقلّة عن تعديل الأمر',
+    /hasPermission\('can_edit_po'\)\s*\|\|\s*hasPermission\('can_receive_po'\)/.test(CODE));
+
+  // ⚠️ لا منسّق نقديّ ثانٍ يلتفّ حول البوّابة
+  // النداء الوحيد المسموح لـfmtPriceRaw هو من داخل البوّابة نفسها؛ أي نداء
+  // ثانٍ = مسار يعرض مبلغاً دون المرور بها.
+  const rawCalls = (CODE.match(/fmtPriceRaw\(/g) || []).length;
+  T('لا منسّق نقديّ يتجاوز بوّابة المبالغ (fmtPriceRaw داخليّ فقط)',
+    rawCalls === 1
+    && /const fmtPrice = n => canViewAmounts\(\) \? fmtPriceRaw\(n\) : '—';/.test(CODE),
+    'نداءات fmtPriceRaw = ' + rawCalls);
+  // ⚠️ التعريف نفسه `function tafqitSARRaw(` يطابق النمط (خلافاً لصيغة السهم
+  // في fmtPriceRaw) — فيُستبعَد قبل العدّ، وإلّا صار التأكيد يقيس شكل التعريف
+  // لا عدد النداءات.
+  const tafqitCalls = (CODE.replace(/function tafqitSARRaw\(/g, 'function _def_(')
+                           .match(/tafqitSARRaw\(/g) || []).length;
+  T('ولا التفقيط (tafqitSARRaw داخليّ فقط)', tafqitCalls === 1,
+    'نداءات tafqitSARRaw = ' + tafqitCalls);
+  T('التفقيط محجوب كذلك (وإلّا تسرّب المبلغ حروفاً)',
+    /function tafqitSAR\(amount\)\{\s*if\(!canViewAmounts\(\)\) return '—';/.test(CODE));
+
+  T('مركز التقارير قائمة بيضاء لا سوداء',
+    /canViewAmounts\(\)\s*\|\|\s*x\.d\.noMoney === true/.test(CODE)
+    && /def\.noMoney !== true && !canViewAmounts\(\)/.test(CODE));
+
+  // ── سلوكيّ: صندوق يحمّل البوّابة الحقيقية ──
+  const P = (() => {
+    const src = [
+      `const STATE = { currentUser:null };`,
+      `function toast(){}`,
+      grabConst('PERMISSION_DEFS'), grabConst('PERMISSION_KEYS'), grabConst('DEFAULT_PERMISSIONS'),
+      grab('hasPermission'), grab('isAdmin'),
+      grab('normScopeSectors'), grab('myScopeSectors'), grab('isScopedUser'), grab('canViewAmounts'),
+      grab('effectivePerm'),
+      grabConst('SCOPED_PAGES'), grab('pageAllowed'),
+      grabConst('fmtPriceRaw'), grabConst('fmtPrice'),
+      grab('tafqitSAR'), grab('tafqitSARRaw'),
+    ].join('\n\n');
+    return new Function(src + `; return {STATE, hasPermission, effectivePerm, normScopeSectors,
+      isScopedUser, canViewAmounts, pageAllowed, fmtPrice, tafqitSAR, DEFAULT_PERMISSIONS};`)();
+  })();
+
+  const asUser = (perms, scope, role) => {
+    P.STATE.currentUser = { username:'u', role: role||'user', permissions: perms||{}, scopeSectors: scope||[] };
+  };
+
+  P.STATE.currentUser = null;
+  T('normScopeSectors يقبل المصفوفة والنصّ ويُسقِط الفارغ',
+    P.normScopeSectors(['أ','',' ب ']).join('|') === 'أ|ب'
+    && P.normScopeSectors('["ج"]').join('') === 'ج'
+    && P.normScopeSectors(null).length === 0
+    && P.normScopeSectors('نصّ تالف').length === 0);
+
+  asUser({}, []);
+  T('بلا قطاعات = غير مُنطَّق', P.isScopedUser() === false);
+  asUser({}, ['الصيانة والتشغيل']);
+  T('بقطاع = مُنطَّق', P.isScopedUser() === true);
+
+  T('الوجهات المسموحة للمُنطَّق أربع فقط',
+    ['dashboard','purchase-orders','pr','reports'].every(p => P.pageAllowed(p))
+    && !['items','suppliers','history','entry','pricing','analytics','ai','registrations']
+         .some(p => P.pageAllowed(p)));
+  asUser({}, []);
+  T('غير المُنطَّق يصل كل وجهة (صفر انحدار)',
+    ['items','suppliers','analytics','ai','registrations'].every(p => P.pageAllowed(p)));
+
+  // ⚠️ حارس الانحدار: مستخدم قائم بصلاحيات مكتوبة صراحةً وبلا المفتاح الجديد
+  asUser({ can_create_po:true, can_edit_po:true }, []);
+  T('مستخدم قائم بلا مفتاح المبالغ يبقى يراها (userDefault:true)',
+    P.canViewAmounts() === true && P.fmtPrice(1500) === '1,500');
+  T('نظيره في نموذج الصلاحيات يُرسَم مُحدَّداً لا فارغاً',
+    P.effectivePerm({ can_create_po:true }, 'can_view_amounts', 'user') === true);
+  T('ومفتاح افتراضه false يبقى غير مُحدَّد',
+    P.effectivePerm({ can_create_po:true }, 'can_delete', 'user') === false);
+
+  asUser({ can_view_amounts:false }, ['الصيانة والتشغيل']);
+  T('الموظّف المُنطَّق لا يرى رقماً نقديّاً',
+    P.fmtPrice(1500) === '—' && P.fmtPrice(0) === '—' && P.tafqitSAR(1500) === '—');
+  asUser({ can_view_amounts:true }, ['الصيانة والتشغيل']);
+  T('ومنحُه المفتاح يُعيدها (قابلية الضبط لا قاعدة مثبَّتة)',
+    P.fmtPrice(1500) === '1,500');
+  asUser({}, [], 'admin');
+  T('المدير يرى المبالغ دائماً', P.canViewAmounts() === true && P.fmtPrice(12) === '12');
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

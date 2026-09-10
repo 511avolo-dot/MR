@@ -12651,6 +12651,7 @@ async function renderPRPortal(){
   const canAdmin = hasPermission('can_manage_users');
   const tabs = `
     <div class="pr-tabs">
+      ${prTab('create','➕ طلب جديد', view==='create')}
       ${prTab('list','📋 الطلبات', view==='list')}
       ${prTab('inbox', inboxLabel, view==='inbox')}
       ${prTab('incoming', incomingLabel, view==='incoming')}
@@ -12862,12 +12863,31 @@ async function prParseForm(){
 
 function prBuilderHTML(){
   const cats = [...new Set((STATE.items||[]).map(i=>i.category).filter(Boolean))].sort();
-  const sectorOpts = ['<option value=""></option>'].concat((PO_ENUMS?.sector||[]).map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
+  // ⚠️ قطاع الطلب يقيَّد بنطاق الموظّف: طلبٌ خارج قطاعه لن يراه هو ولا يصل
+  // مدير قطاعه، فيضيع بين الاثنين. وبقطاع واحد يُختار مسبقاً ويُقفَل الحقل.
+  const _myScope = myScopeSectors();
+  const _sectors = _myScope.length ? _myScope : (PO_ENUMS?.sector||[]);
+  const _lockSector = _myScope.length === 1;
+  const sectorOpts = (_lockSector ? [] : ['<option value=""></option>'])
+    .concat(_sectors.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(s)}</option>`)).join('');
   const deptOpts = ['<option value="">— اختر —</option>'].concat((STATE.departments||[]).map(d=>`<option value="${escapeAttr(d.id)}">${escapeHtml(d.name_ar||d.id)}</option>`)).join('');
   const prioOpts = PR_PRIORITIES.map(p=>`<option value="${p}"${p==='متوسط'?' selected':''}>${p}</option>`).join('');
   const itemDatalist = `<datalist id="pr-item-names">${[...new Set((STATE.items||[]).map(i=>i.name).filter(Boolean))].slice(0,500).map(n=>`<option value="${escapeAttr(n)}">`).join('')}</datalist>`;
+  // ⚠️ بند إعداد لا خطأ كود: مرحلة «مدير المشروع/القطاع» في سلسلة الاعتماد
+  // تحلّ معتمِدها من `proc_departments.manager_user`. والأقسام بلا بذرة في
+  // الإنتاج (وصفر مستخدم له `department_id`) — فبلا ضبطها تقف السلسلة عند
+  // تلك المرحلة بلا معتمِد، وهو فشل **صامت** يبتلع الطلب. نقولها صراحةً.
+  const _deptsReady = (STATE.departments||[]).some(d => d && d.manager_user);
+  const _deptWarn = _deptsReady ? '' : `
+    <div class="print-note-box danger" style="margin-bottom:14px;padding:10px 12px;border-radius:8px;
+         background:#fdf3f3;border:1px solid #f0c9c9;color:#7a2b2b;font-size:12.5px;line-height:1.7">
+      ⚠️ <b>لم تُضبَط الأقسام ومدراؤها بعد.</b> سلسلة الاعتماد تحلّ «مدير المشروع/القطاع»
+      من قسم الطلب، فبلا ذلك يقف الطلب عند تلك المرحلة بلا معتمِد.
+      يضبطها المدير من تبويب «🏢 الأقسام» قبل اعتماد الطلبات.
+    </div>`;
   return `
     ${itemDatalist}
+    ${_deptWarn}
     <div class="pr-card">
       <div class="pr-parse-bar">
         <button class="btn btn-accent btn-sm" onclick="prParseForm()">
@@ -12880,7 +12900,8 @@ function prBuilderHTML(){
         <div class="rep-field"><label>نوع/فئة المواد <span style="color:var(--danger)">*</span></label><input class="input" id="pr-title" list="pr-cats" placeholder="مثل: البوفية، أغراض معيشة"></div>
         <datalist id="pr-cats">${cats.map(c=>`<option value="${escapeAttr(c)}">`).join('')}</datalist>
         <div class="rep-field"><label>الإدارة / القسم</label><select class="select" id="pr-dept">${deptOpts}</select></div>
-        <div class="rep-field"><label>القطاع</label><select class="select" id="pr-sector">${sectorOpts}</select></div>
+        <div class="rep-field"><label>القطاع</label><select class="select" id="pr-sector"${_lockSector?' disabled':''}>${sectorOpts}</select>${
+          _lockSector?`<div style="font-size:11px;color:var(--muted);margin-top:4px">قطاعك المسنَد — لا يمكن تغييره.</div>`:''}</div>
         <div class="rep-field"><label>المشروع / الموقع</label><input class="input" id="pr-project" placeholder="مثل: برج الابتكار"></div>
         <div class="rep-field"><label>الأولوية</label><select class="select" id="pr-priority">${prioOpts}</select></div>
         <div class="rep-field"><label>تاريخ التوريد المطلوب</label><input type="date" class="input" id="pr-needed"></div>
@@ -12895,11 +12916,11 @@ function prBuilderHTML(){
           <thead><tr>
             <th style="width:30px">م</th><th>إسم الصنف</th><th style="width:70px">الوحدة</th>
             <th style="width:80px">كمية العقد</th><th style="width:80px">رصيد مستودعي</th>
-            <th style="width:90px">الكمية المطلوبة</th><th style="width:90px">سعر الوحدة</th>
-            <th style="width:90px">الإجمالي</th><th style="width:36px"></th>
+            <th style="width:90px">الكمية المطلوبة</th>${canViewAmounts()?`<th style="width:90px">سعر الوحدة</th>
+            <th style="width:90px">الإجمالي</th>`:''}<th style="width:36px"></th>
           </tr></thead>
           <tbody id="pr-items-body"></tbody>
-          <tfoot><tr><td colspan="7" style="text-align:end;font-weight:700">الإجمالي التقديري</td><td class="num" id="pr-total" style="font-weight:700">0</td><td></td></tr></tfoot>
+          ${canViewAmounts()?`<tfoot><tr><td colspan="7" style="text-align:end;font-weight:700">الإجمالي التقديري</td><td class="num" id="pr-total" style="font-weight:700">0</td><td></td></tr></tfoot>`:''}
         </table>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="prAddDraftItem();prRenderItems();" style="margin-top:8px">➕ إضافة بند</button>
@@ -12925,8 +12946,8 @@ function prRenderItems(){
       <td><input class="input pr-cell num" data-f="contract_qty" value="${escapeAttr(it.contract_qty||'')}"></td>
       <td><input class="input pr-cell num" data-f="stock_balance" value="${escapeAttr(it.stock_balance||'')}"></td>
       <td><input class="input pr-cell num" data-f="requested_qty" value="${escapeAttr(it.requested_qty||'')}" oninput="prRecalcTotal()"></td>
-      <td><input class="input pr-cell num" data-f="unit_price" value="${escapeAttr(it.unit_price||'')}" oninput="prRecalcTotal()"></td>
-      <td class="num pr-line-total">${fmtPrice(num0(it.requested_qty)*num0(it.unit_price))}</td>
+      ${canViewAmounts()?`<td><input class="input pr-cell num" data-f="unit_price" value="${escapeAttr(it.unit_price||'')}" oninput="prRecalcTotal()"></td>
+      <td class="num pr-line-total">${fmtPrice(num0(it.requested_qty)*num0(it.unit_price))}</td>`:''}
       <td class="center"><button class="btn btn-ghost btn-sm" title="حذف" onclick="prRemoveDraftItem(${i})">✕</button></td>
     </tr>`).join('');
 }
@@ -12946,8 +12967,19 @@ function prRecalcTotal(){
     const cell=tr.querySelector('.pr-line-total'); if(cell) cell.textContent=fmtPrice(lt);
   });
   const tEl=document.getElementById('pr-total'); if(tEl) tEl.textContent=fmtPrice(total);
-  const wEl=document.getElementById('pr-words'); if(wEl) wEl.textContent = total>0 ? ('بالكلمات: '+tafqitSAR(total)) : '';
+  // «بالكلمات» بلا صلاحية مبالغ = «بالكلمات: —» — سطر بلا معنى، فيُترك فارغاً.
+  const wEl=document.getElementById('pr-words');
+  if(wEl) wEl.textContent = (total>0 && canViewAmounts()) ? ('بالكلمات: '+tafqitSAR(total)) : '';
 }
+// ترويسة Bearer لنقطة الإشعار (نفس ما تفعله requests.html).
+async function prAuthHeader(){
+  try{
+    const {data} = await CLOUD.client.auth.getSession();
+    const tok = data && data.session && data.session.access_token;
+    return tok ? {Authorization:'Bearer '+tok} : {};
+  }catch(e){ return {}; }
+}
+
 async function prSubmitNew(asDraft){
   if(!prCloudReady()){ toast('error','غير متصل','يجب الاتصال بالسحابة'); return; }
   prCollectItems();
@@ -12980,6 +13012,17 @@ async function prSubmitNew(asDraft){
     let nStages=0;
     if(!asDraft) nStages = await prBuildChain(pr);
     try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action: asDraft?'create':'submit', entity_type:'pr', entity_id:pr.id, old_value:null, new_value:{status:pr.status,total}, meta:{stages:nStages}}); }catch(e){}
+    // الإشعار: البوابة الداخلية لم تكن ترسل شيئاً إطلاقاً، فطلبٌ يُرفَع لا
+    // يعلم به معتمِده حتى يفتح النظام صدفةً. نستعمل نفس نقطة `requests.html`
+    // بلا كود بريد جديد. fire-and-forget: فشل البريد لا يُسقِط طلباً حُفِظ.
+    if(!asDraft){
+      try{
+        fetch('/api/notify', {method:'POST',
+          headers:Object.assign({'Content-Type':'application/json'}, await prAuthHeader()),
+          body:JSON.stringify({kind:'pr', pr_id:pr.id, event:'submitted'})
+        }).catch(()=>{});
+      }catch(e){}
+    }
     toast('success', asDraft?'حُفظت المسودة':'تم الإرسال', asDraft?'يمكنك إكمالها لاحقاً':`دخل الطلب سلسلة الاعتماد (${nStages} مرحلة)`);
     __prLoaded=false; __prDraftItems=[];
     prGoView('track', pr.id);
