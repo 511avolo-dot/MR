@@ -2254,6 +2254,18 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && /applyScopedNav[\s\S]{0,700}\.nav-item\[data-page\][\s\S]{0,400}\.mnav-item\[data-mpage\]/.test(CODE)
     && /function navigate\(page\)\{\s*[\s\S]{0,200}?if\(!pageAllowed\(page\)\)/.test(CODE));
 
+  // ⚠️ كشفه المتصفّح لا الفحص النصّيّ: القاعدة الثابتة لإخفاء «طلبات الشراء»
+  // تحمل !important، فـ`style.display='flex'` السطريّ لا يغلبها والمدخل يبقى
+  // مخفيّاً عن الموظّف الذي هي مسار طلباته. العلاج قاعدة مضادّة بنفس القوّة.
+  T('مدخل الطلبات يُرفع للمُنطَّق بقاعدة CSS مضادّة لا بـstyle سطريّ',
+    /body\.role-scoped \.nav-item\[data-page="pr"\]\{\s*display:flex !important/.test(HTML)
+    && !/\.nav-item\[data-page="pr"\]'\)\.forEach\(el => \{\s*el\.style\.display/.test(CODE));
+
+  T('الشريط السفليّ يحمل وجهتَي الموظّف (يعمل من هاتفه)',
+    /data-mpage="pr" data-scoped-only/.test(HTML)
+    && /data-mpage="reports" data-scoped-only/.test(HTML)
+    && /body\.role-scoped \.mnav-item\[data-scoped-only\]\{\s*display:flex/.test(HTML));
+
   T('السقوط المحلّي لا يصكّ حساباً مُنطَّقاً أبداً',
     !/AUTH_BOOTSTRAP_USERS\s*=[\s\S]{0,900}scope/i.test(CODE)
     && /validScope\s*=\s*profile\s*\?/.test(CODE));

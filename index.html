@@ -2306,6 +2306,13 @@ body.role-user .admin-only{ display:none !important; }
    تظلّ تفتح صفحة الطلبات عند وجود ما ينتظر الاعتماد. */
 .nav-item[data-page="reference"],
 .nav-item[data-page="pr"]{ display:none !important; }
+/* ⚠️ الموظّف المُنطَّق يرفع الإخفاء عن «طلبات الشراء» وحده — فهي مسار رفع
+   طلباته. القاعدة أعلاه تحمل !important فلا يغلبها `style.display` سطريّ
+   (جُرِّب فلم يعمل) — فالعلاج قاعدة مضادّة بنفس القوّة. */
+body.role-scoped .nav-item[data-page="pr"]{ display:flex !important; }
+/* وأزرار الشريط السفليّ الخاصّة به تظهر له وحده */
+.mnav-item[data-scoped-only]{ display:none; }
+body.role-scoped .mnav-item[data-scoped-only]{ display:flex; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
@@ -5674,6 +5681,12 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
   <button class="mnav-item" type="button" data-mpage="suppliers">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>الموردون
   </button>
+  <button class="mnav-item" type="button" data-mpage="pr" data-scoped-only>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>طلباتي
+  </button>
+  <button class="mnav-item" type="button" data-mpage="reports" data-scoped-only>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>المتابعة
+  </button>
   <button class="mnav-item" type="button" id="mnav-more">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>المزيد
   </button>
@@ -6836,11 +6849,6 @@ function applyScopedNav(){
   });
   document.querySelectorAll('.mnav-item[data-mpage]').forEach(el => {
     el.classList.toggle('perm-hidden', scoped && !pageAllowed(el.dataset.mpage));
-  });
-  // صفحة الطلبات مخفيّة بـCSS ثابت للجميع؛ المُنطَّق يرفعها عن نفسه لأنها
-  // مسار رفع طلباته — وتبقى مخفيّة عن غيره حتى يقرّر المالك تعميمها.
-  document.querySelectorAll('.nav-item[data-page="pr"]').forEach(el => {
-    el.style.display = scoped ? 'flex' : '';
   });
 }
 
