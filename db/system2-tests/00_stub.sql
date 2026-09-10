@@ -29,17 +29,23 @@ GRANT USAGE ON SCHEMA auth TO authenticated, anon, service_role;
 
 -- ── الجداول (الأعمدة التي تلمسها الهجرة أو تأكيداتها فقط) ──
 CREATE TABLE IF NOT EXISTS proc_users (
-  username TEXT PRIMARY KEY, display_name TEXT, email TEXT, password_hash TEXT,
+  username TEXT PRIMARY KEY, display_name TEXT, email TEXT, password_hash TEXT NOT NULL DEFAULT 'x',
   role TEXT DEFAULT 'user', permissions JSONB DEFAULT '{}'::jsonb, active BOOLEAN DEFAULT true,
   department_id TEXT, manager_user TEXT, delegate_to TEXT, is_away BOOLEAN DEFAULT false,
   job_title TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(), last_login TIMESTAMPTZ, notes TEXT
 );
+-- ⚠️ الأنواع **مطابقة للإنتاج حرفيّاً** (information_schema.columns على
+--    yofcaxvstjcrmbgciwym). كتبتُها أوّل مرّة من منظور العميل (التواريخ نصوص
+--    في JS) فكان `actual_delivery TEXT` بينما الإنتاج `date` — فمرّ عيب
+--    حقيقيّ محلّياً وانكشف عند أوّل استدعاء حيّ:
+--    «CASE types date and text cannot be matched».
+--    كعبٌ لا يطابق أنواع الإنتاج ليس اختباراً.
 CREATE TABLE IF NOT EXISTS proc_purchase_orders (
-  po_number TEXT PRIMARY KEY, issue_date TEXT, sector TEXT, project TEXT, supplier TEXT,
+  po_number TEXT PRIMARY KEY, issue_date DATE, sector TEXT, project TEXT, supplier TEXT,
   subtotal NUMERIC, vat NUMERIC, total NUMERIC, officer TEXT, payment_method TEXT,
-  priority TEXT, expected_delivery TEXT, actual_delivery TEXT, status TEXT,
-  days_delayed NUMERIC, delay_reason TEXT, notes TEXT, category TEXT, lead_time_days NUMERIC,
+  priority TEXT, expected_delivery DATE, actual_delivery DATE, status TEXT,
+  days_delayed INTEGER, delay_reason TEXT, notes TEXT, category TEXT, lead_time_days INTEGER,
   items JSONB, status_history JSONB, receipts JSONB, source JSONB,
   created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
   updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now()

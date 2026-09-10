@@ -343,8 +343,9 @@ BEGIN
                           THEN coalesce(status_history, '[]'::jsonb) || jsonb_build_object(
                                  'from', v_po.status, 'to', v_newstatus, 'by', v_name, 'at', v_at)
                           ELSE status_history END,
-    actual_delivery = CASE WHEN v_complete AND actual_delivery IS NULL
-                           THEN to_char(v_at, 'YYYY-MM-DD') ELSE actual_delivery END,
+    -- ⚠️ العمود `date` في الإنتاج لا `text`: to_char كان يكسر CASE بتعارض
+    -- الأنواع («CASE types date and text cannot be matched»).
+    actual_delivery = coalesce(actual_delivery, CASE WHEN v_complete THEN v_at::date END),
     updated_at = v_at,
     updated_by = v_me
   WHERE po_number = p_po;
