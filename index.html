@@ -5370,6 +5370,15 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
         <div id="uf-perms-grid"><!-- تُولَّد ديناميكياً من PERMISSION_DEFS --></div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px">المدير لديه كل الصلاحيات تلقائياً ولا يمكن تقييده.</div>
       </div>
+      <div style="margin-top:16px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--ink)">نطاق أوامر الشراء (القطاعات)</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+          اترك الحقل فارغاً = <b>وصول كامل</b> لكل الأوامر (الوضع الافتراضي).
+          حدِّد قطاعاً أو أكثر لموظفي الصيانة والتشغيل فيرون أوامر قطاعاتهم فقط،
+          ويُفرَض ذلك على الخادم لا في المتصفّح.
+        </div>
+        <div id="uf-scope-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px"></div>
+      </div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;font-size:13px">
         <input type="checkbox" id="uf-active" checked> الحساب مفعّل (يمكنه تسجيل الدخول)
       </label>
@@ -5831,6 +5840,11 @@ const PERMISSION_DEFS = [
   { key:'can_edit_po',              label:'تعديل أمر شراء',                short:'تعديل أمر',     cat:'أوامر الشراء', userDefault:true  },
   { key:'can_approve_po',           label:'اعتماد أمر شراء',               short:'اعتماد أمر',    cat:'أوامر الشراء', userDefault:false },
   { key:'can_delete_po',            label:'حذف أمر شراء',                  short:'حذف أمر',       cat:'أوامر الشراء', userDefault:false },
+  { key:'can_receive_po',           label:'تسجيل استلام البضاعة',           short:'استلام',        cat:'أوامر الشراء', userDefault:false },
+  // ⚠️ userDefault:true مقصود: صفوف المستخدمين القائمة لا تحمل هذا المفتاح،
+  //    و`hasPermission` تسقط للافتراضيّ حين يغيب — فلا يفقد أحدٌ مبالغه.
+  //    (ونظيرتها على الخادم `proc_can_view_amounts` بالافتراضيّ نفسه.)
+  { key:'can_view_amounts',         label:'عرض المبالغ والأسعار',           short:'المبالغ',       cat:'أوامر الشراء', userDefault:true  },
   { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
   { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
   { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
@@ -5949,6 +5963,26 @@ function _sha256Pure(ascii) {
   return H.map(x => (x>>>0).toString(16).padStart(8,'0')).join('');
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   نطاق موظفي الصيانة والتشغيل (النظام 2)
+   ----------------------------------------------------------------------
+   مستخدم بقطاعات = «مُنطَّق»: يرى أوامر قطاعاته فقط. القائمة فارغة/غائبة =
+   وصول كامل = سلوك النظام كما كان (المستخدمون القائمون جميعاً).
+   ⚠️ هذه الطبقة **عرضٌ وإرشاد فقط**؛ الحدّ الحقيقيّ في RLS على الخادم
+   (db/system2-staff-scope.sql). لا تعتمد عليها وحدها في أي قرار أمنيّ.
+   ══════════════════════════════════════════════════════════════════════ */
+function normScopeSectors(v){
+  if(Array.isArray(v)) return v.map(x => String(x||'').trim()).filter(Boolean);
+  if(typeof v === 'string' && v.trim()){
+    try{ const p = JSON.parse(v); return Array.isArray(p) ? normScopeSectors(p) : []; }catch(e){ return []; }
+  }
+  return [];
+}
+function myScopeSectors(){ return normScopeSectors(STATE.currentUser && STATE.currentUser.scopeSectors); }
+function isScopedUser(){ return myScopeSectors().length > 0; }
+// هل يرى المستخدم المبالغ؟ نفس دلالة الخادم (proc_can_view_amounts).
+function canViewAmounts(){ return hasPermission('can_view_amounts'); }
+
 async function fetchCloudUsers(force){
   if(!window.CLOUD || !CLOUD.enabled || !CLOUD.client) return null;
   const now = Date.now();
@@ -5968,6 +6002,8 @@ async function fetchCloudUsers(force){
         role: u.role,
         permissions: u.permissions || DEFAULT_PERMISSIONS[u.role] || DEFAULT_PERMISSIONS.user,
         active: u.active !== false,
+        // نطاق القطاعات — كان المُخطِّط يُسقِطه فلا تراه الواجهة إطلاقاً.
+        scopeSectors: normScopeSectors(u.scope_sectors),
         last_login: u.last_login,
         created_by: u.created_by,
         created_at: u.created_at
@@ -6013,6 +6049,10 @@ async function attemptLogin(username, password){
   let validRole = null;
   let validDisplayName = null;
   let validPermissions = null;
+  // نطاق القطاعات — يأتي من ملفّ proc_users وحده. ⚠️ مسارا السقوط
+  // المحلّي (AUTH_BOOTSTRAP_USERS) لا يمنحان نطاقاً أبداً: لا يُصكّ حساب
+  // مُنطَّق من قائمة مضمَّنة في الكود. محروس بتأكيد بنيويّ.
+  let validScope = [];
 
   // If cloud is enabled, authenticate via Supabase Auth (never the local
   // bootstrap passwords — those are only for pre-cloud first-time setup).
@@ -6074,6 +6114,7 @@ async function attemptLogin(username, password){
       validDisplayName = (profile && profile.displayName) ? profile.displayName : username;
       validPermissions = (profile && profile.permissions) ? profile.permissions
                          : (DEFAULT_PERMISSIONS[validRole] || DEFAULT_PERMISSIONS.user);
+      validScope = profile ? normScopeSectors(profile.scopeSectors) : [];
     }
     // if auth failed → fall through to invalid count
   } else {
@@ -6119,6 +6160,7 @@ async function attemptLogin(username, password){
     role: validRole,
     displayName: validDisplayName,
     permissions: validPermissions,
+    scopeSectors: validScope,
     loginTime: Date.now()
   };
   try{ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session)); }catch(e){}
@@ -6238,6 +6280,13 @@ function applyUserRoleToUI(){
   document.querySelectorAll('[data-requires-perm]').forEach(el => {
     el.classList.toggle('perm-hidden', !hasPermission(el.getAttribute('data-requires-perm')));
   });
+  // موظّف مُنطَّق (بقطاعات): قشرة مختصرة — يُخفى ما لا يخصّه من الوجهات
+  // والأدوات. الحدّ الحقيقيّ على الخادم؛ هذا إرشاد بصريّ يمنع طرقَ أبواب مغلقة.
+  document.body.classList.toggle('role-scoped', isScopedUser());
+  document.querySelectorAll('[data-hide-scoped]').forEach(el => {
+    el.classList.toggle('perm-hidden', isScopedUser());
+  });
+  applyScopedNav();
   // زر الإعدادات يظهر لأي مستخدم يملك صلاحية إعدادات واحدة على الأقل (لا يلزم أن يكون مديراً)
   const settingsBtn = document.getElementById('btn-settings');
   if(settingsBtn){
@@ -6317,6 +6366,7 @@ async function refreshCurrentUserSession(){
     role: u.role,
     displayName: u.displayName,
     permissions: u.permissions,
+    scopeSectors: normScopeSectors(u.scopeSectors),
     loginTime: STATE.currentUser.loginTime || Date.now()
   };
   STATE.currentUser = newSession;
@@ -6456,6 +6506,9 @@ async function createUser(data){
     role,
     permissions,
     active: data.active !== false,
+    // [] يُخزَّن null: «بلا نطاق» = وصول كامل، وهو الافتراضيّ.
+    scope_sectors: (normScopeSectors(data.scopeSectors).length
+                    ? normScopeSectors(data.scopeSectors) : null),
     created_by: STATE.currentUser ? STATE.currentUser.username : 'unknown',
     notes: data.notes || null
   };
@@ -6509,6 +6562,10 @@ async function updateUser(username, updates){
   if(updates.permissions !== undefined) payload.permissions = updates.permissions;
   if(updates.active !== undefined) payload.active = !!updates.active;
   if(updates.notes !== undefined) payload.notes = updates.notes;
+  if(updates.scopeSectors !== undefined){
+    const sc = normScopeSectors(updates.scopeSectors);
+    payload.scope_sectors = sc.length ? sc : null;
+  }
   if(updates.password){
     if(updates.password.length < 6) return {ok:false, error:'كلمة السر يجب أن تكون 6 أحرف على الأقل'};
     if(isSelf){
@@ -6671,7 +6728,15 @@ function reportError(where, err, ctx, userMessage){
 function procErrors(){ return ERR_LOG.slice().reverse(); }
 
 /* ========== FORMATTERS ========== */
-const fmtPrice = n => n==null||isNaN(n) ? '—' : Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
+/* ⚠️ بوّابة المبالغ — نقطة واحدة تحكم كل عرض نقديّ في النظام.
+   `fmtPrice` هي **المنسّق الوحيد للمال** (172 موضع نداء: الجداول، الكانبان،
+   الدرج، المؤشّرات، لوحة التحكم، كل المطبوعات، والتصدير) — ومُتحقَّق أنّ كل
+   وسائطها نقديّة (سعر/إجمالي/ضريبة/توفير)، لا كميّات ولا عدّادات.
+   فحجب المبالغ يتمّ هنا مرّة واحدة بدل 172 تعديلاً يسهل أن يفوت أحدها.
+   من لا يملك `can_view_amounts` يرى «—» أينما كان الرقم.
+   ⚠️ لا تُنشئ منسّقاً نقديّاً آخر يلتفّ حول هذه البوّابة (محروس بتأكيد). */
+const fmtPriceRaw = n => n==null||isNaN(n) ? '—' : Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
+const fmtPrice = n => canViewAmounts() ? fmtPriceRaw(n) : '—';
 const fmtDate = d => d||'—';
 const todayStr = () => new Date().toISOString().slice(0,10);
 
@@ -6751,7 +6816,37 @@ function mnavSync(){
     b.setAttribute('aria-current', b.dataset.mpage === cur ? 'page' : 'false');
   });
 }
+/* ══════════════════════════════════════════════════════════════════════
+   قشرة الموظّف المُنطَّق — مصدر واحد لما يراه في التنقّل
+   ----------------------------------------------------------------------
+   الوجهات الأربع هي كامل عمله: لوحته · أوامر مشاريعه · طلباته · تقرير
+   المتابعة. وما عداها (الكتالوج · التسعير · الموردون · التسجيلات ·
+   التحليلات · الذكاء) ليس من شأنه، وأكثره محجوب على الخادم أصلاً فلا
+   معنى لأن يفتحه ويجده فارغاً.
+   ⚠️ مصدر واحد يخدم الشريط الجانبي والشريط السفليّ و`navigate` معاً —
+   لا قائمتان تتقادم إحداهما (محروس بتأكيد).
+   ══════════════════════════════════════════════════════════════════════ */
+const SCOPED_PAGES = ['dashboard','purchase-orders','pr','reports'];
+function pageAllowed(page){ return !isScopedUser() || SCOPED_PAGES.includes(page); }
+
+function applyScopedNav(){
+  const scoped = isScopedUser();
+  document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+    el.classList.toggle('perm-hidden', scoped && !pageAllowed(el.dataset.page));
+  });
+  document.querySelectorAll('.mnav-item[data-mpage]').forEach(el => {
+    el.classList.toggle('perm-hidden', scoped && !pageAllowed(el.dataset.mpage));
+  });
+  // صفحة الطلبات مخفيّة بـCSS ثابت للجميع؛ المُنطَّق يرفعها عن نفسه لأنها
+  // مسار رفع طلباته — وتبقى مخفيّة عن غيره حتى يقرّر المالك تعميمها.
+  document.querySelectorAll('.nav-item[data-page="pr"]').forEach(el => {
+    el.style.display = scoped ? 'flex' : '';
+  });
+}
+
 function navigate(page){
+  // وجهة خارج نطاق الموظّف ⇒ تُعاد للوحته بدل شاشة فارغة أو خطأ صلاحية.
+  if(!pageAllowed(page)) page = 'dashboard';
   STATE.page = page;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.page===page));
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active', p.id==='page-'+page));
@@ -11048,7 +11143,13 @@ async function printDocOpen(opts, bodyHtml){
 }
 
 // ─── تفقيط: تحويل مبلغ بالريال إلى كلمات عربية (للأوامر والمستندات المالية) ───
+// التفقيط بوّابة مبالغ كذلك: يكتب الرقم حروفاً، فلولا حجبه لتسرّب المبلغ
+// من كل مطبوعة تحمل «المبلغ كتابةً» رغم حجب أرقامها.
 function tafqitSAR(amount){
+  if(!canViewAmounts()) return '—';
+  return tafqitSARRaw(amount);
+}
+function tafqitSARRaw(amount){
   const n = Math.round((Number(amount)||0) * 100) / 100;
   const riyals = Math.floor(n);
   const halalas = Math.round((n - riyals) * 100);
@@ -13682,8 +13783,14 @@ function reportsCatalog(){
       ],
       run:(v)=>buildPOListReport({status:v.status||'', project:v.project||'', sector:v.sector||'', from:v.from||'', to:v.to||''}) },
 
+    // ⚠️ `noMoney:true` أدناه هي العلامة الوحيدة التي تُصرّح بخلوّ تقرير من
+    //    المال، وهي **قائمة بيضاء لا سوداء**: من لا يملك `can_view_amounts`
+    //    لا يرى إلا ما وُسِم بها صراحةً — فتقريرٌ جديد يُضاف بلا العلامة
+    //    يُحجَب عنه تلقائياً بدل أن يتسرّب. (وتُعاد الفحوص في `reportRun`
+    //    لأن الفهرس يُستدعى من onclick، فإخفاء البطاقة وحده ليس بوّابة.)
     { group:'المشتريات', perm:null, icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
       title:'متابعة أوامر الشراء — بلا مبالغ', desc:'ورقة متابعة ميدانية لموظفي الصيانة: الأوامر والبنود المنتظَرة وحالة التسليم — بلا أي أسعار أو إجماليات.',
+      noMoney:true,
       fields:[
         {type:'multiselect', key:'status',  label:'الحالة',            allLabel:'كل الحالات',          opts:poStatusMulti},
         {type:'multiselect', key:'project', label:'المشروع / الجهة',   allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
@@ -13889,7 +13996,11 @@ function renderReportsCenter(){
   __REPORTS_DEFS = reportsCatalog();
   const groups = [...new Set(__REPORTS_DEFS.map(d=>d.group))];
   host.innerHTML = groups.map(g=>{
-    const cards = __REPORTS_DEFS.map((d,i)=>({d,i})).filter(x=>x.d.group===g).map(({d,i})=>{
+    const cards = __REPORTS_DEFS.map((d,i)=>({d,i}))
+      .filter(x=>x.d.group===g)
+      // من لا يرى المبالغ لا تُعرض له إلا التقارير الموسومة `noMoney`.
+      .filter(x=>canViewAmounts() || x.d.noMoney === true)
+      .map(({d,i})=>{
       const locked = d.perm && !hasPermission(d.perm);
       const fieldsHtml = (d.fields||[]).map(f=>{
         if(f.type==='date') return `<div class="rep-field"><label>${escapeHtml(f.label)}</label><input type="date" class="input" data-rep-field="${f.key}" value="${f.value||''}"></div>`;
@@ -13918,6 +14029,8 @@ function renderReportsCenter(){
           </div>
         </div>`;
     }).join('');
+    // مجموعة أُفرِغت بالكامل بعد التصفية لا تُرسَم عنواناً معلّقاً بلا بطاقات
+    if(!cards) return '';
     return `<div class="rep-group"><div class="rep-group-title"><span class="rg-dot"></span>${escapeHtml(g)}</div><div class="rep-grid">${cards}</div></div>`;
   }).join('');
   repMultiWireOutside();
@@ -13926,6 +14039,11 @@ function renderReportsCenter(){
 // يجمع قيم الحقول للبطاقة ويشغّل التقرير (يدعم التقارير المتزامنة وغير المتزامنة)
 async function reportRun(idx){
   const def = __REPORTS_DEFS[idx];
+  // ⚠️ إعادة فحص عند التشغيل لا عند الرسم فقط: الفهرس يُستدعى من onclick،
+  // فإخفاء البطاقة وحده ليس بوّابة.
+  if(def && def.noMoney !== true && !canViewAmounts()){
+    toast('error','صلاحية مرفوضة','هذا التقرير يحوي مبالغ.'); return;
+  }
   if(!def) return;
   if(def.perm && !requirePermission(def.perm, def.title)) return;
   const card = document.querySelector(`.rep-card[data-rep-idx="${idx}"]`);
@@ -14077,7 +14195,8 @@ async function openUserForm(mode, username){
     passHint.textContent = '(مطلوبة للحساب الجديد)';
     roleSel.value = 'user';
     activeChk.checked = true;
-    setUserFormPermissions(DEFAULT_PERMISSIONS.user);
+    setUserFormPermissions(DEFAULT_PERMISSIONS.user, 'user');
+    setUserFormScope([]);
   } else {
     eyebrow.textContent = 'تعديل مستخدم';
     title.textContent = 'تعديل: ' + username;
@@ -14093,7 +14212,8 @@ async function openUserForm(mode, username){
     activeChk.checked = u.active !== false;
     // دمج صلاحيات المستخدم فوق افتراضات دوره، حتى لا تظهر الصلاحيات المُضافة
     // حديثاً (غير المحفوظة) كغير مُحدّدة فتُسحب عند الحفظ بالخطأ.
-    setUserFormPermissions(Object.assign({}, DEFAULT_PERMISSIONS[u.role] || DEFAULT_PERMISSIONS.user, u.permissions || {}));
+    setUserFormPermissions(u.permissions || {}, u.role);
+    setUserFormScope(u.scopeSectors);
   }
   closeModal('modal-users');
   setTimeout(()=>openModal('modal-user-form'), 150);
@@ -14117,12 +14237,52 @@ function renderUserFormPermissions(){
   grid.dataset.built = '1';
 }
 
-function setUserFormPermissions(p){
+// القيمة **الفعّالة** لمفتاح صلاحية — نفس دلالة hasPermission بالضبط:
+// قيمة صريحة إن وُجدت، وإلا الافتراضيّ حسب الدور (لا `false`).
+function effectivePerm(perms, key, role){
+  const v = (perms || {})[key];
+  if(v === true || v === false) return v;
+  return !!((DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.user)[key]);
+}
+
+function setUserFormPermissions(p, role){
   renderUserFormPermissions();
   p = p || {};
+  // ⚠️ الخطر هنا حقيقيّ: `readUserFormPermissions` تكتب **كل** المفاتيح صراحةً،
+  // فمربّع غير مُحدَّد لمفتاح غائب = كتابة `false` تسلب المستخدم صلاحيةً
+  // افتراضها true (أوّل مرشّح: can_view_amounts). مسارات الفتح الثلاثة كانت
+  // تتفادى ذلك بتمرير كائن مدموج فوق افتراضات الدور — لكنّها ضمانة تعتمد على
+  // تذكّر كل نقطة نداء. الآن الضمانة **بنيويّة** داخل الدالة نفسها.
+  // محروس بتأكيد في الحزمة.
   document.querySelectorAll('#uf-perms-grid input[data-perm]').forEach(cb => {
-    cb.checked = p[cb.getAttribute('data-perm')] === true;
+    cb.checked = effectivePerm(p, cb.getAttribute('data-perm'), role);
   });
+}
+
+// شبكة القطاعات — من PO_ENUMS.sector (مصدر واحد للقطاعات في النظام).
+function renderUserFormScope(){
+  const grid = document.getElementById('uf-scope-grid');
+  if(!grid || grid.dataset.built === '1') return;
+  grid.innerHTML = (PO_ENUMS.sector || []).map(sec =>
+    `<label style="display:flex;align-items:center;gap:8px;cursor:pointer">`
+    + `<input type="checkbox" data-scope="${escapeAttr(sec)}"> ${escapeHtml(sec)}</label>`
+  ).join('');
+  grid.dataset.built = '1';
+}
+function setUserFormScope(list){
+  renderUserFormScope();
+  const set = new Set(normScopeSectors(list));
+  document.querySelectorAll('#uf-scope-grid input[data-scope]').forEach(cb => {
+    cb.checked = set.has(cb.getAttribute('data-scope'));
+  });
+}
+function readUserFormScope(){
+  renderUserFormScope();
+  const out = [];
+  document.querySelectorAll('#uf-scope-grid input[data-scope]').forEach(cb => {
+    if(cb.checked) out.push(cb.getAttribute('data-scope'));
+  });
+  return out;
 }
 
 function readUserFormPermissions(){
@@ -14143,15 +14303,16 @@ async function saveUserForm(){
   const role = document.getElementById('uf-role').value;
   const active = document.getElementById('uf-active').checked;
   const permissions = readUserFormPermissions();
+  const scopeSectors = readUserFormScope();
   const btn = document.getElementById('uf-save');
   btn.disabled = true;
   btn.textContent = 'جاري الحفظ...';
   try{
     let res;
     if(__userFormMode === 'add'){
-      res = await createUser({username, displayName, password, role, active, permissions});
+      res = await createUser({username, displayName, password, role, active, permissions, scopeSectors});
     } else {
-      const updates = {displayName, role, active, permissions};
+      const updates = {displayName, role, active, permissions, scopeSectors};
       if(password) updates.password = password;
       res = await updateUser(__userFormTarget, updates);
     }
@@ -14833,7 +14994,11 @@ window.CLOUD = {
         }
         return out;
       };
-      const [items, suppliers, history] = await Promise.all([
+      // الموظّف المُنطَّق لا يحتاج الكتالوج ولا دليل الموردين ولا السجل
+      // السعريّ — وأكثرها محجوب عنه على الخادم أصلاً (سياسات القسم 4-ج).
+      // فلا نطلبها له: أسرع، وبلا طلبات تعود فارغة.
+      const scoped = isScopedUser();
+      const [items, suppliers, history] = scoped ? [[],[],[]] : await Promise.all([
         fetchAll('proc_items','updated_at',false),
         fetchAll('proc_suppliers','updated_at',false),
         fetchAll('proc_history','date',false)
@@ -14841,8 +15006,14 @@ window.CLOUD = {
       // أوامر الشراء — جلب مرن: غياب الجدول (قبل تنفيذ السكربت) لا يكسر المزامنة
       let pos = [];
       try{
-        pos = await fetchAll('proc_purchase_orders','issue_date',false);
-      }catch(e){ /* الجدول غير موجود بعد — تجاهل */ }
+        // ⚠️ المُنطَّق يقرأ عبر العرض `proc_po_visible` الذي يُصفّر المبالغ
+        // ويجرّد أسعار البنود، فلا تصل قيمةٌ ماليّة جهازَه أصلاً.
+        // وغير المُنطَّق يبقى على الجدول نفسه — صفر انحدار.
+        pos = await fetchAll(scoped ? 'proc_po_visible' : 'proc_purchase_orders','issue_date',false);
+      }catch(e){
+        // العرض غير موجود بعد (الهجرة لم تُطبَّق) ⇒ سقوط للجدول الأساس.
+        if(scoped){ try{ pos = await fetchAll('proc_purchase_orders','issue_date',false); }catch(_){} }
+      }
       updateCloudStatus('connected');
       return {
         items: items || [],
@@ -15275,7 +15446,11 @@ async function refreshFromCloud(){
   // Strategy: cloud is source of truth for cloud items; merge with original DATA
   // ⚠️ DATA مُعرَّف بـconst فلا يوجد على window — قراءته عبر window.DATA كانت تُرجع undefined
   // فيُحسب أساس الدمج صفراً، وتختفي أي سجلات محلية غير مرفوعة للسحابة بلا إنذار.
-  const SEED = (typeof DATA!=='undefined' && DATA) ? DATA : {};
+  // ⚠️ الموظّف المُنطَّق: **لا دمج بذرة إطلاقاً.** البذرة مضمَّنة في هذا
+  // الملف (529 صنفاً · 42 مورداً · 808 سجلات سعرية بأسعارها)، فلولا هذا
+  // الاستثناء لوصلته الأسعار من الملف نفسه رغم إحكام القاعدة عليه —
+  // وهو ما يُفرغ إخفاء المبالغ من معناه.
+  const SEED = (typeof DATA!=='undefined' && DATA && !isScopedUser()) ? DATA : {};
   const cloudItemCodes = new Set(data.items.map(i=>i.code));
   const baseItems = (SEED.items||[]).filter(i=>!cloudItemCodes.has(i.code));
   STATE.items = [...data.items.map(x=>({...x,_cloud:true})), ...baseItems];
@@ -15317,8 +15492,13 @@ async function refreshFromCloud(){
   // ثم يُطبَّق التوحيد المؤكَّد على الأوامر القائمة فتُصلَّح البيانات التاريخية بلا تدخّل.
   try{
     await prjLoad();
-    const au=prjAutoUnify();
-    if(au.orders) toast('success','توحيد المشاريع',`وُحّدت ${au.rows} كتابة على ${au.orders} أمر`);
+    // ⚠️ التوحيد التلقائيّ يُعيد كتابة أوامر الشراء — عملٌ تصحيحيّ ليس من
+    // شأن موظّف الصيانة، ولا صلاحية كتابة له على الأوامر أصلاً (فكانت
+    // ستفشل صامتةً ويُصدَّر توست كاذب بعدد «وُحّد»).
+    if(!isScopedUser()){
+      const au=prjAutoUnify();
+      if(au.orders) toast('success','توحيد المشاريع',`وُحّدت ${au.rows} كتابة على ${au.orders} أمر`);
+    }
   }catch(e){ reportError('prjLoad', e); }
 
   // Apply local edits (item edits from local users)
@@ -17188,7 +17368,12 @@ function poReceivedSum(po){
 }
 function poReceiveOpen(num){
   const po=poFind(num); if(!po) return;
-  if(!requirePermission('can_edit_po','استلام البضاعة')) return;
+  // الاستلام صلاحية مستقلّة: موظّف الميدان يستلم بلا أن يملك تعديل الأمر
+  // (`can_edit_po` تفتح النموذج والمشاريع والحذف — أوسع بكثير مما يلزمه).
+  if(!(hasPermission('can_edit_po') || hasPermission('can_receive_po'))){
+    toast('error','صلاحية مرفوضة','تسجيل استلام البضاعة يتطلّب صلاحية «تسجيل استلام البضاعة»');
+    return;
+  }
   if(!Array.isArray(po.items)||!po.items.length){ toast('info','لا بنود','هذا الأمر بلا بنود قابلة للاستلام'); return; }
   if(PO_TERMINAL.includes(po.status)){ toast('info','—','الأمر في حالة نهائية (مُغلق أو مُلغى)'); return; }
   const rows = po.items.map((it,idx)=>{
@@ -17220,10 +17405,94 @@ function poReceiveOpen(num){
     </div></div>`;
   document.body.appendChild(m); syncScrollLock();
 }
+/* ══════════════════════════════════════════════════════════════════════
+   ملاحظات المتابعة على أمر الشراء
+   ----------------------------------------------------------------------
+   قناة «رؤية التحديثات» بين الميدان والمشتريات: الموظّف يكتب ما رآه على
+   الأرض (وصل جزء · المورد تأخّر · صنف مخالف)، والمشتريات تقرأه في الدرج
+   نفسه. ظاهرة **للجميع** — فقيمتها كلّها في أن يقرأها الطرف الآخر.
+   تُكتب عبر `po_add_comment` الخادمية (لا سياسة UPDATE للمُنطَّق).
+   ══════════════════════════════════════════════════════════════════════ */
+function poCommentsHtml(po){
+  const list = Array.isArray(po.comments) ? po.comments : [];
+  const items = list.slice().reverse().map(c=>`
+    <div class="po-timeline-item">
+      <div class="po-tl-main">${escapeHtml(c.text||'')}</div>
+      <div class="po-tl-meta">${escapeHtml(c.by||'')} · ${escapeHtml(String(c.at||'').slice(0,16).replace('T',' '))}</div>
+    </div>`).join('');
+  const n = escapeAttr(po.po_number);
+  return `<div class="po-drawer-sec"><h4>ملاحظات المتابعة${list.length?` (${list.length})`:''}</h4>
+    ${items || '<div style="font-size:12.5px;color:var(--muted)">لا ملاحظات بعد.</div>'}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <input id="po-comment-input" class="input" style="flex:1;min-width:180px"
+             placeholder="اكتب ملاحظة متابعة…" maxlength="2000">
+      <button class="btn btn-ghost btn-sm" onclick="poAddComment('${n}')">إضافة</button>
+    </div></div>`;
+}
+async function poAddComment(num){
+  const el = document.getElementById('po-comment-input');
+  const txt = (el && el.value || '').trim();
+  if(!txt){ toast('warn','فارغة','اكتب نصّ الملاحظة أولاً'); return; }
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)){
+    toast('error','غير متصل','إضافة الملاحظات تتطلّب اتصالاً بالسحابة.'); return;
+  }
+  try{
+    const {error} = await CLOUD.client.rpc('po_add_comment', {p_po:num, p_text:txt});
+    if(error) throw error;
+    const po = poFind(num);
+    if(po){
+      po.comments = (po.comments||[]).concat([{
+        by:(STATE.currentUser?STATE.currentUser.displayName:'—'),
+        at:new Date().toISOString(), text:txt }]);
+    }
+    if(el) el.value='';
+    if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
+    toast('success','أُضيفت','ستظهر لفريق المشتريات على الأمر نفسه.');
+  }catch(e){
+    reportError('poAddComment', e, {po:num},
+      {title:'تعذّر إضافة الملاحظة', body:e.message||'راجع اتصالك أو صلاحيتك.'});
+  }
+}
+
 function poReceiveClose(){ const m=document.getElementById('modal-po-receive'); if(m) m.remove(); syncScrollLock(); }
+// مسار الموظّف المُنطَّق: يجمع الكميّات ويسلّمها لـ`po_record_receipt`.
+// الخادم يقصّ عند المتبقّي ويحسب الحالة ويكتب التدقيق — فلا شيء هنا يُصدَّق.
+async function poReceiveSaveScoped(num, po, m){
+  const lines=[];
+  m.querySelectorAll('input[data-rcv]').forEach(inp=>{
+    const idx=Number(inp.getAttribute('data-rcv'));
+    const qty=Number(inp.value)||0;
+    if(qty>0) lines.push({idx, qty});
+  });
+  if(!lines.length){ toast('warn','لا كمية','أدخل كمية مستلمة واحدة على الأقل'); return; }
+  const note=(document.getElementById('po-receive-note')?.value||'').trim();
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)){
+    toast('error','غير متصل','تسجيل الاستلام يتطلّب اتصالاً بالسحابة.'); return;
+  }
+  try{
+    const {data, error} = await CLOUD.client.rpc('po_record_receipt',
+      {p_po:num, p_lines:lines, p_note:note||null});
+    if(error) throw error;
+    poReceiveClose();
+    const r = data || {};
+    toast('success', r.complete?'اكتمل الاستلام — أُغلق الأمر ✓':'تم تسجيل استلام جزئي',
+          `${num} · مستلَم ${r.received??'—'} من ${r.ordered??'—'}`);
+    // الصفّ تغيّر على الخادم — أعِد تحميله كي يعكس ما حُسِب هناك لا ما خمّنّاه.
+    await refreshFromCloud();
+    if(document.getElementById('po-drawer').classList.contains('active')) openPODrawer(num);
+  }catch(e){
+    reportError('poReceiveSaveScoped', e, {po:num},
+      {title:'تعذّر تسجيل الاستلام', body:e.message||'راجع اتصالك أو صلاحيتك.'});
+  }
+}
+
 function poReceiveSave(num){
   const po=poFind(num); if(!po) return;
   const m=document.getElementById('modal-po-receive'); if(!m) return;
+  // ⚠️ الموظّف المُنطَّق لا يكتب صفّ أمر الشراء إطلاقاً (لا سياسة UPDATE له).
+  // ولو كتبه لمَحا المبالغ: صفّه وصل من `proc_po_visible` بمبالغ مُصفَّرة،
+  // و`poSave` يرفع الصفّ كاملاً. فيمرّ عبر RPC خادميّة تحسب كل شيء بنفسها.
+  if(isScopedUser()) return poReceiveSaveScoped(num, po, m);
   const lines=[]; let anyReceived=false;
   m.querySelectorAll('input[data-rcv]').forEach(inp=>{
     const idx=Number(inp.getAttribute('data-rcv')), it=po.items[idx]; if(!it) return;
@@ -17335,12 +17604,16 @@ function openPODrawer(num){
         return `<div class="po-partial-note">📦 تسليم جزئي: استُلم <b>${pi.received}</b> من <b>${pi.ordered}</b> (متبقٍّ <b>${pi.remaining}</b>)${pi.daysSince!=null?` · منذ آخر استلام <b>${escapeHtml(poDays(pi.daysSince))}</b>`:''}.<br>تابع المورد بالكميات المتبقّية، وبإكمال الاستلام يُقفَل الأمر تلقائياً.</div>`;
       })():''}
     </div>
+    ${canViewAmounts()?`
     <div class="po-drawer-sec"><h4>مالية</h4><div class="po-kv">
       ${kv('قبل الضريبة',fmtPrice(po.subtotal)+' ر.س')}
       ${kv('ضريبة 15%',fmtPrice(po.vat)+' ر.س')}
       ${kv('الإجمالي شامل الضريبة','<b>'+fmtPrice(po.total)+' ر.س</b>')}
       ${kv('طريقة الدفع',escapeHtml(po.payment_method||'—'))}
-    </div></div>
+    </div></div>`:`
+    <div class="po-drawer-sec"><h4>الدفع</h4><div class="po-kv">
+      ${kv('طريقة الدفع',escapeHtml(po.payment_method||'—'))}
+    </div></div>`}
     <div class="po-drawer-sec"><h4>التسليم</h4><div class="po-kv">
       ${kv('تاريخ الإصدار',poFmtDate(po.issue_date))}
       ${kv('التسليم المتوقع',poFmtDate(po.expected_delivery))}
@@ -17360,6 +17633,7 @@ function openPODrawer(num){
     ${itemsHtml}
     ${_priceHtml}
     ${receiptsHtml}
+    ${poCommentsHtml(po)}
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>
     <div class="po-drawer-actions">
@@ -18711,7 +18985,7 @@ function init(){
   // Auto-update permission checkboxes when role changes (admin = all checked, user = defaults)
   const ufRole = document.getElementById('uf-role');
   if(ufRole) ufRole.addEventListener('change', e => {
-    setUserFormPermissions(DEFAULT_PERMISSIONS[e.target.value] || DEFAULT_PERMISSIONS.user);
+    setUserFormPermissions(DEFAULT_PERMISSIONS[e.target.value] || DEFAULT_PERMISSIONS.user, e.target.value);
   });
 
   // AI Settings buttons
