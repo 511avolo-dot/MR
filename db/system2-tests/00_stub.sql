@@ -53,10 +53,15 @@ CREATE TABLE IF NOT EXISTS proc_purchase_orders (
 CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT);
 CREATE TABLE IF NOT EXISTS proc_suppliers(id TEXT PRIMARY KEY, name TEXT, phone TEXT, iban TEXT);
 CREATE TABLE IF NOT EXISTS proc_history  (num BIGINT PRIMARY KEY, code TEXT, supplier TEXT, price NUMERIC, date TEXT, reference TEXT);
+-- ⚠️ أعمدة معالجة المشتريات بأنواع الإنتاج نفسها (db/pr-portal.sql §11):
+--    proc_status TEXT · *_by TEXT · *_at TIMESTAMPTZ. كعبٌ لا يطابقها ليس اختباراً.
 CREATE TABLE IF NOT EXISTS proc_purchase_requests (
   id TEXT PRIMARY KEY, title TEXT, department_id TEXT, sector TEXT, project TEXT,
   requester TEXT, status TEXT DEFAULT 'draft', current_seq INT DEFAULT 0,
-  est_total NUMERIC DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+  est_total NUMERIC DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now(),
+  proc_status TEXT, proc_started_by TEXT, proc_started_at TIMESTAMPTZ,
+  quotes_collected_by TEXT, quotes_collected_at TIMESTAMPTZ,
+  updated_by TEXT, updated_at TIMESTAMPTZ
 );
 CREATE TABLE IF NOT EXISTS proc_pr_items     (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, name TEXT, qty NUMERIC, price NUMERIC);
 CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);

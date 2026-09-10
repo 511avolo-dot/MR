@@ -204,6 +204,13 @@ const META = {
   rejected:  ['تم رفض الطلب', '#dc2626', '✕'],
   returned:  ['أُعيد الطلب للتعديل', '#2563eb', '↩'],
   submitted: ['تم استلام طلبك', '#2563eb', '⏳'],
+  // ── أحداث معالجة المشتريات ومحادثة الطلب ──
+  // بلا هذه كان الطالب يرفع طلبه ثم لا يعلم شيئاً حتى الاعتماد النهائي،
+  // والمشتريات لا سبيل لها للاستفهام إلا خارج النظام فتضيع المعلومة.
+  proc_started:     ['بدأ العمل على طلبك', '#0891b2', '▶'],
+  quotes_collected: ['اكتمل جمع عروض الأسعار', '#16a34a', '✓'],
+  question:         ['استفسار على طلبك', '#d97706', '؟'],
+  answer:           ['وصل ردّ على استفسارك', '#0891b2', '↪'],
 };
 const LINES = (title) => ({
   pending:   `لديك طلب شراء بانتظار اعتمادك ضمن سلسلة الموافقات. يمكنك اتخاذ القرار مباشرةً من هذا البريد، أو فتح البوابة لمراجعة كامل التفاصيل.`,
@@ -211,6 +218,10 @@ const LINES = (title) => ({
   rejected:  `نأسف لإبلاغك بأن طلبك «${title}» قد رُفض.`,
   returned:  `أُعيد طلبك «${title}» إليك للتعديل. يرجى مراجعته وتحديث المطلوب ثم إعادة إرساله.`,
   submitted: `تم استلام طلبك «${title}» بنجاح، وبدأ مساره في سلسلة الاعتماد. ستصلك التحديثات تلقائياً.`,
+  proc_started:     `بدأ فريق المشتريات العمل فعلياً على طلبك «${title}»: جارٍ التواصل مع الموردين وجمع عروض الأسعار. ستصلك التحديثات في كل خطوة.`,
+  quotes_collected: `اكتمل جمع عروض الأسعار لطلبك «${title}»، وهو الآن في مرحلة المقارنة والترسية تمهيداً لإصدار أمر الشراء.`,
+  question:         `لدى فريق المشتريات استفسار بخصوص طلبك «${title}». الردّ عليه من داخل النظام يُسرّع التنفيذ ويبقى محفوظاً على الطلب.`,
+  answer:           `وصل ردّ من مُقدّم الطلب «${title}» على استفسارك. راجعه لمتابعة التنفيذ.`,
 });
 
 function emailShell(inner, heroEvent) {
@@ -383,6 +394,34 @@ export async function notifyProcurement(env, base, pr, origin) {
   if (!toList.length) return { skipped: true, reason: 'no_procurement' };
   const html = buildProcurementEmail(pr, origin);
   return sendResend(env, toList, `طلب معتمد جاهز للمشتريات — طلب ${pr.id} | مجموعة الذيابي`, html);
+}
+
+/**
+ * إشعار فريق المشتريات على طلب بعينه (رَدُّ الطالب على استفسار مثلاً).
+ * المستلِمون يُحسبون على الخادم: مَن يعمل على الطلب فعلاً إن وُجد، وإلا
+ * أصحاب صلاحية المشتريات — ولا يُقبَل أي عنوان من العميل.
+ */
+export async function notifyProcurementEvent(env, base, pr, event, origin, comment) {
+  let recips = [];
+  // الأولوية لمن بدأ العمل عليه فعلاً — هو صاحب السياق.
+  const owner = pr.proc_started_by || pr.quotes_collected_by || '';
+  if (owner && owner !== pr.requester) {
+    const e = await userEmail(env, base, owner);
+    if (e) recips.push(e);
+  }
+  if (!recips.length) {
+    try {
+      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
+      const users = await ur.json();
+      let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+      if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
+      recips = pick.filter((u) => u.username !== pr.requester)
+        .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));
+    } catch (_) {}
+  }
+  const toList = [...new Set(recips.filter(Boolean))];
+  if (!toList.length) return { skipped: true, reason: 'no_procurement' };
+  return sendResend(env, toList, subjectFor(event, pr), buildResultEmail(event, pr, origin, comment));
 }
 
 // ملاحظة: تنفيذ قرار البريد انتقل بالكامل إلى دالة قاعدة البيانات pr_transition_email
