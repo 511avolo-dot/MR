@@ -53,13 +53,40 @@ CREATE TABLE IF NOT EXISTS proc_purchase_orders (
 CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT);
 CREATE TABLE IF NOT EXISTS proc_suppliers(id TEXT PRIMARY KEY, name TEXT, phone TEXT, iban TEXT);
 CREATE TABLE IF NOT EXISTS proc_history  (num BIGINT PRIMARY KEY, code TEXT, supplier TEXT, price NUMERIC, date TEXT, reference TEXT);
+-- ⚠️ أعمدة معالجة المشتريات بأنواع الإنتاج نفسها (db/pr-portal.sql §11):
+--    proc_status TEXT · *_by TEXT · *_at TIMESTAMPTZ. كعبٌ لا يطابقها ليس اختباراً.
+-- ⚠️ **مطابق لمخطّط الإنتاج عموداً بعمود** (information_schema على
+--    yofcaxvstjcrmbgciwym). عمودٌ ناقص هنا يُخفي عيباً حقيقيّاً: غياب
+--    `po_number` أخفى ربط الطلب بأمر الشراء حتى أوّل تشغيل. (وسبقه
+--    `actual_delivery date` في جدول الأوامر.) كعبٌ لا يطابق الإنتاج ليس اختباراً.
 CREATE TABLE IF NOT EXISTS proc_purchase_requests (
-  id TEXT PRIMARY KEY, title TEXT, department_id TEXT, sector TEXT, project TEXT,
-  requester TEXT, status TEXT DEFAULT 'draft', current_seq INT DEFAULT 0,
-  est_total NUMERIC DEFAULT 0, created_at TIMESTAMPTZ DEFAULT now()
+  id TEXT PRIMARY KEY, request_no TEXT, title TEXT, addressee TEXT,
+  department_id TEXT, department TEXT, sector TEXT, project TEXT, requester TEXT,
+  request_date DATE, needed_by DATE, period_from DATE, period_to DATE,
+  priority TEXT, justification TEXT, est_total NUMERIC DEFAULT 0,
+  total_in_words TEXT, currency TEXT, status TEXT DEFAULT 'draft',
+  current_seq INT DEFAULT 0, approval_rule_id BIGINT, source JSONB,
+  rfq_id TEXT, po_number TEXT,
+  created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
+  updated_by TEXT, updated_at TIMESTAMPTZ,
+  requester_name TEXT, requester_mobile TEXT,
+  stage_due_at TIMESTAMPTZ, escalations INT, escalated_at TIMESTAMPTZ,
+  last_escalation_at TIMESTAMPTZ,
+  proc_status TEXT, proc_started_by TEXT, proc_started_at TIMESTAMPTZ,
+  quotes_collected_by TEXT, quotes_collected_at TIMESTAMPTZ
 );
-CREATE TABLE IF NOT EXISTS proc_pr_items     (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, name TEXT, qty NUMERIC, price NUMERIC);
+-- ⚠️ **مطابق لمخطّط الإنتاج عموداً بعمود** (مُتحقَّق على yofcaxvstjcrmbgciwym).
+--    كان هيكلاً متخيَّلاً (name/qty/price) لا يوجد منه عمود واحد في الإنتاج —
+--    فأي تأكيد يلمس بنود الطلب كان يختبر جدولاً غير موجود. كعبٌ لا يطابق
+--    الإنتاج ليس اختباراً (ثالث مرّة في هذا المشروع).
+CREATE TABLE IF NOT EXISTS proc_pr_items (
+  id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, item_code TEXT, description TEXT,
+  unit TEXT, contract_qty NUMERIC, stock_balance NUMERIC, requested_qty NUMERIC,
+  unit_price NUMERIC, line_total NUMERIC, category TEXT, notes TEXT
+);
 CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);
+CREATE TABLE IF NOT EXISTS proc_approval_rules (id BIGSERIAL PRIMARY KEY, priority INT, department_id TEXT, category TEXT, min_total NUMERIC, max_total NUMERIC, stages JSONB, active BOOLEAN DEFAULT true);
+CREATE TABLE IF NOT EXISTS proc_settings (key TEXT PRIMARY KEY, value JSONB);
 CREATE TABLE IF NOT EXISTS proc_audit_log (
   id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), username TEXT NOT NULL,
   display_name TEXT, user_role TEXT, action TEXT NOT NULL, entity_type TEXT,
@@ -137,3 +164,15 @@ BEGIN
   END LOOP;
 END $$;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- ⚠️ قاعدة اعتماد **نشطة** كواقع الإنتاج قبل التصحيح: بدونها يصير تأكيد
+-- «سلسلة الاعتماد مُطفأة» فراغيّاً (العدّ صفر بالإطفاء وبدونه معاً).
+INSERT INTO proc_approval_rules (priority, min_total, stages, active)
+VALUES (10, 0, '[{"seq":1,"label":"مدير القسم","resolver":"dept_manager"}]'::jsonb, true);
+
+-- ⚠️ **الامتيازات الافتراضية لـSupabase — بلا محاكاتها لا يكون هذا اختباراً.**
+-- Supabase تضبط `ALTER DEFAULT PRIVILEGES` على `public` تمنح ALL لـanon و
+-- authenticated على **كل جدول جديد**. قاعدة محلّية عارية لا تفعل ذلك، فهجرةٌ
+-- تنسى `REVOKE` تمرّ محلّياً وتصل الإنتاج بقفل امتياز ناقص (وقع فعلاً في
+-- `proc_pr_messages`). محاكاتها هنا تجعل الحزمة تمسك ذلك.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;

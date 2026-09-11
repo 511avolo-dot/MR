@@ -20,7 +20,7 @@
  *     فلا يمكن انتحال بريد "قبول" لطلب قيد المراجعة.
  */
 
-import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, fromAddress, replyTo, htmlToText, publicOrigin } from './_pr-shared.js';
+import { loadPR as prLoadPR, loadApprovals as prLoadApprovals, notifyPending as prNotifyPending, notifyResult as prNotifyResult, notifyProcurement as prNotifyProcurement, notifyProcurementEvent as prNotifyProcEvent, fromAddress, replyTo, htmlToText, publicOrigin } from './_pr-shared.js';
 
 const EVENTS = new Set(['received', 'approved', 'rejected', 'needs_revision']);
 
@@ -138,7 +138,11 @@ export async function onRequestPost({ request, env }) {
     if (!vsPr.ok) return json({ error: 'غير مصرّح', detail: vsPr.reason }, 403);
     const prId = String(payload.pr_id || '').trim();
     const ev = String(payload.event || '').trim();
-    if (!prId || !['pending', 'approved', 'rejected', 'returned', 'submitted'].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
+    // ⚠️ الأحداث الموجَّهة للطالب وتلك الموجَّهة للمشتريات مفصولة عمداً:
+    // اتجاه البريد يُحدَّد على الخادم من نوع الحدث، لا من العميل.
+    const TO_REQUESTER  = ['pending', 'approved', 'rejected', 'returned', 'submitted', 'proc_started', 'quotes_collected', 'po_issued', 'question'];
+    const TO_PROCUREMENT = ['answer'];
+    if (!prId || ![...TO_REQUESTER, ...TO_PROCUREMENT].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
     const pr = await prLoadPR(env, base, prId);
     if (!pr) return json({ error: 'الطلب غير موجود' }, 404);
     let origin = ''; try { origin = new URL(request.headers.get('origin') || request.headers.get('referer')).origin; } catch (_) {} origin = publicOrigin(env, origin);
@@ -157,8 +161,11 @@ export async function onRequestPost({ request, env }) {
         res = aerr
           ? { error: true, detail: (r1 && r1.detail) || (r2 && r2.detail) || '' }
           : { ok: true, sent: ((r1 && r1.sent) || 0) + ((r2 && r2.sent) || 0) };
+      } else if (TO_PROCUREMENT.includes(ev)) {
+        // ردّ الطالب يعود لمن يعمل على الطلب فعلاً (أو لفريق المشتريات).
+        res = await prNotifyProcEvent(env, base, pr, ev, origin, comment);
       } else {
-        // بريد نتيجة لمُقدّم الطلب (رُفض/أُعيد/استُلم).
+        // بريد لمُقدّم الطلب (رُفض/أُعيد/استُلم/بدأ العمل/جُمعت العروض/استفسار).
         res = await prNotifyResult(env, base, pr, ev, origin, comment);
       }
       if (res && res.error) return json({ error: 'تعذّر إرسال البريد', detail: res.detail || '' }, 502);

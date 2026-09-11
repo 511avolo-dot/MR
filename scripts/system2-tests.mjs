@@ -2257,13 +2257,15 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   // ⚠️ كشفه المتصفّح لا الفحص النصّيّ: القاعدة الثابتة لإخفاء «طلبات الشراء»
   // تحمل !important، فـ`style.display='flex'` السطريّ لا يغلبها والمدخل يبقى
   // مخفيّاً عن الموظّف الذي هي مسار طلباته. العلاج قاعدة مضادّة بنفس القوّة.
-  T('مدخل الطلبات يُرفع للمُنطَّق بقاعدة CSS مضادّة لا بـstyle سطريّ',
-    /body\.role-scoped \.nav-item\[data-page="pr"\]\{\s*display:flex !important/.test(HTML)
+  T('مدخل الطلبات يُرفع للمُنطَّق وللمشتريات بقاعدة CSS مضادّة لا بـstyle سطريّ',
+    /body\.role-scoped \.nav-item\[data-page="pr"\],[\s\S]{0,400}body\.pr-visible \.nav-item\[data-page="pr"\]\{\s*display:flex !important/.test(HTML)
     && !/\.nav-item\[data-page="pr"\]'\)\.forEach\(el => \{\s*el\.style\.display/.test(CODE));
 
-  T('الشريط السفليّ يحمل وجهتَي الموظّف (يعمل من هاتفه)',
+  // ⚠️ «شاشتان فقط» أمرٌ صريح من المالك: زرّ ثالث في الشريط السفليّ يعيد
+  // فتح باب أغلقه القرار. التأكيد يمنع عودته.
+  T('الشريط السفليّ يحمل وجهة الطلبات ولا يحمل وجهة ثالثة للمُنطَّق',
     /data-mpage="pr" data-scoped-only/.test(HTML)
-    && /data-mpage="reports" data-scoped-only/.test(HTML)
+    && !/data-mpage="reports" data-scoped-only/.test(HTML)
     && /body\.role-scoped \.mnav-item\[data-scoped-only\]\{\s*display:flex/.test(HTML));
 
   T('السقوط المحلّي لا يصكّ حساباً مُنطَّقاً أبداً',
@@ -2324,11 +2326,13 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('normScopeSectors'), grab('myScopeSectors'), grab('isScopedUser'), grab('canViewAmounts'),
       grab('effectivePerm'),
       grabConst('SCOPED_PAGES'), grab('pageAllowed'),
+      grab('prPermStrict'), grabConst('PR_TEAM_KEYS'), grab('prCanSeeAll'), grab('prIsProcurement'),
       grabConst('fmtPriceRaw'), grabConst('fmtPrice'),
       grab('tafqitSAR'), grab('tafqitSARRaw'),
     ].join('\n\n');
     return new Function(src + `; return {STATE, hasPermission, effectivePerm, normScopeSectors,
-      isScopedUser, canViewAmounts, pageAllowed, fmtPrice, tafqitSAR, DEFAULT_PERMISSIONS};`)();
+      isScopedUser, canViewAmounts, pageAllowed, fmtPrice, tafqitSAR, DEFAULT_PERMISSIONS,
+      prPermStrict, prCanSeeAll, prIsProcurement};`)();
   })();
 
   const asUser = (perms, scope, role) => {
@@ -2347,10 +2351,16 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   asUser({}, ['الصيانة والتشغيل']);
   T('بقطاع = مُنطَّق', P.isScopedUser() === true);
 
-  T('الوجهات المسموحة للمُنطَّق أربع فقط',
-    ['dashboard','purchase-orders','pr','reports'].every(p => P.pageAllowed(p))
-    && !['items','suppliers','history','entry','pricing','analytics','ai','registrations']
-         .some(p => P.pageAllowed(p)));
+  // ⚠️ أمر المالك الصريح: «شاشة أوامر الشراء التي تخصّه وشاشة رفع الطلبات
+  // ومتابعتها — باقي النظام ما يخصّه أبداً». حتى لوحة التحكم والتقارير
+  // خارج نطاقه (تقرير المتابعة يُطبع من داخل شاشة الأوامر).
+  T('الوجهات المسموحة للمُنطَّق شاشتان فقط',
+    ['purchase-orders','pr'].every(p => P.pageAllowed(p))
+    && !['dashboard','reports','items','suppliers','history','entry','pricing',
+         'analytics','ai','registrations'].some(p => P.pageAllowed(p)));
+  T('مهبط الموظّف شاشة أوامره لا لوحة التحكم',
+    /const SCOPED_HOME\s*=\s*'purchase-orders'/.test(CODE)
+    && /if\(isScopedUser\(\)\)\{\s*try\{\s*navigate\(SCOPED_HOME\)/.test(CODE));
   asUser({}, []);
   T('غير المُنطَّق يصل كل وجهة (صفر انحدار)',
     ['items','suppliers','analytics','ai','registrations'].every(p => P.pageAllowed(p)));
@@ -2372,6 +2382,464 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     P.fmtPrice(1500) === '1,500');
   asUser({}, [], 'admin');
   T('المدير يرى المبالغ دائماً', P.canViewAmounts() === true && P.fmtPrice(12) === '12');
+
+  /* ⚠️ عيب حقيقيّ كشفه المتصفّح لا الفحص النصّيّ: `can_manage_rfq` افتراضه
+     **true** (مفتاح موظّفي المكتب)، فصفّ موظّف صيانة لا يذكره كان يُقرأ «من
+     المشتريات» — تبويب الوارد وأزرار «بدأت العمل عليه» وقائمةُ طلبات زملائه
+     بدل طلباته. الخادم كان يرفض الفعل (`pr_has_perm` افتراضه false) فالأثر
+     واجهة وسعة قائمة؛ والعلاج: للمُنطَّق المنح صريح أو لا شيء. */
+  asUser({ can_receive_po:true, can_view_amounts:false }, ['الصيانة والتشغيل']);
+  T('المفتاح الغائب لا يجعل الموظّف الميدانيّ «مشتريات»',
+    P.prIsProcurement() === false && P.prCanSeeAll() === false
+    && P.hasPermission('can_manage_rfq') === true);
+  asUser({ can_manage_rfq:true }, ['الصيانة والتشغيل']);
+  T('والمنح الصريح يعمل (لا قاعدة مثبَّتة)', P.prIsProcurement() === true);
+  asUser({ can_approve_l1:true }, ['الصيانة والتشغيل']);
+  T('ومعتمِد قطاعٍ مُنطَّق يبقى يرى طلبات قطاعه',
+    P.prCanSeeAll() === true && P.prIsProcurement() === false);
+  // عدم انحدار: موظّف المكتب بلا مفتاح صريح يبقى «مشتريات» كما اليوم حرفيّاً
+  asUser({ can_create_po:true, can_edit_po:true }, []);
+  T('وموظّف المكتب غير المُنطَّق يبقى «مشتريات» (صفر انحدار)',
+    P.prIsProcurement() === true && P.prCanSeeAll() === true);
+}
+
+/* ── ٣١) دورة الطلب: مسار الطالب · الاستفهام · القوالب · مراحل المشتريات ──
+   طلب المالك: «يظهر لهم حالة الطلب، من استلمه ومن بدأ في تسعيره وكم له يوم
+   منذ أن بدأ العمل به، ويمكن للمشتريات إرجاعه للتعديل أو الاستفهام من خلال
+   النظام، وحفظ الطلبات الشهرية المتكررة بكمّياتها ومسمّياتها».
+   الحدّ الحوكميّ في `db/system2-request-flow.sql`؛ وهذه تحرس طبقة الواجهة
+   **سلوكيّاً** (تُشغّل الدوال فعلاً) لا نصّيّاً. */
+{
+  G('٣١) دورة الطلب: المسار والاستفهام والقوالب');
+
+  const FLOW      = fs.readFileSync(path.join(ROOT, 'db/system2-request-flow.sql'), 'utf8');
+  const NOTIFY    = fs.readFileSync(path.join(ROOT, 'functions/api/notify.js'), 'utf8');
+  const PR_SHARED = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+
+  // ── بنيويّ: مراحل المشتريات صارت محكومة ──
+  T('مراحل المشتريات تمرّ بـRPC لا بـUPDATE مباشر',
+    /rpc\('pr_proc_stage', \{p_pr_id:id, p_stage:stage\}\)/.test(CODE)
+    && /async function prStart\(id\)\{ return prProcStage\(id,'in_progress'\); \}/.test(CODE)
+    && /async function prQuotesDone\(id\)\{ return prProcStage\(id,'quotes_collected'\); \}/.test(CODE));
+
+  /* ⚠️ السقوط للمسار القديم مشروط **حصراً** بغياب الدالّة من القاعدة (أي أنّ
+     الحارس غير موجود بعد)، فلا يصلح بوّابةً خلفيّة حول حارس قائم. أي كتابة
+     مباشرة لـproc_status خارج هذا الفرع = تجاوز. */
+  const directStage = (CODE.match(/proc_status:'(in_progress|quotes_collected)'/g) || []).length;
+  T('الكتابة المباشرة للمرحلة محصورة في فرع «الدالّة غير موجودة»',
+    /if\(!prFnMissing\(error\)\) throw error;[\s\S]{0,700}from\('proc_purchase_requests'\)[\s\S]{0,200}\.update\(/.test(CODE)
+    && directStage === 2, 'كتابات مباشرة = ' + directStage);
+  T('كشف غياب الدالّة يغطّي رمز PostgREST ورمز Postgres معاً',
+    /PGRST202\|42883/.test(CODE));
+
+  // ── بنيويّ: قناة إشعار واحدة، والاتجاه يُحسَب على الخادم ──
+  const notifyCalls = (CODE.match(/fetch\('\/api\/notify'/g) || []).length;
+  T('قناة إشعار واحدة للطلبات (لا ترويسة/جسم مكرّران)',
+    /async function prNotifyPR\(prId, event, comment\)/.test(CODE)
+    && /prNotifyPR\(pr\.id, 'submitted'\)/.test(CODE)
+    && /prNotifyPR\(id, META\.ev\)/.test(CODE)
+    && /prNotifyPR\(prId, kind, txt\)/.test(CODE));
+  T('العميل لا يمرّر وجهة البريد (يُحسَب من نوع الحدث على الخادم)',
+    !/body\.to\s*=|recipient:/.test(CODE.slice(CODE.indexOf('async function prNotifyPR'),
+                                               CODE.indexOf('async function prNotifyPR') + 700))
+    && /const TO_REQUESTER\s+= \[/.test(NOTIFY) && /const TO_PROCUREMENT\s+= \[/.test(NOTIFY));
+  T('أحداث المشتريات والاستفهام معرَّفة في قوالب البريد',
+    ['proc_started','quotes_collected','question','answer']
+      .every(e => PR_SHARED.includes(`${e}:`)));
+
+  // ── بنيويّ: الجدولان الاختياريّان يُجلبان بتسامح ──
+  T('المحادثة والقوالب تُجلبان بتسامح (الواجهة تعمل قبل الترقية)',
+    /window\.__prMsgOK = false/.test(CODE) && /window\.__prTplOK = false/.test(CODE)
+    && /p\.messages\s*=\s*\(msByPr\[p\.id\]\|\|\[\]\)\.sort\(\(a,b\)=>\(a\.id\|\|0\)-\(b\.id\|\|0\)\)/.test(CODE)
+    && /STATE\.prTemplates = \(tpls\|\|\[\]\)/.test(CODE));
+
+  // ── بنيويّ: الحوكمة في القاعدة ──
+  T('SQL: المعالجة تتطلّب صلاحية مشتريات وطلباً معتمَداً',
+    /pr_has_perm\('can_manage_rfq'\) OR pr_is_admin\(\)/.test(FLOW)
+    && /v_pr\.status <> 'approved'/.test(FLOW));
+  T('SQL: تقدّم للأمام فقط (لا يُمحى أثر من عمل على الطلب)',
+    /انتقال غير مسموح/.test(FLOW) && /v_cur = 'completed'/.test(FLOW));
+  T('SQL: الاستفهام لا يُغيّر حالة الطلب ولا يمسّ سلسلة الاعتماد',
+    !/UPDATE proc_purchase_requests/.test(
+      FLOW.slice(FLOW.indexOf('FUNCTION pr_post_message'), FLOW.indexOf('FUNCTION pr_proc_stage'))));
+  T('SQL: لا سياسة INSERT على المحادثة (لا انتحال مؤلِّف)',
+    /لا سياسة INSERT\/UPDATE\/DELETE/.test(FLOW)
+    && !/CREATE POLICY "prmsg_insert"/.test(FLOW));
+  T('SQL: الاستفهام مقيَّد برؤية الطلب وبطول محدود',
+    /NOT proc_can_see_pr\(p_pr_id\)/.test(FLOW) && /length\(v_txt\) > 4000/.test(FLOW));
+  T('SQL: القوالب يكتبها صاحبها ويراها قطاعه',
+    /lower\(owner\) = lower\(proc_me\(\)\)/.test(FLOW)
+    && /sector = ANY\(proc_scope_sectors\(\)\)/.test(FLOW));
+  T('SQL: تنفيذ الدالّتين مسحوب من anon',
+    /REVOKE ALL ON FUNCTION pr_post_message[\s\S]{0,120}FROM PUBLIC, anon/.test(FLOW)
+    && /REVOKE ALL ON FUNCTION pr_proc_stage[\s\S]{0,120}FROM PUBLIC, anon/.test(FLOW));
+
+  /* ⚠️ كشفهما المتصفّح: تبويب «الوارد للمشتريات» كان يظهر للموظّف الميدانيّ
+     بعدّاد (شاشة مقفلة عليه = ضجيج يوهمه بعملٍ ينتظره)، وسطر الإجمالي كان
+     يعرض «— ر.س» = وحدة عملة بلا رقم. */
+  /* ⚠️ «متابعة وليس وورك فلو» (قرار المالك 2026-09-10): لا تبويب اعتماد ولا
+     شاشة أقسام إطلاقاً — وجودها يعيد فتح باب أغلقه القرار. */
+  T('لا تبويب اعتماد ولا شاشة أقسام في شاشة الطلبات',
+    /\$\{isProc \? prTab\('incoming'/.test(CODE)
+    && !/prTab\('inbox'/.test(CODE) && !/prTab\('depts'/.test(CODE)
+    && /if\(view==='inbox' \|\| view==='depts'\) view = 'list';/.test(CODE));
+  /* ⚠️ عيبٌ وقع فعلاً وأمسكه المتصفّح وحده: بقي `const showInbox = inboxN > 0`
+     بعد حذف `inboxN` ⇒ ReferenceError يُفرِغ شاشة الطلبات كاملةً، و`node --check`
+     لا يراه (خطأ تنفيذ لا صياغة). الحارس: لا مرجع لمتغيّرات الاعتماد المحذوفة. */
+  /* ⚠️ إنذار كاذب: اللافتة كانت تقول إن الطلب سيقف بلا معتمِد ما لم تُضبَط
+     الأقسام — وهو صحيح للوورك فلو وباطل للمتابعة. أمسكها المتصفّح. */
+  T('لا لافتة «اضبط الأقسام ومدراءها» في نموذج الطلب',
+    !/لم تُضبَط الأقسام ومدراؤها/.test(CODE)
+    // اللافتة الوحيدة في رأس النموذج صارت لافتة «تُكمل مسودّة» لا إنذار اعتماد.
+    && /const _deptWarn = __prEditId/.test(CODE)
+    && /تُكمل الآن المسودّة/.test(CODE));
+  T('لا مرجع متبقٍّ لمتغيّرات الاعتماد المحذوفة',
+    !/\binboxN\b/.test(CODE) && !/\bshowInbox\b/.test(CODE) && !/\binboxLabel\b/.test(CODE));
+  T('ولا لوحة قرار اعتماد في شاشة المتابعة',
+    // لا قرار اعتماد إطلاقاً — واللوحة الوحيدة هناك هي إكمال المسودّة.
+    !/prAct\s*\(/.test(CODE) && !/prActPrompt/.test(CODE)
+    && /const actionPanel = \(pr\.status==='draft'\)/.test(CODE)
+    && /prEditDraft\('\$\{escapeAttr\(pr\.id\)\}'\)/.test(CODE));
+  T('وحدة العملة تختفي مع الرقم المحجوب (لا «— ر.س»)',
+    /\$\{fmtPrice\(pr\.est_total\)\}\$\{canViewAmounts\(\)\?' ر\.س':''\}/.test(CODE));
+
+  // ── سلوكيّ: صندوق يُشغّل دوال العرض الحقيقية ──
+  const R = (() => {
+    const src = [
+      `const STATE = { currentUser:null, prTemplates:[], purchaseRequests:[] };`,
+      `const window = { __prTplOK:true };`,
+      `let __perms = {}; let __proc = false;`,
+      `function hasPermission(k){ return __perms[k] === true; }`,
+      grab('escapeHtml'), grab('escapeAttr'), grab('poDays'),
+      grab('prDaysSince'), grab('prSinceText'), grab('prIsLive'),
+      `function prIsProcurement(){ return __proc; }`,
+      grab('prJourneyHTML'), grab('prThreadHTML'), grab('prTemplatesHTML'),
+    ].join('\n\n');
+    return new Function(src + `; return {STATE, window, prDaysSince, prSinceText,
+      prJourneyHTML, prThreadHTML, prTemplatesHTML,
+      setUser:(u,proc)=>{ STATE.currentUser=u; __proc=!!proc; }};`)();
+  })();
+
+  const daysAgo = n => new Date(Date.now() - n*86400000).toISOString();
+
+  T('عمر الطلب بالأيام يُحسب من الطابع الزمنيّ',
+    R.prDaysSince(daysAgo(5)) === 5 && R.prDaysSince(null) === null
+    && R.prDaysSince('ليس تاريخاً') === null && R.prSinceText(daysAgo(0)) === 'اليوم');
+
+  // المطلب الحرفيّ: «من بدأ في تسعيره وكم له يوم منذ أن بدأ العمل به»
+  const jr = R.prJourneyHTML({ id:'PR-1', status:'approved', proc_status:'in_progress',
+    created_at: daysAgo(9), proc_started_by:'ahmad', proc_started_at: daysAgo(3) });
+  T('مسار الطالب يسمّي من بدأ العمل ويُبرز عمره بالأيام',
+    jr.includes('ahmad') && jr.includes('منذ بدء العمل عليه') && jr.includes('3 أيام'));
+  T('وقبل بدء العمل يُحسب العمر من إرسال الطلب لا صفراً مضلّلاً',
+    (() => { const h = R.prJourneyHTML({ id:'PR-2', status:'approved', proc_status:'received',
+               created_at: daysAgo(4) });
+             return h.includes('منذ إرسال الطلب') && h.includes('4 أيام'); })());
+  /* ⚠️ المسار صار **متابعة**: لا مرحلة «سلسلة اعتماد» ولا «بانتظار مَن يعتمد».
+     خلاصته «صدر أمر الشراء رقم …» — وهو ما طلبه المالك حرفيّاً. */
+  T('مسار الطالب بلا أي مرحلة اعتماد',
+    (() => { const h = R.prJourneyHTML({ id:'PR-3', status:'submitted', proc_status:'received',
+               created_at: daysAgo(1) });
+             return !h.includes('سلسلة الاعتماد') && !h.includes('بانتظار:')
+                    && h.includes('أُرسل الطلب للمشتريات') && h.includes('وصل المشتريات'); })());
+  T('وخلاصته «صدر أمر الشراء رقم …» قابلاً للنقر',
+    (() => { const h = R.prJourneyHTML({ id:'PR-4', status:'submitted', proc_status:'po_issued',
+               created_at: daysAgo(2), po_number:'P.O-DG26-3210' });
+             return h.includes('P.O-DG26-3210') && h.includes('prOpenLinkedPO')
+                    && h.includes('صدر لهذا الطلب'); })());
+  T('والمسودّة لا تُعرَض كأنها وصلت المشتريات',
+    (() => { const h = R.prJourneyHTML({ id:'PR-5', status:'draft', created_at: daysAgo(1) });
+             return !h.includes('صدر لهذا الطلب'); })());
+
+  // الاستفهام: المشتريات تسأل، والطالب يجيب — بلا تغيير حالة
+  const pr = { id:'PR-9', requester:'field1', messages:[
+    {id:1, kind:'question', body:'هل الكمية 10 أم 100؟', author:'proc1', author_name:'أحمد', created_at:'2026-09-01T08:00:00Z'},
+    {id:2, kind:'answer',   body:'100', author:'field1', author_name:'سالم', created_at:'2026-09-01T09:00:00Z'}]};
+  R.setUser({username:'proc1', role:'user'}, true);
+  const th1 = R.prThreadHTML(pr);
+  T('المشتريات ترى صندوق استفهام والحوار كاملاً',
+    th1.includes("prPostMessage('PR-9','question')")
+    && th1.includes('هل الكمية 10 أم 100؟') && th1.includes('أحمد'));
+  R.setUser({username:'field1', role:'user'}, false);
+  T('والطالب يرى صندوق الردّ لا الاستفهام',
+    R.prThreadHTML(pr).includes("prPostMessage('PR-9','answer')")
+    && !R.prThreadHTML(pr).includes("'question')"));
+  R.setUser({username:'other', role:'user'}, false);
+  T('وغريبٌ بلا رسائل لا يرى اللوحة أصلاً',
+    R.prThreadHTML({ id:'PR-8', requester:'field1', messages:[] }) === '');
+
+  // القوالب
+  R.setUser({username:'field1', role:'user'}, false);
+  R.STATE.prTemplates = [
+    { id:'TPL-A', name:'مستلزمات برج الشمال الشهرية', owner:'field1', sector:'الصيانة والتشغيل',
+      project:'برج الشمال', items:[{description:'فلتر',requested_qty:10},{description:'زيت',requested_qty:4}],
+      use_count:3, last_used_at:'2026-08-01' },
+    { id:'TPL-B', name:'قالب زميل', owner:'field2', sector:'الصيانة والتشغيل', items:[{description:'كرتون'}] },
+  ];
+  const tpl = R.prTemplatesHTML();
+  T('لوحة القوالب تعرض الاسم وعدد البنود وزرّ الإنشاء',
+    tpl.includes('مستلزمات برج الشمال الشهرية') && tpl.includes("prUseTemplate('TPL-A')")
+    && tpl.includes('>2<') && tpl.includes('استُخدم 3 مرّة'));
+  T('وحذف القالب لصاحبه وحده',
+    tpl.includes("prDeleteTemplate('TPL-A')") && !tpl.includes("prDeleteTemplate('TPL-B')"));
+  R.STATE.prTemplates = [];
+  T('وبلا قوالب ترشد لصنع أوّل قالب لا تترك فراغاً',
+    R.prTemplatesHTML().includes('حفظ كقالب متكرّر'));
+  R.window.__prTplOK = false;
+  T('وقبل تطبيق الترقية تقول ذلك صراحةً (لا فشل صامت)',
+    R.prTemplatesHTML().includes('system2-request-flow.sql'));
+  R.window.__prTplOK = true;
+
+  // ⚠️ القالب بيانات لا التزام: استدعاؤه يملأ نموذجاً يمرّ بالسلسلة كاملةً.
+  T('القالب لا يختصر أي اعتماد (يملأ نموذج طلب جديد فقط)',
+    /async function prUseTemplate\(id\)\{[\s\S]{0,900}STATE\.prView = 'create'/.test(CODE)
+    && !/prUseTemplate[\s\S]{0,900}prBuildChain/.test(CODE));
+  /* ⚠️ قطاع القالب لا يُفرَض إن كان خارج نطاق الموظّف — وإلّا ضاع الطلب بين
+     قطاعين: لا هو يراه ولا مدير قطاعه. */
+  T('قطاع القالب يُقبل فقط إن كان خياراً متاحاً للموظّف',
+    /\[\.\.\.sc\.options\]\.some\(o=>o\.value===t\.sector\)/.test(CODE));
+}
+
+/* ── ٣٢) متابعة لا وورك فلو — سند موقَّع + ربط أمر الشراء ─────────
+   تصحيح نموذج بقرار المالك: «نظام بسيط وليس وورك فلو… ما في مواضيع اعتمادات
+   وقصص طويلة، إلا إذا مكنتهم من رفع الطلب PDF موقع من المدير… ورفعنا أمر
+   الشراء يظهر لهم ونقدر نربط الأمر بالطلب… وخلاص متابعة.» */
+{
+  G('٣٢) متابعة لا وورك فلو: السند والربط');
+
+  const TRACK  = fs.readFileSync(path.join(ROOT, 'db/system2-request-tracking.sql'), 'utf8');
+  const NOTIFY2    = fs.readFileSync(path.join(ROOT, 'functions/api/notify.js'), 'utf8');
+  const PR_SHARED2 = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+  const PRDOC  = fs.readFileSync(path.join(ROOT, 'functions/api/pr-doc.js'), 'utf8');
+
+  // ── لا اعتمادات ──
+  T('الطلب يُرسَل مباشرةً للمشتريات (لا in_review ولا بناء سلسلة)',
+    /currency:'SAR', status:'draft'/.test(CODE)
+    && !/prBuildChain/.test(CODE)
+    && !/status\s*:\s*'in_review'/.test(CODE));
+  T('SQL: سلسلة الاعتماد مُطفأة تعطيلاً لا حذفاً (قابلة للإحياء)',
+    /UPDATE proc_approval_rules SET active = false/.test(TRACK)
+    && !/DROP TABLE[\s\S]{0,60}proc_approval_rules/.test(TRACK));
+
+  // ── السند الموقَّع: إلزاميّ، ودليل لا ادّعاء ──
+  T('لا إرسال بلا سند موقَّع (والمسودّة تُحفظ بدونه)',
+    // `existingDoc` = مسودّة رُفِع سندها سابقاً — لا تُطالَب بإرفاقه مرّتين.
+    /if\(!asDraft && !__prDraftDoc && !existingDoc\)\{[\s\S]{0,220}return;/.test(CODE)
+    && /السند مطلوب/.test(CODE));
+  T('حقل الرفع في النموذج بصيغ مقبولة وحدّ حجم',
+    /id="pr-doc-input"[\s\S]{0,140}accept="application\/pdf,image\/jpeg,image\/png"/.test(CODE)
+    && /PR_DOC_MAX\s*=\s*10 \* 1024 \* 1024/.test(CODE));
+  T('نقطة الرفع تمرّ بحارس الملفات الطبقيّ نفسه',
+    /import \{ inspectUpload, fileResponseHeaders, MAX_UPLOAD_BYTES \} from '\.\/_file-guard\.js'/.test(PRDOC)
+    && /const check = inspectUpload\(buf\)/.test(PRDOC));
+  /* ⚠️ المفتاح يُولَّد خادميّاً من التوقيع السحريّ لا من اسم الملف ولا من
+     Content-Type الذي أرسله العميل — وإلّا رُفِع تحت مجلّد طلب آخر. */
+  T('المفتاح خادميّ والامتداد من التوقيع لا من اسم الملف',
+    /const key = `\$\{PREFIX\}\$\{prId\}\/\$\{crypto\.randomUUID\(\)\}\.\$\{check\.ext\}`/.test(PRDOC)
+    && /contentType: check\.ct/.test(PRDOC));
+  T('الرؤية تُفحص بهوية المتصل (RLS هي الحكم) وتفشل مغلقةً',
+    /rpc\/proc_can_see_pr/.test(PRDOC)
+    && /return \(await r\.json\(\)\) === true;/.test(PRDOC)
+    && /catch \(_\) \{ return false; \}/.test(PRDOC));
+  /* ⚠️ الفحص على **الوصول الفعليّ** لا على ذِكر الاسم: التعليق يشرح العزل
+     ويسمّي حاوية البوابة، وحظر النصّ كان سيمنع توثيق القاعدة نفسها. */
+  T('ولا يلمس حاوية البوابة (النظام 3 معزول)',
+    !/env\s*(?:\.\s*QUOTES_BUCKET|\[\s*['"`]QUOTES_BUCKET)/.test(PRDOC)
+    && /env\.SUPPLIER_DOCS/.test(PRDOC));
+  T('SQL: مفتاح السند مقيَّد بمجال الطلب نفسه',
+    /p_key NOT LIKE \('docs\/pr\/' \|\| p_pr_id \|\| '\/%'\)/.test(TRACK));
+
+  // ── ربط أمر الشراء: جوهر المتابعة ──
+  T('SQL: لا ربط برقم أمر غير موجود',
+    /NOT EXISTS \(SELECT 1 FROM proc_purchase_orders WHERE po_number = v_po\)/.test(TRACK));
+  T('SQL: الربط صلاحية مشتريات ويترك أثر تدقيق',
+    /ربط أمر الشراء يتطلّب صلاحية المشتريات/.test(TRACK)
+    && /'pr_link_po'/.test(TRACK) && /'pr_unlink_po'/.test(TRACK));
+  T('SQL: «صدر أمر الشراء» لا تُدَّعى بزرّ بل يثبتها الربط',
+    /p_stage = 'po_issued' AND coalesce\(v_pr\.po_number,''\) = ''/.test(TRACK));
+  /* ⚠️ اختيار من قائمة لا كتابة حرّة: رقمٌ بكتابة مختلفة يكسر الربط بصمت
+     (درس توحيد المشاريع). */
+  T('الواجهة تربط باختيار من قائمة الأوامر القائمة لا بحقل حرّ',
+    /<select class="select" id="pr-po-pick"/.test(CODE)
+    && /rpc\('pr_link_po', \{ p_pr_id: prId, p_po_number: num \}\)/.test(CODE));
+  /* ⚠️ لا يكفي وجود النصّ في الملف: يجب أن **يصل العرض**. أوّل صياغة فحصت
+     التعريف فقط، فحذفُ سطر التركيب مرّ بلا إخفاق — تأكيدٌ فراغيّ. */
+  T('والربط عكسيّ كذلك: درج الأمر يقول عن أي طلب صدر',
+    /const _srcPr = \(STATE\.purchaseRequests\|\|\[\]\)\.find\(r => r && r\.po_number === po\.po_number\)/.test(CODE)
+    && /صادر عن طلب الشراء/.test(CODE)
+    && /const _ageBanner = _ageBanner0 \+ _srcPrHtml;/.test(CODE)
+    && /\$\{_ageBanner\}/.test(CODE));
+  T('وإشعار البريد بصدور الأمر يذهب للطالب',
+    /prNotifyPR\(prId, 'po_issued', num\)/.test(CODE)
+    && /'po_issued'/.test(NOTIFY2) && /po_issued:/.test(PR_SHARED2));
+
+  // ── الوارد للمشتريات = ما لم يصدر له أمر بعد ──
+  T('الوارد يستثني ما صدر له أمر شراء أو أُقفل',
+    /prIsLive\(p\) && !\['po_issued','closed','completed'\]\.includes\(p\.proc_status\|\|''\)/.test(CODE));
+  T('وبطاقة لوحة المهام صارت متابعةً لا اعتماداً',
+    /طلبات شراء لم يصدر لها أمر بعد/.test(CODE)
+    && !/طلبات شراء بانتظار اعتمادك/.test(CODE));
+
+  // ── عرض السند داخل النظام لا في تبويب خارجيّ ──
+  T('السند يُفتح داخل النظام بحقن blob في عارض المستندات',
+    /DOCV\.blobs\.set\(pr\.doc_key, blob\)/.test(CODE)
+    && /docvOpen\(\[\{ path: pr\.doc_key/.test(CODE));
+  T('وسكّ روابط التخزين مقصور على وثائق التسجيل',
+    /filter\(p => p && \/\^\(\?:supplier-docs\\\/\)\?DG-\/\.test\(p\)/.test(CODE));
+}
+
+/* ── ٣٣) رابط دعوة موظفي القطاع ──────────────────────────────────
+   طلب المالك: «رابط لدعوة موظفين ومدير الصيانة والتشغيل للدخول وتسجيل بياناتهم
+   لتوصلهم الإشعارات والمتابعة». وقراراته: رابط واحد للقطاع · بريد الشركة حصراً
+   · الحساب ينتظر التفعيل.
+   ⚠️ سلوك النقطة مُختبَر بـ22 تأكيداً في `db/portal-tests/file-guard.test.mjs`
+   (منها أنّ الحساب يُنشأ موقوفاً والقطاع من الرمز). هنا **ما لا يُمسَك سلوكيّاً**:
+   خصائص زمنية/بنيوية وسلامة الصفحة العامّة. */
+{
+  G('٣٣) رابط دعوة موظفي القطاع');
+
+  const SINV = fs.readFileSync(path.join(ROOT, 'functions/api/staff-invite.js'), 'utf8');
+  const SPAGE = fs.readFileSync(path.join(ROOT, 'staff-register.html'), 'utf8');
+
+  /* ⚠️ خاصيّة **زمنية** لا سلوكية: `===` و`timingSafeEq` يقبلان ويرفضان نفس
+     المدخلات، فلا اختبار وظيفيّ يمسك الفرق — الحارس بنيويّ بالضرورة. */
+  T('توقيع الرمز يُقارَن بمقارنة ثابتة الزمن',
+    /if \(!timingSafeEq\(expect, parts\[1\]\)\) return null;/.test(SINV)
+    && /d \|= x\.charCodeAt\(i\) \^ y\.charCodeAt\(i\)/.test(SINV));
+  T('والرمز يحمل حمولته موقَّعة — لا جدول رموز ولا هجرة له',
+    /crypto\.subtle\.importKey/.test(SINV) && !/proc_invitations/.test(SINV));
+  T('والإبطال بمفتاح epoch في الإعدادات (نقرة تُسقِط كل الروابط)',
+    /key=eq\.staff_invite/.test(SINV) && /action === 'revoke'/.test(SINV));
+  T('ومدّة الصلاحية مسقوفة', /Math\.min\(MAX_DAYS/.test(SINV) && /MAX_DAYS = 60/.test(SINV));
+
+  /* الحقول الحوكمية مفروضة نصّاً في الخادم — لا تُقرأ من جسم الطلب إطلاقاً. */
+  T('الدور والصلاحيات والحالة مفروضة خادميّاً لا من العميل',
+    /role: 'user', permissions: FIELD_PERMISSIONS, active: false,/.test(SINV)
+    && /scope_sectors: \[p\.s\]/.test(SINV)
+    && /FIELD_PERMISSIONS = \{ can_receive_po: true, can_view_amounts: false \}/.test(SINV));
+  T('وسقف الصفوف المعلّقة معرَّف', /MAX_PENDING_PER_SECTOR = \d+/.test(SINV));
+
+  /* الصفحة العامّة: بلا فهرسة وبلا أي مصدر خارجيّ (آمنة CSP كصفحات المورّدين). */
+  T('صفحة التسجيل غير مفهرسة',
+    /<meta name="robots" content="noindex,nofollow">/.test(SPAGE));
+  T('وبلا أي مصدر خارجيّ (آمنة CSP)',
+    !/https?:\/\//.test(SPAGE.replace(/<!--[\s\S]*?-->/g, '')));
+  T('وحقولها 16px فلا يُقرّب iOS الشاشة تلقائياً',
+    /input\{[^}]*font-size:16px/.test(SPAGE));
+  T('وترفع للنقطة الخادمية لا للقاعدة مباشرةً',
+    /fetch\('\/api\/staff-invite/.test(SPAGE) && !/supabase/i.test(SPAGE));
+
+  // الواجهة الإدارية
+  T('زرّ الرابط في لوحة المستخدمين محكوم بصلاحية إدارية',
+    /id="btn-staff-invite"/.test(HTML)
+    && /requirePermission\('can_manage_users','رابط دعوة الموظفين'\)/.test(CODE));
+  T('ويعرض الإبطال بجوار التوليد',
+    /staffInviteMint\(\)/.test(CODE) && /staffInviteRevoke\(\)/.test(CODE));
+  /* ⚠️ النافذة تُلحَق وقت التشغيل ⇒ يجب أن تُوسَم ephemeral وإلّا بقيت في DOM
+     بمعرّف مكرَّر وتسرّب قفل التمرير (سابقة مثبَّتة في هذا الملف). */
+  T('ونافذته المُلحَقة وقت التشغيل تُزال عند الإغلاق',
+    /id='modal-staff-invite'; el\.dataset\.ephemeral='1'/.test(CODE)
+    && /syncScrollLock\(\); a11yWire\(el\);/.test(CODE));
+  /* ⚠️ الخادم يشترط `role==='admin'`؛ بوّابة الواجهة على `can_manage_users`
+     وحدها كانت تُظهر الزرّ لمن سيُرفَض بعد النقر. */
+  T('وبوّابة الزرّ توافق شرط الخادم (أدمن لا مجرّد مفتاح)',
+    /STATE\.currentUser\?\.role !== 'admin'/.test(CODE)
+    && /p\.role === 'admin' && p\.active !== false/.test(SINV));
+  /* سقفُ المعلّقين وُصِف «لكل قطاع» وكان استعلامه عالميّاً بلا مرشّح قطاع. */
+  T('وسقف المعلّقين مُنطاق فعلاً بالقطاع لا عالميّاً',
+    /scope_sectors=cs\./.test(SINV) && /created_by=eq\.staff_invite/.test(SINV));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ٣٤) الترقيم الخادميّ · مسار المسودّة · ترتيب الإرسال
+   --------------------------------------------------------------------------
+   ثلاثة عيوب كشفها فحص ما بعد التنفيذ، كلّها **مرّت من فحوص نصّية** — فما
+   يمكن إثباته سلوكيّاً يُثبَت بتشغيل الدالّة، لا بمطابقة نصّ.
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  G('٣٤) الترقيم والمسودّة وترتيب الإرسال');
+  const NUM    = fs.readFileSync(path.join(ROOT, 'db/system2-request-numbering.sql'), 'utf8');
+  const TRACK  = fs.readFileSync(path.join(ROOT, 'db/system2-request-tracking.sql'), 'utf8');
+  const SHARED = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+
+  // ① الترقيم لا يُشتقّ من القائمة المعروضة
+  T('الرقم يأتي من `pr_next_number` الخادميّة لا من STATE',
+    /await CLOUD\.client\.rpc\('pr_next_number'\)/.test(CODE)
+    && /id: editing \? __prEditId : await prNextNumber\(\)/.test(CODE));
+  T('والدالّة DEFINER تحت قفل استشاريّ (فلا تسابُق ولا رؤية مُصفّاة)',
+    /SECURITY DEFINER/.test(NUM) && /pg_advisory_xact_lock\('pr_next_number'\)|pg_advisory_xact_lock\(hashtext\('pr_next_number'\)\)/.test(NUM));
+  T('والسقوط للحساب المحلّي مشروط بغياب الدالّة وحده (لا يبتلع خطأً)',
+    /if\(!prFnMissing\(e\)\) throw e;/.test(CODE));
+  /* ⚠️ `upsert` مع رقمٍ مكرّر = كتابة فوق طلب قائم. الإنشاء `insert` صريح. */
+  T('الإنشاء `insert` لا `upsert` (فالتعارض يُكشف لا يُبتلَع)',
+    !/from\('proc_purchase_requests'\)\.upsert/.test(CODE)
+    && /\? await tbl\.update\(pr\)\.eq\('id', pr\.id\)\s*:\s*await tbl\.insert\(pr\)/.test(CODE));
+
+  // ② المسودّة تُفتح وتُكمَل
+  T('المسودّة تُفتح للإكمال بمعرّفها لا كطلب جديد',
+    /function prEditDraft\(id\)/.test(CODE) && /__prEditId = id;/.test(CODE)
+    && /prSaveCloud\(pr, items, editing \? 'update' : 'insert'\)/.test(CODE));
+  T('ولها مدخل ظاهر في القائمة وفي شاشة المتابعة',
+    (CODE.match(/prEditDraft\('/g) || []).length >= 2
+    && /إكمال المسودّة وإرسالها/.test(CODE));
+  T('وفتح «طلب جديد» يُلغي وضع التعديل (لا يُحدَّث طلبٌ آخر بالخطأ)',
+    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDoc=null; __prEditId=null; \}/.test(CODE));
+
+  // ③ ترتيب الإرسال: مسودّة → مرفق → إرسال → إشعار
+  T('الطلب يُحفَظ مسودّةً ثمّ يُحوَّل بعد وصول السند',
+    (() => {
+      const i = CODE.indexOf('async function prSubmitNew');
+      const body = CODE.slice(i, i + 3000);
+      const save = body.indexOf('await prSaveCloud(pr, items');
+      const up   = body.indexOf('await prUploadDoc(pr.id, __prDraftDoc)');
+      const flip = body.indexOf(`.update({status:'submitted'`);
+      const noti = body.indexOf(`prNotifyPR(pr.id, 'submitted')`);
+      return save > 0 && up > save && flip > up && noti > flip;
+    })());
+  T('ولا تُكتب حالة `submitted` في صفّ الإنشاء إطلاقاً',
+    !/status: asDraft\?'draft':'submitted'/.test(CODE));
+
+  // ── SQL: الحُرّاس المرافقة ──
+  T('SQL: حذف بنود الطلب بالرؤية لا بالنطاق (وإلّا تضاعفت عند إعادة الحفظ)',
+    /CREATE POLICY "prc_delete" ON proc_pr_items FOR DELETE TO authenticated\s*\n\s*USING \(proc_can_see_pr\(pr_id\)\)/.test(NUM));
+  T('SQL: السند لا يُمسَح بعد الإرسال (المرفق هو الاعتماد)',
+    /لا يُزال سند الطلب بعد إرساله/.test(TRACK));
+  T('SQL: أمر شراء واحد لطلب واحد',
+    /WHERE po_number = v_po AND id <> p_pr_id/.test(TRACK));
+
+  // ── الكتلة الميتة: لا إحياء ──
+  T('كتلة سلسلة الاعتماد محذوفة بالكامل من الواجهة',
+    ['prBuildChain','prMatchRule','prResolveApprover','prCurrentStage',
+     'prCanActOn','prInbox(','prAct(','prActPrompt','prInboxHTML']
+      .every(n => !CODE.includes(n)));
+  T('ولا تُجلب جداولها في كل تحميل (رحلتا شبكة بلا قارئ)',
+    !/fetchAll\('proc_pr_approvals'/.test(CODE)
+    && !/fetchAll\('proc_approval_rules'/.test(CODE)
+    && !/STATE\.prRules/.test(CODE));
+  T('واشتراك اللحظيّ صار على المحادثة لا على سلسلة الاعتماد',
+    !/table:'proc_pr_approvals'/.test(CODE) && /table:'proc_pr_messages'/.test(CODE));
+
+  // ── البريد ──
+  T('ردّ الطالب يصل مَن يعمل على طلبه فعلاً لا الفريق كلّه',
+    /proc_started_by,quotes_collected_by/.test(SHARED)
+    && /const owner = pr\.proc_started_by \|\| pr\.quotes_collected_by/.test(SHARED));
+  T('ونصّ بريد الاستلام بلا ذِكر «سلسلة الاعتماد» المُلغاة',
+    !/بدأ مساره في سلسلة الاعتماد/.test(SHARED));
+
+  // ── سلوكيّ: نصّ مرحلة المتابعة مصدرٌ واحد للشارة والمطبوعة ──
+  const S = (() => {
+    const src = [ grab('prIsLive'), grabConst('PROC_STAGE_LABEL'),
+                  grab('prProcStageText'), grab('procStatusBadge') ].join('\n\n');
+    return new Function(src + '; return {prProcStageText, procStatusBadge};')();
+  })();
+  T('نصّ المرحلة: المسودّة «—» والمُرسَل مرحلته والمربوط رقم أمره',
+    S.prProcStageText({status:'draft'}) === '—'
+    && S.prProcStageText({status:'submitted', proc_status:'in_progress'}) === 'قيد التنفيذ'
+    && S.prProcStageText({status:'submitted', proc_status:'received'}) === 'وارد جديد'
+    && S.prProcStageText({status:'submitted', po_number:'PO-9'}).includes('PO-9'));
+  T('والشارة تشترك معه في المصدر نفسه (لا جدولان يتفارقان)',
+    S.procStatusBadge({proc_status:'po_issued'}).includes('صدر أمر الشراء')
+    && (CODE.match(/const PROC_STAGE_LABEL/g) || []).length === 1);
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

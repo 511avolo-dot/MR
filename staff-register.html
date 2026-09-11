@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>تسجيل موظّف — مجموعة الذيابي</title>
+<!-- صفحة عامّة محكومة برمز الدعوة: بلا حساب، بلا أي مصدر خارجيّ (آمنة CSP). -->
+<style>
+  :root{--navy:#16243d;--gold:#c2a063;--gold-2:#a37f43;--ink:#1b2333;--muted:#5d6b80;
+        --line:#e2e6ee;--bg:#f2f4f8;--ok:#1c7a4d;--err:#b4453f}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Segoe UI',Tahoma,Arial,sans-serif;
+       line-height:1.7;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
+       padding:calc(28px + env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom))}
+  .card{width:100%;max-width:520px;background:#fff;border:1px solid var(--line);border-radius:18px;
+        box-shadow:0 18px 50px rgba(20,30,50,.10);overflow:hidden}
+  .head{background:linear-gradient(120deg,#0f1a2e,#16243d 55%,#1d2f4d);padding:26px 28px;text-align:center;color:#f6efe0}
+  .head h1{margin:0;font-size:18px;font-weight:800}
+  .head .sub{font-size:12.5px;color:var(--gold);margin-top:6px;letter-spacing:.3px}
+  .body{padding:22px 26px 26px}
+  label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}
+  .hint{font-size:11.5px;color:var(--muted);font-weight:400;margin-top:4px;line-height:1.6}
+  input{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;font-family:inherit;
+        font-size:16px;color:var(--ink);background:#fbfcfe}
+  input:focus{outline:none;border-color:var(--gold)}
+  input[dir=ltr]{text-align:left}
+  .btn{margin-top:20px;width:100%;padding:14px;border:none;border-radius:12px;
+       background:linear-gradient(180deg,var(--gold),var(--gold-2));color:#fff;font-family:inherit;
+       font-size:15.5px;font-weight:800;cursor:pointer;min-height:48px}
+  .btn:disabled{opacity:.55;cursor:default}
+  .line{padding:11px 13px;border-radius:10px;margin-top:14px;font-size:13px;line-height:1.7}
+  .line.ok{background:#eaf6ef;color:var(--ok);border:1px solid #cdeadb}
+  .line.er{background:#fbeceb;color:var(--err);border:1px solid #f3d2ce}
+  .line.info{background:#eef3fb;color:#2b4a7a;border:1px solid #d3e0f2}
+  .sector{display:inline-block;background:#eef3fb;border:1px solid #d3e0f2;color:#2b4a7a;
+          border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:700;margin-top:8px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <h1>تسجيل موظّف — متابعة المشتريات</h1>
+    <div class="sub">مجموعة الذيابي</div>
+    <div id="sector-chip" class="sector hidden"></div>
+  </div>
+  <div class="body">
+    <div id="gate" class="line info">جارٍ التحقّق من الرابط…</div>
+
+    <form id="form" class="hidden" autocomplete="on">
+      <div class="line info">
+        سجّل بياناتك مرّة واحدة لتتابع أوامر الشراء التي تخصّك وترفع طلباتك،
+        <b>وتصلك الإشعارات على بريدك</b>. حسابك يُفعّله مدير النظام بعد المراجعة.
+      </div>
+
+      <label for="f-name">الاسم الكامل <span style="color:var(--err)">*</span></label>
+      <input id="f-name" name="name" autocomplete="name" maxlength="80" required>
+
+      <label for="f-email">بريد الشركة <span style="color:var(--err)">*</span></label>
+      <input id="f-email" name="email" type="email" dir="ltr" autocomplete="email" maxlength="120" required>
+      <div class="hint">يجب أن ينتهي بـ<b id="dom-hint">@aldeyabi.com</b> — وهو العنوان الذي تصلك عليه إشعارات طلباتك وأوامرك.</div>
+
+      <label for="f-mobile">الجوال</label>
+      <input id="f-mobile" name="mobile" type="tel" dir="ltr" autocomplete="tel" maxlength="20">
+
+      <label for="f-job">المسمّى الوظيفيّ</label>
+      <input id="f-job" name="job" maxlength="60" placeholder="فنّي صيانة / مدير الصيانة والتشغيل…">
+      <div class="hint">اكتبه بدقّة — يعتمد عليه المدير في تحديد صلاحياتك عند التفعيل.</div>
+
+      <label for="f-pass">كلمة المرور <span style="color:var(--err)">*</span></label>
+      <input id="f-pass" name="password" type="password" dir="ltr" autocomplete="new-password" minlength="8" required>
+      <div class="hint">8 أحرف على الأقل. تدخل بها بعد تفعيل حسابك.</div>
+
+      <button type="submit" class="btn" id="submit">إرسال بياناتي</button>
+      <div id="out"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var qs = new URLSearchParams(location.search);
+  var token = qs.get('t') || '';
+  var gate = document.getElementById('gate');
+  var form = document.getElementById('form');
+  var out  = document.getElementById('out');
+  var btn  = document.getElementById('submit');
+  var domain = 'aldeyabi.com';
+
+  function say(el, cls, msg){ el.className = 'line ' + cls; el.textContent = msg; el.classList.remove('hidden'); }
+
+  if(!token){ say(gate,'er','رابط غير مكتمل. اطلب رابط الدعوة من مدير النظام.'); return; }
+
+  fetch('/api/staff-invite?t=' + encodeURIComponent(token))
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if(!res.ok || !res.j.ok){
+        say(gate,'er', (res.j && res.j.error) || 'الرابط غير صالح أو انتهت صلاحيته.');
+        return;
+      }
+      domain = res.j.domain || domain;
+      document.getElementById('dom-hint').textContent = '@' + domain;
+      var chip = document.getElementById('sector-chip');
+      chip.textContent = 'قطاع: ' + res.j.sector;
+      chip.classList.remove('hidden');
+      gate.classList.add('hidden');
+      form.classList.remove('hidden');
+    })
+    .catch(function(){ say(gate,'er','تعذّر الوصول للخادم — حاول لاحقاً.'); });
+
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var name = document.getElementById('f-name').value.trim();
+    var email= document.getElementById('f-email').value.trim().toLowerCase();
+    var pass = document.getElementById('f-pass').value;
+    // تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع دائماً.
+    if(name.length < 3){ say(out,'er','اكتب اسمك الكامل.'); return; }
+    if(email.slice(-(domain.length+1)) !== '@' + domain){ say(out,'er','استخدم بريد الشركة (@' + domain + ').'); return; }
+    if(pass.length < 8){ say(out,'er','كلمة المرور 8 أحرف على الأقل.'); return; }
+
+    btn.disabled = true; say(out,'info','جارٍ الإرسال…');
+    fetch('/api/staff-invite?t=' + encodeURIComponent(token), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        display_name: name, email: email, password: pass,
+        mobile: document.getElementById('f-mobile').value.trim(),
+        job_title: document.getElementById('f-job').value.trim()
+      })
+    })
+    .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+    .then(function(res){
+      if(!res.ok || !res.j.ok){
+        btn.disabled = false;
+        say(out,'er',(res.j && res.j.error) || 'تعذّر إتمام التسجيل.');
+        return;
+      }
+      form.querySelectorAll('input').forEach(function(i){ i.disabled = true; });
+      btn.style.display = 'none';
+      say(out,'ok', res.j.already
+        ? res.j.message
+        : 'تمّ استلام بياناتك ✅ — حسابك بانتظار تفعيل مدير النظام، وسيصلك الدخول بعده على بريدك.');
+    })
+    .catch(function(){ btn.disabled = false; say(out,'er','تعذّر الاتصال — حاول مرّة أخرى.'); });
+  });
+})();
+</script>
+</body>
+</html>
