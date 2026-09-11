@@ -113,7 +113,10 @@ function tokenTtlMs(env) {
 
 // ── قراءة بيانات الطلب وسلسلة اعتماده (بصلاحية الخادم) ──
 export async function loadPR(env, base, prId) {
-  const cols = 'id,title,department,department_id,requester,requester_name,status,current_seq,est_total';
+  // ⚠️ `proc_started_by`/`quotes_collected_by` ليسا زينة: بدونهما كان فرع
+  // «الأولوية لمن بدأ العمل عليه» في notifyProcurementEvent **ميّتاً دائماً**،
+  // فردّ الطالب على استفسارٍ شخصيّ يذهب بريداً جماعيّاً لكل فريق المشتريات.
+  const cols = 'id,title,department,department_id,requester,requester_name,status,current_seq,est_total,po_number,proc_status,proc_started_by,quotes_collected_by';
   const r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(prId)}&select=${cols}`, { headers: svcHeaders(env) });
   if (!r.ok) return null;
   const rows = await r.json();
@@ -218,7 +221,7 @@ const LINES = (title) => ({
   approved:  `تم اعتماد طلبك «${title}» نهائياً عبر كامل سلسلة الموافقات، وسيُحوَّل إلى المشتريات لبدء عروض الأسعار والتوريد.`,
   rejected:  `نأسف لإبلاغك بأن طلبك «${title}» قد رُفض.`,
   returned:  `أُعيد طلبك «${title}» إليك للتعديل. يرجى مراجعته وتحديث المطلوب ثم إعادة إرساله.`,
-  submitted: `تم استلام طلبك «${title}» بنجاح، وبدأ مساره في سلسلة الاعتماد. ستصلك التحديثات تلقائياً.`,
+  submitted: `تم استلام طلبك «${title}» ووصل فريق المشتريات. ستصلك التحديثات تلقائياً في كل خطوة حتى يصدر أمر الشراء.`,
   proc_started:     `بدأ فريق المشتريات العمل فعلياً على طلبك «${title}»: جارٍ التواصل مع الموردين وجمع عروض الأسعار. ستصلك التحديثات في كل خطوة.`,
   quotes_collected: `اكتمل جمع عروض الأسعار لطلبك «${title}»، وهو الآن في مرحلة المقارنة تمهيداً لإصدار أمر الشراء.`,
   po_issued:        `صدر أمر الشراء لطلبك «${title}». يمكنك متابعة التوريد من شاشة الطلب في النظام — لا حاجة للاتصال بالمشتريات.`,

@@ -108,6 +108,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM proc_purchase_orders WHERE po_number = v_po) THEN
     RAISE EXCEPTION 'أمر الشراء % غير موجود في النظام', v_po;
   END IF;
+  -- ⚠️ أمرٌ واحد لطلب واحد: بدون هذا يدّعي طلبان الأمر نفسه ويرى صاحباهما
+  -- «صدر أمر الشراء رقم …» — وهو جوهر المتابعة، فلا يجوز أن يكذب.
+  IF EXISTS (SELECT 1 FROM proc_purchase_requests
+              WHERE po_number = v_po AND id <> p_pr_id) THEN
+    RAISE EXCEPTION 'أمر الشراء % مرتبط بالطلب % — فُكّ ربطه أوّلاً', v_po,
+      (SELECT id FROM proc_purchase_requests WHERE po_number = v_po AND id <> p_pr_id LIMIT 1);
+  END IF;
 
   SELECT * INTO v_pr FROM proc_purchase_requests WHERE id = p_pr_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'الطلب غير موجود'; END IF;
@@ -181,6 +188,18 @@ BEGIN
   END IF;
   IF p_key IS NOT NULL AND p_key NOT LIKE ('docs/pr/' || p_pr_id || '/%') THEN
     RAISE EXCEPTION 'مفتاح المرفق خارج مجال هذا الطلب';
+  END IF;
+  -- ⚠️ الدليل لا يُمسَح بعد الإرسال: المرفق **هو** الاعتماد في هذا النموذج،
+  -- فإزالته تترك طلباً مُرسَلاً بلا سنده. المسح مسموح في المسودّة والمُعاد فقط.
+  IF p_key IS NULL AND coalesce(v_old,'') <> ''
+     AND coalesce(v_st,'') NOT IN ('draft','returned') THEN
+    RAISE EXCEPTION 'لا يُزال سند الطلب بعد إرساله (الحالة: %)', coalesce(v_st,'—');
+  END IF;
+  -- الاستبدال بعد الإرسال بصلاحية المشتريات وحدها (تصحيح مستند خاطئ).
+  IF p_key IS NOT NULL AND coalesce(v_old,'') <> '' AND p_key <> v_old
+     AND coalesce(v_st,'') NOT IN ('draft','returned')
+     AND NOT (pr_has_perm('can_manage_rfq') OR pr_is_admin()) THEN
+    RAISE EXCEPTION 'استبدال السند بعد الإرسال يتطلّب صلاحية المشتريات';
   END IF;
 
   UPDATE proc_purchase_requests

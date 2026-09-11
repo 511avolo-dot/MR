@@ -12345,6 +12345,7 @@ let __prLoaded = false;
 let __prDraftItems = [];   // بنود مسودة الإنشاء الحالية
 let __prTplPrefill = null; // قالب بانتظار تعبئة حقول النموذج بعد رسمه
 let __prDraftDoc   = null; // ملف الطلب الموقَّع من المدير (دليل الاعتماد الورقيّ)
+let __prEditId     = null; // مسودّة قائمة قيد التعديل (تُحدَّث بمعرّفها لا تُنشأ من جديد)
 
 /* ══════════ مرفق الطلب الموقَّع ══════════
    قرار المالك: لا اعتمادات داخل النظام — «إلا إذا مكنتهم من رفع الطلب PDF
@@ -12422,7 +12423,7 @@ function prCanSeeAll(){ return PR_TEAM_KEYS.some(prPermStrict); }
 
 async function prLoadAll(){
   if(__prLoaded) return;
-  if(!prCloudReady()){ STATE.purchaseRequests=[]; STATE.prRules=[]; STATE.departments=[]; return; }
+  if(!prCloudReady()){ STATE.purchaseRequests=[]; STATE.departments=[]; return; }
   const fetchAll = async (table, orderCol)=>{
     const PAGE=1000; let from=0, out=[];
     while(true){
@@ -12436,11 +12437,11 @@ async function prLoadAll(){
     return out;
   };
   try{
-    const [prs, items, approvals, rules, depts] = await Promise.all([
+    // ⚠️ أُسقِط جلب `proc_pr_approvals` و`proc_approval_rules`: بعد تصحيح النموذج
+    // إلى «متابعة لا وورك فلو» لا يقرأهما أحد — كانا رحلتَي شبكة في كل تحميل.
+    const [prs, items, depts] = await Promise.all([
       fetchAll('proc_purchase_requests','created_at'),
       fetchAll('proc_pr_items','id'),
-      fetchAll('proc_pr_approvals','id'),
-      fetchAll('proc_approval_rules','priority'),
       fetchAll('proc_departments','id'),
     ]);
     // ⚠️ جدولان اختياريّان (`db/system2-request-flow.sql`): يُجلبان **بتسامح**
@@ -12451,52 +12452,59 @@ async function prLoadAll(){
     catch(_){ msgs=[]; window.__prMsgOK = false; }
     try{ tpls = await fetchAll('proc_pr_templates','created_at'); window.__prTplOK = true; }
     catch(_){ tpls=[]; window.__prTplOK = false; }
-    const byPr={}, apByPr={}, msByPr={};
+    const byPr={}, msByPr={};
     items.forEach(it=>{ (byPr[it.pr_id]=byPr[it.pr_id]||[]).push(it); });
-    approvals.forEach(a=>{ (apByPr[a.pr_id]=apByPr[a.pr_id]||[]).push(a); });
     msgs.forEach(m=>{ (msByPr[m.pr_id]=msByPr[m.pr_id]||[]).push(m); });
     prs.forEach(p=>{
       p.items     = (byPr[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
-      p.approvals = (apByPr[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
       p.messages  = (msByPr[p.id]||[]).sort((a,b)=>(a.id||0)-(b.id||0)); // الأقدم أوّلاً (قراءة حوار)
     });
     STATE.purchaseRequests = prs;
-    STATE.prRules = (rules||[]).filter(r=>r.active!==false);
     STATE.departments = depts||[];
     STATE.prTemplates = (tpls||[]).filter(t=>t && t.active!==false);
     __prLoaded = true;
   }catch(e){ console.warn('[pr] load:', e?.message); STATE.purchaseRequests=STATE.purchaseRequests||[]; }
 }
 
-function prNextNumber(){
+/* ══════════════ ترقيم الطلب — **خادميّ** لا من القائمة المعروضة ══════════════
+   ⚠️ عيب حرِج أُصلح: كانت تأخذ أعلى رقم من `STATE.purchaseRequests`، وهي بعد
+   تطبيق النطاق **ما تسمح به RLS فقط** (طلباتي + طلبات قطاعي). فموظّف قطاع يرى
+   أعلى رقم 0003 يقترح 0004 بينما 0004 يخصّ قطاعاً آخر **محجوباً عنه** ⇒ الكتابة
+   تُرفَض (`pr_update` تشترط requester=me) و**كل إعادة محاولة تنتج الرقم نفسه**
+   فيعلق الموظّف نهائيّاً؛ ولغير المُنطَّق السياسة متساهلة فيصير رقمٌ مكرّر
+   **كتابةً فوق طلب قائم**. الآن الرقم من `pr_next_number()` (قفل استشاريّ +
+   SECURITY DEFINER فترى كل الصفوف). السقوط للحساب المحلّي **مشروط حصراً بغياب
+   الدالّة** من القاعدة (نمط `prFnMissing`) — لا تجاوز لحارس موجود. */
+function prNextNumberLocal(){
   const year=new Date().getFullYear(); let max=0;
   (STATE.purchaseRequests||[]).forEach(p=>{ const m=String(p.id||'').match(/(\d+)\s*$/); if(m){const n=+m[1]; if(n>max)max=n;} });
   return `PR-DG${year}-${String(max>0?max+1:1).padStart(4,'0')}`;
 }
-function prMatchRule(pr){
-  const rules=[...(STATE.prRules||[])].sort((a,b)=>(a.priority??100)-(b.priority??100));
-  const total=Number(pr.est_total)||0;
-  return rules.find(r=>{
-    if(r.department_id && r.department_id!==pr.department_id) return false;
-    if(r.category && r.category!==pr.title) return false;
-    if(total < (Number(r.min_total)||0)) return false;
-    if(r.max_total!=null && total > Number(r.max_total)) return false;
-    return true;
-  }) || null;
-}
-function prResolveApprover(pr, stage){
-  if(stage.resolver==='dept_manager'){
-    const d=(STATE.departments||[]).find(x=>x.id===pr.department_id);
-    return d ? (d.manager_user||null) : null;
+async function prNextNumber(){
+  if(prCloudReady()){
+    try{
+      const {data,error} = await CLOUD.client.rpc('pr_next_number');
+      if(error) throw error;
+      if(data) return String(data);
+    }catch(e){
+      if(!prFnMissing(e)) throw e;      // خطأ حقيقيّ لا يُبتلَع
+    }
   }
-  return null; // role / user_manager → يُحدَّد فعلياً وقت الاعتماد (P2)
+  return prNextNumberLocal();
 }
 
-async function prSaveCloud(pr, items){
+/* `mode='insert'` للإنشاء و`'update'` للتعديل.
+   ⚠️ لا `upsert` بعد اليوم: مع ترقيمٍ كان يُشتقّ من قائمة مُصفّاة، رقمٌ مكرّر
+   يعني **الكتابة فوق طلب قائم** وحذف بنوده بصمت. الإدراج يفشل بـ23505 فيُكشف
+   التعارض بدل أن يُبتلَع. */
+async function prSaveCloud(pr, items, mode){
   if(!prCloudReady()) throw new Error('يجب الاتصال بالسحابة لحفظ الطلب');
   pr.updated_at = new Date().toISOString();
   pr.updated_by = STATE.currentUser?.username || null;
-  const {error} = await CLOUD.client.from('proc_purchase_requests').upsert(pr);
+  const tbl = CLOUD.client.from('proc_purchase_requests');
+  const {error} = (mode === 'update')
+    ? await tbl.update(pr).eq('id', pr.id)
+    : await tbl.insert(pr);
   if(error) throw error;
   await CLOUD.client.from('proc_pr_items').delete().eq('pr_id', pr.id);
   if(items && items.length){
@@ -12512,93 +12520,11 @@ async function prSaveCloud(pr, items){
 }
 function num0(v){ const n=Number(v); return isNaN(n)?0:n; }
 
-async function prBuildChain(pr){
-  const rule = prMatchRule(pr);
-  const stages = (rule && Array.isArray(rule.stages)) ? rule.stages : [];
-  if(rule) pr.approval_rule_id = rule.id;
-  await CLOUD.client.from('proc_pr_approvals').delete().eq('pr_id', pr.id);
-  if(stages.length){
-    const rows = stages.map(s=>({
-      pr_id:pr.id, seq:s.seq, stage_label:s.label, resolver:s.resolver,
-      role_key:s.role_key, approver:prResolveApprover(pr, s), decision:'pending'
-    }));
-    const {error} = await CLOUD.client.from('proc_pr_approvals').insert(rows);
-    if(error) throw error;
-  }
-  return stages.length;
-}
-
-/* ---------- P2: أفعال الاعتماد والصلاحيات ---------- */
-// المرحلة المعلّقة الحالية (أقل seq لم يُبتّ فيها)
-function prCurrentStage(pr){
-  if(pr.status!=='in_review') return null;
-  return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0] || null;
-}
-// هل يحقّ للمستخدم الحالي البتّ في المرحلة الحالية؟ يعيد صفّ المرحلة أو null
-function prDelegOf(username){ const u=(STATE.users||[]).find(x=>x.username===username); return (u&&u.is_away&&u.delegate_to)?u.delegate_to:null; }
-function prCanActOn(pr){
-  const stage = prCurrentStage(pr);
-  if(!stage) return null;
-  const me = STATE.currentUser?.username;
-  if(!me) return null;
-  if(pr.requester === me) return null; // فصل المهام: لا يعتمد المُقدِّم طلبه
-  let ok=false;
-  if(stage.resolver==='dept_manager'){
-    const d=(STATE.departments||[]).find(x=>x.id===pr.department_id);
-    const m=d&&d.manager_user;
-    ok = (m===me) || (!!m&&prDelegOf(m)===me) || hasPermission('can_approve_l2'); // المدير الأعلى/المفوَّض
-  } else if(stage.resolver==='user_manager'){
-    ok = stage.approver ? (stage.approver===me || prDelegOf(stage.approver)===me) : hasPermission('can_approve_l1');
-  } else { // role
-    ok = !!stage.role_key && hasPermission(stage.role_key);
-  }
-  return ok ? stage : null;
-}
-// صندوق «بانتظار اعتمادي»
-function prInbox(){
-  return (STATE.purchaseRequests||[]).filter(p=>p.status==='in_review' && prCanActOn(p));
-}
-// تنفيذ قرار على المرحلة الحالية
-async function prAct(prId, action, comment){
-  if(!prCloudReady()){ toast('error','غير متصل','يجب الاتصال بالسحابة'); return; }
-  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===prId);
-  if(!pr){ toast('error','غير موجود','الطلب غير موجود'); return; }
-  const stage=prCanActOn(pr);
-  if(!stage){ toast('error','غير مصرّح','لست المعتمِد لهذه المرحلة، أو الطلب ليس قيد اعتمادك'); return; }
-  if((action==='reject'||action==='return') && !((comment||'').trim())){
-    toast('error','سبب مطلوب','اكتب سبب '+(action==='reject'?'الرفض':'الإرجاع')); return;
-  }
-  const me=STATE.currentUser?.username||null;
-  const now=new Date().toISOString();
-  const decision = action==='approve'?'approved' : action==='reject'?'rejected' : 'returned';
-  // حدّد الحالة الجديدة للطلب
-  const pending = (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0));
-  const isLast = pending.length<=1; // هذه آخر مرحلة معلّقة
-  let newStatus = pr.status, newSeq = pr.current_seq;
-  if(action==='approve'){
-    if(isLast){ newStatus='approved'; }
-    else { const next=pending[1]; newSeq=next.seq; }
-  } else if(action==='reject'){ newStatus='rejected'; }
-  else { newStatus='returned'; newSeq=0; }
-  try{
-    // التنفيذ على الخادم عبر آلة الحالة الموثوقة (pr_transition) — تفرض المُعتمِد
-    // الصحيح وفصل المهام وتمنع تجاوز السلسلة حتى لو تلاعب العميل.
-    const {data,error}=await CLOUD.client.rpc('pr_transition',{p_pr_id:prId, p_action:action, p_comment:comment||null});
-    if(error) throw error;
-    const finalized = data ? !!data.finalized : (action==='approve'&&isLast);
-    const resStatus = (data && data.status) || newStatus;
-    try{ pushAuditToCloud && pushAuditToCloud({username:me, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:(action==='approve'?'approve':action==='reject'?'reject':'return'), entity_type:'pr', entity_id:prId, old_value:{status:pr.status}, new_value:{status:resStatus, stage:stage.stage_label}, meta:{comment:comment||null}}); }catch(_){}
-    const msg = action==='approve' ? (finalized?'اعتُمد الطلب نهائياً — يُحوّل لطلب تسعير...':'اعتُمدت مرحلتك — انتقل للتالي') : action==='reject'?'رُفض الطلب':'أُعيد الطلب للتعديل';
-    toast('success','تم', msg);
-    // P4: التحويل التلقائي إلى RFQ عند الاعتماد النهائي
-    if(action==='approve' && finalized){
-      try{ await prToRFQ(Object.assign({}, pr, {status:'approved'})); }catch(e){ console.warn('[pr->rfq]', e?.message); }
-    }
-    __prLoaded=false;
-    await prLoadAll();
-    renderPRPortal();
-  }catch(e){ toast('error','تعذّر التنفيذ', e.message||'خطأ غير متوقع'); }
-}
+/* ⚠️ حُذفت هنا كتلة سلسلة الاعتماد الإلكترونية (prBuildChain · prCurrentStage ·
+   prCanActOn · prInbox · prAct) بقرار المالك «متابعة لا وورك فلو». كانت غير
+   قابلة للوصول من `renderPRPortal` لكنّها **دوالّ عامّة**، فـ`prAct` تبقى
+   قابلة للاستدعاء من طرفية المتصفّح وتكتب قرارات اعتماد في نموذجٍ لم يعُد فيه
+   اعتماد. جداول القاعدة وبذرة القواعد تبقى معطّلة لا محذوفة (إحياء بلا هجرة). */
 
 /* ---------- P4: التحويل التلقائي إلى طلب تسعير (RFQ) ---------- */
 function prItemBaseline(it){
@@ -12671,7 +12597,8 @@ async function buildPRReport(opts){
   const bcls=(s)=>({approved:'ok',rejected:'danger',in_review:'warn',returned:'info',rfq_issued:'info',converted_to_po:'ok',draft:'neutral',cancelled:'danger'})[s]||'neutral';
   const lbl=(s)=>(PR_STATUS_META[s]||{}).label||s||'—';
   const rows=list.map(p=>{
-    const stage=(p.approvals||[]).find(a=>a.decision==='pending');
+    // مرحلة **المتابعة** (لا مرحلة اعتماد — أُلغيت السلسلة الإلكترونية).
+    const stageTxt = prProcStageText(p);
     return `<tr>
       <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
       <td>${escapeHtml(p.title||'—')}</td>
@@ -12680,7 +12607,7 @@ async function buildPRReport(opts){
       <td>${escapeHtml(p.requester||'—')}</td>
       <td class="num price">${fmtPrice(p.est_total)}</td>
       <td class="center"><span class="print-badge ${bcls(p.status)}">${escapeHtml(lbl(p.status))}</span></td>
-      <td>${stage?escapeHtml(stage.stage_label):'—'}</td>
+      <td>${escapeHtml(stageTxt)}</td>
       <td class="center">${escapeHtml(String(p.request_date||p.created_at||'').slice(0,10))}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="9" class="center" style="padding:16px;color:#888">لا توجد طلبات مطابقة</td></tr>';
@@ -12797,7 +12724,7 @@ async function renderPRPortal(){
 function prTab(key,label,active){
   return `<button class="pr-tab${active?' active':''}" onclick="prGoView('${key}')">${label}</button>`;
 }
-function prGoView(view, id){ STATE.prView=view; STATE.prTrackId=id||null; if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; } renderPRPortal(); }
+function prGoView(view, id){ STATE.prView=view; STATE.prTrackId=id||null; if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; } renderPRPortal(); }
 
 function prListHTML(){
   const me = STATE.currentUser?.username;
@@ -12808,9 +12735,11 @@ function prListHTML(){
   }
   const rows = list.map(p=>{
     // مرحلة **المتابعة** (لا اعتماد): أين وصل الطلب فعلاً.
-    const stageTxt = p.po_number
-      ? `أمر الشراء ${escapeHtml(p.po_number)}`
-      : (prIsLive(p) ? procStatusBadge(p) : '—');
+    // والمسودّة تُفتح للإكمال مباشرةً — كانت صفّاً ميّتاً لا يصير طلباً أبداً.
+    const stageTxt = p.status==='draft'
+      ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();prEditDraft('${escapeAttr(p.id)}')">✏️ إكمال المسودّة وإرسالها</button>`
+      : (p.po_number ? `أمر الشراء ${escapeHtml(p.po_number)}`
+                     : (prIsLive(p) ? procStatusBadge(p) : '—'));
     return `<tr onclick="prGoView('track','${escapeAttr(p.id)}')" style="cursor:pointer">
       <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
       <td>${escapeHtml(p.title||'—')}</td>
@@ -12837,12 +12766,18 @@ function prIncoming(){
   return (STATE.purchaseRequests||[])
     .filter(p=>prIsLive(p) && !['po_issued','closed','completed'].includes(p.proc_status||''));
 }
+/* مصدر واحد لنصّ مرحلة المتابعة — تستعمله الشارة والمطبوعة معاً. */
+const PROC_STAGE_LABEL = { received:['وارد جديد','warn'], in_progress:['قيد التنفيذ','info'],
+  quotes_collected:['تم جمع العروض','info'], po_issued:['صدر أمر الشراء','ok'],
+  closed:['مُقفل','ok'], completed:['مكتمل','ok'] };
+function prProcStageText(pr){
+  if(!prIsLive(pr)) return '—';
+  if(pr.po_number) return `أمر الشراء ${pr.po_number}`;
+  return (PROC_STAGE_LABEL[pr.proc_status||'received'] || PROC_STAGE_LABEL.received)[0];
+}
 function procStatusBadge(pr){
-  const s=pr.proc_status||'received';
-  const M={ received:['وارد جديد','warn'], in_progress:['قيد التنفيذ','info'],
-            quotes_collected:['تم جمع العروض','info'], po_issued:['صدر أمر الشراء','ok'],
-            closed:['مُقفل','ok'], completed:['مكتمل','ok'] };
-  const m=M[s]||M.received; return `<span class="pr-badge ${m[1]}">${m[0]}</span>`;
+  const m = PROC_STAGE_LABEL[pr.proc_status||'received'] || PROC_STAGE_LABEL.received;
+  return `<span class="pr-badge ${m[1]}">${m[0]}</span>`;
 }
 function prIncomingHTML(){
   if(!prIsProcurement()){ return `<div class="empty"><div class="empty-icon">🔒</div><div class="empty-title">خاص بفريق المشتريات</div><div class="empty-text">تحتاج صلاحية «إدارة عروض الأسعار» لعرض الوارد.</div></div>`; }
@@ -12930,41 +12865,6 @@ async function prPrint(id){
       <tbody>${items}</tbody>
     </table>`;
   await printDocOpen({ compactHeader:true, docNumber:pr.id, eyebrow:'مجموعة الذيابي · المشتريات', title:'طلب شراء مواد', subtitle:pr.title||'' , signature:true }, body);
-}
-
-function prInboxHTML(){
-  const list = prInbox();
-  if(!list.length){
-    return `<div class="empty"><div class="empty-icon">📥</div><div class="empty-title">لا طلبات بانتظار اعتمادك</div><div class="empty-text">ستظهر هنا الطلبات التي تقع مرحلتها الحالية ضمن صلاحيتك.</div></div>`;
-  }
-  const rows = list.map(p=>{
-    const stage = prCurrentStage(p);
-    return `<tr>
-      <td dir="ltr" style="text-align:start"><a style="cursor:pointer;color:var(--accent-2);font-weight:600" onclick="prGoView('track','${escapeAttr(p.id)}')">${escapeHtml(p.id)}</a></td>
-      <td>${escapeHtml(p.title||'—')}</td>
-      <td>${escapeHtml(p.department||p.department_id||'—')}</td>
-      <td>${escapeHtml(p.requester||'—')}</td>
-      <td class="num">${fmtPrice(p.est_total)}</td>
-      <td>${escapeHtml(stage?stage.stage_label:'—')}</td>
-      <td class="center" style="white-space:nowrap">
-        <button class="btn btn-primary btn-sm" onclick="prActPrompt('${escapeAttr(p.id)}','approve')">اعتماد</button>
-        <button class="btn btn-ghost btn-sm" onclick="prActPrompt('${escapeAttr(p.id)}','return')">إرجاع</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prActPrompt('${escapeAttr(p.id)}','reject')">رفض</button>
-      </td>
-    </tr>`;
-  }).join('');
-  return `<div class="pr-card"><table class="data-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th>مرحلتك</th><th class="center">القرار</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-// نافذة تأكيد بسيطة للقرار مع سبب (للرفض/الإرجاع)
-function prActPrompt(prId, action){
-  let comment='';
-  if(action==='reject' || action==='return'){
-    comment = prompt(action==='reject'?'سبب الرفض:':'سبب الإرجاع للتعديل:', '');
-    if(comment===null) return; // أُلغي
-  } else {
-    comment = prompt('ملاحظة الاعتماد (اختياري):', '') || '';
-  }
-  prAct(prId, action, comment);
 }
 
 /* ---------- P3: قراءة النموذج بالذكاء (OCR/AI) ---------- */
@@ -13091,7 +12991,7 @@ async function prUseTemplate(id){
 function prApplyTemplateFields(t){
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
   set('pr-title', t.title); set('pr-project', t.project); set('pr-just', t.justification);
-  set('pr-priority', t.priority);
+  set('pr-priority', t.priority); set('pr-needed', t.needed_by);
   const d=document.getElementById('pr-dept');
   if(d && t.department_id && [...d.options].some(o=>o.value===t.department_id)) d.value=t.department_id;
   // ⚠️ القطاع لا يُفرَض من القالب إن كان خارج نطاق الموظّف — وإلّا ضاع الطلب
@@ -13171,7 +13071,12 @@ function prBuilderHTML(){
   /* ⚠️ لافتة «اضبط الأقسام ومدراءها» أُزيلت مع سلسلة الاعتماد: لا مرحلة تحلّ
      معتمِدها من القسم بعد اليوم، فالتحذير صار إنذاراً كاذباً يخيف بلا سبب.
      حقل القسم يبقى للتصنيف لا للاعتماد. */
-  const _deptWarn = '';
+  // لافتة «تُكمل مسودّة» — وإلّا بدا للمستخدم أنّه يُنشئ طلباً ثانياً.
+  const _deptWarn = __prEditId
+    ? `<div class="pr-card" style="border-color:var(--accent-2);background:#f7fbff;margin-bottom:12px">
+         ✏️ تُكمل الآن المسودّة <b dir="ltr">${escapeHtml(__prEditId)}</b> — الحفظ يُحدّثها ولا يُنشئ طلباً جديداً.
+       </div>`
+    : '';
   return `
     ${itemDatalist}
     ${_deptWarn}
@@ -13235,8 +13140,8 @@ function prBuilderHTML(){
       </div>
 
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 إرسال للاعتماد</button>
-        <button class="btn btn-ghost" onclick="prSubmitNew(true)">💾 حفظ كمسودة</button>
+        <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 إرسال للمشتريات</button>
+        <button class="btn btn-ghost" onclick="prSubmitNew(true)">💾 ${__prEditId?'حفظ التعديل كمسودة':'حفظ كمسودة'}</button>
         <button class="btn btn-ghost" onclick="prGoView('list')">إلغاء</button>
       </div>
     </div>`;
@@ -13296,8 +13201,11 @@ async function prSubmitNew(asDraft){
   const items=__prDraftItems.filter(it=>(it.description||'').trim() && num0(it.requested_qty)>0);
   if(!items.length){ toast('error','بيانات ناقصة','أضف بنداً واحداً على الأقل بكمية مطلوبة'); return; }
   /* ⚠️ الادّعاء بلا دليل أسوأ من غيابه (نفس درس شهادة المحتوى المحلي):
-     الإرسال مشروط بوصول المرفق فعلاً، لا بنيّة رفعه. المسودّة تُحفظ بدونه. */
-  if(!asDraft && !__prDraftDoc){
+     الإرسال مشروط بوصول المرفق فعلاً، لا بنيّة رفعه. المسودّة تُحفظ بدونه.
+     `__prEditId` = تعديل مسودّة قائمة: سندها المرفوع سابقاً يُغني عن إرفاق جديد. */
+  const editing = !!__prEditId;
+  const existingDoc = editing && (STATE.purchaseRequests||[]).find(p=>p.id===__prEditId)?.doc_key;
+  if(!asDraft && !__prDraftDoc && !existingDoc){
     toast('error','السند مطلوب','أرفق الطلب موقَّعاً من مديرك قبل الإرسال');
     document.getElementById('pr-doc-input')?.focus(); return;
   }
@@ -13305,7 +13213,7 @@ async function prSubmitNew(asDraft){
   const deptId=document.getElementById('pr-dept')?.value||'';
   const dept=(STATE.departments||[]).find(d=>d.id===deptId);
   const pr={
-    id: prNextNumber(), request_no:null, title,
+    id: editing ? __prEditId : await prNextNumber(), request_no:null, title,
     department_id: deptId||null, department: dept?dept.name_ar:null,
     sector: document.getElementById('pr-sector')?.value||null,
     project: document.getElementById('pr-project')?.value||null,
@@ -13319,26 +13227,65 @@ async function prSubmitNew(asDraft){
     est_total: total, total_in_words: total>0?tafqitSAR(total):null,
     // ⚠️ `submitted` لا `in_review`: لا سلسلة اعتماد إلكترونية — الطلب يصل
     // المشتريات مباشرةً، والاعتماد وقع على الورق ودليله المرفق الموقَّع.
-    currency:'SAR', status: asDraft?'draft':'submitted', current_seq: 0,
+    // ⚠️ يُحفَظ **مسودّةً دائماً** أوّلاً؛ التحويل إلى `submitted` بعد وصول السند.
+    currency:'SAR', status:'draft', current_seq: 0,
     created_by: STATE.currentUser?.username||null, created_at: new Date().toISOString()
   };
+  if(editing) delete pr.created_at;   // لا يُعاد كتابة تاريخ الإنشاء عند التعديل
   try{
     toast('info','جارٍ الحفظ', asDraft?'حفظ المسودة...':'إرسال الطلب...');
-    await prSaveCloud(pr, items);
-    // المرفق يُرفع **بعد** وجود صفّ الطلب (النقطة تتحقّق من رؤيته)، ثم يُثبَّت
-    // مفتاحه بـpr_set_doc بهوية المُقدّم.
+    /* ⚠️ ترتيب مقصود — كان عيباً حقيقيّاً: الحفظ كان يقع بحالة `submitted`
+       **قبل** رفع المرفق، فأيّ فشل رفع (شبكة · حارس الملفات · R2) يترك الطلب
+       «مُرسَلاً بلا دليله» بينما التوست يقول «تعذّر الحفظ» ولا يُرسَل إشعار.
+       الآن: مسودّة → مرفق → تحويل للإرسال → إشعار. فشلُ الرفع يترك **مسودّة**
+       قابلة لإعادة المحاولة، ولا يُدَّعى إرسالٌ بلا سند. */
+    await prSaveCloud(pr, items, editing ? 'update' : 'insert');
     if(__prDraftDoc){ await prUploadDoc(pr.id, __prDraftDoc); }
-    try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action: asDraft?'create':'submit', entity_type:'pr', entity_id:pr.id, old_value:null, new_value:{status:pr.status,total}, meta:{has_doc:!!__prDraftDoc}}); }catch(e){}
+    if(!asDraft){
+      const {error:sErr} = await CLOUD.client.from('proc_purchase_requests')
+        .update({status:'submitted', updated_at:new Date().toISOString(),
+                 updated_by:STATE.currentUser?.username||null}).eq('id', pr.id);
+      if(sErr) throw sErr;
+      pr.status = 'submitted';
+    }
+    try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action: asDraft?'create':'submit', entity_type:'pr', entity_id:pr.id, old_value:null, new_value:{status:pr.status,total}, meta:{has_doc:!!(__prDraftDoc||existingDoc), edited:editing}}); }catch(e){}
     // الإشعار: البوابة الداخلية لم تكن ترسل شيئاً إطلاقاً، فطلبٌ يُرفَع لا
     // يعلم به معتمِده حتى يفتح النظام صدفةً. نستعمل نفس نقطة `requests.html`
     // بلا كود بريد جديد. fire-and-forget: فشل البريد لا يُسقِط طلباً حُفِظ.
     if(!asDraft) prNotifyPR(pr.id, 'submitted');
     toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب للمشتريات',
-      asDraft?'يمكنك إكمالها لاحقاً':'يمكنك متابعته من هنا حتى يصدر أمر الشراء.');
-    __prLoaded=false; __prDraftItems=[]; __prDraftDoc=null;
+      asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'يمكنك متابعته من هنا حتى يصدر أمر الشراء.');
+    __prLoaded=false; __prDraftItems=[]; __prDraftDoc=null; __prEditId=null;
     prGoView('track', pr.id);
     prLoadAll().then(renderPRPortal);
   }catch(e){ toast('error','تعذّر الحفظ', e.message||'خطأ غير متوقع'); }
+}
+
+/* ══════════ فتح مسودّة محفوظة لإكمالها وإرسالها ══════════
+   ⚠️ كان طريقاً مسدوداً: `prSubmitNew` تولّد رقماً جديداً في كل مرّة، فلا مسار
+   يفتح مسودّة ويُكملها — التوست يَعِد «يمكنك إكمالها لاحقاً» والنتيجة صفٌّ ميّت
+   لا يصير طلباً أبداً. وهو يصيب بالضبط من لم تجهز ورقته الموقَّعة بعد. */
+function prEditDraft(id){
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id);
+  if(!pr){ toast('error','غير موجود',''); return; }
+  if(pr.status!=='draft'){ toast('warn','غير قابل للتعديل','لا يُعدَّل إلا ما كان مسودّة'); return; }
+  const me = STATE.currentUser?.username;
+  if(pr.requester && me && pr.requester!==me && !prIsProcurement()){
+    toast('error','غير مصرّح','المسودّة يُكملها صاحبها'); return; }
+  __prEditId = id;
+  __prDraftDoc = null;
+  __prDraftItems = (pr.items||[]).map(it=>({
+    item_code:it.item_code||'', description:it.description||'', unit:it.unit||'',
+    contract_qty:it.contract_qty??'', stock_balance:it.stock_balance??'',
+    requested_qty:it.requested_qty??'', unit_price:it.unit_price??'',
+    category:it.category||'', notes:it.notes||''
+  }));
+  __prTplPrefill = {
+    title:pr.title||'', project:pr.project||'', sector:pr.sector||'',
+    department_id:pr.department_id||'', priority:pr.priority||'متوسط',
+    justification:pr.justification||'', needed_by:pr.needed_by||''
+  };
+  STATE.prView='create'; STATE.prTrackId=null; renderPRPortal();
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -13533,17 +13480,18 @@ async function prUnlinkPO(prId){
 function prTrackingHTML(id){
   const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id);
   if(!pr){ return `<div class="empty"><div class="empty-title">الطلب غير موجود</div><button class="btn btn-ghost btn-sm" onclick="prGoView('list')">رجوع</button></div>`; }
-  const stepper = (pr.approvals||[]).map(a=>{
-    const st = a.decision==='approved'?'done' : a.decision==='rejected'?'rej' : a.decision==='returned'?'ret' : (pr.current_seq===a.seq?'active':'wait');
-    const icon = st==='done'?'✓' : st==='rej'?'✕' : st==='ret'?'↩' : a.seq;
-    return `<div class="pr-step ${st}">
-      <div class="pr-step-dot">${icon}</div>
-      <div class="pr-step-body"><div class="pr-step-label">${escapeHtml(a.stage_label||'—')}</div>
-      <div class="pr-step-sub">${a.approver?escapeHtml(a.approver):''}${a.acted_at?(' · '+a.acted_at.slice(0,10)):''}${a.comment?(' · '+escapeHtml(a.comment)):''}</div></div>
-    </div>`;
-  }).join('') || '<div class="empty-text" style="padding:14px">لا توجد سلسلة اعتماد بعد (مسودة).</div>';
+  // ⚠️ أُزيل «مُدرَّج سلسلة الاعتماد» هنا: كان يُحسب ولا يُستعمَل بعد تصحيح
+  // النموذج (المسار الظاهر هو `prJourneyHTML` — مراحل متابعة لا اعتماد).
   const itemsRows=(pr.items||[]).map((it,i)=>`<tr><td class="center">${i+1}</td><td>${escapeHtml(it.description)}</td><td class="center">${escapeHtml(it.unit||'—')}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td></tr>`).join('');
-  const actionPanel = '';
+  // المسودّة تُكمَل من شاشتها نفسها — لا يبحث صاحبها عن مدخل آخر.
+  const actionPanel = (pr.status==='draft')
+    ? `<div class="pr-card" style="margin-top:12px;border-color:var(--accent-2);background:#f7fbff">
+         <div class="pr-section-title">مسودّة لم تُرسَل بعد</div>
+         <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
+           لن تراها المشتريات حتى ترسلها${pr.doc_key?'':'، والإرسال يتطلّب إرفاق الطلب موقَّعاً من مديرك'}.</div>
+         <button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">✏️ إكمال المسودّة وإرسالها</button>
+       </div>`
+    : '';
   return `
     <button class="btn btn-ghost btn-sm" onclick="prGoView('list')">← رجوع للقائمة</button>
     <div class="pr-card" style="margin-top:12px">
@@ -14719,6 +14667,11 @@ async function renderUsersList(){
    ⚠️ ولذلك الإبطال متاح هنا: نقرة تُسقِط كل الروابط الصادرة. */
 async function staffInviteOpen(){
   if(!requirePermission('can_manage_users','رابط دعوة الموظفين')) return;
+  /* ⚠️ الخادم يشترط `role==='admin'` (`callerProfile`) — فبلا هذا الفحص يرى
+     حاملُ المفتاح غير الأدمن الزرَّ ويُرفَض بعد النقر. توحيد الشرطين. */
+  if(STATE.currentUser?.role !== 'admin'){
+    toast('error','للمدير فقط','رابط دعوة الموظفين يُصدره مدير النظام'); return;
+  }
   const sectors = (PO_ENUMS?.sector||[]);
   const opts = sectors.map(x=>`<option value="${escapeAttr(x)}">${escapeHtml(x)}</option>`).join('');
   const el = document.createElement('div');
@@ -15874,7 +15827,8 @@ window.CLOUD = {
       .on('postgres_changes', {event:'*', schema:'public', table:'proc_purchase_requests'}, ()=>{
         if(STATE.page==='pr'){ __prLoaded=false; renderPRPortal(); }
       })
-      .on('postgres_changes', {event:'*', schema:'public', table:'proc_pr_approvals'}, ()=>{
+      .on('postgres_changes', {event:'*', schema:'public', table:'proc_pr_messages'}, ()=>{
+        // الاستفهام والردّ يظهران فوراً للطرف الآخر (بدل اشتراك سلسلة الاعتماد المُلغاة).
         if(STATE.page==='pr'){ __prLoaded=false; renderPRPortal(); }
       })
       .subscribe((status)=>{

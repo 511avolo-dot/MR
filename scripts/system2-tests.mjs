@@ -2489,12 +2489,17 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   /* ⚠️ إنذار كاذب: اللافتة كانت تقول إن الطلب سيقف بلا معتمِد ما لم تُضبَط
      الأقسام — وهو صحيح للوورك فلو وباطل للمتابعة. أمسكها المتصفّح. */
   T('لا لافتة «اضبط الأقسام ومدراءها» في نموذج الطلب',
-    !/لم تُضبَط الأقسام ومدراؤها/.test(CODE) && /const _deptWarn = '';/.test(CODE));
+    !/لم تُضبَط الأقسام ومدراؤها/.test(CODE)
+    // اللافتة الوحيدة في رأس النموذج صارت لافتة «تُكمل مسودّة» لا إنذار اعتماد.
+    && /const _deptWarn = __prEditId/.test(CODE)
+    && /تُكمل الآن المسودّة/.test(CODE));
   T('لا مرجع متبقٍّ لمتغيّرات الاعتماد المحذوفة',
     !/\binboxN\b/.test(CODE) && !/\bshowInbox\b/.test(CODE) && !/\binboxLabel\b/.test(CODE));
   T('ولا لوحة قرار اعتماد في شاشة المتابعة',
-    !/prAct\('\$\{escapeAttr\(pr\.id\)\}','approve'/.test(CODE)
-    && /const actionPanel = '';/.test(CODE));
+    // لا قرار اعتماد إطلاقاً — واللوحة الوحيدة هناك هي إكمال المسودّة.
+    !/prAct\s*\(/.test(CODE) && !/prActPrompt/.test(CODE)
+    && /const actionPanel = \(pr\.status==='draft'\)/.test(CODE)
+    && /prEditDraft\('\$\{escapeAttr\(pr\.id\)\}'\)/.test(CODE));
   T('وحدة العملة تختفي مع الرقم المحجوب (لا «— ر.س»)',
     /\$\{fmtPrice\(pr\.est_total\)\}\$\{canViewAmounts\(\)\?' ر\.س':''\}/.test(CODE));
 
@@ -2609,15 +2614,17 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
 
   // ── لا اعتمادات ──
   T('الطلب يُرسَل مباشرةً للمشتريات (لا in_review ولا بناء سلسلة)',
-    /status: asDraft\?'draft':'submitted'/.test(CODE)
-    && !/if\(!asDraft\) nStages = await prBuildChain\(pr\)/.test(CODE));
+    /currency:'SAR', status:'draft'/.test(CODE)
+    && !/prBuildChain/.test(CODE)
+    && !/status\s*:\s*'in_review'/.test(CODE));
   T('SQL: سلسلة الاعتماد مُطفأة تعطيلاً لا حذفاً (قابلة للإحياء)',
     /UPDATE proc_approval_rules SET active = false/.test(TRACK)
     && !/DROP TABLE[\s\S]{0,60}proc_approval_rules/.test(TRACK));
 
   // ── السند الموقَّع: إلزاميّ، ودليل لا ادّعاء ──
   T('لا إرسال بلا سند موقَّع (والمسودّة تُحفظ بدونه)',
-    /if\(!asDraft && !__prDraftDoc\)\{[\s\S]{0,200}return;/.test(CODE)
+    // `existingDoc` = مسودّة رُفِع سندها سابقاً — لا تُطالَب بإرفاقه مرّتين.
+    /if\(!asDraft && !__prDraftDoc && !existingDoc\)\{[\s\S]{0,220}return;/.test(CODE)
     && /السند مطلوب/.test(CODE));
   T('حقل الرفع في النموذج بصيغ مقبولة وحدّ حجم',
     /id="pr-doc-input"[\s\S]{0,140}accept="application\/pdf,image\/jpeg,image\/png"/.test(CODE)
@@ -2733,6 +2740,106 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ونافذته المُلحَقة وقت التشغيل تُزال عند الإغلاق',
     /id='modal-staff-invite'; el\.dataset\.ephemeral='1'/.test(CODE)
     && /syncScrollLock\(\); a11yWire\(el\);/.test(CODE));
+  /* ⚠️ الخادم يشترط `role==='admin'`؛ بوّابة الواجهة على `can_manage_users`
+     وحدها كانت تُظهر الزرّ لمن سيُرفَض بعد النقر. */
+  T('وبوّابة الزرّ توافق شرط الخادم (أدمن لا مجرّد مفتاح)',
+    /STATE\.currentUser\?\.role !== 'admin'/.test(CODE)
+    && /p\.role === 'admin' && p\.active !== false/.test(SINV));
+  /* سقفُ المعلّقين وُصِف «لكل قطاع» وكان استعلامه عالميّاً بلا مرشّح قطاع. */
+  T('وسقف المعلّقين مُنطاق فعلاً بالقطاع لا عالميّاً',
+    /scope_sectors=cs\./.test(SINV) && /created_by=eq\.staff_invite/.test(SINV));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ٣٤) الترقيم الخادميّ · مسار المسودّة · ترتيب الإرسال
+   --------------------------------------------------------------------------
+   ثلاثة عيوب كشفها فحص ما بعد التنفيذ، كلّها **مرّت من فحوص نصّية** — فما
+   يمكن إثباته سلوكيّاً يُثبَت بتشغيل الدالّة، لا بمطابقة نصّ.
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  G('٣٤) الترقيم والمسودّة وترتيب الإرسال');
+  const NUM    = fs.readFileSync(path.join(ROOT, 'db/system2-request-numbering.sql'), 'utf8');
+  const TRACK  = fs.readFileSync(path.join(ROOT, 'db/system2-request-tracking.sql'), 'utf8');
+  const SHARED = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+
+  // ① الترقيم لا يُشتقّ من القائمة المعروضة
+  T('الرقم يأتي من `pr_next_number` الخادميّة لا من STATE',
+    /await CLOUD\.client\.rpc\('pr_next_number'\)/.test(CODE)
+    && /id: editing \? __prEditId : await prNextNumber\(\)/.test(CODE));
+  T('والدالّة DEFINER تحت قفل استشاريّ (فلا تسابُق ولا رؤية مُصفّاة)',
+    /SECURITY DEFINER/.test(NUM) && /pg_advisory_xact_lock\('pr_next_number'\)|pg_advisory_xact_lock\(hashtext\('pr_next_number'\)\)/.test(NUM));
+  T('والسقوط للحساب المحلّي مشروط بغياب الدالّة وحده (لا يبتلع خطأً)',
+    /if\(!prFnMissing\(e\)\) throw e;/.test(CODE));
+  /* ⚠️ `upsert` مع رقمٍ مكرّر = كتابة فوق طلب قائم. الإنشاء `insert` صريح. */
+  T('الإنشاء `insert` لا `upsert` (فالتعارض يُكشف لا يُبتلَع)',
+    !/from\('proc_purchase_requests'\)\.upsert/.test(CODE)
+    && /\? await tbl\.update\(pr\)\.eq\('id', pr\.id\)\s*:\s*await tbl\.insert\(pr\)/.test(CODE));
+
+  // ② المسودّة تُفتح وتُكمَل
+  T('المسودّة تُفتح للإكمال بمعرّفها لا كطلب جديد',
+    /function prEditDraft\(id\)/.test(CODE) && /__prEditId = id;/.test(CODE)
+    && /prSaveCloud\(pr, items, editing \? 'update' : 'insert'\)/.test(CODE));
+  T('ولها مدخل ظاهر في القائمة وفي شاشة المتابعة',
+    (CODE.match(/prEditDraft\('/g) || []).length >= 2
+    && /إكمال المسودّة وإرسالها/.test(CODE));
+  T('وفتح «طلب جديد» يُلغي وضع التعديل (لا يُحدَّث طلبٌ آخر بالخطأ)',
+    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDoc=null; __prEditId=null; \}/.test(CODE));
+
+  // ③ ترتيب الإرسال: مسودّة → مرفق → إرسال → إشعار
+  T('الطلب يُحفَظ مسودّةً ثمّ يُحوَّل بعد وصول السند',
+    (() => {
+      const i = CODE.indexOf('async function prSubmitNew');
+      const body = CODE.slice(i, i + 3000);
+      const save = body.indexOf('await prSaveCloud(pr, items');
+      const up   = body.indexOf('await prUploadDoc(pr.id, __prDraftDoc)');
+      const flip = body.indexOf(`.update({status:'submitted'`);
+      const noti = body.indexOf(`prNotifyPR(pr.id, 'submitted')`);
+      return save > 0 && up > save && flip > up && noti > flip;
+    })());
+  T('ولا تُكتب حالة `submitted` في صفّ الإنشاء إطلاقاً',
+    !/status: asDraft\?'draft':'submitted'/.test(CODE));
+
+  // ── SQL: الحُرّاس المرافقة ──
+  T('SQL: حذف بنود الطلب بالرؤية لا بالنطاق (وإلّا تضاعفت عند إعادة الحفظ)',
+    /CREATE POLICY "prc_delete" ON proc_pr_items FOR DELETE TO authenticated\s*\n\s*USING \(proc_can_see_pr\(pr_id\)\)/.test(NUM));
+  T('SQL: السند لا يُمسَح بعد الإرسال (المرفق هو الاعتماد)',
+    /لا يُزال سند الطلب بعد إرساله/.test(TRACK));
+  T('SQL: أمر شراء واحد لطلب واحد',
+    /WHERE po_number = v_po AND id <> p_pr_id/.test(TRACK));
+
+  // ── الكتلة الميتة: لا إحياء ──
+  T('كتلة سلسلة الاعتماد محذوفة بالكامل من الواجهة',
+    ['prBuildChain','prMatchRule','prResolveApprover','prCurrentStage',
+     'prCanActOn','prInbox(','prAct(','prActPrompt','prInboxHTML']
+      .every(n => !CODE.includes(n)));
+  T('ولا تُجلب جداولها في كل تحميل (رحلتا شبكة بلا قارئ)',
+    !/fetchAll\('proc_pr_approvals'/.test(CODE)
+    && !/fetchAll\('proc_approval_rules'/.test(CODE)
+    && !/STATE\.prRules/.test(CODE));
+  T('واشتراك اللحظيّ صار على المحادثة لا على سلسلة الاعتماد',
+    !/table:'proc_pr_approvals'/.test(CODE) && /table:'proc_pr_messages'/.test(CODE));
+
+  // ── البريد ──
+  T('ردّ الطالب يصل مَن يعمل على طلبه فعلاً لا الفريق كلّه',
+    /proc_started_by,quotes_collected_by/.test(SHARED)
+    && /const owner = pr\.proc_started_by \|\| pr\.quotes_collected_by/.test(SHARED));
+  T('ونصّ بريد الاستلام بلا ذِكر «سلسلة الاعتماد» المُلغاة',
+    !/بدأ مساره في سلسلة الاعتماد/.test(SHARED));
+
+  // ── سلوكيّ: نصّ مرحلة المتابعة مصدرٌ واحد للشارة والمطبوعة ──
+  const S = (() => {
+    const src = [ grab('prIsLive'), grabConst('PROC_STAGE_LABEL'),
+                  grab('prProcStageText'), grab('procStatusBadge') ].join('\n\n');
+    return new Function(src + '; return {prProcStageText, procStatusBadge};')();
+  })();
+  T('نصّ المرحلة: المسودّة «—» والمُرسَل مرحلته والمربوط رقم أمره',
+    S.prProcStageText({status:'draft'}) === '—'
+    && S.prProcStageText({status:'submitted', proc_status:'in_progress'}) === 'قيد التنفيذ'
+    && S.prProcStageText({status:'submitted', proc_status:'received'}) === 'وارد جديد'
+    && S.prProcStageText({status:'submitted', po_number:'PO-9'}).includes('PO-9'));
+  T('والشارة تشترك معه في المصدر نفسه (لا جدولان يتفارقان)',
+    S.procStatusBadge({proc_status:'po_issued'}).includes('صدر أمر الشراء')
+    && (CODE.match(/const PROC_STAGE_LABEL/g) || []).length === 1);
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

@@ -45,7 +45,8 @@ INSERT INTO proc_purchase_requests (id, title, sector, requester, status) VALUES
   ('PR-1','طلب صالح','الصيانة والتشغيل','saleh','draft'),
   ('PR-2','طلب آخر','الإنشاءات','Mostafa','draft')
 ON CONFLICT (id) DO NOTHING;
-INSERT INTO proc_pr_items (pr_id, seq, name, qty, price) VALUES ('PR-1',1,'بند',1,10),('PR-2',1,'بند',1,10);
+INSERT INTO proc_pr_items (pr_id, seq, description, requested_qty, unit_price)
+VALUES ('PR-1',1,'بند',1,10),('PR-2',1,'بند',1,10);
 INSERT INTO proc_audit_log (username, action, entity_type) VALUES ('Abdullah','login','auth');
 
 SELECT set_config('request.jwt.claims', '', false);

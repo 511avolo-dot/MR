@@ -75,7 +75,15 @@ CREATE TABLE IF NOT EXISTS proc_purchase_requests (
   proc_status TEXT, proc_started_by TEXT, proc_started_at TIMESTAMPTZ,
   quotes_collected_by TEXT, quotes_collected_at TIMESTAMPTZ
 );
-CREATE TABLE IF NOT EXISTS proc_pr_items     (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, name TEXT, qty NUMERIC, price NUMERIC);
+-- ⚠️ **مطابق لمخطّط الإنتاج عموداً بعمود** (مُتحقَّق على yofcaxvstjcrmbgciwym).
+--    كان هيكلاً متخيَّلاً (name/qty/price) لا يوجد منه عمود واحد في الإنتاج —
+--    فأي تأكيد يلمس بنود الطلب كان يختبر جدولاً غير موجود. كعبٌ لا يطابق
+--    الإنتاج ليس اختباراً (ثالث مرّة في هذا المشروع).
+CREATE TABLE IF NOT EXISTS proc_pr_items (
+  id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, item_code TEXT, description TEXT,
+  unit TEXT, contract_qty NUMERIC, stock_balance NUMERIC, requested_qty NUMERIC,
+  unit_price NUMERIC, line_total NUMERIC, category TEXT, notes TEXT
+);
 CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);
 CREATE TABLE IF NOT EXISTS proc_approval_rules (id BIGSERIAL PRIMARY KEY, priority INT, department_id TEXT, category TEXT, min_total NUMERIC, max_total NUMERIC, stages JSONB, active BOOLEAN DEFAULT true);
 CREATE TABLE IF NOT EXISTS proc_settings (key TEXT PRIMARY KEY, value JSONB);

@@ -202,9 +202,13 @@ export async function onRequestPost({ request, env }) {
         message: 'لديك حساب في النظام بالفعل. إن لم تستطع الدخول فراجع مدير النظام.' });
     }
 
-    // سقف الصفوف المعلّقة لهذا القطاع — حزام أمان ضدّ إغراق اللوحة برابط مسرَّب.
+    // سقف الصفوف المعلّقة **لهذا القطاع** — حزام أمان ضدّ إغراق اللوحة برابط
+    // مسرَّب. ⚠️ كان الاستعلام بلا مرشّح قطاع فكان سقفاً عالميّاً يحتسب حتى
+    // الحسابات الموقوفة القديمة، فيمنع قطاعاً بسبب قطاع آخر.
     const pend = await fetch(
-      `${base}/rest/v1/proc_users?active=eq.false&select=username&limit=${MAX_PENDING_PER_SECTOR + 1}`,
+      `${base}/rest/v1/proc_users?active=eq.false&created_by=eq.staff_invite`
+      + `&scope_sectors=cs.${encodeURIComponent(JSON.stringify([p.s]))}`
+      + `&select=username&limit=${MAX_PENDING_PER_SECTOR + 1}`,
       { headers: svcHeaders(env) });
     const pendRows = await pend.json();
     if (Array.isArray(pendRows) && pendRows.length > MAX_PENDING_PER_SECTOR) {
