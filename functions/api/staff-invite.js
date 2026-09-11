@@ -110,11 +110,24 @@ async function callerProfile(env, request) {
     const u = await ur.json();
     if (!(u && u.email)) return null;
     const uname = emailToUsername(u.email);
-    const pr = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(uname)}&select=username,role,active`,
+    /* ⚠️ مطابقة **غير حسّاسة لحالة الأحرف** — وهذا ليس تجميلاً: الإنتاج يحمل
+       صفَّين يختلفان بالحالة فقط (`Abdullah` أدمن نشط · `abdullah` مستخدم
+       موقوف)، و`emailToUsername` تُعيد الاسم بحروف صغيرة. فـ`eq.` كانت تطابق
+       **الصفّ الخاطئ** ⇒ المالك نفسه يُرفَض بـ403 عند توليد رابط الدعوة.
+       (`admin-users.js` تعلّم الدرس بـ`ilike` — وهذا الملف فاته.)
+       وتهريب أحرف البدل (% _ \) يمنع مطابقة أوسع تلتقط مستخدماً آخر. */
+    const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
+    const pr = await fetch(
+      `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`,
       { headers: svcHeaders(env) });
+    if (!pr.ok) return null;
     const rows = await pr.json();
-    const p = rows && rows[0];
-    return (p && p.role === 'admin' && p.active !== false) ? p : null;
+    const lower = String(uname).toLowerCase();
+    /* ومع تعدّد المطابقات نختار **الأدمن النشط** صراحةً لا أوّل صفّ يعود —
+       ترتيب PostgREST ليس عقداً، فاختيار «الأوّل» يجعل الصلاحية رهن الحظّ. */
+    return (Array.isArray(rows) ? rows : []).find(
+      (x) => String(x.username).toLowerCase() === lower
+        && x.role === 'admin' && x.active !== false) || null;
   } catch (_) { return null; }
 }
 

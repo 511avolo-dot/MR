@@ -688,8 +688,17 @@ function siNet(opts = {}) {
     if (u.includes('/rest/v1/proc_users') && m === 'GET') {
       if (u.includes('role=eq.admin')) return new Response(JSON.stringify([{ username:'admin', email:'abdullah@aldeyabi.com' }]), { status: 200 });
       if (u.includes('active=eq.false')) return new Response(JSON.stringify(opts.pending || []), { status: 200 });
-      if (u.includes('username=eq.abdullah')) return new Response(JSON.stringify([{ username:'abdullah', role:'admin', active:true }]), { status: 200 });
-      if (u.includes('username=eq.saleh'))    return new Response(JSON.stringify([{ username:'saleh', role:'user', active:true }]), { status: 200 });
+      /* ⚠️ **مطابق لصفوف الإنتاج حرفيّاً** (مُتحقَّق على yofcaxvstjcrmbgciwym):
+         صفّان يختلفان بحالة الأحرف فقط — `abdullah` مستخدم **موقوف** و`Abdullah`
+         أدمن نشط — والموقوف **أوّلاً** عمداً. الكعب السابق كان يتخيّل صفّاً واحداً
+         (`abdullah` أدمن نشط) فمرّ عيب `eq.` الذي يرفض المالك نفسه بـ403. */
+      if (u.includes('username=ilike.abdullah') || u.includes('username=eq.abdullah'))
+        return new Response(JSON.stringify([
+          { username:'abdullah', role:'user',  active:false },
+          { username:'Abdullah', role:'admin', active:true  },
+        ]), { status: 200 });
+      if (u.includes('username=ilike.saleh') || u.includes('username=eq.saleh'))
+        return new Response(JSON.stringify([{ username:'saleh', role:'user', active:true }]), { status: 200 });
       if (u.includes('or=(')) return new Response(JSON.stringify(opts.existing || []), { status: 200 });
       return new Response('[]', { status: 200 });
     }
@@ -735,7 +744,13 @@ const REG_BODY = {
 
     const ok = await mint(SI_ENV);
     siT('والأدمن يسكّه برابط الصفحة العامّة',
-      ok.status === 200 && ok.j.ok && ok.j.url.includes('/staff-register.html?t='));
+      ok.status === 200 && ok.j.ok && ok.j.url.includes('/staff-register.html?t='),
+      ok.status !== 200 ? `status=${ok.status} ${JSON.stringify(ok.j)}` : '');
+    /* ⚠️ العيب الحقيقيّ الذي أوقف المالك: صفّان يختلفان بحالة الأحرف، والموقوف
+       أوّلاً. فمطابقة `eq.` (حسّاسة) أو أخذ «أوّل صفّ» تُرجِعان الصفّ الخاطئ. */
+    siT('ولا يوقفه صفٌّ موقوف يطابق اسمه بحالة أحرف مختلفة',
+      n.calls.some(c => c.url.includes('username=ilike.')) &&
+      !n.calls.some(c => c.url.includes('proc_users?username=eq.')));
   } finally { n.restore(); }
 }
 
