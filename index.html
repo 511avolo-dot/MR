@@ -19758,8 +19758,26 @@ function wfCanApprove(req){
 }
 function wfIsApprover(){ return hasPermission('can_approve_l1') || hasPermission('can_approve_l2'); }
 
+/* ⚠️ الإدراج عبر `proc_notify` الخادميّة لا من العميل: كانت السياسة
+   `FOR ALL USING(true) WITH CHECK(true)` تسمح لأي مستخدم مسجَّل بأن **يُدرِج
+   إشعاراً بانتحال أي مستلِم** (و**يقرأ إشعارات الجميع**). الدالّة تشتقّ المُرسِل
+   من `proc_me()`، وتُحلّ المستلِم من سجلّ المستخدمين، ولا تُشعِر الفاعل بفعل نفسه.
+   (db/system2-notifications-hardening.sql)
+   السقوط للإدراج المباشر مشروط حصراً بغياب الدالّة — أي حين لا تكون الهجرة
+   مطبَّقة بعد، وعندها تكون السياسة القديمة المتساهلة قائمة أصلاً. فليس بوّابة
+   خلفية حولها: بعد التطبيق يرفض RLS الإدراج المباشر. (نفس نمط `prProcStage`.) */
 async function wfNotify(recipient, type, title, body, link){
   if(!recipient || !(CLOUD && CLOUD.enabled)) return;
+  try{
+    const {error} = await CLOUD.client.rpc('proc_notify', {
+      p_recipient: recipient, p_type: type || null, p_title: title,
+      p_body: body || null, p_link: link || null
+    });
+    if(error) throw error;
+    return;
+  }catch(e){
+    if(!prFnMissing(e)) return;   // خطأ حقيقيّ: لا تُدرِج من العميل
+  }
   try{ await CLOUD.client.from('proc_notifications').insert({
     id:'ntf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
     recipient, type, title, body: body||'', link: link||null, read:false

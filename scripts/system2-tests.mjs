@@ -2476,6 +2476,33 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /if\(k\.label === 'قيمة المشتريات'\)\s*return canViewAmounts\(\);/.test(CODE)
     && /if\(k\.label === 'مؤشر صحة النظام'\)\s*return !isScopedUser\(\);/.test(CODE));
 
+  /* ⚠️ ثغرة قائمة أُغلقت: `proc_notifications` سياستها كانت
+     `FOR ALL USING(true) WITH CHECK(true)` ⇒ أي مستخدم مسجَّل يقرأ إشعارات
+     الجميع **ويُدرِج إشعاراً بانتحال أي مستلِم**. الإدراج صار عبر
+     `proc_notify` الخادميّة التي تشتقّ المُرسِل من الهوية. */
+  T('إشعارات النظام تُدرَج عبر RPC خادميّة لا من العميل',
+    /CLOUD\.client\.rpc\('proc_notify'/.test(CODE)
+    && /if\(!prFnMissing\(e\)\) return;/.test(CODE));
+  {
+    const NH = fs.readFileSync(path.join(ROOT, 'db/system2-notifications-hardening.sql'), 'utf8');
+    const WF = fs.readFileSync(path.join(ROOT, 'db/workflows.sql'), 'utf8');
+    T('SQL: القراءة والتعليم للمستلِم وحده، ولا إدراج ولا حذف للعميل',
+      /USING \(proc_me\(\) IS NOT NULL AND lower\(recipient\) = lower\(proc_me\(\)\)\)/.test(NH)
+      && /REVOKE ALL ON proc_notifications FROM authenticated;/.test(NH)
+      && /GRANT  UPDATE \(read\)    ON proc_notifications TO authenticated;/.test(NH)
+      && !/CREATE POLICY[^;]*proc_notifications FOR INSERT/.test(NH)
+      && !/CREATE POLICY[^;]*proc_notifications FOR DELETE/.test(NH));
+    T('SQL: proc_notify تشتقّ المُرسِل ولا تُشعِر الفاعل بفعل نفسه',
+      /v_me text := proc_me\(\)/.test(NH)
+      && /IF lower\(v_to\) = lower\(v_me\) THEN RETURN NULL/.test(NH)
+      && /created_by\)\s*\n\s*VALUES[\s\S]{0,240}?false, v_me\)/.test(NH));
+    /* ⚠️ والتنصيب النظيف يجب أن يكون آمناً بذاته: إعادة تشغيل المُنصِّب
+       القديم كانت ستُعيد إنشاء السياسة المتساهلة فوق التصليب. */
+    T('SQL: المُنصِّب القديم لم يعُد يُنشئ السياسة المتساهلة',
+      !/CREATE POLICY "auth_all" ON proc_notifications/.test(WF)
+      && /DROP POLICY IF EXISTS "auth_all" ON proc_notifications;/.test(WF));
+  }
+
   /* نظيرة الصرامة على الخادم — وإلّا أخفت الواجهة ما يُرسله الخادم فعلاً. */
   {
     const LP = fs.readFileSync(path.join(ROOT, 'db/system2-scoped-least-privilege.sql'), 'utf8');
