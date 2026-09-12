@@ -2321,6 +2321,11 @@ body.pr-visible .nav-item[data-page="pr"]{ display:flex !important; }
 [data-scoped-only-inline]{ display:none; }
 body.role-scoped [data-scoped-only-inline]{ display:inline-flex; }
 body.role-scoped .mnav-item[data-scoped-only]{ display:flex; }
+/* ⚠️ الزرّان العائمان يُخفَيان عنه: المساعد الذكيّ ليس من صلاحياته (ولا من
+   شاشتيه)، وجرس سير العمل يخصّ سلسلة اعتماد لا يشارك فيها. وهما فوق ذلك
+   يغطّيان أزرار «القائمة/اللوحة/الإنذارات» على شاشة 393px — مقيسٌ لا مُقدَّر. */
+body.role-scoped .ai-fab,
+body.role-scoped #wf-bell{ display:none !important; }
 
 /* ============ ANIMATIONS & MICRO-INTERACTIONS ============ */
 @keyframes slideInRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
@@ -3758,7 +3763,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
         <div class="page-header">
           <div class="page-eyebrow">بوابة الأقسام</div>
           <h1 class="page-title">طلبات الشراء</h1>
-          <p class="page-subtitle">ارفع طلب شراء المواد، تابع اعتماده لحظة بلحظة عبر سلسلة الموافقات، حتى يتحوّل تلقائياً إلى طلب تسعير.</p>
+          <p class="page-subtitle">ارفع طلبك مرفقاً بالنموذج الموقَّع من مديرك، وتابع أين وصل لدى المشتريات حتى يصدر أمر الشراء.</p>
         </div>
         <div id="pr-root"></div>
       </section>
@@ -6277,6 +6282,16 @@ function hasPermission(permKey){
   const perms = STATE.currentUser.permissions || {};
   if(perms[permKey] === true) return true;
   if(perms[permKey] === false) return false;
+  /* ⚠️ الموظّف المُنطَّق: **المنح صريح أو لا شيء**. رابط الدعوة يكتب مفتاحين
+     فقط (can_receive_po/can_view_amounts)، والسقوط لافتراضيّ الدور كان يمنحه
+     can_edit_po و can_create_po و can_import و can_export و can_use_ai… فتظهر
+     له أزرارها والخادم يرفضها (po_update/po_insert = NOT proc_is_scoped()) —
+     أبوابٌ مغلقة يطرقها، وهو ما تتوخّاه القشرة أصلاً. وأخطرها زرّ «المشاريع»:
+     يُعيد كتابة الأوامر فيفشل صامتاً مع توست نجاح كاذب.
+     نظيرتها على الخادم: proc_can_view_amounts تُصفّر افتراضها للمُنطَّق
+     (db/system2-scoped-least-privilege.sql) فيتطابق الجانبان.
+     ⚠️ غير المُنطَّق بلا أي تغيير — الافتراضيّ يبقى حارس عدم الانحدار. */
+  if(isScopedUser()) return false;
   // مفتاح غير محفوظ (صلاحية أُضيفت لاحقاً) → استخدم افتراضي الدور بدل سحبها ضمنياً
   const def = DEFAULT_PERMISSIONS[STATE.currentUser.role] || DEFAULT_PERMISSIONS.user;
   return def[permKey] === true;
@@ -6875,6 +6890,23 @@ function applyScopedNav(){
   document.querySelectorAll('.mnav-item[data-mpage]').forEach(el => {
     el.classList.toggle('perm-hidden', scoped && !pageAllowed(el.dataset.mpage));
   });
+  hideEmptyNavLabels();
+}
+
+/* عنوان مجموعة بلا وجهة واحدة تحته = ضجيج: الشريط الجانبي مسطّح (`.nav-label`
+   ثمّ أشقّاؤها `.nav-item`) فلا حاوية تُخفى معها. الموظّف المُنطَّق كان يرى
+   «المخزون والبيانات» و«الشركاء والمعايير» و«التقارير» و«ذكاء اصطناعي» عناوينَ
+   فارغة. عامّة عمداً: تفيد أيضاً موظّف مكتب حجبت صلاحياتُه مجموعةً كاملة. */
+function hideEmptyNavLabels(){
+  const nav = document.querySelector('.nav'); if(!nav) return;
+  let label = null, any = false;
+  const flush = () => { if(label) label.classList.toggle('perm-hidden', !any); };
+  [...nav.children].forEach(el => {
+    if(el.classList.contains('nav-label')){ flush(); label = el; any = false; return; }
+    if(el.classList.contains('nav-item') && !el.classList.contains('perm-hidden')
+       && getComputedStyle(el).display !== 'none') any = true;
+  });
+  flush();
 }
 
 function navigate(page){
@@ -12622,7 +12654,7 @@ async function buildPRReport(opts){
       <div class="print-section-title">طلبات الشراء</div>
       <table class="print-table"><thead><tr><th>رقم الطلب</th><th>النوع</th><th>المشروع / الجهة</th><th>الإدارة</th><th>الطالب</th><th class="num">الإجمالي</th><th class="center">الحالة</th><th>المرحلة</th><th class="center">التاريخ</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
-  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PURCHASE REQUESTS', title:'تقرير طلبات الشراء', subtitle:'حالة الطلبات عبر سلسلة الاعتماد'}, body);
+  return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · PURCHASE REQUESTS', title:'تقرير طلبات الشراء', subtitle:'حالة الطلبات لدى المشتريات'}, body);
 }
 
 // إدارة الأقسام (داخل البوابة — لمن يملك can_manage_users)
@@ -12925,7 +12957,7 @@ async function prParseForm(){
 /* ══════════ القوالب المتكررة ══════════
    «الطلب الشهريّ للمشروع» كان يُكتب من الصفر كل مرّة ببنوده وكمّياته. القالب
    يحفظه مرّة ويُستدعى بضغطة. القالب **بيانات لا التزام**: استدعاؤه يملأ نموذج
-   طلب جديد يمرّ بسلسلة الاعتماد كاملةً — لا اختصار حوكميّ. */
+   طلب جديد يمرّ بالمسار كاملاً (سندٌ موقَّع إلزاميّ ثمّ إرسال) — لا اختصار. */
 function prTemplatesHTML(){
   if(window.__prTplOK === false){
     return `<div class="empty"><div class="empty-icon">⭐</div>
@@ -14303,7 +14335,7 @@ function reportsCatalog(){
       fields:[], run:()=>buildPOCycleReport() },
 
     { group:'المشتريات', perm:null, icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/>',
-      title:'تقرير طلبات الشراء', desc:'حالة طلبات الشراء عبر سلسلة الاعتماد — قابلة للتصفية بالحالة والفترة.',
+      title:'تقرير طلبات الشراء', desc:'حالة طلبات الشراء لدى المشتريات — قابلة للتصفية بالحالة والفترة.',
       fields:[
         {type:'select', key:'status', label:'الحالة', html:prStatusOpts},
         {type:'date', key:'from', label:'من تاريخ'},
@@ -17616,7 +17648,14 @@ function renderPOKPIs(){
     {label:'قيد التوريد',value:supplying,meta:'جارية',statusFilter:'قيد التوريد'},
     {label:'نسبة التسليم',value:delRate+'%',meta:`${delivered} مُسلَّم من ${active.length}`},
     {label:'مؤشر صحة النظام',value:health+'%',meta:health>=70?'ممتاز':health>=50?'يحتاج تحسين':'حرج',view:'alerts',gold:true},
-  ];
+  ].filter(k => {
+    /* ⚠️ بطاقةٌ قيمتها «—» دائماً ليست حجباً بل ضجيج: من لا يرى المبالغ لا
+       تعنيه «قيمة المشتريات»، ومؤشّر صحة النظام مقياس إداريّ لا ميدانيّ.
+       حذفهما يرفع أوّل أمر شراء إلى أعلى شاشة الهاتف بدل سبع بطاقات. */
+    if(k.label === 'قيمة المشتريات')   return canViewAmounts();
+    if(k.label === 'مؤشر صحة النظام')  return !isScopedUser();
+    return true;
+  });
   el.innerHTML=kpis.map((k,i)=>`
     <div class="po-kpi ${k.danger?'danger':''} ${k.gold?'gold':''} ${(STATE.poView==='list'&&STATE.poSegment===k.seg&&!k.statusFilter)?'active':''}" data-kpi="${i}">
       <div class="po-kpi-label">${escapeHtml(k.label)}</div>
@@ -17640,6 +17679,11 @@ function renderPOKPIs(){
 // شريط التسلسل: نطاق كل سلسلة وعددها والأرقام المفقودة داخلها
 function renderPOSeqBar(){
   const el=document.getElementById('po-seq-bar'); if(!el) return;
+  /* ⚠️ الموظّف المُنطَّق يرى قطاعه وحده، فقائمته **مُصفّاة بطبيعتها**: أرقام
+     القطاعات الأخرى تبدو له «فجوات» فيُعلَن له «8 أرقام مفقودة» وهي مسجَّلة
+     فعلاً. إنذارٌ كاذب يربك مراجعة الدفتر — نفس قاعدة التقارير المُصفّاة
+     («لا تُحتسب الفجوات على قائمة مُصفّاة»). الشريط كلّه لا معنى له عنده. */
+  if(isScopedUser()){ el.innerHTML=''; return; }
   const sums=poSeqSummary(STATE.purchaseOrders).slice(0,3);
   if(!sums.length){ el.innerHTML=''; return; }
   const sorted=(STATE.poSort.col==='po_number');
@@ -18129,6 +18173,11 @@ function openPODrawer(num){
   const hist=(po.status_history||[]).slice().reverse();
   const timeline=hist.length?hist.map(h=>`<div class="po-timeline-item"><div class="po-tl-main">${escapeHtml(h.from||'—')} ← ${escapeHtml(h.to)}</div><div class="po-tl-meta">${escapeHtml(h.by||'')} · ${escapeHtml(String(h.at||'').slice(0,16).replace('T',' '))}</div>${h.note?`<div class="po-tl-meta" style="color:#8a6a30">السبب: ${escapeHtml(h.note)}</div>`:''}</div>`).join(''):'<div class="po-tl-meta">لا يوجد سجل بعد</div>';
   const canEdit=hasPermission('can_edit_po'), canApprove=hasPermission('can_approve_po'), canDel=hasPermission('can_delete_po');
+  /* ⚠️ الاستلام صلاحية مستقلّة: `poReceiveOpen` تقبل can_edit_po **أو**
+     can_receive_po، فبوّابة الزرّ يجب أن تطابق بوّابة الفعل. كانت أضيق منها
+     (canEdit وحده) فموظّف الميدان — الذي يملك الاستلام وحده — لا يرى زرّه
+     أصلاً. لم يظهر العيب إلّا حين صار can_edit_po لا يُمنَح ضمنياً. */
+  const canRecv=canEdit || hasPermission('can_receive_po');
   // حلقة السعر: ماذا غذّى هذا الأمر في السجل السعري، وما البنود التي لم تُطابَق
   const _priceHtml=(()=>{
     const lines=Array.isArray(po.items)?po.items:[];
@@ -18208,10 +18257,10 @@ function openPODrawer(num){
     ${po.notes?`<div class="po-drawer-sec"><h4>ملاحظات</h4><div style="font-size:13px;color:var(--ink-2)">${escapeHtml(po.notes)}</div></div>`:''}
     <div class="po-drawer-sec"><h4>الخط الزمني</h4><div class="po-timeline">${timeline}</div></div>
     <div class="po-drawer-actions">
-      ${(_nextStage)?`<button class="btn btn-accent btn-sm" onclick="poNextStage('${n}')" title="نقل لِـ ${escapeAttr(_nextStage)}">▶ ${escapeHtml(_nextStage)}</button>`:''}
-      ${(canEdit && !PO_TERMINAL.includes(po.status) && Array.isArray(po.items) && po.items.length)?`<button class="btn btn-accent btn-sm" onclick="poReceiveOpen('${n}')" title="تسجيل استلام البضاعة">📦 استلام</button>`:''}
+      ${(canEdit && _nextStage)?`<button class="btn btn-accent btn-sm" onclick="poNextStage('${n}')" title="نقل لِـ ${escapeAttr(_nextStage)}">▶ ${escapeHtml(_nextStage)}</button>`:''}
+      ${(canRecv && !PO_TERMINAL.includes(po.status) && Array.isArray(po.items) && po.items.length)?`<button class="btn btn-accent btn-sm" onclick="poReceiveOpen('${n}')" title="تسجيل استلام البضاعة">📦 استلام</button>`:''}
       ${(canEdit && !PO_TERMINAL.includes(po.status) && po.status!=='تسليم كامل')?`<button class="btn btn-ghost btn-sm" onclick="markPODelivered('${n}')">تسليم كامل ✓</button>`:''}
-      ${(!PO_TERMINAL.includes(po.status))?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="changePOStatus('${n}','ملغى')">إلغاء</button>`:''}
+      ${(canEdit && !PO_TERMINAL.includes(po.status))?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="changePOStatus('${n}','ملغى')">إلغاء</button>`:''}
       ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openPOModal('${n}')">تعديل</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="printPO('${n}')">طباعة</button>
       ${canDel?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="deletePO('${n}')">حذف</button>`:''}
@@ -19709,8 +19758,26 @@ function wfCanApprove(req){
 }
 function wfIsApprover(){ return hasPermission('can_approve_l1') || hasPermission('can_approve_l2'); }
 
+/* ⚠️ الإدراج عبر `proc_notify` الخادميّة لا من العميل: كانت السياسة
+   `FOR ALL USING(true) WITH CHECK(true)` تسمح لأي مستخدم مسجَّل بأن **يُدرِج
+   إشعاراً بانتحال أي مستلِم** (و**يقرأ إشعارات الجميع**). الدالّة تشتقّ المُرسِل
+   من `proc_me()`، وتُحلّ المستلِم من سجلّ المستخدمين، ولا تُشعِر الفاعل بفعل نفسه.
+   (db/system2-notifications-hardening.sql)
+   السقوط للإدراج المباشر مشروط حصراً بغياب الدالّة — أي حين لا تكون الهجرة
+   مطبَّقة بعد، وعندها تكون السياسة القديمة المتساهلة قائمة أصلاً. فليس بوّابة
+   خلفية حولها: بعد التطبيق يرفض RLS الإدراج المباشر. (نفس نمط `prProcStage`.) */
 async function wfNotify(recipient, type, title, body, link){
   if(!recipient || !(CLOUD && CLOUD.enabled)) return;
+  try{
+    const {error} = await CLOUD.client.rpc('proc_notify', {
+      p_recipient: recipient, p_type: type || null, p_title: title,
+      p_body: body || null, p_link: link || null
+    });
+    if(error) throw error;
+    return;
+  }catch(e){
+    if(!prFnMissing(e)) return;   // خطأ حقيقيّ: لا تُدرِج من العميل
+  }
   try{ await CLOUD.client.from('proc_notifications').insert({
     id:'ntf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
     recipient, type, title, body: body||'', link: link||null, read:false
@@ -20618,8 +20685,11 @@ function startApp(){
   __APP_STARTED = true;
   applyUserRoleToUI();
   init();
-  // الموظّف المُنطَّق يهبط على أوامره مباشرةً — لوحة التحكم ليست من شاشتيه.
-  if(isScopedUser()){ try{ navigate(SCOPED_HOME); }catch(e){} }
+  /* الموظّف المُنطَّق يهبط على أوامره مباشرةً — لوحة التحكم ليست من شاشتيه.
+     ⚠️ و«القائمة» لا «لوحة التحكم» داخل الشاشة: عرض لوحة التحكم تحليلاتٌ
+     أكثر قيمها مبالغُ محجوبة عنه («قيمة المشتريات —»)، فيمرّ على الجوال بسبع
+     بطاقات مؤشّرات قبل أن يبلغ أوّل أمر شراء. قائمة أوامره هي عمله. */
+  if(isScopedUser()){ STATE.poView = 'list'; try{ navigate(SCOPED_HOME); }catch(e){} }
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
   try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
   try{ mobileTableWrap(); }catch(e){}

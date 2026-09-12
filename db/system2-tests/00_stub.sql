@@ -176,3 +176,24 @@ VALUES (10, 0, '[{"seq":1,"label":"مدير القسم","resolver":"dept_manager
 -- تنسى `REVOKE` تمرّ محلّياً وتصل الإنتاج بقفل امتياز ناقص (وقع فعلاً في
 -- `proc_pr_messages`). محاكاتها هنا تجعل الحزمة تمسك ذلك.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+
+-- ⚠️ منقول حرفيّاً من db/workflows.sql (تعريف الإنتاج) — كعبٌ لا يطابق أنواع
+-- الإنتاج ليس اختباراً. لا نُشغّل workflows.sql كاملاً هنا: بقيّة عباراته
+-- تفترض مخطّط `proc_purchase_requests` قديماً لا يطابق الإنتاج.
+CREATE TABLE IF NOT EXISTS proc_notifications (
+  id          TEXT PRIMARY KEY,
+  recipient   TEXT NOT NULL,
+  type        TEXT,
+  title       TEXT NOT NULL,
+  body        TEXT,
+  link        TEXT,
+  read        BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+-- الحالة الابتدائية = حالة الإنتاج قبل التصليب: سياسة متساهلة ومنح كامل،
+-- فيبرهن الاختبار أنّ الهجرة هي التي أغلقتها.
+ALTER TABLE proc_notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "auth_all" ON proc_notifications;
+CREATE POLICY "auth_all" ON proc_notifications
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON proc_notifications TO authenticated;

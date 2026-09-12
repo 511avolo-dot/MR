@@ -51,9 +51,12 @@ CREATE INDEX IF NOT EXISTS idx_ntf_recipient ON proc_notifications(recipient, re
 CREATE INDEX IF NOT EXISTS idx_ntf_created   ON proc_notifications(created_at DESC);
 
 ALTER TABLE proc_notifications ENABLE ROW LEVEL SECURITY;
+-- ⚠️ سياسة `auth_all` المتساهلة أُزيلت: كانت تتيح لأي مستخدم مسجَّل قراءة
+-- إشعارات الجميع وإدراج إشعار بانتحال أي مستلِم. التنصيب النظيف يجب أن يكون
+-- آمناً بذاته، فلا تُنشَأ هنا سياسة ولا تُمنَح كتابة —
+-- التصليب الكامل (القراءة للمستلِم + proc_notify) في:
+--   db/system2-notifications-hardening.sql   ← شغّلها بعد هذا الملف
 DROP POLICY IF EXISTS "auth_all" ON proc_notifications;
-CREATE POLICY "auth_all" ON proc_notifications
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 3) حدّ الاعتماد (قابل للتعديل) — فوقه يتطلب الطلب اعتماد المدير العام
 INSERT INTO proc_settings (key, value, description)

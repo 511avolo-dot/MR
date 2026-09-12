@@ -15,7 +15,9 @@ for f in db/system2-tests/00_stub.sql db/system2-staff-scope.sql db/system2-test
          db/system2-request-flow.sql db/system2-tests/11_flow.sql \
          db/system2-request-tracking.sql db/system2-tests/12_tracking.sql \
          db/system2-staff-invite.sql db/system2-tests/13_invite.sql \
-         db/system2-request-numbering.sql db/system2-tests/14_numbering.sql; do
+         db/system2-request-numbering.sql db/system2-tests/14_numbering.sql \
+         db/system2-scoped-least-privilege.sql db/system2-tests/15_least_privilege.sql \
+         db/system2-notifications-hardening.sql db/system2-tests/16_notifications.sql; do
   printf '  %-42s' "$(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/s2t.err \
     && echo "ok" \
@@ -28,6 +30,7 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-request-flow.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-request-tracking.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-invite.sql >/dev/null 2>&1 \
+  && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-notifications-hardening.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-request-numbering.sql >/dev/null 2>&1 \
   && echo "ok" || { echo "FAILED"; exit 1; }
 
