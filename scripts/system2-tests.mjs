@@ -2360,7 +2360,11 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
          'analytics','ai','registrations'].some(p => P.pageAllowed(p)));
   T('مهبط الموظّف شاشة أوامره لا لوحة التحكم',
     /const SCOPED_HOME\s*=\s*'purchase-orders'/.test(CODE)
-    && /if\(isScopedUser\(\)\)\{\s*try\{\s*navigate\(SCOPED_HOME\)/.test(CODE));
+    && /if\(isScopedUser\(\)\)\{[^}]*navigate\(SCOPED_HOME\)/.test(CODE));
+  /* ⚠️ وداخل الشاشة «القائمة» لا «لوحة التحكم»: عرض اللوحة تحليلاتٌ أكثر قيمها
+     محجوبة عنه، فيمرّ على الجوال بسبع بطاقات مؤشّرات قبل أوّل أمر شراء. */
+  T('وعرضه الافتراضيّ قائمة أوامره لا لوحة تحليلات',
+    /if\(isScopedUser\(\)\)\{\s*STATE\.poView\s*=\s*'list'/.test(CODE));
   asUser({}, []);
   T('غير المُنطَّق يصل كل وجهة (صفر انحدار)',
     ['items','suppliers','analytics','ai','registrations'].every(p => P.pageAllowed(p)));
@@ -2390,8 +2394,20 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
      واجهة وسعة قائمة؛ والعلاج: للمُنطَّق المنح صريح أو لا شيء. */
   asUser({ can_receive_po:true, can_view_amounts:false }, ['الصيانة والتشغيل']);
   T('المفتاح الغائب لا يجعل الموظّف الميدانيّ «مشتريات»',
-    P.prIsProcurement() === false && P.prCanSeeAll() === false
-    && P.hasPermission('can_manage_rfq') === true);
+    P.prIsProcurement() === false && P.prCanSeeAll() === false);
+  /* ⚠️ وهذا هو الفرق الجوهريّ: `hasPermission` نفسها صارت صارمة للمُنطَّق.
+     كانت تسقط لافتراضيّ الدور فتمنحه can_edit_po/can_create_po/can_import/
+     can_export/can_use_ai — أزرارٌ يراها والخادم يرفضها
+     (po_update/po_insert = NOT proc_is_scoped()). المنح صريح أو لا شيء. */
+  T('ومفاتيح الكتابة الغائبة لا تُمنَح له ضمنياً',
+    ['can_edit_po','can_create_po','can_delete_po','can_import','can_export',
+     'can_use_ai','can_manage_suppliers','can_review_registrations','can_view_audit']
+      .every(k => P.hasPermission(k) === false)
+    && P.hasPermission('can_receive_po') === true);
+  T('و`prPermStrict` صارت مطابِقة لـ`hasPermission` (لا بوّابتان تتفارقان)',
+    P.DEFAULT_PERMISSIONS.user.can_edit_po === true
+    && ['can_edit_po','can_manage_rfq','can_receive_po','can_view_amounts']
+         .every(k => P.prPermStrict(k) === P.hasPermission(k)));
   asUser({ can_manage_rfq:true }, ['الصيانة والتشغيل']);
   T('والمنح الصريح يعمل (لا قاعدة مثبَّتة)', P.prIsProcurement() === true);
   asUser({ can_approve_l1:true }, ['الصيانة والتشغيل']);
@@ -2401,6 +2417,76 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   asUser({ can_create_po:true, can_edit_po:true }, []);
   T('وموظّف المكتب غير المُنطَّق يبقى «مشتريات» (صفر انحدار)',
     P.prIsProcurement() === true && P.prCanSeeAll() === true);
+  /* ⚠️ الحارس الأهمّ في هذا القسم: الصرامة **للمُنطَّق وحده**. صفوف موظّفي
+     المكتب القائمين لا تحمل أكثر المفاتيح، فلو تسرّبت الصرامة إليهم فقدوا
+     أدواتهم كلّها في لحظة نشر. */
+  asUser({}, []);
+  T('وصفٌّ بلا أي مفتاح يبقى على افتراضيّ الدور ما دام غير مُنطَّق',
+    ['can_edit_po','can_create_po','can_import','can_export','can_use_ai',
+     'can_manage_suppliers','can_view_amounts'].every(k => P.hasPermission(k) === true)
+    && P.hasPermission('can_receive_po') === false
+    && P.hasPermission('can_delete_po') === false);
+
+  /* ⚠️ والمنع الصريح يبقى أقوى من كل شيء: `false` مكتوبة تُحترَم للطرفين. */
+  asUser({ can_edit_po:false }, []);
+  T('والمنع الصريح يُحترَم لغير المُنطَّق أيضاً', P.hasPermission('can_edit_po') === false);
+  asUser({}, ['الصيانة والتشغيل'], 'admin');
+  T('والأدمن يبقى فوق الصرامة ولو أُسنِد له قطاع',
+    P.hasPermission('can_edit_po') === true && P.canViewAmounts() === true);
+
+  /* الزرّان العائمان: لا يخصّانه، ويغطّيان أزرار «القائمة/اللوحة/الإنذارات»
+     على 393px (مقيسٌ في المتصفّح). */
+  /* ⚠️ يقرأ HTML لا CODE: الأخير جافاسكربت بلا CSS ولا ترميز، فتأكيدٌ عليه
+     يمرّ فراغاً (وقع فعلاً في أوّل صياغة لهذا القسم). */
+  T('الزرّان العائمان (الذكاء والجرس) مخفيّان عن الموظّف المُنطَّق',
+    /body\.role-scoped\s+\.ai-fab\s*,\s*body\.role-scoped\s+#wf-bell\s*\{[^}]*display:\s*none/.test(HTML));
+
+  /* عنوان مجموعة بلا وجهة تحته = ضجيج. الشريط مسطّح فلا حاوية تُخفى معها. */
+  T('عناوين مجموعات الشريط الجانبي الفارغة تُخفى',
+    /function hideEmptyNavLabels\s*\(/.test(CODE)
+    && /hideEmptyNavLabels\(\);\s*\n\}/.test(CODE.slice(CODE.indexOf('function applyScopedNav'))));
+
+  /* نصّ يَعِد بما أُلغي أسوأ من نصٍّ ناقص: قرار المالك «متابعة لا وورك فلو». */
+  T('لا نصّ مرئيّ يَعِد بسلسلة موافقات أُلغيت',
+    !/سلسلة الموافقات/.test(HTML)
+    && !/page-subtitle">[^<]*سلسلة الاعتماد/.test(HTML)
+    && !/subtitle:'[^']*سلسلة الاعتماد/.test(CODE)
+    && !/desc:'[^']*سلسلة الاعتماد/.test(CODE));
+
+  /* ⚠️ ثلاث بوّابات في صفّ أزرار الدرج كشفتها الصرامة ولم تُحدِثها:
+     — «📦 استلام» كان محكوماً بـcan_edit_po وحده، بينما `poReceiveOpen`
+       تقبل can_edit_po **أو** can_receive_po: بوّابة الزرّ أضيق من بوّابة
+       الفعل، فموظّف الميدان لا يرى زرّ عمله الأساسيّ.
+     — «▶ <المرحلة التالية>» و«إلغاء» كانا **بلا أي بوّابة صلاحية**، بينما
+       `changePOStatus` ترفضهما بـrequirePermission('can_edit_po'). */
+  T('زرّ الاستلام يتبع بوّابة فعله لا بوّابة أضيق',
+    /const canRecv\s*=\s*canEdit \|\| hasPermission\('can_receive_po'\)/.test(CODE)
+    && /\$\{\(canRecv &&[^}]*poReceiveOpen/.test(CODE)
+    && !/\$\{\(canEdit && !PO_TERMINAL\.includes\(po\.status\) && Array\.isArray\(po\.items\)/.test(CODE));
+  T('وزرّا نقل المرحلة والإلغاء صارا خلف صلاحية التعديل',
+    /\$\{\(canEdit && _nextStage\)\?/.test(CODE)
+    && /\$\{\(canEdit && !PO_TERMINAL\.includes\(po\.status\)\)\?[\s\S]{0,240}?'ملغى'/.test(CODE));
+
+  /* شريط الفجوات على قائمةٍ مُصفّاة بطبيعتها = إنذار كاذب: أرقام القطاعات
+     الأخرى تبدو «مفقودة» وهي مسجَّلة. نفس قاعدة التقارير المُصفّاة. */
+  T('لا إنذار فجوات تسلسل للموظّف المُنطَّق (قائمته مُصفّاة بالقطاع)',
+    /function renderPOSeqBar\(\)\{[\s\S]{0,700}?if\(isScopedUser\(\)\)\{ el\.innerHTML=''; return; \}/.test(CODE));
+  /* وبطاقةٌ قيمتها «—» دائماً ليست حجباً بل ضجيج. */
+  T('بطاقتا قيمة المشتريات وصحة النظام تسقطان عمّن لا يعنيانه',
+    /if\(k\.label === 'قيمة المشتريات'\)\s*return canViewAmounts\(\);/.test(CODE)
+    && /if\(k\.label === 'مؤشر صحة النظام'\)\s*return !isScopedUser\(\);/.test(CODE));
+
+  /* نظيرة الصرامة على الخادم — وإلّا أخفت الواجهة ما يُرسله الخادم فعلاً. */
+  {
+    const LP = fs.readFileSync(path.join(ROOT, 'db/system2-scoped-least-privilege.sql'), 'utf8');
+    /* ⚠️ و`coalesce` الداخليّة ليست تجميلاً: `scope_sectors` عمودها NULL لكل
+       موظفي المكتب، فبدونها يُنتج التعبير NULL لا true ويفقد الأربعةُ
+       القائمون مبالغهم لحظة النشر (أمسكه LP1 قبل أي تطبيق حيّ). */
+    T('SQL: افتراضيّ «عرض المبالغ» يُصفَّر للمُنطَّق ويبقى true لغيره',
+      /CREATE OR REPLACE FUNCTION proc_can_view_amounts/.test(LP)
+      && /NOT coalesce\(\s*CASE WHEN jsonb_typeof\(u\.scope_sectors\) = 'array'/.test(LP)
+      && /THEN jsonb_array_length\(u\.scope_sectors\) > 0 END,\s*false\)/.test(LP));
+  }
 }
 
 /* ── ٣١) دورة الطلب: مسار الطالب · الاستفهام · القوالب · مراحل المشتريات ──

@@ -233,21 +233,68 @@ async function session(viewport, tag) {
   ok('درج الأمر بلا مبالغ', !MONEY_RX.test(drawer.text), (drawer.text.match(MONEY_RX) || ['—'])[0]);
   ok('زرّ الاستلام في الدرج', drawer.recv === true, String(drawer.recv));
   ok('خانة ملاحظة المتابعة في الدرج', drawer.comment === true, String(drawer.comment));
-  /* ⚠️ عيب قائم مرصود (سابق لهذا السكربت): `hasPermission` تسقط لافتراضيّ الدور
-     حين يغيب المفتاح، ورابط الدعوة يكتب مفتاحين فقط — فمفاتيح الكتابة
-     (`can_edit_po`/`can_create_po`/`can_import`) تصير true للموظّف الميدانيّ.
-     الخادم يرفضها (`po_update/po_insert` = `NOT proc_is_scoped()`) فلا خطر
-     بيانات، لكنّها **أبواب مغلقة يطرقها** — وهو ما تتوخّاه القشرة أصلاً. */
+  /* كان عيباً: `hasPermission` تسقط لافتراضيّ الدور حين يغيب المفتاح، ورابط
+     الدعوة يكتب مفتاحين فقط — فمفاتيح الكتابة تصير true فتظهر أزرارها
+     والخادم يرفضها (po_update/po_insert = NOT proc_is_scoped()).
+     أُصلح: للمُنطَّق **المنح صريح أو لا شيء**. */
   const writeBtns = await page.evaluate(() => {
     const vis = el => el && getComputedStyle(el).display !== 'none' && !el.classList.contains('perm-hidden');
-    const ids = ['po-add-btn', 'po-import-btn', 'po-projects-btn']
+    const ids = ['po-add-btn', 'po-import-btn', 'po-projects-btn', 'po-export-btn']
       .filter(i => vis(document.getElementById(i)));
     const dr = [...document.querySelectorAll('#po-drawer button')].filter(vis)
       .map(b => b.textContent.trim()).filter(t => /تعديل|إلغاء|تغيير|تسليم كامل/.test(t));
-    return { ids, dr, perms: ['can_edit_po','can_create_po','can_import'].map(k => `${k}=${hasPermission(k)}`) };
+    return { ids, dr,
+      perms: ['can_edit_po','can_create_po','can_import','can_export','can_use_ai']
+               .map(k => hasPermission(k)),
+      keeps: hasPermission('can_receive_po') };
   });
-  note('⚠️ أزرار كتابة ظاهرة له والخادم يرفضها',
-    `${writeBtns.ids.join(' · ')} | الدرج: ${writeBtns.dr.join(' · ')} | ${writeBtns.perms.join(' ')}`);
+  ok('لا زرّ كتابة يطرق باباً مغلقاً', writeBtns.ids.length === 0 && writeBtns.dr.length === 0,
+    `${writeBtns.ids.join(' · ') || 'لا شيء'} | الدرج: ${writeBtns.dr.join(' · ') || 'لا شيء'}`);
+  ok('مفاتيح الكتابة الغائبة = false، والممنوح صراحةً باقٍ',
+    writeBtns.perms.every(v => v === false) && writeBtns.keeps === true,
+    `perms=${writeBtns.perms.join(',')} receive=${writeBtns.keeps}`);
+
+  const floats = await page.evaluate(() =>
+    ['ai-fab', 'wf-bell'].map(id => {
+      const el = document.getElementById(id);
+      return el ? getComputedStyle(el).display : 'مفقود';
+    }));
+  ok('الزرّان العائمان مخفيّان عنه', floats.every(d => d === 'none' || d === 'مفقود'), floats.join(' · '));
+
+  /* عناوين المجموعات الفارغة — ولا يُخفى عنوانٌ تحته وجهة مرئيّة. */
+  const labels = await page.evaluate(() => {
+    const nav = document.querySelector('.nav');
+    return {
+      shown: [...nav.querySelectorAll('.nav-label')]
+        .filter(l => getComputedStyle(l).display !== 'none').map(l => l.textContent.trim()),
+      items: [...nav.querySelectorAll('.nav-item[data-page]')]
+        .filter(a => getComputedStyle(a).display !== 'none').map(a => a.dataset.page) };
+  });
+  ok('لا عنوان مجموعة فارغ في الشريط الجانبي',
+    labels.shown.length === 1 && labels.shown[0] === 'المشتريات',
+    labels.shown.join(' · ') || 'لا شيء');
+  ok('والوجهتان تحته لم تُخفَيا معه', labels.items.length === 2, labels.items.join(' · '));
+
+  /* ⚠️ أداء: `hasPermission` صارت تستدعي `isScopedUser()` التي تُطبّع مصفوفة
+     القطاعات، و`fmtPrice` تمرّ بها في **كل** خلية نقدية. نقيس ولا نفترض. */
+  const perf = await page.evaluate(() => {
+    const t0 = performance.now();
+    for (let i = 0; i < 20000; i++) fmtPrice(1234.5);
+    return Math.round(performance.now() - t0);
+  });
+  ok('لا كلفة أداء محسوسة من فحص النطاق داخل fmtPrice', perf < 400, `${perf}ms / 20k نداء`);
+
+  /* بطاقةٌ قيمتها «—» دائماً، ومؤشّر إداريّ، وشريط فجوات كاذب على قائمة
+     مُصفّاة بطبيعتها — ثلاثتها ضجيج يُبعد أوّل أمر شراء عن أعلى الشاشة. */
+  const strip = await page.evaluate(() => ({
+    labels: [...document.querySelectorAll('#po-kpi-strip .po-kpi-label')].map(e => e.textContent.trim()),
+    seq: (document.getElementById('po-seq-bar') || {}).innerHTML || ''
+  }));
+  ok('بطاقتا «قيمة المشتريات» و«مؤشر صحة النظام» محذوفتان عنه',
+    !strip.labels.includes('قيمة المشتريات') && !strip.labels.includes('مؤشر صحة النظام'),
+    `${strip.labels.length} بطاقة: ${strip.labels.join(' · ')}`);
+  ok('ولا إنذار فجوات كاذب على قائمة مُصفّاة بالقطاع',
+    strip.seq.trim() === '', strip.seq ? 'الشريط ظاهر' : 'فارغ');
 
   // نافذة الاستلام
   await page.evaluate(() => poReceiveOpen('P.O-DG26-3209'));
@@ -318,6 +365,8 @@ async function session(viewport, tag) {
   await login(page, { user: SCOPED_USER });
   await page.waitForTimeout(700);
   await shoot(page, '10-mobile-orders');
+  /* لقطة بحجم الشاشة (لا الصفحة كاملة): هي ما يراه فعلاً أوّل ما يفتح هاتفه. */
+  await page.screenshot({ path: `${OUT}/10b-mobile-first-screen.png` });
 
   const mnav = await page.evaluate(() => [...document.querySelectorAll('.mnav-item[data-mpage]')]
     .filter(n => getComputedStyle(n).display !== 'none').map(n => n.dataset.mpage));
@@ -352,6 +401,22 @@ async function session(viewport, tag) {
 
   await page.evaluate(() => { navDrawer(true); });
   await shoot(page, '14-mobile-drawer-menu');
+  /* ⚠️ فرضية خطر مقيسة: `hideEmptyNavLabels` تعتمد `getComputedStyle` — فلو
+     كان الشريط الجانبي على الجوال مخفيّاً بـ`display:none` (لا بـtransform)
+     لحُسبت كل الوجهات مخفيّةً فتُخفى **كل** العناوين، وتُفتَح القائمة بلا
+     عنوان واحد. نُشغّل الممرّ والدرج مفتوح ونتحقّق. */
+  const mLabels = await page.evaluate(() => {
+    applyScopedNav();
+    const nav = document.querySelector('.nav');
+    return {
+      shown: [...nav.querySelectorAll('.nav-label')]
+        .filter(l => getComputedStyle(l).display !== 'none').map(l => l.textContent.trim()),
+      items: [...nav.querySelectorAll('.nav-item[data-page]')]
+        .filter(a => getComputedStyle(a).display !== 'none').map(a => a.dataset.page) };
+  });
+  ok('على الجوال: عنوان المشتريات باقٍ ووجهتاه تحته',
+    mLabels.shown.length === 1 && mLabels.shown[0] === 'المشتريات' && mLabels.items.length === 2,
+    `${mLabels.shown.join(' · ') || 'لا شيء'} | ${mLabels.items.join(' · ')}`);
   await page.evaluate(() => { navDrawer(false); });
 
   await ctx.close();
@@ -375,6 +440,39 @@ async function session(viewport, tag) {
   ok('موظّف المكتب: المبالغ ظاهرة', off.money !== '—', off.money);
   ok('موظّف المكتب غير مُنطَّق', off.scoped === false, String(off.scoped));
   ok('زرّ المتابعة الميدانيّ مخفيّ عنه', off.followup === 'none', off.followup);
+
+  /* ⚠️ أهمّ فحص في الملف: الصرامة **للمُنطَّق وحده**. موظّف المكتب هنا يحمل
+     مفتاحين فقط في صفّه — كحال الأربعة القائمين — فلو تسرّبت إليه الصرامة
+     فقد أدواته كلّها لحظة النشر. */
+  const offKeep = await page.evaluate(() => {
+    const vis = el => el && getComputedStyle(el).display !== 'none' && !el.classList.contains('perm-hidden');
+    return {
+      perms: ['can_edit_po','can_create_po','can_import','can_export','can_use_ai',
+              'can_manage_suppliers','can_view_amounts'].map(k => hasPermission(k)),
+      btns: ['po-add-btn','po-import-btn','po-export-btn','po-projects-btn']
+              .filter(i => vis(document.getElementById(i))).length,
+      labels: [...document.querySelectorAll('.nav .nav-label')]
+                .filter(l => getComputedStyle(l).display !== 'none').length,
+      fab: getComputedStyle(document.getElementById('ai-fab')).display };
+  });
+  ok('موظّف المكتب: كل مفاتيحه الافتراضية باقية (صفر انحدار)',
+    offKeep.perms.every(v => v === true), offKeep.perms.join(','));
+  ok('وأزرار شاشة الأوامر الأربعة ظاهرة له', offKeep.btns === 4, `${offKeep.btns}/4`);
+  ok('وعناوين مجموعاته لم تُخفَ', offKeep.labels >= 4, String(offKeep.labels));
+  ok('وزرّ المساعد الذكيّ باقٍ له', offKeep.fab !== 'none', offKeep.fab);
+  /* ⚠️ المقارنة بالمِثل: شريط التسلسل لا يُرسَم إلّا في عرض «القائمة»
+     (`renderPurchaseOrders`)، وموظّف المكتب يهبط على «لوحة التحكم» — فقياسه
+     هناك يُظهره فارغاً ويبدو انحداراً وهو سلوك قائم. */
+  const offStrip = await page.evaluate(() => {
+    STATE.poView = 'list'; renderPurchaseOrders();
+    return {
+      labels: [...document.querySelectorAll('#po-kpi-strip .po-kpi-label')].map(e => e.textContent.trim()),
+      seq: (document.getElementById('po-seq-bar') || {}).innerHTML || '' };
+  });
+  ok('وبطاقاته السبع وشريط التسلسل كما كانا (صفر انحدار)',
+    offStrip.labels.length === 7 && offStrip.labels.includes('قيمة المشتريات')
+    && offStrip.labels.includes('مؤشر صحة النظام') && offStrip.seq.trim() !== '',
+    `${offStrip.labels.length} بطاقة · شريط=${offStrip.seq.trim() ? 'ظاهر' : 'فارغ'}`);
 
   await page.evaluate(() => { navigate('reports'); });
   await page.waitForTimeout(500);

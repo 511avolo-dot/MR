@@ -15,7 +15,8 @@ for f in db/system2-tests/00_stub.sql db/system2-staff-scope.sql db/system2-test
          db/system2-request-flow.sql db/system2-tests/11_flow.sql \
          db/system2-request-tracking.sql db/system2-tests/12_tracking.sql \
          db/system2-staff-invite.sql db/system2-tests/13_invite.sql \
-         db/system2-request-numbering.sql db/system2-tests/14_numbering.sql; do
+         db/system2-request-numbering.sql db/system2-tests/14_numbering.sql \
+         db/system2-scoped-least-privilege.sql db/system2-tests/15_least_privilege.sql; do
   printf '  %-42s' "$(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/s2t.err \
     && echo "ok" \
