@@ -140,17 +140,36 @@ async function callerProfile(env, request) {
   } catch (_) { return null; }
 }
 
-/** هل لهذا البريد (أو اسم المستخدم المشتقّ منه) حساب قائم؟ */
+/* هل لهذا البريد (أو اسم المستخدم المشتقّ منه) حساب قائم؟
+   ⚠️ المطابقة على الاسم **غير حسّاسة لحالة الأحرف**: الإنتاج يحمل `Mostafa`
+   و`Mahmoud` بحرف كبير، فـ`eq.mahmoud` كانت **لا تطابقهما** — فتُرسَل دعوة
+   لبريد له حساب أصلاً. وتهريب أحرف البدل يمنع مطابقة أوسع. */
 async function existingUser(env, base, email, username) {
+  const safe = String(username).replace(/[\\%_]/g, (c) => '\\' + c);
   const r = await fetch(
-    `${base}/rest/v1/proc_users?or=(username.eq.${encodeURIComponent(username)},email.eq.${encodeURIComponent(email)})&select=username,active`,
+    `${base}/rest/v1/proc_users?or=(username.ilike.${encodeURIComponent(safe)},email.eq.${encodeURIComponent(email)})&select=username,active`,
     { headers: svcHeaders(env) });
   if (!r.ok) return null;                       // فشل مغلق يُعالَج عند المستدعي
   const rows = await r.json();
   return (Array.isArray(rows) && rows.length) ? rows[0] : false;
 }
 
-const usernameFrom = (email) => String(email).split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 30);
+/* ⚠️ اشتقاق اسم المستخدم من البريد **يجب أن يطابق ما يفعله مسار الدخول** —
+   وإلّا صار الحساب المُنشأ هويّةً ثالثة لا الواجهة تجدها ولا القاعدة.
+   كان هنا اشتقاق خاصّ (`local-part` بعد حذف كل ما ليس [a-z0-9_]) وهو يُخطئ مرّتين:
+
+   (أ) **يتجاهل خريطة الأسماء المستقرّة** `AUTH_EMAIL_MAP`: بريد `supply@aldeyabi.com`
+       اسمه في النظام `mostafa` لا `supply`. وصفّ `Mostafa` في الإنتاج **بلا بريد**،
+       فلا فحصُ الاسم ولا فحصُ البريد يجده ⇒ تُرسَل الدعوة، ثمّ يقول Auth عند
+       التفعيل «مسجَّل مسبقاً» فيُنشأ صفّ `supply` ثانٍ ببريد مضبوط — و`proc_me()`
+       تُطابق بالبريد أوّلاً ⇒ **هويّة مصطفى (أدمن) تنقلب إلى موظّف ميدانيّ مُنطَّق**،
+       وكلمة مروره لم تتغيّر أصلاً. (بلاغ Codex P2 — مؤكَّد بالقياس على الإنتاج.)
+   (ب) **يُسقِط النقطة**: `ali.salem@aldeyabi.com` كان يصير `alisalem`، بينما
+       `usernameToEmail` في الدخول تبني البريد من `ali.salem` — فالملفّ لا يُعثَر
+       عليه بعد المصادقة، ويدخل الموظّف بلا نطاق ولا صلاحيات. (بلاغ Codex P1.)
+
+   العلاج: `emailToUsername` نفسها التي يستعملها بقية النظام. */
+const usernameFrom = (email) => emailToUsername(String(email).toLowerCase());
 
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
@@ -225,7 +244,7 @@ export async function onRequestPost({ request, env }) {
 
       const sent = await sendResend(env, [email],
         'دعوة للانضمام إلى نظام متابعة المشتريات | مجموعة الذيابي',
-        inviteEmail({ displayName, sector, jobTitle, email, link,
+        inviteEmail({ displayName, sector, jobTitle, email, username, link,
           expiresAt: now + days * 86400000, inviter: admin.display_name || admin.username }));
 
       /* ⚠️ الرابط يُعاد للمدير **حتى عند نجاح الإرسال**: بريدٌ يقع في مجلّد
@@ -274,8 +293,17 @@ export async function onRequestPost({ request, env }) {
         user_metadata: { username, source: 'staff_invite' } }),
     });
     const auData = await au.json().catch(() => ({}));
-    if (!au.ok && !/already|exists|registered/i.test(JSON.stringify(auData))) {
-      return json({ error: 'تعذّر إنشاء حساب الدخول' }, 400);
+    if (!au.ok) {
+      /* ⚠️ «مسجَّل مسبقاً» كان يُعامَل **نجاحاً** فيمضي الكود لإنشاء ملفّ ثانٍ —
+         وهو ناقل الضرر الحقيقيّ في بلاغ Codex: بريدٌ له حساب Auth تحت اسم آخر
+         (مثل `supply@` ⇒ `Mostafa`) ينتهي بصفّ `proc_users` ثانٍ ببريد مضبوط،
+         فتُطابقه `proc_me()` بالبريد أوّلاً و**تنقلب هويّة صاحب الحساب الأصليّ**.
+         وكلمة المرور التي اختارها الموظّف لم تُثبَّت أصلاً (Auth رفض الإنشاء)،
+         فحتى «النجاح» كان كاذباً. الآن يفشل مغلقاً بلا أي كتابة. */
+      const already = /already|exists|registered/i.test(JSON.stringify(auData));
+      return json({ error: already
+        ? 'لهذا البريد حساب دخول في النظام بالفعل — راجع مدير النظام'
+        : 'تعذّر إنشاء حساب الدخول' }, already ? 409 : 400);
     }
 
     /* ⚠️ كل الحقول الحوكمية مفروضة هنا لا من العميل: الدور `user`، والصلاحيات
@@ -313,7 +341,7 @@ export async function onRequestPost({ request, env }) {
 /* ═══════════ قالب بريد الدعوة ═══════════
    جداول لا flexbox، وأنماط سطريّة، وألوان BRAND — فعملاء البريد (Outlook
    خاصّة) لا يدعمون الشبكات الحديثة ولا الأنماط الخارجية. */
-function inviteEmail({ displayName, sector, jobTitle, email, link, expiresAt, inviter }) {
+function inviteEmail({ displayName, sector, jobTitle, email, username, link, expiresAt, inviter }) {
   const until = new Date(expiresAt).toISOString().slice(0, 10);
   const row = (k, v) => v
     ? `<tr>
@@ -344,7 +372,8 @@ function inviteEmail({ displayName, sector, jobTitle, email, link, expiresAt, in
 
       <table style="width:100%;border-collapse:collapse;background:${BRAND.wash};
              border:1px solid ${BRAND.line};border-radius:10px;margin:0 0 22px">
-        ${row('القطاع', sector)}${row('المسمّى الوظيفيّ', jobTitle)}${row('بريد الدخول', email)}
+        ${row('القطاع', sector)}${row('المسمّى الوظيفيّ', jobTitle)}
+        ${row('اسم الدخول', username)}${row('بريدك', email)}
       </table>
 
       <div style="text-align:center;margin:26px 0 18px">

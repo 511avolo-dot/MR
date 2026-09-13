@@ -672,6 +672,16 @@ const SI_REQ = (qs, init = {}, headers = {}) => new Request(
                'Content-Type': 'application/json', ...headers }, ...init });
 
 /* شبكة مُقلَّدة: تصادق الأدمن · تُعيد صفوف proc_users/settings · تلتقط الكتابات */
+const ROWS_ALL = {
+  abdullah: [
+    { username:'abdullah', role:'user',  active:false, email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
+    { username:'Abdullah', role:'admin', active:true,  email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
+  ],
+  mostafa:  [{ username:'Mostafa', role:'admin', active:true, email:null, display_name:'مصطفى' }],
+  mahmoud:  [{ username:'Mahmoud', role:'user',  active:true, email:null, display_name:'محمود' }],
+};
+/* ⚠️ `saleh` **غير موجود عمداً** — هو المدعوّ في المسار السعيد. أي صفّ باسمه هنا
+   يجعل فحص «بريد له حساب» يُرجِع 409 فيسقط كل ما بعده. */
 function siNet(opts = {}) {
   const calls = [];
   const real = globalThis.fetch;
@@ -681,7 +691,9 @@ function siNet(opts = {}) {
     if (u.includes('/auth/v1/user')) {
       const a = (o.headers && (o.headers.Authorization || o.headers.authorization)) || '';
       if (a.includes('admin-jwt')) return new Response(JSON.stringify({ email: 'abdullah@aldeyabi.com' }), { status: 200 });
-      if (a.includes('user-jwt'))  return new Response(JSON.stringify({ email: 'saleh@aldeyabi.com' }), { status: 200 });
+      /* موظّف **قائم فعلاً** (نشط، غير أدمن) — أقوى من هويّة مجهولة: يُثبِت أنّ
+         الرفض جاء من فحص الرتبة لا من تعذّر العثور على الصفّ. */
+      if (a.includes('user-jwt'))  return new Response(JSON.stringify({ email: 'mahmoud@aldeyabi.com' }), { status: 200 });
       return new Response('{}', { status: 401 });
     }
     if (u.includes('/rest/v1/proc_settings') && m === 'GET') {
@@ -689,7 +701,17 @@ function siNet(opts = {}) {
     }
     if (u.includes('/rest/v1/proc_users') && m === 'GET') {
       if (u.includes('or=(')) {
-        return new Response(JSON.stringify(opts.existing || []), { status: opts.existingFail ? 500 : 200 });
+        if (opts.existingFail) return new Response('{}', { status: 500 });
+        if (opts.existing) return new Response(JSON.stringify(opts.existing), { status: 200 });
+        /* نُحاكي `or=(username.ilike.X,email.eq.Y)` كما تفعل القاعدة: مطابقة
+           الاسم **غير حسّاسة لحالة الأحرف**، ومطابقة البريد تامّة. */
+        const dec = decodeURIComponent(u);
+        const un = (/username\.i?like\.([^,)]*)/.exec(dec) || [, ''])[1].replace(/\\(.)/g, '$1').toLowerCase();
+        const em = (/email\.eq\.([^,)]*)/.exec(dec) || [, ''])[1].toLowerCase();
+        const all = Object.values(ROWS_ALL).flat();
+        const hit = all.filter((x) => String(x.username).toLowerCase() === un
+                                   || (x.email && String(x.email).toLowerCase() === em));
+        return new Response(JSON.stringify(hit), { status: 200 });
       }
       if (u.includes('role=eq.admin')) return new Response(JSON.stringify([{ username:'admin', email:'abdullah@aldeyabi.com' }]), { status: 200 });
       /* ⚠️ **مطابق لصفوف الإنتاج حرفيّاً** (مُتحقَّق على yofcaxvstjcrmbgciwym):
@@ -701,18 +723,19 @@ function siNet(opts = {}) {
          (وهو ما يقع فعلاً حين يُشتقّ الاسم من صفّ الأدمن `Abdullah`). */
       const mName = /username=i?like\.([^&]*)/.exec(u) || /username=eq\.([^&]*)/.exec(u);
       const want = mName ? decodeURIComponent(mName[1]).replace(/\\(.)/g, '$1').toLowerCase() : '';
-      const ROWS = {
-        abdullah: [
-          { username:'abdullah', role:'user',  active:false, email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
-          { username:'Abdullah', role:'admin', active:true,  email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
-        ],
-        saleh: [{ username:'saleh', role:'user', active:true, email:'saleh@aldeyabi.com' }],
-      };
+      /* ⚠️ صفوف الإنتاج الحقيقية (مقيسة على yofcaxvstjcrmbgciwym 2026-09-13):
+         `Mostafa` و`Mahmoud` بحرف كبير و**بلا بريد** — وهما ما جعل `eq.` تُخفق
+         وتسمح بدعوة بريدٍ له حساب. و`supply@aldeyabi.com` اسمه `mostafa` عبر
+         AUTH_EMAIL_MAP لا `supply`. */
+      const ROWS = ROWS_ALL;
       let rows = ROWS[want] || [];
       if (u.includes('active=eq.true')) rows = rows.filter((x) => x.active !== false);
       return new Response(JSON.stringify(rows), { status: 200 });
     }
     if (u.includes('/auth/v1/admin/users') && m === 'POST') {
+      /* ردّ GoTrue الحقيقيّ حين يكون البريد مسجَّلاً في Auth أصلاً. */
+      if (opts.authAlready) return new Response(
+        JSON.stringify({ code: 422, msg: 'A user with this email address has already been registered' }), { status: 422 });
       return new Response(JSON.stringify({ id: 'auth-uid-1' }), { status: opts.authFail ? 500 : 200 });
     }
     if (u.includes('/rest/v1/proc_users') && m === 'POST') {
@@ -931,6 +954,56 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
       siT('وفشل حفظ الملف يحذف حساب الدخول (لا حساب يتيم)', r.status === 400 && !!del);
     } finally { n.restore(); }
   }
+
+  /* ⚠️ الحساب موجود في **Auth** لا في `proc_users` (مثلاً حُذِف ملفه وبقي دخوله):
+     كان يُقرَأ نجاحاً فيُكتَب ملفٌ ثانٍ بلا حساب دخول يملكه. الآن 409 بلا كتابة. */
+  {
+    const n = siNet({ authAlready: true });
+    try {
+      const r = await si.onRequestPost({ request: DONE({ password:'Passw0rd!' }), env: SI_ENV });
+      const wrote = n.calls.filter(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
+      siT('وحسابُ دخولٍ قائم في Auth يُرفض 409 ولا يُكتَب ملفٌ ثانٍ',
+        r.status === 409 && wrote.length === 0);
+    } finally { n.restore(); }
+  }
+}
+
+/* ══ (ز) اسم الدخول: مشتقّ بنفس قاعدة النظام، والمطابقة غير حسّاسة للحالة ══
+   عيبان أبلغ عنهما Codex على PR #100 وأُكِّدا بالقياس على صفوف الإنتاج:
+   (١) اسم الدخول كان يُشتقّ محليّاً (`split('@')[0]` بحذف كل ما ليس a-z0-9_)
+       بدل `emailToUsername` — فـ`supply@aldeyabi.com` (اسمه `mostafa` عبر
+       AUTH_EMAIL_MAP) كان يُقرَأ `supply` فلا يطابق شيئاً ⇒ **دعوة تُنشئ ملفاً
+       ثانياً ببريد مصطفى**، و`proc_me()` يطابق البريد أوّلاً ⇒ **الأدمن ينقلب
+       موظّف ميدان مُنطَّقاً**. و`ali.salem@` كان يصير `alisalem` فلا يطابق ملفّه.
+   (٢) المطابقة كانت `eq.` حسّاسة للحالة — و`Mahmoud`/`Mostafa` بحرف كبير. */
+{
+  const n = siNet();
+  try {
+    const r = await invite(SI_ENV, ADMIN, { ...INVITE, email:'supply@aldeyabi.com' });
+    siT('دعوة بريد مصطفى (supply@) تُرفض — لا ملفّ ثانٍ ينقلب به الأدمن موظّفاً',
+      r.status === 409 && !n.calls.some(c => c.url.includes('api.resend.com')),
+      r.status !== 409 ? `status=${r.status} ${JSON.stringify(r.j)}` : '');
+  } finally { n.restore(); }
+}
+{
+  const n = siNet();
+  try {
+    const r = await invite(SI_ENV, ADMIN, { ...INVITE, email:'mahmoud@aldeyabi.com' });
+    siT('ودعوة صفٍّ اسمه بحرف كبير (Mahmoud) تُرفض رغم اختلاف الحالة',
+      r.status === 409, r.status !== 409 ? `status=${r.status}` : '');
+  } finally { n.restore(); }
+}
+{
+  const n = siNet();
+  try {
+    const r = await invite(SI_ENV, ADMIN, { ...INVITE, email:'ali.salem@aldeyabi.com' });
+    const mail = n.calls.find(c => c.url.includes('api.resend.com'));
+    const html = mail ? JSON.parse(mail.body).html : '';
+    siT('وبريدٌ بنقطة يبقى اسم دخوله كما يشتقّه النظام (ali.salem لا alisalem)',
+      r.status === 200 && html.includes('ali.salem') && !html.includes('alisalem'),
+      r.status !== 200 ? `status=${r.status} ${JSON.stringify(r.j)}` : '');
+    siT('والبريد يُعلِم المدعوّ باسم دخوله صراحةً', /اسم الدخول/.test(html));
+  } finally { n.restore(); }
 }
 
 if (siFailed) { console.error(`\n❌ نقطة /api/staff-invite: ${siFailed} فشل`); process.exit(1); }
