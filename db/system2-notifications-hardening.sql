@@ -42,9 +42,25 @@ GRANT  UPDATE (read)    ON proc_notifications TO authenticated;
 
 -- ═══════════ 3) السياسات: القراءة والتعليم للمستلِم وحده ═══════════
 ALTER TABLE proc_notifications ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "auth_all"        ON proc_notifications;
-DROP POLICY IF EXISTS "ntf_select_own"  ON proc_notifications;
-DROP POLICY IF EXISTS "ntf_update_own"  ON proc_notifications;
+
+-- ⚠️ **تُحذَف كل سياسة قائمة بالتعداد لا بالاسم.** أوّل صياغة كانت
+--    `DROP POLICY IF EXISTS "auth_all"` نقلاً عن `db/workflows.sql` — وقياسُ
+--    الإنتاج أظهر أنّ الاسمين هناك **`auth_read`(SELECT) و`auth_write`(ALL)**
+--    وكلتاهما `USING(true)`. وسياسات RLS المتساهلة **تُجمَع بـOR**، فكانت
+--    الهجرة ستُطبَّق بنجاح ظاهريّ و**تترك تسريب القراءة مفتوحاً على مصراعيه**
+--    (السحب من الامتيازات كان سيمنع الإدراج المزوَّر وحده).
+--    نفس درس البوابة: هجرةٌ تفترض baseline المستودع تنكسر صامتةً على إنتاج
+--    بُنِيَ تدريجيّاً. التعداد لا يفترض اسماً.
+--    (حلقة داخلية لا `proc_drop_all_policies` كي تبقى هذه الهجرة الأمنية
+--     مستقلّة عن ترتيب `db/system2-staff-scope.sql`.)
+DO $drop$
+DECLARE p record;
+BEGIN
+  FOR p IN SELECT policyname FROM pg_policies
+            WHERE schemaname='public' AND tablename='proc_notifications' LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON proc_notifications', p.policyname);
+  END LOOP;
+END $drop$;
 
 CREATE POLICY "ntf_select_own" ON proc_notifications FOR SELECT TO authenticated
   USING (proc_me() IS NOT NULL AND lower(recipient) = lower(proc_me()));

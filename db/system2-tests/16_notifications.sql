@@ -106,6 +106,30 @@ BEGIN
   RAISE NOTICE 'NT8 نجحت';
 END $$;
 
+-- ── NT9: لا سياسة متساهلة ناجية بعد التصليب ──
+-- ⚠️ الحارس الذي كان ناقصاً: الهجرة كانت تُسقِط سياسةً **بالاسم**، وأسماء
+-- الإنتاج مختلفة (auth_read/auth_write)، وسياسات RLS تُجمَع بـOR — فتمرّ
+-- الهجرة و«تنجح» بينما تسريب القراءة قائم. هذا يفحص **الأثر** لا الاسم.
+DO $$
+DECLARE v_bad text;
+BEGIN
+  SELECT string_agg(p.polname || '=' || coalesce(pg_get_expr(p.polqual,p.polrelid),'∅'), ', ')
+    INTO v_bad
+    FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid
+   WHERE c.relname = 'proc_notifications'
+     AND p.polpermissive
+     AND coalesce(pg_get_expr(p.polqual, p.polrelid), '') = 'true';
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'NT9 فشل: سياسة متساهلة ناجية تُبقي التسريب مفتوحاً — %', v_bad;
+  END IF;
+
+  IF (SELECT count(*) FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
+       WHERE c.relname='proc_notifications') <> 2 THEN
+    RAISE EXCEPTION 'NT9 فشل: عدد السياسات ليس 2 (select+update للمستلِم)';
+  END IF;
+  RAISE NOTICE 'NT9 نجحت';
+END $$;
+
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', false);
 DELETE FROM proc_notifications WHERE recipient IN ('nt_alice','nt_bob');
 DELETE FROM proc_users        WHERE username  IN ('nt_alice','nt_bob','nt_gone');
