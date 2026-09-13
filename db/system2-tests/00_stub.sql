@@ -176,3 +176,110 @@ VALUES (10, 0, '[{"seq":1,"label":"مدير القسم","resolver":"dept_manager
 -- تنسى `REVOKE` تمرّ محلّياً وتصل الإنتاج بقفل امتياز ناقص (وقع فعلاً في
 -- `proc_pr_messages`). محاكاتها هنا تجعل الحزمة تمسك ذلك.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+
+-- ⚠️ منقول حرفيّاً من db/workflows.sql (تعريف الإنتاج) — كعبٌ لا يطابق أنواع
+-- الإنتاج ليس اختباراً. لا نُشغّل workflows.sql كاملاً هنا: بقيّة عباراته
+-- تفترض مخطّط `proc_purchase_requests` قديماً لا يطابق الإنتاج.
+CREATE TABLE IF NOT EXISTS proc_notifications (
+  id          TEXT PRIMARY KEY,
+  recipient   TEXT NOT NULL,
+  type        TEXT,
+  title       TEXT NOT NULL,
+  body        TEXT,
+  link        TEXT,
+  read        BOOLEAN DEFAULT false,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+-- الحالة الابتدائية = حالة الإنتاج قبل التصليب: سياسة متساهلة ومنح كامل،
+-- فيبرهن الاختبار أنّ الهجرة هي التي أغلقتها.
+ALTER TABLE proc_notifications ENABLE ROW LEVEL SECURITY;
+-- ⚠️ **أسماء الإنتاج الحقيقية** لا اسم `db/workflows.sql`: القياس الحيّ على
+--    `yofcaxvstjcrmbgciwym` أظهر سياستين `auth_read`(SELECT) و`auth_write`(ALL)
+--    كلتاهما `USING(true)` — لا `auth_all`. وكعبٌ باسمٍ متخيَّل جعل أوّل صياغة
+--    للهجرة تمرّ خضراء بينما كانت ستترك التسريب مفتوحاً على الإنتاج.
+--    (خامس تكرار لدرس «كعبٌ لا يطابق الإنتاج ليس اختباراً».)
+DROP POLICY IF EXISTS "auth_read"  ON proc_notifications;
+DROP POLICY IF EXISTS "auth_write" ON proc_notifications;
+CREATE POLICY "auth_read"  ON proc_notifications
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "auth_write" ON proc_notifications
+  FOR ALL    TO authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON proc_notifications TO authenticated;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  الجداول السبعة التي فاتت هجرة النطاق — بحالتها الإنتاجية المفتوحة
+--  ⚠️ الأعمدة والسياسات **منقولة من قياس حيّ** على `yofcaxvstjcrmbgciwym`
+--     (pg_policies، 2026-09-13): كل السياسات `USING(true)` لـauthenticated،
+--     وسياستا anon على التسجيلات هما `public_insert`/`public_insert_pending`.
+--     الكعب يبدأ من هذه الحالة فيبرهن الاختبار أنّ الإقفال هو ما أغلقها،
+--     ويبرهن كذلك أنّ سياستَي anon نجتا.
+-- ════════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS proc_supplier_registrations (
+  id             TEXT PRIMARY KEY,
+  legal_name_ar  TEXT,
+  commercial_reg TEXT,
+  tax_id         TEXT,
+  iban           TEXT,
+  account_holder TEXT,
+  contact_email  TEXT,
+  doc_paths      JSONB,
+  status         TEXT DEFAULT 'pending',
+  submitted_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS proc_pr_attachments (
+  id BIGSERIAL PRIMARY KEY, pr_id TEXT, path TEXT, uploaded_by TEXT);
+CREATE TABLE IF NOT EXISTS proc_rfqs (
+  id TEXT PRIMARY KEY, title TEXT, status TEXT, weights JSONB,
+  awarded_to TEXT, awards JSONB, awarded_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now());
+CREATE TABLE IF NOT EXISTS proc_rfq_quotes (
+  id TEXT PRIMARY KEY, rfq_id TEXT, supplier TEXT, prices JSONB, attrs JSONB,
+  note TEXT, token TEXT, status TEXT, updated_by TEXT, updated_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS proc_item_aliases (
+  id BIGSERIAL PRIMARY KEY, item_code TEXT, alias TEXT, normalized_alias TEXT);
+CREATE TABLE IF NOT EXISTS proc_ai_usage (
+  id BIGSERIAL PRIMARY KEY, date TEXT, username TEXT, tokens INT);
+CREATE TABLE IF NOT EXISTS proc_pr_audit (
+  id BIGSERIAL PRIMARY KEY, pr_id TEXT, action TEXT, actor TEXT,
+  at TIMESTAMPTZ DEFAULT now());
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['proc_supplier_registrations','proc_pr_attachments',
+                           'proc_rfqs','proc_rfq_quotes','proc_item_aliases',
+                           'proc_ai_usage','proc_pr_audit'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_read"  ON %I', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_write" ON %I', t);
+    EXECUTE format('CREATE POLICY "auth_read"  ON %I FOR SELECT TO authenticated USING (true)', t);
+    EXECUTE format('CREATE POLICY "auth_write" ON %I FOR ALL    TO authenticated USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', t);
+  END LOOP;
+END $$;
+-- سياستا anon على التسجيلات — نموذج التسجيل العامّ يعتمد عليهما، والإقفال
+-- يجب ألّا يمسّهما (يفحصه LK5).
+DROP POLICY IF EXISTS "public_insert"         ON proc_supplier_registrations;
+DROP POLICY IF EXISTS "public_insert_pending" ON proc_supplier_registrations;
+CREATE POLICY "public_insert" ON proc_supplier_registrations
+  FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "public_insert_pending" ON proc_supplier_registrations
+  FOR INSERT TO anon, authenticated WITH CHECK (status = 'pending');
+GRANT INSERT ON proc_supplier_registrations TO anon;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- ⚠️ الإعدادات وقواعد الاعتماد: RLS + سياسة مفتوحة + منح — كحال
+--    الإنتاج بالضبط (pg_policies: سياسة واحدة `USING(true)` لكلٍّ، والمنح
+--    قائم). الكعب كان يُنشئ الجداول بلا شيء من ذلك، فتأكيدٌ يقرأها بدور
+--    `authenticated` يفشل بـ«permission denied» لا لأنّ السياسة حجبته.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['proc_settings','proc_approval_rules'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_all" ON %I', t);
+    EXECUTE format('CREATE POLICY "auth_all" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', t);
+  END LOOP;
+END $$;
