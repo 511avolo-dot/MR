@@ -268,3 +268,18 @@ CREATE POLICY "public_insert_pending" ON proc_supplier_registrations
   FOR INSERT TO anon, authenticated WITH CHECK (status = 'pending');
 GRANT INSERT ON proc_supplier_registrations TO anon;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- ⚠️ الإعدادات وقواعد الاعتماد: RLS + سياسة مفتوحة + منح — كحال
+--    الإنتاج بالضبط (pg_policies: سياسة واحدة `USING(true)` لكلٍّ، والمنح
+--    قائم). الكعب كان يُنشئ الجداول بلا شيء من ذلك، فتأكيدٌ يقرأها بدور
+--    `authenticated` يفشل بـ«permission denied» لا لأنّ السياسة حجبته.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['proc_settings','proc_approval_rules'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS "auth_all" ON %I', t);
+    EXECUTE format('CREATE POLICY "auth_all" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)', t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO authenticated', t);
+  END LOOP;
+END $$;

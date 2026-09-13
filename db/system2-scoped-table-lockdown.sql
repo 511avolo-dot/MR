@@ -89,6 +89,42 @@ BEGIN
   END LOOP;
 END $lock$;
 
+-- ═══════════ proc_settings — قائمة مفاتيح بيضاء بدل الإقفال الكامل ═══════════
+-- هذا الجدول **لا يُقفَل**: الموظّف المُنطَّق يحتاج منه مفتاحين فعلاً
+--   `projects_registry` (سجلّ المشاريع — `prjLoad`، وبدونه تنكسر أسماء الجهات)
+--   `company_info`      (ترويسة المطبوعات — تقرير المتابعة الميدانيّ يطبعها)
+-- لكن قراءته كانت **مفتوحة على كل مفاتيحه**، ومنها ما لا يخصّه:
+--   `ai_config.api_key`          — فارغ اليوم، وأي مفتاح Gemini يضعه المالك
+--                                  لاحقاً يصير مقروءاً لكل مستخدم مسجَّل.
+--   `portal_settings.invite_code`— رمز دعوة بوابة الطلبات الداخلية.
+-- فبدل حجب الجدول (يكسر الجهات والمطبوعات) نحصر المُنطَّق في المفتاحين.
+-- ⚠️ الكتابة محجوبة عنه أصلاً بـ`proc_config_guard` (هوية إدارية/خدمية)؛
+--    سياسات الكتابة هنا طبقة ثانية لا بديل عنه.
+-- ⚠️ سياسة لكل أمر لا `FOR ALL` واحدة: بـFOR ALL يسري `USING` على DELETE
+--    كذلك، فيصير للمُنطَّق حقّ **حذف** صفّ `projects_registry` الذي سمحنا له
+--    بقراءته. (RESTRICTIVE تُجمَع بـAND، فسياسة SELECT الأوسع لا تُوسِّع غيرها.)
+DO $cfg$
+BEGIN
+  IF to_regclass('public.proc_settings') IS NULL THEN RETURN; END IF;
+  ALTER TABLE proc_settings ENABLE ROW LEVEL SECURITY;
+  DROP POLICY IF EXISTS "scoped_keys_only"   ON proc_settings;
+  DROP POLICY IF EXISTS "no_scoped_insert"   ON proc_settings;
+  DROP POLICY IF EXISTS "no_scoped_update"   ON proc_settings;
+  DROP POLICY IF EXISTS "no_scoped_delete"   ON proc_settings;
+
+  CREATE POLICY "scoped_keys_only" ON proc_settings
+    AS RESTRICTIVE FOR SELECT TO authenticated
+    USING (NOT proc_is_scoped()
+           OR key = ANY (ARRAY['projects_registry','company_info']));
+  CREATE POLICY "no_scoped_insert" ON proc_settings
+    AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (NOT proc_is_scoped());
+  CREATE POLICY "no_scoped_update" ON proc_settings
+    AS RESTRICTIVE FOR UPDATE TO authenticated
+    USING (NOT proc_is_scoped()) WITH CHECK (NOT proc_is_scoped());
+  CREATE POLICY "no_scoped_delete" ON proc_settings
+    AS RESTRICTIVE FOR DELETE TO authenticated USING (NOT proc_is_scoped());
+END $cfg$;
+
 COMMENT ON FUNCTION proc_is_scoped() IS
   'هل المتصل موظّف مُنطَّق بقطاع؟ يُستعمَل في سياسات النطاق وسياسات '
   'RESTRICTIVE في db/system2-scoped-table-lockdown.sql.';
@@ -110,4 +146,8 @@ COMMENT ON FUNCTION proc_is_scoped() IS
 --                            'proc_ai_usage','proc_pr_audit'] LOOP
 --     EXECUTE format('DROP POLICY IF EXISTS "no_scoped_access" ON %I', t);
 --   END LOOP;
+--   DROP POLICY IF EXISTS "scoped_keys_only" ON proc_settings;
+--   DROP POLICY IF EXISTS "no_scoped_insert" ON proc_settings;
+--   DROP POLICY IF EXISTS "no_scoped_update" ON proc_settings;
+--   DROP POLICY IF EXISTS "no_scoped_delete" ON proc_settings;
 -- END $$;

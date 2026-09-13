@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  LK1–LK7 — إقفال الجداول التي فاتت هجرة النطاق (سياسات RESTRICTIVE)
+--  LK1–LK9 — إقفال الجداول التي فاتت هجرة النطاق (سياسات RESTRICTIVE)
 --  تُشغَّل بعد db/system2-scoped-table-lockdown.sql
 --
 --  التأكيدات **سلوكيّة بدور `authenticated` فعليّ** لا فحصاً لنصّ السياسة:
@@ -172,7 +172,61 @@ BEGIN
   RAISE NOTICE 'LK7 نجحت';
 END $$;
 
+-- ── LK8: proc_settings — المُنطَّق يقرأ مفتاحَيه ولا يقرأ غيرهما ──
+--    الجدول لا يُقفَل (سجلّ المشاريع وترويسة المطبوعات يحتاجهما فعلاً)، لكن
+--    `ai_config.api_key` و`portal_settings.invite_code` ليسا من شأنه.
+--    ⚠️ LK8-أ شرط لازم: لو حُجِب المفتاحان لانكسرت أسماء الجهات والمطبوعات
+--    وصار «لا يقرأ غيرهما» صحيحاً لأنّه لا يقرأ شيئاً.
+DO $$
+DECLARE v_cnt int;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+  DELETE FROM proc_users WHERE username='lk_field';
+  INSERT INTO proc_users (username, display_name, email, role, active, permissions, scope_sectors)
+  VALUES ('lk_field','ميدان','lk_field@aldeyabi.com','user',true,'{}'::jsonb,
+          '["الصيانة والتشغيل"]'::jsonb);
+  INSERT INTO proc_settings (key, value) VALUES
+    ('projects_registry','{"projects":[]}'::jsonb),
+    ('company_info','{"name":"مجموعة الذيابي"}'::jsonb),
+    ('ai_config','{"api_key":"SECRET-KEY"}'::jsonb),
+    ('portal_settings','{"invite_code":"7ETJPV7FTH"}'::jsonb)
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+  PERFORM set_config('request.jwt.claims','{"email":"lk_field@aldeyabi.com"}',true);
+  PERFORM set_config('role','authenticated',true);
+  SELECT count(*) INTO v_cnt FROM proc_settings
+   WHERE key IN ('projects_registry','company_info');
+  IF v_cnt <> 2 THEN
+    PERFORM set_config('role','postgres',true);
+    RAISE EXCEPTION 'LK8-أ فشل (انحدار): المُنطَّق يقرأ % من مفتاحَيه لا 2', v_cnt;
+  END IF;
+  SELECT count(*) INTO v_cnt FROM proc_settings
+   WHERE key IN ('ai_config','portal_settings');
+  PERFORM set_config('role','postgres',true);
+  IF v_cnt <> 0 THEN
+    RAISE EXCEPTION 'LK8-ب فشل: المُنطَّق قرأ % مفتاحاً خارج قائمته البيضاء', v_cnt;
+  END IF;
+  RAISE NOTICE 'LK8 نجحت';
+END $$;
+
+-- ── LK9: ولا يحذف مفتاحاً سمحنا له بقراءته (فخّ FOR ALL على DELETE) ──
+DO $$
+DECLARE v_n int;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"email":"lk_field@aldeyabi.com"}',true);
+  PERFORM set_config('role','authenticated',true);
+  BEGIN
+    DELETE FROM proc_settings WHERE key='projects_registry';
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+  EXCEPTION WHEN insufficient_privilege THEN v_n := 0;
+  END;
+  PERFORM set_config('role','postgres',true);
+  IF v_n <> 0 THEN RAISE EXCEPTION 'LK9 فشل: المُنطَّق حذف سجلّ المشاريع'; END IF;
+  RAISE NOTICE 'LK9 نجحت';
+END $$;
+
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', false);
+DELETE FROM proc_settings WHERE key IN ('projects_registry','company_info','ai_config','portal_settings');
 DELETE FROM proc_supplier_registrations WHERE id LIKE 'LK-%';
 DELETE FROM proc_rfq_quotes  WHERE id='LK-Q';
 DELETE FROM proc_rfqs        WHERE id='LK-RFQ';

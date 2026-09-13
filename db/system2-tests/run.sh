@@ -38,4 +38,4 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
 
 psql -q -d postgres -c "DROP DATABASE IF EXISTS $DB;" >/dev/null
 echo "✓ النطاق (SC1–SC16) · دورة الطلب (FL1–FL16) · المتابعة (TR1–TR10) · الدعوة (IV1–IV3)"
-echo "  الترقيم (NM1–NM6) · أقلّ امتياز (LP1–LP5) · الإشعارات (NT1–NT9) · الإقفال (LK1–LK7) — خروج 0"
+echo "  الترقيم (NM1–NM6) · أقلّ امتياز (LP1–LP5) · الإشعارات (NT1–NT9) · الإقفال (LK1–LK9) — خروج 0"
