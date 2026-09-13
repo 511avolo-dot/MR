@@ -12917,15 +12917,26 @@ function prApplyParsed(obj){
   if(obj.department){ const d=(STATE.departments||[]).find(x=>(x.name_ar||'').trim()===String(obj.department).trim()); const sel=document.getElementById('pr-dept'); if(d&&sel) sel.value=d.id; }
   const items=Array.isArray(obj.items)?obj.items:[];
   const clean=items.filter(it=>(it.description||'').toString().trim());
+  let kept = 0;
   if(clean.length){
-    __prDraftItems = clean.map(it=>({
+    prCollectItems();   // احفظ ما كتبه المستخدم فعلاً قبل الدمج
+    /* ⚠️ الصفوف الفارغة تُسقَط فلا تتقدّم البنودَ المستخرَجة (شكوى المالك:
+       «البنود تسجل بعد الأعمدة المضافة حتى لو كانت فارغة»). وصفٌّ بلا صنف
+       ولا كمية ليس بنداً أصلاً.
+       ⚠️ وما كتبه المستخدم بيده **يبقى**: الاستبدال الكامل كان يمحو عمله بلا
+       إنذار لو قرأ النموذج بعد إدخال بنود يدويّاً. */
+    const manual = __prDraftItems.filter(it =>
+      (it.description||'').toString().trim() || num0(it.requested_qty) > 0);
+    kept = manual.length;
+    __prDraftItems = manual.concat(clean.map(it=>({
       description:String(it.description||'').trim(), unit:it.unit||'',
       contract_qty:(it.contract_qty==null?'':it.contract_qty), stock_balance:(it.stock_balance==null?'':it.stock_balance),
       requested_qty:(it.requested_qty==null?'':it.requested_qty), unit_price:(it.unit_price==null?'':it.unit_price)
-    }));
+    })));
     prRenderItems(); prRecalcTotal();
   }
-  toast('success','تمت القراءة', `استُخرج ${clean.length} بند — راجع البيانات قبل الإرسال`);
+  toast('success','تمت القراءة',
+    `استُخرج ${clean.length} بند${kept?` وأُضيفت بعد ${kept} بنداً كتبتها` : ''} — راجع البيانات قبل الإرسال`);
 }
 async function prParseForm(){
   if(!requirePermission('can_use_ai','قراءة النموذج بالذكاء')) return;
@@ -13148,7 +13159,7 @@ function prBuilderHTML(){
           ${canViewAmounts()?`<tfoot><tr><td colspan="7" style="text-align:end;font-weight:700">الإجمالي التقديري</td><td class="num" id="pr-total" style="font-weight:700">0</td><td></td></tr></tfoot>`:''}
         </table>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="prAddDraftItem();prRenderItems();" style="margin-top:8px">➕ إضافة بند</button>
+      <button class="btn btn-ghost btn-sm" onclick="prAddItemRow()" style="margin-top:8px">➕ إضافة بند</button>
       <div id="pr-words" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
 
       <div class="pr-section-title" style="margin-top:18px">الطلب الموقَّع من المدير <span style="color:var(--danger)">*</span></div>
@@ -13179,10 +13190,26 @@ function prBuilderHTML(){
     </div>`;
 }
 function prAddDraftItem(prefill){ __prDraftItems.push(Object.assign({description:'',unit:'',contract_qty:'',stock_balance:'',requested_qty:'',unit_price:''}, prefill||{})); }
-function prRemoveDraftItem(i){ __prDraftItems.splice(i,1); if(!__prDraftItems.length) prAddDraftItem(); prRenderItems(); prRecalcTotal(); }
+/* ➕ إضافة بند: **يُجمَع أوّلاً** ما كتبه المستخدم في الصفوف الظاهرة، ثم يُضاف
+   الصفّ الجديد. (الجمع بعد الإضافة يقرأ DOM لا يطابق المصفوفة.) */
+function prAddItemRow(){ prCollectItems(); prAddDraftItem(); prRenderItems(); }
+function prRemoveDraftItem(i){
+  prCollectItems();                       // ⚠️ قبل التغيير لا بعده — انظر prRenderItems
+  __prDraftItems.splice(i,1);
+  if(!__prDraftItems.length) prAddDraftItem();
+  prRenderItems(); prRecalcTotal();
+}
+/* ⚠️ **لا تستدعِ `prCollectItems()` من هنا.** كانت تُستدعى في أوّل السطر
+   «لحفظ القيم قبل إعادة الرسم»، وهي تقرأ صفوف DOM وتكتبها في المصفوفة
+   **بنفس الفهرس** — فإذا كانت المصفوفة قد تغيّرت للتوّ صار الـDOM قديماً
+   والفهارس مُزاحة، فتُكتب القيم القديمة فوق الجديدة. عَرَضان مُعادان بالتشغيل:
+     · القراءة الذكية (تستبدل المصفوفة) ⇒ الصفّ الفارغ القديم يطمس **البند
+       الأوّل المستخرَج** فيُفقَد صامتاً ويبدو الجدول وكأنّ البنود بدأت بعد صفّ فارغ.
+     · حذف الصفّ i ⇒ الصفوف القديمة تُعاد كتابتها مُزاحةً، فيبقى الصفّ المحذوف
+       ويختفي **آخر بند** بدلاً منه.
+   القاعدة: من يُغيّر `__prDraftItems` يجمع **قبل** التغيير ثم يرسم. */
 function prRenderItems(){
   const body=document.getElementById('pr-items-body'); if(!body) return;
-  prCollectItems(); // احفظ القيم الحالية قبل إعادة الرسم
   body.innerHTML = __prDraftItems.map((it,i)=>`
     <tr data-row="${i}">
       <td class="center">${i+1}</td>

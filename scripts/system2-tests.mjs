@@ -2915,6 +2915,154 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /id="f-pass2"/.test(SPAGE) && /pass !== pass2/.test(SPAGE));
 }
 
+/* ── ٣٥) بنود الطلب: الجمع قبل التغيير لا بعده ────────────────────────
+   بلاغ المالك بلقطة: «عند رفع البنود بالقراءة الذكية البنود تسجل بعد الأعمدة
+   المضافة حتى لو كانت فارغة، وعند حذف الأعمدة الفارغة لا تُحذف — تُحذف البنود
+   المضافة بالذكاء في الأسفل».
+
+   الجذر **واحد يُنتج العَرَضين**: `prRenderItems()` كانت تستدعي `prCollectItems()`
+   في أوّل سطر «لحفظ القيم قبل إعادة الرسم» — وهي تقرأ صفوف DOM وتكتبها في
+   المصفوفة **بنفس الفهرس**. فمتى تغيّرت المصفوفة للتوّ صار الـDOM قديماً
+   والفهارس مُزاحة، فتُكتب القيم القديمة فوق الجديدة.
+
+   ⚠️ والأثر أسوأ ممّا بدا في اللقطة: البند الأوّل المستخرَج **يُفقَد صامتاً**
+   لا أنّه «يأتي بعد صفّ فارغ». التأكيدات هنا **سلوكية تُشغّل الدوال فعلاً** —
+   الفحص النصّيّ هو ما مرّ عليه العيب أصلاً. */
+{
+  G('٣٥) بنود الطلب — الجمع قبل التغيير');
+
+  /* DOM مُقلَّد بالقدر الذي تلمسه هذه الدوال: جسم الجدول وصفوفه وخلاياه. */
+  const mkPRDoc = () => {
+    let rows = [];
+    const el = (id) => ({ textContent:'', value:'' });
+    const body = {
+      set innerHTML(html) {
+        /* نُحاكي إعادة الرسم من الترميز المولَّد فعلاً.
+           ⚠️ لا تفترض ترتيب السمات: حقل الصنف يحمل `list="pr-item-names"`
+           **بين** `data-f` و`value`، فتعبيرٌ يلصقهما يفقد كل الأوصاف ويُنتج
+           إخفاقاً وهميّاً في الكعب لا في الكود (وقع فعلاً). */
+        rows = String(html).split('<tr data-row=').slice(1).map((chunk) => {
+          const i = +(/^"(\d+)"/.exec(chunk) || [0, -1])[1];
+          const cells = {};
+          for (const f of ['description','unit','contract_qty','stock_balance','requested_qty','unit_price']) {
+            const v = new RegExp('data-f="' + f + '"[^>]*?value="([^"]*)"').exec(chunk);
+            cells[f] = { getAttribute: () => f, value: v ? v[1] : '' };
+          }
+          return { i, cells };
+        });
+      },
+      get innerHTML() { return ''; },
+      querySelectorAll(sel) {
+        if (sel.includes('tr[data-row]')) return rows.map((r) => ({
+          getAttribute: () => String(r.i),
+          querySelectorAll: () => Object.values(r.cells),
+          querySelector: (s) => { const m = /data-f=(\w+)/.exec(s); return m ? r.cells[m[1]] : null; },
+        }));
+        return [];
+      },
+      _rows: () => rows,
+    };
+    return {
+      getElementById: (id) => (id === 'pr-items-body' ? body : el(id)),
+      querySelectorAll: (sel) => body.querySelectorAll(sel),
+      _body: body,
+    };
+  };
+
+  const mk = () => {
+    const doc = mkPRDoc();
+    const api = new Function('document', 'escapeAttr', 'fmtPrice', 'num0', 'canViewAmounts', 'toast', 'prCollectItems_unused',
+      grabLet('__prDraftItems') + '\n'
+      + grab('prAddDraftItem') + '\n' + grab('prAddItemRow') + '\n'
+      + grab('prRemoveDraftItem') + '\n' + grab('prRenderItems') + '\n'
+      + grab('prCollectItems') + '\n'
+      + 'function prRecalcTotal(){}\n'
+      + 'return { get items(){ return __prDraftItems; }, set items(v){ __prDraftItems = v; },'
+      + ' prAddDraftItem, prAddItemRow, prRemoveDraftItem, prRenderItems, prCollectItems };'
+    )(doc, (x) => String(x == null ? '' : x), (x) => String(x), (x) => Number(x) || 0, () => false, () => {});
+    return { doc, api };
+  };
+  const names = (api) => api.items.map((x) => x.description || '(فارغ)').join('|');
+
+  /* (أ) القراءة الذكية بعد صفّ فارغ افتراضيّ */
+  {
+    const { api } = mk();
+    api.prAddDraftItem(); api.prRenderItems();          // الصفّ الفارغ الافتراضيّ
+    api.items = [{ description:'أكياس نفايات', unit:'شوال', requested_qty:60 },
+                 { description:'صابون سائل', unit:'حبة', requested_qty:130 },
+                 { description:'منظف زجاج', unit:'كرتون', requested_qty:21 }];
+    api.prRenderItems();
+    T('القراءة الذكية لا تفقد البند الأوّل خلف صفّ فارغ',
+      names(api) === 'أكياس نفايات|صابون سائل|منظف زجاج', names(api));
+  }
+
+  /* (ب) حذف الصفّ الفارغ يحذفه هو لا آخر بند */
+  {
+    const { api } = mk();
+    api.items = [{ description:'', requested_qty:'' },
+                 { description:'صابون سائل', requested_qty:130 },
+                 { description:'منظف زجاج', requested_qty:21 }];
+    api.prRenderItems();
+    api.prRemoveDraftItem(0);
+    T('وحذف الصفّ الفارغ يحذفه هو لا آخر بند',
+      names(api) === 'صابون سائل|منظف زجاج', names(api));
+  }
+
+  /* (ج) حذف صفّ من الوسط */
+  {
+    const { api } = mk();
+    api.items = [{ description:'أ' }, { description:'ب' }, { description:'ج' }];
+    api.prRenderItems();
+    api.prRemoveDraftItem(1);
+    T('وحذف صفّ من الوسط يُصيب الصفّ نفسه', names(api) === 'أ|ج', names(api));
+  }
+
+  /* (د) ➕ لا يفقد ما كُتِب في الصفوف الظاهرة */
+  {
+    const { doc, api } = mk();
+    api.prAddDraftItem(); api.prRenderItems();
+    doc._body._rows()[0].cells.description.value = 'مكتوب باليد';
+    api.prAddItemRow();
+    T('و➕ إضافة بند يحفظ ما كُتِب في الصفوف الظاهرة',
+      api.items.length === 2 && api.items[0].description === 'مكتوب باليد', names(api));
+  }
+
+  /* (هـ) الجمع بعد الحذف يحفظ تعديلاً لم يُرسَل بعد */
+  {
+    const { doc, api } = mk();
+    api.items = [{ description:'أ' }, { description:'ب' }, { description:'ج' }];
+    api.prRenderItems();
+    doc._body._rows()[2].cells.description.value = 'ج المعدَّل';
+    api.prRemoveDraftItem(0);
+    T('وحذف صفّ يحفظ تعديلاً لم يُغادر الحقل بعد',
+      names(api) === 'ب|ج المعدَّل', names(api));
+  }
+
+  /* (و) الحارس البنيويّ: لا جمع داخل الرسم إطلاقاً */
+  T('و`prRenderItems` لا تجمع من DOM قديم',
+    !/prCollectItems\(\)/.test(grab('prRenderItems')));
+  T('وكل مُغيِّر للمصفوفة يجمع قبل التغيير', (() => {
+    const rm = grab('prRemoveDraftItem');
+    return rm.indexOf('prCollectItems()') > -1
+      && rm.indexOf('prCollectItems()') < rm.indexOf('__prDraftItems.splice')
+      && /prCollectItems\(\); prAddDraftItem\(\);/.test(grab('prAddItemRow'))
+      && !/onclick="prAddDraftItem\(\);prRenderItems\(\);"/.test(HTML);
+  })());
+
+  /* (ز) القراءة الذكية: تُسقِط الفارغ وتُبقي المكتوب يدويّاً */
+  {
+    const src = grab('prApplyParsed');
+    T('والقراءة الذكية تُسقِط الصفوف الفارغة ولا تُقدّمها على البنود',
+      /manual = __prDraftItems\.filter/.test(src)
+      && /\(it\.description\|\|''\)\.toString\(\)\.trim\(\) \|\| num0\(it\.requested_qty\) > 0/.test(src));
+    T('وتُبقي ما كتبه المستخدم بيده بدل محوه',
+      /__prDraftItems = manual\.concat\(/.test(src) && !/__prDraftItems = clean\.map/.test(src));
+    T('وتجمع قبل الدمج لا بعده',
+      src.indexOf('prCollectItems()') > -1
+      && src.indexOf('prCollectItems()') < src.indexOf('__prDraftItems = manual'));
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    ٣٤) الترقيم الخادميّ · مسار المسودّة · ترتيب الإرسال
    --------------------------------------------------------------------------
