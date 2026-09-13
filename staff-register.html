@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>تسجيل موظّف — مجموعة الذيابي</title>
-<!-- صفحة عامّة محكومة برمز الدعوة: بلا حساب، بلا أي مصدر خارجيّ (آمنة CSP). -->
+<title>تفعيل حسابك — مجموعة الذيابي</title>
+<!-- صفحة عامّة محكومة برمز الدعوة الشخصيّ: الهويّة كلّها من الرمز، والموظّف
+     يضبط كلمة مروره فقط. بلا حساب، وبلا أي مصدر خارجيّ (آمنة CSP). -->
 <style>
   :root{--navy:#16243d;--gold:#c2a063;--gold-2:#a37f43;--ink:#1b2333;--muted:#5d6b80;
         --line:#e2e6ee;--bg:#f2f4f8;--ok:#1c7a4d;--err:#b4453f}
@@ -35,13 +36,20 @@
   .line.info{background:#eef3fb;color:#2b4a7a;border:1px solid #d3e0f2}
   .sector{display:inline-block;background:#eef3fb;border:1px solid #d3e0f2;color:#2b4a7a;
           border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:700;margin-top:8px}
+  .who{background:#fbfcfe;border:1px solid var(--line);border-radius:12px;padding:4px 14px;margin-top:16px}
+  .who-row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+           padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .who-row:last-child{border-bottom:none}
+  .who-row span{color:var(--muted)}
+  .who-row b{font-weight:700;word-break:break-all}
+  .opt{font-weight:400;color:var(--muted);font-size:11.5px}
   .hidden{display:none}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="head">
-    <h1>تسجيل موظّف — متابعة المشتريات</h1>
+    <h1>تفعيل حسابك — نظام متابعة المشتريات</h1>
     <div class="sub">مجموعة الذيابي</div>
     <div id="sector-chip" class="sector hidden"></div>
   </div>
@@ -50,29 +58,29 @@
 
     <form id="form" class="hidden" autocomplete="on">
       <div class="line info">
-        سجّل بياناتك مرّة واحدة لتتابع أوامر الشراء التي تخصّك وترفع طلباتك،
-        <b>وتصلك الإشعارات على بريدك</b>. حسابك يُفعّله مدير النظام بعد المراجعة.
+        هذه دعوة <b>شخصية لك</b>. اختر كلمة مرورك فقط وتدخل النظام مباشرةً —
+        تتابع أوامر الشراء التي تخصّ قطاعك، وتُسجّل الاستلام، وترفع طلباتك،
+        <b>وتصلك الإشعارات على بريدك</b>.
       </div>
 
-      <label for="f-name">الاسم الكامل <span style="color:var(--err)">*</span></label>
-      <input id="f-name" name="name" autocomplete="name" maxlength="80" required>
+      <!-- بيانات الدعوة: تُعرَض ولا تُحرَّر — مصدرها الرمز الموقَّع لا هذه الصفحة. -->
+      <div class="who" id="who">
+        <div class="who-row"><span>الاسم</span><b id="w-name">—</b></div>
+        <div class="who-row"><span>بريد الدخول</span><b id="w-email" dir="ltr">—</b></div>
+        <div class="who-row" id="w-job-row"><span>المسمّى الوظيفيّ</span><b id="w-job">—</b></div>
+      </div>
 
-      <label for="f-email">بريد الشركة <span style="color:var(--err)">*</span></label>
-      <input id="f-email" name="email" type="email" dir="ltr" autocomplete="email" maxlength="120" required>
-      <div class="hint">يجب أن ينتهي بـ<b id="dom-hint">@aldeyabi.com</b> — وهو العنوان الذي تصلك عليه إشعارات طلباتك وأوامرك.</div>
-
-      <label for="f-mobile">الجوال</label>
+      <label for="f-mobile">الجوال <span class="opt">(اختياريّ)</span></label>
       <input id="f-mobile" name="mobile" type="tel" dir="ltr" autocomplete="tel" maxlength="20">
 
-      <label for="f-job">المسمّى الوظيفيّ</label>
-      <input id="f-job" name="job" maxlength="60" placeholder="فنّي صيانة / مدير الصيانة والتشغيل…">
-      <div class="hint">اكتبه بدقّة — يعتمد عليه المدير في تحديد صلاحياتك عند التفعيل.</div>
-
-      <label for="f-pass">كلمة المرور <span style="color:var(--err)">*</span></label>
+      <label for="f-pass">اختر كلمة المرور <span style="color:var(--err)">*</span></label>
       <input id="f-pass" name="password" type="password" dir="ltr" autocomplete="new-password" minlength="8" required>
-      <div class="hint">8 أحرف على الأقل. تدخل بها بعد تفعيل حسابك.</div>
+      <div class="hint">8 أحرف على الأقل — بها تدخل النظام من الآن فصاعداً.</div>
 
-      <button type="submit" class="btn" id="submit">إرسال بياناتي</button>
+      <label for="f-pass2">تأكيد كلمة المرور <span style="color:var(--err)">*</span></label>
+      <input id="f-pass2" name="password2" type="password" dir="ltr" autocomplete="new-password" minlength="8" required>
+
+      <button type="submit" class="btn" id="submit">تفعيل حسابي</button>
       <div id="out"></div>
     </form>
   </div>
@@ -100,10 +108,15 @@
         return;
       }
       domain = res.j.domain || domain;
-      document.getElementById('dom-hint').textContent = '@' + domain;
       var chip = document.getElementById('sector-chip');
       chip.textContent = 'قطاع: ' + res.j.sector;
       chip.classList.remove('hidden');
+      /* ⚠️ `textContent` لا innerHTML: هذه قيم تصل من الشبكة، وحقنها ترميزاً
+         يفتح XSS على صفحة عامّة. */
+      document.getElementById('w-name').textContent  = res.j.display_name || '—';
+      document.getElementById('w-email').textContent = res.j.email || '—';
+      if(res.j.job_title){ document.getElementById('w-job').textContent = res.j.job_title; }
+      else { document.getElementById('w-job-row').classList.add('hidden'); }
       gate.classList.add('hidden');
       form.classList.remove('hidden');
     })
@@ -111,35 +124,34 @@
 
   form.addEventListener('submit', function(ev){
     ev.preventDefault();
-    var name = document.getElementById('f-name').value.trim();
-    var email= document.getElementById('f-email').value.trim().toLowerCase();
-    var pass = document.getElementById('f-pass').value;
-    // تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع دائماً.
-    if(name.length < 3){ say(out,'er','اكتب اسمك الكامل.'); return; }
-    if(email.slice(-(domain.length+1)) !== '@' + domain){ say(out,'er','استخدم بريد الشركة (@' + domain + ').'); return; }
+    var pass  = document.getElementById('f-pass').value;
+    var pass2 = document.getElementById('f-pass2').value;
+    /* تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع دائماً.
+       ⚠️ الاسم والبريد والقطاع **لا تُرسَل من هنا**: الخادم يقرؤها من الرمز
+       الموقَّع، فلا يستطيع حاملُ الرابط انتحال بريد غيره ولا تغيير قطاعه. */
     if(pass.length < 8){ say(out,'er','كلمة المرور 8 أحرف على الأقل.'); return; }
+    if(pass !== pass2){ say(out,'er','كلمتا المرور غير متطابقتين.'); return; }
 
-    btn.disabled = true; say(out,'info','جارٍ الإرسال…');
+    btn.disabled = true; say(out,'info','جارٍ التفعيل…');
     fetch('/api/staff-invite?t=' + encodeURIComponent(token), {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        display_name: name, email: email, password: pass,
-        mobile: document.getElementById('f-mobile').value.trim(),
-        job_title: document.getElementById('f-job').value.trim()
+        password: pass,
+        mobile: document.getElementById('f-mobile').value.trim()
       })
     })
     .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
     .then(function(res){
       if(!res.ok || !res.j.ok){
         btn.disabled = false;
-        say(out,'er',(res.j && res.j.error) || 'تعذّر إتمام التسجيل.');
+        say(out,'er',(res.j && res.j.error) || 'تعذّر إتمام التفعيل.');
         return;
       }
       form.querySelectorAll('input').forEach(function(i){ i.disabled = true; });
       btn.style.display = 'none';
       say(out,'ok', res.j.already
         ? res.j.message
-        : 'تمّ استلام بياناتك ✅ — حسابك بانتظار تفعيل مدير النظام، وسيصلك الدخول بعده على بريدك.');
+        : 'تمّ تفعيل حسابك ✅ — يمكنك الدخول الآن ببريدك وكلمة المرور التي اخترتها.');
     })
     .catch(function(){ btn.disabled = false; say(out,'er','تعذّر الاتصال — حاول مرّة أخرى.'); });
   });
