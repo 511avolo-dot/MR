@@ -2801,15 +2801,15 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /filter\(p => p && \/\^\(\?:supplier-docs\\\/\)\?DG-\/\.test\(p\)/.test(CODE));
 }
 
-/* ── ٣٣) رابط دعوة موظفي القطاع ──────────────────────────────────
-   طلب المالك: «رابط لدعوة موظفين ومدير الصيانة والتشغيل للدخول وتسجيل بياناتهم
-   لتوصلهم الإشعارات والمتابعة». وقراراته: رابط واحد للقطاع · بريد الشركة حصراً
-   · الحساب ينتظر التفعيل.
-   ⚠️ سلوك النقطة مُختبَر بـ22 تأكيداً في `db/portal-tests/file-guard.test.mjs`
-   (منها أنّ الحساب يُنشأ موقوفاً والقطاع من الرمز). هنا **ما لا يُمسَك سلوكيّاً**:
-   خصائص زمنية/بنيوية وسلامة الصفحة العامّة. */
+/* ── ٣٣) دعوة الموظّف الشخصية بالبريد ────────────────────────────
+   طلب المالك (2026-09-13): «اجعله يرسل بتمبلت احترافيّ عن طريق Resend — فقط
+   أضع اسم الموظف وإيميله وأحدّد الوظيفة ويتم الإرسال». وقراراته: القطاع +
+   مسمّى نصّيّ · يدخل مباشرةً بعد ضبط كلمة مروره · **الرابط المشترك يُحذَف**.
+   ⚠️ سلوك النقطة مُختبَر في `db/portal-tests/file-guard.test.mjs` (منها أنّ
+   الهويّة من الرمز لا من العميل، وأنّ الحساب يُنشأ نشطاً). هنا **ما لا يُمسَك
+   سلوكيّاً**: خصائص زمنية/بنيوية، وسلامة الصفحة العامّة، وهندسة قالب البريد. */
 {
-  G('٣٣) رابط دعوة موظفي القطاع');
+  G('٣٣) دعوة الموظّف الشخصية بالبريد');
 
   const SINV = fs.readFileSync(path.join(ROOT, 'functions/api/staff-invite.js'), 'utf8');
   const SPAGE = fs.readFileSync(path.join(ROOT, 'staff-register.html'), 'utf8');
@@ -2825,12 +2825,29 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /key=eq\.staff_invite/.test(SINV) && /action === 'revoke'/.test(SINV));
   T('ومدّة الصلاحية مسقوفة', /Math\.min\(MAX_DAYS/.test(SINV) && /MAX_DAYS = 60/.test(SINV));
 
-  /* الحقول الحوكمية مفروضة نصّاً في الخادم — لا تُقرأ من جسم الطلب إطلاقاً. */
+  /* الحقول الحوكمية مفروضة نصّاً في الخادم — لا تُقرأ من جسم الطلب إطلاقاً.
+     ⚠️ و`active: true` الآن بقرار المالك: المراجعة تمّت لحظة الدعوة بالاسم. */
   T('الدور والصلاحيات والحالة مفروضة خادميّاً لا من العميل',
-    /role: 'user', permissions: FIELD_PERMISSIONS, active: false,/.test(SINV)
-    && /scope_sectors: \[p\.s\]/.test(SINV)
+    /role: 'user', permissions: FIELD_PERMISSIONS, active: true,/.test(SINV)
+    && /scope_sectors: \[sector\]/.test(SINV)
     && /FIELD_PERMISSIONS = \{ can_receive_po: true, can_view_amounts: false \}/.test(SINV));
-  T('وسقف الصفوف المعلّقة معرَّف', /MAX_PENDING_PER_SECTOR = \d+/.test(SINV));
+  /* ⚠️ الحارس الأهمّ بعد التحوّل: الرمز صار **الاعتماد**، فلو قرأ الخادم
+     البريد أو القطاع من جسم الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو
+     منح نفسه قطاعاً آخر. المسار العامّ لا يقرأ من `body` إلا كلمة المرور والجوال. */
+  T('والهويّة من الرمز لا من جسم الطلب في المسار العامّ',
+    /const email = String\(p\.e\)\.toLowerCase\(\);/.test(SINV)
+    && /const sector = String\(p\.s\);/.test(SINV)
+    && !/body\.email/.test(SINV.split("المسار العامّ")[1] || '')
+    && !/body\.sector/.test(SINV.split("المسار العامّ")[1] || '')
+    && !/body\.display_name/.test(SINV.split("المسار العامّ")[1] || ''));
+  /* ⚠️ ولا كلمة مرور في البريد إطلاقاً — الرابط دعوة لا اعتماد جاهز. */
+  T('ولا تُرسَل كلمة مرور في بريد الدعوة',
+    !/password[^)]{0,40}(inviteEmail|sendResend)/.test(SINV)
+    && !/inviteEmail\(\{[^}]*password/.test(SINV));
+  /* رمز v1 القديم (قطاع بلا بريد) يجب أن يسقط — وإلّا بقيت الروابط المشتركة حيّة. */
+  T('ورمز الرابط المشترك القديم يسقط (يشترط بريداً في الحمولة)',
+    /if \(!p \|\| !p\.e \|\| !p\.s/.test(SINV)
+    && /if \(!EMAIL_RE\.test\(String\(p\.e\)\)\) return null;/.test(SINV));
 
   /* الصفحة العامّة: بلا فهرسة وبلا أي مصدر خارجيّ (آمنة CSP كصفحات المورّدين). */
   T('صفحة التسجيل غير مفهرسة',
@@ -2846,8 +2863,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('زرّ الرابط في لوحة المستخدمين محكوم بصلاحية إدارية',
     /id="btn-staff-invite"/.test(HTML)
     && /requirePermission\('can_manage_users','رابط دعوة الموظفين'\)/.test(CODE));
-  T('ويعرض الإبطال بجوار التوليد',
-    /staffInviteMint\(\)/.test(CODE) && /staffInviteRevoke\(\)/.test(CODE));
+  T('ويعرض الإبطال بجوار الإرسال',
+    /staffInviteSend\(\)/.test(CODE) && /staffInviteRevoke\(\)/.test(CODE));
+  /* ⚠️ الرابط المشترك مُزال بالكامل — لا `mint` في الخادم ولا في الواجهة. */
+  T('ولا أثر للرابط المشترك (mint) في الخادم ولا الواجهة',
+    !/action === 'mint'/.test(SINV) && !/staffInviteMint/.test(CODE)
+    && !/action:'mint'/.test(CODE));
   /* ⚠️ النافذة تُلحَق وقت التشغيل ⇒ يجب أن تُوسَم ephemeral وإلّا بقيت في DOM
      بمعرّف مكرَّر وتسرّب قفل التمرير (سابقة مثبَّتة في هذا الملف). */
   T('ونافذته المُلحَقة وقت التشغيل تُزال عند الإغلاق',
@@ -2864,9 +2885,182 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ومطابقة هوية الأدمن غير حسّاسة لحالة الأحرف',
     /username=ilike\./.test(SINV) && !/proc_users\?username=eq\./.test(SINV)
     && /replace\(\/\[\\\\%_\]\/g/.test(SINV));
-  /* سقفُ المعلّقين وُصِف «لكل قطاع» وكان استعلامه عالميّاً بلا مرشّح قطاع. */
-  T('وسقف المعلّقين مُنطاق فعلاً بالقطاع لا عالميّاً',
-    /scope_sectors=cs\./.test(SINV) && /created_by=eq\.staff_invite/.test(SINV));
+  /* ⚠️ سقف المعلّقين أُسقِط عمداً لا سهواً: كان حزاماً ضدّ رابطٍ **مشترك**
+     مسرَّب، وبعد أن صارت الدعوة إداريّة شخصية لم يبقَ ما يحرسه — ومُسنَده
+     (`active=false`) لا يطابق صفّاً جديداً أصلاً بعد التفعيل المباشر، فتركُه
+     حارسٌ ميّت يوحي بحماية غير قائمة. */
+  T('وسقف المعلّقين أُسقِط مع الرابط المشترك (لا حارس ميّت)',
+    !/MAX_PENDING_PER_SECTOR/.test(SINV));
+
+  /* ── قالب بريد الدعوة: هندسة تعمل في عملاء البريد فعلاً ── */
+  T('بريد الدعوة يُرسَل عبر Resend للمدعوّ وحده',
+    /sendResend\(env, \[email\],/.test(SINV) && /inviteEmail\(\{/.test(SINV));
+  /* ⚠️ Outlook لا يدعم flex/grid ولا الأنماط الخارجية — جداول وأنماط سطريّة. */
+  T('والقالب بجداول وأنماط سطريّة لا flex/grid',
+    /function inviteEmail\(/.test(SINV)
+    && !/display:\s*(flex|grid)/.test(SINV.slice(SINV.indexOf('function inviteEmail'))));
+  T('وفيه زرّ دعوة ورابط نصّيّ احتياطيّ ومهلة صلاحية',
+    /تفعيل الحساب وإنشاء كلمة المرور/.test(SINV)
+    && /لا يعمل الزرّ؟/.test(SINV) && /صالح حتى/.test(SINV));
+  /* ⚠️ كل قيمة تدخل القالب تمرّ بـ`esc` — الاسم والمسمّى يكتبهما المدير،
+     ووسمٌ غير مُهرَّب فيهما يُفسِد الرسالة أو يحقن رابطاً. */
+  T('وكل قيمة في القالب مُهرَّبة بـesc',
+    /\$\{esc\(displayName\)\}/.test(SINV) && /\$\{esc\(link\)\}/.test(SINV)
+    && /esc\(k\)/.test(SINV) && /esc\(v\)/.test(SINV));
+  /* الصفحة تعرض بيانات الدعوة ولا تُحرّرها، وتُحقنها نصّاً لا ترميزاً. */
+  T('والصفحة العامّة تعرض الهويّة ولا ترسلها، وبـtextContent لا innerHTML',
+    /w-name'\)\.textContent/.test(SPAGE) && /w-email'\)\.textContent/.test(SPAGE)
+    && !/id="f-email"/.test(SPAGE) && !/display_name:/.test(SPAGE));
+  T('وتطلب تأكيد كلمة المرور قبل التفعيل',
+    /id="f-pass2"/.test(SPAGE) && /pass !== pass2/.test(SPAGE));
+}
+
+/* ── ٣٥) بنود الطلب: الجمع قبل التغيير لا بعده ────────────────────────
+   بلاغ المالك بلقطة: «عند رفع البنود بالقراءة الذكية البنود تسجل بعد الأعمدة
+   المضافة حتى لو كانت فارغة، وعند حذف الأعمدة الفارغة لا تُحذف — تُحذف البنود
+   المضافة بالذكاء في الأسفل».
+
+   الجذر **واحد يُنتج العَرَضين**: `prRenderItems()` كانت تستدعي `prCollectItems()`
+   في أوّل سطر «لحفظ القيم قبل إعادة الرسم» — وهي تقرأ صفوف DOM وتكتبها في
+   المصفوفة **بنفس الفهرس**. فمتى تغيّرت المصفوفة للتوّ صار الـDOM قديماً
+   والفهارس مُزاحة، فتُكتب القيم القديمة فوق الجديدة.
+
+   ⚠️ والأثر أسوأ ممّا بدا في اللقطة: البند الأوّل المستخرَج **يُفقَد صامتاً**
+   لا أنّه «يأتي بعد صفّ فارغ». التأكيدات هنا **سلوكية تُشغّل الدوال فعلاً** —
+   الفحص النصّيّ هو ما مرّ عليه العيب أصلاً. */
+{
+  G('٣٥) بنود الطلب — الجمع قبل التغيير');
+
+  /* DOM مُقلَّد بالقدر الذي تلمسه هذه الدوال: جسم الجدول وصفوفه وخلاياه. */
+  const mkPRDoc = () => {
+    let rows = [];
+    const el = (id) => ({ textContent:'', value:'' });
+    const body = {
+      set innerHTML(html) {
+        /* نُحاكي إعادة الرسم من الترميز المولَّد فعلاً.
+           ⚠️ لا تفترض ترتيب السمات: حقل الصنف يحمل `list="pr-item-names"`
+           **بين** `data-f` و`value`، فتعبيرٌ يلصقهما يفقد كل الأوصاف ويُنتج
+           إخفاقاً وهميّاً في الكعب لا في الكود (وقع فعلاً). */
+        rows = String(html).split('<tr data-row=').slice(1).map((chunk) => {
+          const i = +(/^"(\d+)"/.exec(chunk) || [0, -1])[1];
+          const cells = {};
+          for (const f of ['description','unit','contract_qty','stock_balance','requested_qty','unit_price']) {
+            const v = new RegExp('data-f="' + f + '"[^>]*?value="([^"]*)"').exec(chunk);
+            cells[f] = { getAttribute: () => f, value: v ? v[1] : '' };
+          }
+          return { i, cells };
+        });
+      },
+      get innerHTML() { return ''; },
+      querySelectorAll(sel) {
+        if (sel.includes('tr[data-row]')) return rows.map((r) => ({
+          getAttribute: () => String(r.i),
+          querySelectorAll: () => Object.values(r.cells),
+          querySelector: (s) => { const m = /data-f=(\w+)/.exec(s); return m ? r.cells[m[1]] : null; },
+        }));
+        return [];
+      },
+      _rows: () => rows,
+    };
+    return {
+      getElementById: (id) => (id === 'pr-items-body' ? body : el(id)),
+      querySelectorAll: (sel) => body.querySelectorAll(sel),
+      _body: body,
+    };
+  };
+
+  const mk = () => {
+    const doc = mkPRDoc();
+    const api = new Function('document', 'escapeAttr', 'fmtPrice', 'num0', 'canViewAmounts', 'toast', 'prCollectItems_unused',
+      grabLet('__prDraftItems') + '\n'
+      + grab('prAddDraftItem') + '\n' + grab('prAddItemRow') + '\n'
+      + grab('prRemoveDraftItem') + '\n' + grab('prRenderItems') + '\n'
+      + grab('prCollectItems') + '\n'
+      + 'function prRecalcTotal(){}\n'
+      + 'return { get items(){ return __prDraftItems; }, set items(v){ __prDraftItems = v; },'
+      + ' prAddDraftItem, prAddItemRow, prRemoveDraftItem, prRenderItems, prCollectItems };'
+    )(doc, (x) => String(x == null ? '' : x), (x) => String(x), (x) => Number(x) || 0, () => false, () => {});
+    return { doc, api };
+  };
+  const names = (api) => api.items.map((x) => x.description || '(فارغ)').join('|');
+
+  /* (أ) القراءة الذكية بعد صفّ فارغ افتراضيّ */
+  {
+    const { api } = mk();
+    api.prAddDraftItem(); api.prRenderItems();          // الصفّ الفارغ الافتراضيّ
+    api.items = [{ description:'أكياس نفايات', unit:'شوال', requested_qty:60 },
+                 { description:'صابون سائل', unit:'حبة', requested_qty:130 },
+                 { description:'منظف زجاج', unit:'كرتون', requested_qty:21 }];
+    api.prRenderItems();
+    T('القراءة الذكية لا تفقد البند الأوّل خلف صفّ فارغ',
+      names(api) === 'أكياس نفايات|صابون سائل|منظف زجاج', names(api));
+  }
+
+  /* (ب) حذف الصفّ الفارغ يحذفه هو لا آخر بند */
+  {
+    const { api } = mk();
+    api.items = [{ description:'', requested_qty:'' },
+                 { description:'صابون سائل', requested_qty:130 },
+                 { description:'منظف زجاج', requested_qty:21 }];
+    api.prRenderItems();
+    api.prRemoveDraftItem(0);
+    T('وحذف الصفّ الفارغ يحذفه هو لا آخر بند',
+      names(api) === 'صابون سائل|منظف زجاج', names(api));
+  }
+
+  /* (ج) حذف صفّ من الوسط */
+  {
+    const { api } = mk();
+    api.items = [{ description:'أ' }, { description:'ب' }, { description:'ج' }];
+    api.prRenderItems();
+    api.prRemoveDraftItem(1);
+    T('وحذف صفّ من الوسط يُصيب الصفّ نفسه', names(api) === 'أ|ج', names(api));
+  }
+
+  /* (د) ➕ لا يفقد ما كُتِب في الصفوف الظاهرة */
+  {
+    const { doc, api } = mk();
+    api.prAddDraftItem(); api.prRenderItems();
+    doc._body._rows()[0].cells.description.value = 'مكتوب باليد';
+    api.prAddItemRow();
+    T('و➕ إضافة بند يحفظ ما كُتِب في الصفوف الظاهرة',
+      api.items.length === 2 && api.items[0].description === 'مكتوب باليد', names(api));
+  }
+
+  /* (هـ) الجمع بعد الحذف يحفظ تعديلاً لم يُرسَل بعد */
+  {
+    const { doc, api } = mk();
+    api.items = [{ description:'أ' }, { description:'ب' }, { description:'ج' }];
+    api.prRenderItems();
+    doc._body._rows()[2].cells.description.value = 'ج المعدَّل';
+    api.prRemoveDraftItem(0);
+    T('وحذف صفّ يحفظ تعديلاً لم يُغادر الحقل بعد',
+      names(api) === 'ب|ج المعدَّل', names(api));
+  }
+
+  /* (و) الحارس البنيويّ: لا جمع داخل الرسم إطلاقاً */
+  T('و`prRenderItems` لا تجمع من DOM قديم',
+    !/prCollectItems\(\)/.test(grab('prRenderItems')));
+  T('وكل مُغيِّر للمصفوفة يجمع قبل التغيير', (() => {
+    const rm = grab('prRemoveDraftItem');
+    return rm.indexOf('prCollectItems()') > -1
+      && rm.indexOf('prCollectItems()') < rm.indexOf('__prDraftItems.splice')
+      && /prCollectItems\(\); prAddDraftItem\(\);/.test(grab('prAddItemRow'))
+      && !/onclick="prAddDraftItem\(\);prRenderItems\(\);"/.test(HTML);
+  })());
+
+  /* (ز) القراءة الذكية: تُسقِط الفارغ وتُبقي المكتوب يدويّاً */
+  {
+    const src = grab('prApplyParsed');
+    T('والقراءة الذكية تُسقِط الصفوف الفارغة ولا تُقدّمها على البنود',
+      /manual = __prDraftItems\.filter/.test(src)
+      && /\(it\.description\|\|''\)\.toString\(\)\.trim\(\) \|\| num0\(it\.requested_qty\) > 0/.test(src));
+    T('وتُبقي ما كتبه المستخدم بيده بدل محوه',
+      /__prDraftItems = manual\.concat\(/.test(src) && !/__prDraftItems = clean\.map/.test(src));
+    T('وتجمع قبل الدمج لا بعده',
+      src.indexOf('prCollectItems()') > -1
+      && src.indexOf('prCollectItems()') < src.indexOf('__prDraftItems = manual'));
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -1,37 +1,41 @@
 /**
- * /api/staff-invite — دعوة موظفي القطاع للتسجيل الذاتيّ (النظام 2).
+ * /api/staff-invite — دعوة موظّف بعينه للانضمام (النظام 2).
  *
- * طلب المالك: «رابط لدعوة موظفين ومدير الصيانة والتشغيل للدخول وتسجيل بياناتهم
- * لتوصلهم الإشعارات والمتابعة». وقراراته: **رابط واحد للقطاع** يُنشَر ·
- * **بريد الشركة حصراً** · **الحساب ينتظر تفعيل المالك**.
+ * طلب المالك (2026-09-13): «اجعله يرسل بتمبلت احترافيّ عن طريق Resend — فقط
+ * أضع اسم الموظف وإيميله وأحدّد الوظيفة ويتم الإرسال». وقراراته:
+ * **القطاع + مسمّى نصّيّ** · **يدخل مباشرةً بعد ضبط كلمة مروره** ·
+ * **الرابط المشترك يُحذَف** (لم يعُد له `action:'mint'`).
  *
- * ⚠️ المبدأ الحاكم: **الرابط المشترك لا يمنح صلاحية.** من يسجّل عبره يحصل على
- * حساب **موقوف** (`active=false`) بقطاعٍ يأتي من **الرمز الموقَّع** لا من العميل،
- * وبدور `user` وصلاحيات ميدانية ثابتة. فرابطٌ مسرَّب لا يفتح النظام لأحد —
- * أقصى أثره صفوف بانتظار المراجعة، وهي مسقوفة بعدد.
+ * ⚠️ المبدأ الحاكم بعد التحوّل: **الرمز صار شخصيّاً، فهو الاعتماد.** الاسم
+ * والبريد والقطاع والمسمّى كلّها **داخل الرمز الموقَّع**، والعميل لا يُقدّم إلا
+ * كلمة المرور والجوال. فلا يستطيع حاملُ الرابط تغيير بريده ولا قطاعه ولا أن
+ * يمنح نفسه صلاحية. وقُوّة الضمان = أنّ الرابط سُلّم إلى **صندوق بريد الشركة
+ * لذلك الموظّف وحده** (نفس نموذج أي دعوة بالبريد).
+ * ⚠️ ولا تُرسَل كلمة مرور في البريد إطلاقاً — الموظّف يضبطها بنفسه.
+ *
+ * أحاديّة الاستعمال بلا جدول رموز: بعد الإتمام يوجد صفّ بذلك البريد، فإعادة
+ * استعمال الرابط تسقط على فحص «موجود مسبقاً».
  *
  * الرمز موقَّع HMAC ويحمل حمولته (نمط `doc-renew.js`/`supplier-invite-link.js`):
- * **لا جدول رموز ولا هجرة**. والإبطال بمفتاح `staff_invite.epoch` في
- * `proc_settings`: أي رمز صدر قبله يسقط — فيُبطِل المالك كل الروابط بنقرة.
+ * **لا جدول ولا هجرة**. والإبطال بمفتاح `staff_invite.epoch` في `proc_settings`:
+ * أي رمز صدر قبله يسقط — فيُبطِل المالك كل الدعوات المعلّقة بنقرة.
  *
- *   GET                      فحص صحّة (منطقيات وجود فقط، بلا قيم)
- *   GET  ?t=<token>          بيانات الدعوة للصفحة العامّة (القطاع والصلاحية — بلا PII)
- *   POST {action:'mint'}     أدمن مُصادَق same-origin ⇒ يسكّ رابط القطاع
- *   POST {action:'revoke'}   أدمن ⇒ يُبطل كل الروابط الصادرة
- *   POST ?t=<token>          تسجيل عامّ محكوم بالرمز
+ *   GET                        فحص صحّة (منطقيات وجود فقط، بلا قيم)
+ *   GET  ?t=<token>            بيانات الدعوة لتعبئة الصفحة العامّة
+ *   POST {action:'invite'}     أدمن مُصادَق same-origin ⇒ يسكّ ويُرسل الدعوة
+ *   POST {action:'revoke'}     أدمن ⇒ يُبطل كل الدعوات المعلّقة
+ *   POST ?t=<token>            إتمام التسجيل (كلمة المرور فقط)
  */
-import { svcHeaders, sendResend, emailToUsername, publicOrigin, esc, BRAND } from './_pr-shared.js';
+import { svcHeaders, sendResend, publicOrigin, emailToUsername, esc, BRAND } from './_pr-shared.js';
 
 const COMPANY_DOMAIN = 'aldeyabi.com';
 const EMAIL_RE = /^[a-z0-9._%+-]+@aldeyabi\.com$/i;
 const DEFAULT_DAYS = 14;
 const MAX_DAYS = 60;
-/* سقف الصفوف المعلّقة لكل قطاع: رابطٌ مسرَّب لا يستطيع إغراق اللوحة. */
-const MAX_PENDING_PER_SECTOR = 40;
 
 /* صلاحيات الموظّف الميدانيّ — **ثابتة هنا لا تأتي من العميل**. المبالغ محجوبة
    افتراضاً بقرار المالك، والاستلام ممنوح لأنّه جوهر عمله. أي توسعة يمنحها
-   المالك بنفسه من لوحة المستخدمين بعد التفعيل. */
+   المالك بنفسه من لوحة المستخدمين. */
 const FIELD_PERMISSIONS = { can_receive_po: true, can_view_amounts: false };
 
 function json(obj, status = 200) {
@@ -70,6 +74,8 @@ function timingSafeEq(a, b) {
 }
 
 async function mintToken(env, payload) {
+  /* ⚠️ الحمولة عربية، وbtoa تعمل على بايتات latin1 — فالترميز يمرّ عبر
+     TextEncoder (UTF-8) لا btoa مباشرةً على النصّ، وإلّا رمى على أوّل حرف عربيّ. */
   const body = b64u.enc(new TextEncoder().encode(JSON.stringify(payload)));
   return `${body}.${await hmac(secretOf(env), body)}`;
 }
@@ -81,9 +87,12 @@ async function readToken(env, token) {
   if (!timingSafeEq(expect, parts[1])) return null;
   let p = null;
   try { p = JSON.parse(new TextDecoder().decode(b64u.dec(parts[0]))); } catch (_) { return null; }
-  if (!p || !p.s || !p.exp || !p.iat) return null;
+  /* ⚠️ الرمز الشخصيّ يجب أن يحمل بريداً وقطاعاً — ورمز v1 القديم (قطاع فقط)
+     لا يحملهما فيسقط هنا. وهذا مقصود: الروابط المشتركة القديمة تموت مع الحذف. */
+  if (!p || !p.e || !p.s || !p.exp || !p.iat) return null;
+  if (!EMAIL_RE.test(String(p.e))) return null;
   if (Date.now() > Number(p.exp)) return null;
-  if (Number(p.iat) < await inviteEpoch(env)) return null;   // أُبطلت كل الروابط بعده
+  if (Number(p.iat) < await inviteEpoch(env)) return null;   // أُبطلت كل الدعوات بعده
   return p;
 }
 
@@ -113,12 +122,12 @@ async function callerProfile(env, request) {
     /* ⚠️ مطابقة **غير حسّاسة لحالة الأحرف** — وهذا ليس تجميلاً: الإنتاج يحمل
        صفَّين يختلفان بالحالة فقط (`Abdullah` أدمن نشط · `abdullah` مستخدم
        موقوف)، و`emailToUsername` تُعيد الاسم بحروف صغيرة. فـ`eq.` كانت تطابق
-       **الصفّ الخاطئ** ⇒ المالك نفسه يُرفَض بـ403 عند توليد رابط الدعوة.
+       **الصفّ الخاطئ** ⇒ المالك نفسه يُرفَض بـ403 عند إصدار الدعوة.
        (`admin-users.js` تعلّم الدرس بـ`ilike` — وهذا الملف فاته.)
        وتهريب أحرف البدل (% _ \) يمنع مطابقة أوسع تلتقط مستخدماً آخر. */
     const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
     const pr = await fetch(
-      `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active`,
+      `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,display_name,email,role,active`,
       { headers: svcHeaders(env) });
     if (!pr.ok) return null;
     const rows = await pr.json();
@@ -131,6 +140,18 @@ async function callerProfile(env, request) {
   } catch (_) { return null; }
 }
 
+/** هل لهذا البريد (أو اسم المستخدم المشتقّ منه) حساب قائم؟ */
+async function existingUser(env, base, email, username) {
+  const r = await fetch(
+    `${base}/rest/v1/proc_users?or=(username.eq.${encodeURIComponent(username)},email.eq.${encodeURIComponent(email)})&select=username,active`,
+    { headers: svcHeaders(env) });
+  if (!r.ok) return null;                       // فشل مغلق يُعالَج عند المستدعي
+  const rows = await r.json();
+  return (Array.isArray(rows) && rows.length) ? rows[0] : false;
+}
+
+const usernameFrom = (email) => String(email).split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 30);
+
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const token = url.searchParams.get('t');
@@ -142,8 +163,9 @@ export async function onRequestGet({ request, env }) {
   if (!configured(env)) return json({ error: 'الخدمة غير مهيّأة', reason: 'not_configured' }, 503);
   const p = await readToken(env, token);
   if (!p) return json({ error: 'الرابط غير صالح أو انتهت صلاحيته' }, 401);
-  // لا PII: القطاع والصلاحية وشرط النطاق فقط.
-  return json({ ok: true, sector: p.s, expires_at: new Date(Number(p.exp)).toISOString(), domain: COMPANY_DOMAIN });
+  /* بيانات المدعوّ نفسه — وهي بياناته هو، والرابط وصل صندوقَه. */
+  return json({ ok: true, display_name: p.n || '', email: p.e, sector: p.s,
+    job_title: p.j || '', expires_at: new Date(Number(p.exp)).toISOString(), domain: COMPANY_DOMAIN });
 }
 
 export async function onRequestPost({ request, env }) {
@@ -156,7 +178,7 @@ export async function onRequestPost({ request, env }) {
   let body = {};
   try { body = await request.json(); } catch (_) { return json({ error: 'JSON غير صالح' }, 400); }
 
-  /* ── المسار الإداريّ: سكّ رابط أو إبطال كل الروابط ── */
+  /* ── المسار الإداريّ ── */
   if (!token) {
     const admin = await callerProfile(env, request);
     if (!admin) return json({ error: 'هذه العملية متاحة للمدير فقط' }, 403);
@@ -171,61 +193,78 @@ export async function onRequestPost({ request, env }) {
       return json({ ok: true, revoked_at: new Date(now).toISOString() });
     }
 
-    if (body.action === 'mint') {
+    if (body.action === 'invite') {
+      const displayName = String(body.display_name || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
       const sector = String(body.sector || '').trim();
-      if (!sector) return json({ error: 'القطاع مطلوب' }, 400);
+      const jobTitle = String(body.job_title || '').trim().slice(0, 60);
       const days = Math.min(MAX_DAYS, Math.max(1, Number(body.days) || DEFAULT_DAYS));
+
+      if (displayName.length < 3) return json({ error: 'اسم الموظّف مطلوب' }, 400);
+      // ⚠️ بريد الشركة حصراً: وهو أيضاً شرط وصول الإشعار — `userEmail` في
+      // `_pr-shared.js` تُسقِط أي بريد خارج النطاق فلا يصل شيء. و`sendResend`
+      // تُصفّي المستلمين بالنطاق نفسه، فبريد خارجيّ = دعوة لا تُرسَل أصلاً.
+      if (!EMAIL_RE.test(email)) return json({ error: `يجب استخدام بريد الشركة (@${COMPANY_DOMAIN})` }, 400);
+      if (!sector) return json({ error: 'القطاع مطلوب' }, 400);
+
+      const username = usernameFrom(email);
+      if (username.length < 2) return json({ error: 'تعذّر اشتقاق اسم مستخدم من هذا البريد' }, 400);
+
+      // موجود مسبقاً؟ نقولها **الآن** لا بعد أن يضغط الموظّف الرابط.
+      const ex = await existingUser(env, base, email, username);
+      if (ex === null) return json({ error: 'تعذّر التحقّق من الحسابات القائمة' }, 502);
+      if (ex) return json({ error: 'لهذا البريد حساب في النظام بالفعل' }, 409);
+
       const now = Date.now();
-      const t = await mintToken(env, { s: sector, iat: now, exp: now + days * 86400000, v: 1 });
+      const t = await mintToken(env, {
+        n: displayName, e: email, s: sector, j: jobTitle,
+        by: admin.username, iat: now, exp: now + days * 86400000, v: 2,
+      });
       const origin = publicOrigin(env, url.origin);
-      return json({ ok: true, url: `${origin}/staff-register.html?t=${encodeURIComponent(t)}`,
-        sector, expires_at: new Date(now + days * 86400000).toISOString() });
+      const link = `${origin}/staff-register.html?t=${encodeURIComponent(t)}`;
+
+      const sent = await sendResend(env, [email],
+        'دعوة للانضمام إلى نظام متابعة المشتريات | مجموعة الذيابي',
+        inviteEmail({ displayName, sector, jobTitle, email, link,
+          expiresAt: now + days * 86400000, inviter: admin.display_name || admin.username }));
+
+      /* ⚠️ الرابط يُعاد للمدير **حتى عند نجاح الإرسال**: بريدٌ يقع في مجلّد
+         المهملات يترك الموظّف بلا طريق، فالنسخ اليدويّ هو المخرج. */
+      return json({
+        ok: true, url: link, email, sector,
+        expires_at: new Date(now + days * 86400000).toISOString(),
+        sent: !!(sent && sent.ok),
+        send_error: (sent && (sent.error || sent.skipped)) ? (sent.detail || sent.reason || 'send_failed') : null,
+      });
     }
     return json({ error: 'إجراء غير معروف' }, 400);
   }
 
-  /* ── المسار العامّ: تسجيل محكوم بالرمز ── */
+  /* ── المسار العامّ: إتمام التسجيل ──
+     الهويّة كلّها من الرمز؛ العميل يُقدّم كلمة المرور والجوال فقط. */
   const p = await readToken(env, token);
   if (!p) return json({ error: 'الرابط غير صالح أو انتهت صلاحيته' }, 401);
 
-  const displayName = String(body.display_name || '').trim();
-  const email = String(body.email || '').trim().toLowerCase();
-  const mobile = String(body.mobile || '').trim();
-  const jobTitle = String(body.job_title || '').trim();
+  const email = String(p.e).toLowerCase();
+  const displayName = String(p.n || '').trim() || email.split('@')[0];
+  const sector = String(p.s);
+  const jobTitle = String(p.j || '').trim();
   const password = String(body.password || '');
+  const mobile = String(body.mobile || '').trim();
 
-  if (displayName.length < 3) return json({ error: 'الاسم الكامل مطلوب' }, 400);
-  // ⚠️ بريد الشركة حصراً (قرار المالك): وهو أيضاً شرط وصول الإشعار — دالّة
-  // `userEmail` في `_pr-shared.js` تُسقِط أي بريد خارج النطاق فلا يصل شيء.
-  if (!EMAIL_RE.test(email)) return json({ error: `يجب استخدام بريد الشركة (@${COMPANY_DOMAIN})` }, 400);
   if (password.length < 8) return json({ error: 'كلمة المرور 8 أحرف على الأقل' }, 400);
   if (mobile && !/^[0-9+\-\s()]{7,20}$/.test(mobile)) return json({ error: 'رقم الجوال غير صالح' }, 400);
 
-  const username = email.split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  const username = usernameFrom(email);
   if (username.length < 2) return json({ error: 'تعذّر اشتقاق اسم مستخدم من بريدك' }, 400);
 
   try {
-    // موجود مسبقاً؟ (بالاسم أو بالبريد) — لا نُنشئ نسخة ثانية ولا نُفشي حالته.
-    const ex = await fetch(
-      `${base}/rest/v1/proc_users?or=(username.eq.${encodeURIComponent(username)},email.eq.${encodeURIComponent(email)})&select=username,active`,
-      { headers: svcHeaders(env) });
-    const exRows = await ex.json();
-    if (Array.isArray(exRows) && exRows.length) {
+    // إعادة استعمال الرابط بعد الإتمام تسقط هنا — وهي أحاديّة الاستعمال بلا جدول.
+    const ex = await existingUser(env, base, email, username);
+    if (ex === null) return json({ error: 'تعذّر إتمام التسجيل — حاول مرّة أخرى' }, 502);
+    if (ex) {
       return json({ ok: true, already: true,
-        message: 'لديك حساب في النظام بالفعل. إن لم تستطع الدخول فراجع مدير النظام.' });
-    }
-
-    // سقف الصفوف المعلّقة **لهذا القطاع** — حزام أمان ضدّ إغراق اللوحة برابط
-    // مسرَّب. ⚠️ كان الاستعلام بلا مرشّح قطاع فكان سقفاً عالميّاً يحتسب حتى
-    // الحسابات الموقوفة القديمة، فيمنع قطاعاً بسبب قطاع آخر.
-    const pend = await fetch(
-      `${base}/rest/v1/proc_users?active=eq.false&created_by=eq.staff_invite`
-      + `&scope_sectors=cs.${encodeURIComponent(JSON.stringify([p.s]))}`
-      + `&select=username&limit=${MAX_PENDING_PER_SECTOR + 1}`,
-      { headers: svcHeaders(env) });
-    const pendRows = await pend.json();
-    if (Array.isArray(pendRows) && pendRows.length > MAX_PENDING_PER_SECTOR) {
-      return json({ error: 'تعذّر التسجيل الآن — راجع مدير النظام' }, 429);
+        message: 'لديك حساب في النظام بالفعل. ادخل بكلمة مرورك، وإن نسيتها فراجع مدير النظام.' });
     }
 
     // حساب الدخول (مؤكَّد البريد: الدعوة نفسها هي التحقّق)
@@ -240,16 +279,17 @@ export async function onRequestPost({ request, env }) {
     }
 
     /* ⚠️ كل الحقول الحوكمية مفروضة هنا لا من العميل: الدور `user`، والصلاحيات
-       الميدانية الثابتة، والقطاع من **الرمز**، والحساب **موقوف** حتى يفعّله المالك. */
+       الميدانية الثابتة، والقطاع والاسم والبريد من **الرمز**.
+       و`active: true` بقرار المالك — المراجعة تمّت لحظة الدعوة بالاسم. */
     const prof = await fetch(`${base}/rest/v1/proc_users`, {
       method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
         username, display_name: displayName, email, mobile: mobile || null,
         job_title: jobTitle || null, password_hash: 'managed_by_supabase_auth',
-        role: 'user', permissions: FIELD_PERMISSIONS, active: false,
-        scope_sectors: [p.s], requested_role: 'field_staff',
+        role: 'user', permissions: FIELD_PERMISSIONS, active: true,
+        scope_sectors: [sector], requested_role: 'field_staff',
         created_by: 'staff_invite',
-        notes: `تسجيل ذاتيّ عبر رابط دعوة القطاع «${p.s}»`,
+        notes: `انضمّ عبر دعوة شخصية${p.by ? ` من ${p.by}` : ''} — قطاع «${sector}»`,
       }),
     });
     if (!prof.ok) {
@@ -261,18 +301,91 @@ export async function onRequestPost({ request, env }) {
       return json({ error: 'تعذّر حفظ بياناتك — حاول مرّة أخرى' }, 400);
     }
 
-    // تنبيه المدراء ليُفعّلوا الحساب — وإلّا انتظر الموظّف بلا أن يعلم أحد.
-    try { await notifyAdmins(env, base, { displayName, email, mobile, jobTitle, sector: p.s }); } catch (_) {}
+    // إشعار الداعي بالإتمام — لا «بانتظار التفعيل»، فالحساب صار نشطاً.
+    try { await notifyInviter(env, base, p.by, { displayName, email, mobile, jobTitle, sector }); } catch (_) {}
 
-    return json({ ok: true, pending: true });
+    return json({ ok: true, active: true });
   } catch (_) {
     return json({ error: 'تعذّر إتمام التسجيل' }, 500);
   }
 }
 
-async function notifyAdmins(env, base, info) {
-  const r = await fetch(`${base}/rest/v1/proc_users?active=eq.true&role=eq.admin&select=username,email`,
-    { headers: svcHeaders(env) });
+/* ═══════════ قالب بريد الدعوة ═══════════
+   جداول لا flexbox، وأنماط سطريّة، وألوان BRAND — فعملاء البريد (Outlook
+   خاصّة) لا يدعمون الشبكات الحديثة ولا الأنماط الخارجية. */
+function inviteEmail({ displayName, sector, jobTitle, email, link, expiresAt, inviter }) {
+  const until = new Date(expiresAt).toISOString().slice(0, 10);
+  const row = (k, v) => v
+    ? `<tr>
+         <td style="padding:9px 14px;color:${BRAND.soft};font-size:13px;white-space:nowrap">${esc(k)}</td>
+         <td style="padding:9px 14px;font-size:13.5px;font-weight:600;color:${BRAND.ink}">${esc(v)}</td>
+       </tr>` : '';
+  return `<div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;text-align:right;
+      background:${BRAND.wash};padding:28px 16px;margin:0">
+  <span style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden;opacity:0">
+    دعوتك لتفعيل حسابك في نظام متابعة المشتريات — تُنشئ كلمة مرورك وتبدأ فوراً.
+  </span>
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid ${BRAND.line};
+       border-radius:16px;overflow:hidden">
+
+    <div style="background:${BRAND.navy};padding:26px 26px 22px">
+      <div style="color:${BRAND.gold};font-size:12px;letter-spacing:2px;font-weight:700">مجموعة الذيابي</div>
+      <div style="color:#fff;font-size:20px;font-weight:700;margin-top:8px">دعوة للانضمام إلى نظام متابعة المشتريات</div>
+    </div>
+
+    <div style="padding:24px 26px;color:${BRAND.ink};font-size:14.5px;line-height:1.9">
+      <p style="margin:0 0 14px">أهلاً <b>${esc(displayName)}</b>،</p>
+      <p style="margin:0 0 18px">
+        ${inviter ? `دعاك <b>${esc(inviter)}</b> للانضمام إلى` : 'دُعيت للانضمام إلى'}
+        نظام متابعة المشتريات في مجموعة الذيابي. من خلاله تتابع
+        <b>أوامر الشراء التي تخصّ قطاعك</b>، وتُسجّل استلام البضاعة،
+        وترفع طلبات الشراء وتتابع مسارها — وتصلك الإشعارات على بريدك.
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;background:${BRAND.wash};
+             border:1px solid ${BRAND.line};border-radius:10px;margin:0 0 22px">
+        ${row('القطاع', sector)}${row('المسمّى الوظيفيّ', jobTitle)}${row('بريد الدخول', email)}
+      </table>
+
+      <div style="text-align:center;margin:26px 0 18px">
+        <a href="${esc(link)}"
+           style="display:inline-block;background:${BRAND.navy};color:#fff;text-decoration:none;
+                  font-size:15px;font-weight:700;padding:14px 38px;border-radius:10px">
+          تفعيل الحساب وإنشاء كلمة المرور
+        </a>
+      </div>
+
+      <p style="margin:0 0 6px;color:${BRAND.soft};font-size:12.5px;text-align:center">
+        الرابط شخصيّ لك ولا يصلح لغيرك · صالح حتى <b>${esc(until)}</b>
+      </p>
+
+      <div style="border-top:1px solid ${BRAND.line};margin-top:22px;padding-top:16px;
+           color:${BRAND.soft};font-size:12px;line-height:1.8">
+        لا يعمل الزرّ؟ انسخ هذا العنوان في متصفّحك:
+        <div style="direction:ltr;text-align:left;word-break:break-all;color:${BRAND.ink};
+             background:${BRAND.wash};border:1px solid ${BRAND.line};border-radius:8px;
+             padding:9px 11px;margin-top:7px;font-size:11.5px">${esc(link)}</div>
+        <p style="margin:14px 0 0">
+          لم تتوقّع هذه الدعوة؟ تجاهل الرسالة ولا تضغط الرابط، وأبلغ مدير النظام.
+        </p>
+      </div>
+    </div>
+
+    <div style="background:${BRAND.wash};border-top:1px solid ${BRAND.line};
+         padding:14px 26px;color:${BRAND.soft};font-size:11.5px">
+      رسالة آليّة من نظام المشتريات — مجموعة الذيابي
+    </div>
+  </div>
+</div>`;
+}
+
+/** إشعار الداعي بأنّ الموظّف أتمّ التفعيل ودخل. */
+async function notifyInviter(env, base, inviterUsername, info) {
+  const safe = String(inviterUsername || '').replace(/[\\%_]/g, (c) => '\\' + c);
+  const q = safe
+    ? `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&active=eq.true&select=email`
+    : `${base}/rest/v1/proc_users?active=eq.true&role=eq.admin&select=email`;
+  const r = await fetch(q, { headers: svcHeaders(env) });
   const rows = await r.json();
   const to = [...new Set((rows || [])
     .map((u) => (u.email && EMAIL_RE.test(u.email)) ? String(u.email).toLowerCase() : '')
@@ -281,19 +394,20 @@ async function notifyAdmins(env, base, info) {
   const row = (k, v) => v
     ? `<tr><td style="padding:6px 10px;color:${BRAND.soft};font-size:13px">${esc(k)}</td>
          <td style="padding:6px 10px;font-size:13px;font-weight:600">${esc(v)}</td></tr>` : '';
-  const html = `<div style="font-family:Segoe UI,Tahoma,Arial,sans-serif;direction:rtl;text-align:right;
+  const html = `<div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;text-align:right;
       background:${BRAND.wash};padding:24px">
     <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid ${BRAND.line};border-radius:14px;overflow:hidden">
       <div style="background:${BRAND.navy};color:#fff;padding:18px 22px;font-weight:700">
-        👤 تسجيل موظّف جديد بانتظار التفعيل</div>
+        ✅ الموظّف فعّل حسابه</div>
       <div style="padding:18px 22px;color:${BRAND.ink};font-size:14px;line-height:1.8">
-        سجّل موظّف بياناته عبر رابط دعوة القطاع، و<b>حسابه موقوف</b> حتى تُفعّله.
+        أتمّ الموظّف الذي دعوتَه ضبط كلمة مروره، و<b>حسابه نشط الآن</b>.
         <table style="width:100%;border-collapse:collapse;margin:12px 0">
           ${row('الاسم', info.displayName)}${row('البريد', info.email)}
-          ${row('الجوال', info.mobile)}${row('الوظيفة', info.jobTitle)}${row('القطاع', info.sector)}
+          ${row('الجوال', info.mobile)}${row('المسمّى الوظيفيّ', info.jobTitle)}${row('القطاع', info.sector)}
         </table>
-        فعّله من: <b>الإعدادات ← المستخدمون</b> بعد مراجعة بياناته وقطاعه.
+        صلاحياته الميدانية الافتراضية: تسجيل الاستلام، بلا عرض المبالغ.
+        لتعديلها: <b>الإعدادات ← المستخدمون</b>.
       </div>
     </div></div>`;
-  await sendResend(env, to, 'موظّف جديد بانتظار التفعيل | مجموعة الذيابي', html);
+  await sendResend(env, to, 'موظّف فعّل حسابه | مجموعة الذيابي', html);
 }

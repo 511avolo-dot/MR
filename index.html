@@ -12917,15 +12917,26 @@ function prApplyParsed(obj){
   if(obj.department){ const d=(STATE.departments||[]).find(x=>(x.name_ar||'').trim()===String(obj.department).trim()); const sel=document.getElementById('pr-dept'); if(d&&sel) sel.value=d.id; }
   const items=Array.isArray(obj.items)?obj.items:[];
   const clean=items.filter(it=>(it.description||'').toString().trim());
+  let kept = 0;
   if(clean.length){
-    __prDraftItems = clean.map(it=>({
+    prCollectItems();   // احفظ ما كتبه المستخدم فعلاً قبل الدمج
+    /* ⚠️ الصفوف الفارغة تُسقَط فلا تتقدّم البنودَ المستخرَجة (شكوى المالك:
+       «البنود تسجل بعد الأعمدة المضافة حتى لو كانت فارغة»). وصفٌّ بلا صنف
+       ولا كمية ليس بنداً أصلاً.
+       ⚠️ وما كتبه المستخدم بيده **يبقى**: الاستبدال الكامل كان يمحو عمله بلا
+       إنذار لو قرأ النموذج بعد إدخال بنود يدويّاً. */
+    const manual = __prDraftItems.filter(it =>
+      (it.description||'').toString().trim() || num0(it.requested_qty) > 0);
+    kept = manual.length;
+    __prDraftItems = manual.concat(clean.map(it=>({
       description:String(it.description||'').trim(), unit:it.unit||'',
       contract_qty:(it.contract_qty==null?'':it.contract_qty), stock_balance:(it.stock_balance==null?'':it.stock_balance),
       requested_qty:(it.requested_qty==null?'':it.requested_qty), unit_price:(it.unit_price==null?'':it.unit_price)
-    }));
+    })));
     prRenderItems(); prRecalcTotal();
   }
-  toast('success','تمت القراءة', `استُخرج ${clean.length} بند — راجع البيانات قبل الإرسال`);
+  toast('success','تمت القراءة',
+    `استُخرج ${clean.length} بند${kept?` وأُضيفت بعد ${kept} بنداً كتبتها` : ''} — راجع البيانات قبل الإرسال`);
 }
 async function prParseForm(){
   if(!requirePermission('can_use_ai','قراءة النموذج بالذكاء')) return;
@@ -13148,7 +13159,7 @@ function prBuilderHTML(){
           ${canViewAmounts()?`<tfoot><tr><td colspan="7" style="text-align:end;font-weight:700">الإجمالي التقديري</td><td class="num" id="pr-total" style="font-weight:700">0</td><td></td></tr></tfoot>`:''}
         </table>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="prAddDraftItem();prRenderItems();" style="margin-top:8px">➕ إضافة بند</button>
+      <button class="btn btn-ghost btn-sm" onclick="prAddItemRow()" style="margin-top:8px">➕ إضافة بند</button>
       <div id="pr-words" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
 
       <div class="pr-section-title" style="margin-top:18px">الطلب الموقَّع من المدير <span style="color:var(--danger)">*</span></div>
@@ -13179,10 +13190,26 @@ function prBuilderHTML(){
     </div>`;
 }
 function prAddDraftItem(prefill){ __prDraftItems.push(Object.assign({description:'',unit:'',contract_qty:'',stock_balance:'',requested_qty:'',unit_price:''}, prefill||{})); }
-function prRemoveDraftItem(i){ __prDraftItems.splice(i,1); if(!__prDraftItems.length) prAddDraftItem(); prRenderItems(); prRecalcTotal(); }
+/* ➕ إضافة بند: **يُجمَع أوّلاً** ما كتبه المستخدم في الصفوف الظاهرة، ثم يُضاف
+   الصفّ الجديد. (الجمع بعد الإضافة يقرأ DOM لا يطابق المصفوفة.) */
+function prAddItemRow(){ prCollectItems(); prAddDraftItem(); prRenderItems(); }
+function prRemoveDraftItem(i){
+  prCollectItems();                       // ⚠️ قبل التغيير لا بعده — انظر prRenderItems
+  __prDraftItems.splice(i,1);
+  if(!__prDraftItems.length) prAddDraftItem();
+  prRenderItems(); prRecalcTotal();
+}
+/* ⚠️ **لا تستدعِ `prCollectItems()` من هنا.** كانت تُستدعى في أوّل السطر
+   «لحفظ القيم قبل إعادة الرسم»، وهي تقرأ صفوف DOM وتكتبها في المصفوفة
+   **بنفس الفهرس** — فإذا كانت المصفوفة قد تغيّرت للتوّ صار الـDOM قديماً
+   والفهارس مُزاحة، فتُكتب القيم القديمة فوق الجديدة. عَرَضان مُعادان بالتشغيل:
+     · القراءة الذكية (تستبدل المصفوفة) ⇒ الصفّ الفارغ القديم يطمس **البند
+       الأوّل المستخرَج** فيُفقَد صامتاً ويبدو الجدول وكأنّ البنود بدأت بعد صفّ فارغ.
+     · حذف الصفّ i ⇒ الصفوف القديمة تُعاد كتابتها مُزاحةً، فيبقى الصفّ المحذوف
+       ويختفي **آخر بند** بدلاً منه.
+   القاعدة: من يُغيّر `__prDraftItems` يجمع **قبل** التغيير ثم يرسم. */
 function prRenderItems(){
   const body=document.getElementById('pr-items-body'); if(!body) return;
-  prCollectItems(); // احفظ القيم الحالية قبل إعادة الرسم
   body.innerHTML = __prDraftItems.map((it,i)=>`
     <tr data-row="${i}">
       <td class="center">${i+1}</td>
@@ -14709,51 +14736,74 @@ async function staffInviteOpen(){
   const el = document.createElement('div');
   el.className='modal-overlay active'; el.id='modal-staff-invite'; el.dataset.ephemeral='1';
   el.innerHTML = `<div class="modal" style="max-width:560px">
-    <div class="modal-header"><div class="modal-title">🔗 رابط دعوة الموظفين</div>
+    <div class="modal-header"><div class="modal-title">✉️ دعوة موظّف</div>
       <button class="modal-close" onclick="closeModal('modal-staff-invite')">✕</button></div>
     <div class="modal-body">
       <div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:14px">
-        رابط واحد تنشره لموظفي القطاع (ومدير الصيانة والتشغيل) فيسجّلون بياناتهم بأنفسهم.
-        <b>يُشترط بريد الشركة</b> — وهو شرط وصول الإشعارات إليهم.
-        وكل من يسجّل يظهر هنا <b>موقوفاً</b> حتى تُفعّله بنفسك.
+        أدخل اسم الموظّف وبريده وحدّد قطاعه — و<b>يصله بريد دعوة</b> يضبط منه كلمة مروره
+        ويدخل مباشرةً. <b>يُشترط بريد الشركة</b>، وهو شرط وصول الإشعارات إليه.
       </div>
-      <div class="rep-field"><label>القطاع</label>
+      <div class="rep-field"><label>اسم الموظّف *</label>
+        <input class="input" id="si-name" maxlength="80" placeholder="محمد أحمد العتيبي"></div>
+      <div class="rep-field" style="margin-top:10px"><label>بريد الشركة *</label>
+        <input class="input" id="si-email" type="email" dir="ltr" maxlength="120"
+               placeholder="name@aldeyabi.com"></div>
+      <div class="rep-field" style="margin-top:10px"><label>القطاع *</label>
         <select class="select" id="si-sector">${opts}</select></div>
-      <div class="rep-field" style="margin-top:10px"><label>مدّة صلاحية الرابط (أيام)</label>
-        <input class="input" id="si-days" type="number" min="1" max="60" value="14"></div>
+      <div class="rep-field" style="margin-top:10px"><label>المسمّى الوظيفيّ</label>
+        <input class="input" id="si-job" maxlength="60" placeholder="فنّي صيانة / مدير الصيانة والتشغيل…"></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.7">
+        صلاحياته الافتراضية: <b>تسجيل استلام البضاعة</b> بلا عرض المبالغ — توسّعها من
+        «المستخدمون» متى شئت.
+      </div>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="staffInviteMint()">توليد الرابط</button>
+        <button class="btn btn-primary btn-sm" onclick="staffInviteSend()">إرسال الدعوة</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="staffInviteRevoke()"
-                title="يُسقِط كل الروابط التي وُلِّدت سابقاً">🚫 إبطال كل الروابط</button>
+                title="يُسقِط كل الدعوات التي لم تُفعَّل بعد">🚫 إبطال الدعوات المعلّقة</button>
       </div>
       <div id="si-out" style="margin-top:14px;font-size:13px"></div>
     </div></div>`;
   document.body.appendChild(el); syncScrollLock(); a11yWire(el);
 }
-async function staffInviteMint(){
+async function staffInviteSend(){
   const out = document.getElementById('si-out');
+  const name   = (document.getElementById('si-name')?.value || '').trim();
+  const email  = (document.getElementById('si-email')?.value || '').trim().toLowerCase();
   const sector = document.getElementById('si-sector')?.value || '';
-  const days = Number(document.getElementById('si-days')?.value) || 14;
-  out.textContent = 'جارٍ التوليد…';
+  const job    = (document.getElementById('si-job')?.value || '').trim();
+  // تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع.
+  if(name.length < 3){ out.innerHTML = '<div style="color:var(--danger)">اكتب اسم الموظّف كاملاً.</div>'; return; }
+  if(!/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){
+    out.innerHTML = '<div style="color:var(--danger)">يجب استخدام بريد الشركة (@aldeyabi.com).</div>'; return; }
+  if(!sector){ out.innerHTML = '<div style="color:var(--danger)">حدّد القطاع.</div>'; return; }
+  out.textContent = 'جارٍ الإرسال…';
   try{
     const r = await fetch('/api/staff-invite', { method:'POST',
       headers: Object.assign({'Content-Type':'application/json'}, await prAuthHeader()),
-      body: JSON.stringify({ action:'mint', sector, days }) });
+      body: JSON.stringify({ action:'invite', display_name:name, email, sector, job_title:job }) });
     const j = await r.json();
-    if(!r.ok || !j.ok) throw new Error(j.error||'تعذّر التوليد');
-    const msg = `دعوة للتسجيل في نظام متابعة المشتريات — قطاع ${sector}\n\nسجّل بياناتك مرّة واحدة لتتابع أوامرك وترفع طلباتك:\n${j.url}\n\nاستخدم بريد الشركة، وسيُفعّل حسابك بعد المراجعة.`;
-    out.innerHTML = `<div style="background:#eef7ee;border:1px solid #cfe3cf;padding:10px;border-radius:8px">
-        <div style="margin-bottom:8px">✅ الرابط جاهز — صالح حتى <b>${escapeHtml(String(j.expires_at).slice(0,10))}</b></div>
+    if(!r.ok || !j.ok) throw new Error(j.error||'تعذّر الإرسال');
+    /* ⚠️ الرابط يُعرَض حتى عند نجاح الإرسال: بريدٌ يقع في المهملات يترك
+       الموظّف بلا طريق، فالنسخ اليدويّ هو المخرج. */
+    const head = j.sent
+      ? `✅ أُرسلت الدعوة إلى <b dir="ltr">${escapeHtml(email)}</b>`
+      : `⚠️ تعذّر إرسال البريد — <b>انسخ الرابط وأرسله له</b>`;
+    out.innerHTML = `<div style="background:${j.sent?'#eef7ee':'#fdf3e7'};border:1px solid ${j.sent?'#cfe3cf':'#f0d9b5'};padding:10px;border-radius:8px">
+        <div style="margin-bottom:8px">${head} — صالحة حتى <b>${escapeHtml(String(j.expires_at).slice(0,10))}</b></div>
         <input class="input" dir="ltr" readonly value="${escapeAttr(j.url)}" onclick="this.select()" style="font-size:12px">
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(j.url).replace(/"/g,'&quot;')}).then(()=>toast('success','نُسخ الرابط',''))">نسخ الرابط</button>
-          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
-             href="https://wa.me/?text=${encodeURIComponent(msg)}">مشاركة عبر واتساب</a>
+          <button class="btn btn-ghost btn-sm" onclick="staffInviteReset()">دعوة موظّف آخر</button>
         </div></div>`;
-  }catch(e){ out.innerHTML = `<div style="color:var(--danger)">${escapeHtml(e.message||'تعذّر التوليد')}</div>`; }
+  }catch(e){ out.innerHTML = `<div style="color:var(--danger)">${escapeHtml(e.message||'تعذّر الإرسال')}</div>`; }
+}
+function staffInviteReset(){
+  ['si-name','si-email','si-job'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const out = document.getElementById('si-out'); if(out) out.innerHTML='';
+  document.getElementById('si-name')?.focus();
 }
 async function staffInviteRevoke(){
-  if(!confirm('إبطال كل روابط الدعوة الصادرة؟ من لم يسجّل بعد سيحتاج رابطاً جديداً.')) return;
+  if(!confirm('إبطال كل الدعوات المعلّقة؟ من لم يفعّل حسابه بعد سيحتاج دعوة جديدة.')) return;
   const out = document.getElementById('si-out');
   try{
     const r = await fetch('/api/staff-invite', { method:'POST',

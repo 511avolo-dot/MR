@@ -649,11 +649,13 @@ let DR_TOKEN = '';
 if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل`); process.exit(1); }
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);
 
-/* ── تأكيدات نقطة دعوة موظفي القطاع (/api/staff-invite) ─────────────────────
-   قرار المالك (2026-09-10): **رابط واحد للقطاع** يُنشَر · **بريد الشركة حصراً**
-   · **الحساب ينتظر التفعيل**. المبدأ الحاكم المُختبَر هنا: **الرابط المشترك لا
-   يمنح صلاحية** — القطاع من الرمز لا من العميل، والدور والصلاحيات مفروضة،
-   والحساب موقوف. ولو انعكس أيٌّ من ذلك صار الرابط المسرَّب باباً للنظام. */
+/* ── تأكيدات نقطة دعوة الموظّف الشخصية (/api/staff-invite) ──────────────────
+   قرار المالك (2026-09-13): المدير يُدخل الاسم والبريد والقطاع والمسمّى، ويصل
+   الموظّف **بريد دعوة** يضبط منه كلمة مروره ويدخل مباشرةً. الرابط المشترك حُذِف.
+
+   ⚠️ المبدأ الحاكم المُختبَر هنا: **الرمز صار الاعتماد**، فالهويّة كلّها من
+   داخله — البريد والقطاع والاسم والمسمّى. لو قرأ الخادم أيّاً منها من جسم
+   الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو منح نفسه قطاعاً آخر. */
 const si = await import('../../functions/api/staff-invite.js');
 
 const SI_ENV = {
@@ -686,21 +688,29 @@ function siNet(opts = {}) {
       return new Response(JSON.stringify([{ value: { epoch: opts.epoch || 0 } }]), { status: 200 });
     }
     if (u.includes('/rest/v1/proc_users') && m === 'GET') {
+      if (u.includes('or=(')) {
+        return new Response(JSON.stringify(opts.existing || []), { status: opts.existingFail ? 500 : 200 });
+      }
       if (u.includes('role=eq.admin')) return new Response(JSON.stringify([{ username:'admin', email:'abdullah@aldeyabi.com' }]), { status: 200 });
-      if (u.includes('active=eq.false')) return new Response(JSON.stringify(opts.pending || []), { status: 200 });
       /* ⚠️ **مطابق لصفوف الإنتاج حرفيّاً** (مُتحقَّق على yofcaxvstjcrmbgciwym):
          صفّان يختلفان بحالة الأحرف فقط — `abdullah` مستخدم **موقوف** و`Abdullah`
          أدمن نشط — والموقوف **أوّلاً** عمداً. الكعب السابق كان يتخيّل صفّاً واحداً
-         (`abdullah` أدمن نشط) فمرّ عيب `eq.` الذي يرفض المالك نفسه بـ403. */
-      if (u.includes('username=ilike.abdullah') || u.includes('username=eq.abdullah'))
-        return new Response(JSON.stringify([
-          { username:'abdullah', role:'user',  active:false },
-          { username:'Abdullah', role:'admin', active:true  },
-        ]), { status: 200 });
-      if (u.includes('username=ilike.saleh') || u.includes('username=eq.saleh'))
-        return new Response(JSON.stringify([{ username:'saleh', role:'user', active:true }]), { status: 200 });
-      if (u.includes('or=(')) return new Response(JSON.stringify(opts.existing || []), { status: 200 });
-      return new Response('[]', { status: 200 });
+         (`abdullah` أدمن نشط) فمرّ عيب `eq.` الذي يرفض المالك نفسه بـ403.
+         ⚠️ والمطابقة هنا **غير حسّاسة لحالة الأحرف** كدلالة `ilike` في القاعدة:
+         كعبٌ يطابق النصّ الصغير وحده يُخفق على استعلام `ilike.Abdullah` الحقيقيّ
+         (وهو ما يقع فعلاً حين يُشتقّ الاسم من صفّ الأدمن `Abdullah`). */
+      const mName = /username=i?like\.([^&]*)/.exec(u) || /username=eq\.([^&]*)/.exec(u);
+      const want = mName ? decodeURIComponent(mName[1]).replace(/\\(.)/g, '$1').toLowerCase() : '';
+      const ROWS = {
+        abdullah: [
+          { username:'abdullah', role:'user',  active:false, email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
+          { username:'Abdullah', role:'admin', active:true,  email:'abdullah@aldeyabi.com', display_name:'عبدالله' },
+        ],
+        saleh: [{ username:'saleh', role:'user', active:true, email:'saleh@aldeyabi.com' }],
+      };
+      let rows = ROWS[want] || [];
+      if (u.includes('active=eq.true')) rows = rows.filter((x) => x.active !== false);
+      return new Response(JSON.stringify(rows), { status: 200 });
     }
     if (u.includes('/auth/v1/admin/users') && m === 'POST') {
       return new Response(JSON.stringify({ id: 'auth-uid-1' }), { status: opts.authFail ? 500 : 200 });
@@ -708,7 +718,9 @@ function siNet(opts = {}) {
     if (u.includes('/rest/v1/proc_users') && m === 'POST') {
       return new Response('', { status: opts.profileFail ? 400 : 201 });
     }
-    if (u.includes('api.resend.com')) return new Response(JSON.stringify({ id: 'e1' }), { status: 200 });
+    if (u.includes('api.resend.com')) {
+      return new Response(opts.mailFail ? 'blocked' : JSON.stringify({ id: 'e1' }), { status: opts.mailFail ? 422 : 200 });
+    }
     return new Response('{}', { status: 200 });
   };
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -719,46 +731,91 @@ const siT = (name, cond, extra = '') => {
   siTotal++; if (!cond) siFailed++;
   console.log(`${cond ? '✓' : '✗ FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
 };
-const mint = async (env, headers = ADMIN, body = { action:'mint', sector:'الصيانة والتشغيل' }) => {
+const INVITE = { action:'invite', display_name:'صالح الميداني', email:'saleh@aldeyabi.com',
+                 sector:'الصيانة والتشغيل', job_title:'فنّي صيانة' };
+const invite = async (env = SI_ENV, headers = ADMIN, body = INVITE) => {
   const r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify(body) }, headers), env });
   return { status: r.status, j: await r.json() };
 };
 const tokenOf = (u) => new URL(u).searchParams.get('t');
-const REG_BODY = {
-  display_name: 'صالح الميداني', email: 'saleh@aldeyabi.com',
-  password: 'Passw0rd!', mobile: '0500000000', job_title: 'فنّي صيانة',
-};
 
-/* (أ) سكّ الرابط: أدمن فقط، ومن نفس الأصل */
+/* (أ) إصدار الدعوة: أدمن فقط، ومن نفس الأصل، وبتحقّق المدخلات */
 {
   const n = siNet();
   try {
     let r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body:'{}' }, { origin:'https://evil.example' }), env: SI_ENV });
-    siT('سكّ الرابط يُرفض من أصل مختلف', r.status === 403);
+    siT('إصدار الدعوة يُرفض من أصل مختلف', r.status === 403);
 
-    r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify({action:'mint',sector:'س'}) }), env: SI_ENV });
+    r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify(INVITE) }), env: SI_ENV });
     siT('وبلا رمز جلسة يُرفض', r.status === 403);
 
-    const asUser = await mint(SI_ENV, { Authorization: 'Bearer user-jwt' });
-    siT('وموظّف عاديّ لا يسكّ رابط دعوة', asUser.status === 403);
+    const asUser = await invite(SI_ENV, { Authorization: 'Bearer user-jwt' });
+    siT('وموظّف عاديّ لا يدعو أحداً', asUser.status === 403);
 
-    const ok = await mint(SI_ENV);
-    siT('والأدمن يسكّه برابط الصفحة العامّة',
+    siT('وبريد خارج نطاق الشركة يُرفض (وإلّا لم يصله شيء أصلاً)',
+      (await invite(SI_ENV, ADMIN, { ...INVITE, email:'saleh@gmail.com' })).status === 400);
+    siT('واسم ناقص يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, display_name:'ا' })).status === 400);
+    siT('وقطاع فارغ يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, sector:'' })).status === 400);
+
+    const ok = await invite();
+    siT('والأدمن يُصدرها برابط الصفحة العامّة',
       ok.status === 200 && ok.j.ok && ok.j.url.includes('/staff-register.html?t='),
       ok.status !== 200 ? `status=${ok.status} ${JSON.stringify(ok.j)}` : '');
-    /* ⚠️ العيب الحقيقيّ الذي أوقف المالك: صفّان يختلفان بحالة الأحرف، والموقوف
-       أوّلاً. فمطابقة `eq.` (حسّاسة) أو أخذ «أوّل صفّ» تُرجِعان الصفّ الخاطئ. */
+    /* ⚠️ العيب الحقيقيّ الذي أوقف المالك سابقاً: صفّان يختلفان بحالة الأحرف،
+       والموقوف أوّلاً. فمطابقة `eq.` أو أخذ «أوّل صفّ» تُرجِعان الصفّ الخاطئ. */
     siT('ولا يوقفه صفٌّ موقوف يطابق اسمه بحالة أحرف مختلفة',
       n.calls.some(c => c.url.includes('username=ilike.')) &&
       !n.calls.some(c => c.url.includes('proc_users?username=eq.')));
   } finally { n.restore(); }
 }
 
-/* (ب) الرمز: التوقيع والانتهاء والإبطال */
+/* (ب) بريد الدعوة: يُرسَل للمدعوّ وحده، وفيه الرابط، وبلا كلمة مرور */
+{
+  const n = siNet();
+  try {
+    const ok = await invite();
+    const mail = n.calls.find(c => c.url.includes('api.resend.com'));
+    const body = mail ? JSON.parse(mail.body) : null;
+    siT('الدعوة تُرسَل عبر Resend', !!mail && ok.j.sent === true);
+    siT('وإلى المدعوّ وحده لا إلى غيره',
+      !!body && JSON.stringify(body.to) === JSON.stringify(['saleh@aldeyabi.com']));
+    siT('والرسالة تحمل رابط الدعوة نفسه',
+      !!body && body.html.includes(ok.j.url.replace(/&/g, '&amp;')));
+    siT('وتذكر اسم المدعوّ وقطاعه ومسمّاه',
+      !!body && body.html.includes('صالح الميداني') && body.html.includes('الصيانة والتشغيل')
+      && body.html.includes('فنّي صيانة'));
+    /* ⚠️ الحارس الجوهريّ: لا كلمة مرور في البريد إطلاقاً — الرابط دعوة لا اعتماد. */
+    siT('ولا تحمل كلمة مرور إطلاقاً',
+      !!body && !/كلمة المرور\s*[:：]/.test(body.html) && !/password["'\s:=]/i.test(body.html));
+    siT('وموضوعها واضح', !!body && /دعوة للانضمام/.test(body.subject));
+  } finally { n.restore(); }
+}
+
+/* (ج) دعوة لبريد له حساب: تُرفض **عند الإصدار** لا بعد أن يضغط الموظّف */
+{
+  const n = siNet({ existing: [{ username:'saleh', active:true }] });
+  try {
+    const r = await invite();
+    siT('ودعوة بريدٍ له حساب تُرفض فوراً لا بعد ضغط الموظّف الرابط',
+      r.status === 409 && !n.calls.some(c => c.url.includes('api.resend.com')));
+  } finally { n.restore(); }
+}
+
+/* (د) فشل الإرسال: الرابط يعود للمدير فلا يبقى الموظّف بلا طريق */
+{
+  const n = siNet({ mailFail: true });
+  try {
+    const r = await invite();
+    siT('وفشل البريد لا يُسقِط الدعوة — الرابط يعود للمدير لينسخه',
+      r.status === 200 && r.j.ok && r.j.sent === false && !!r.j.url && !!r.j.send_error);
+  } finally { n.restore(); }
+}
+
+/* (هـ) الرمز: التوقيع والانتهاء والإبطال، ومحتواه */
 {
   const n = siNet();
   let url = '';
-  try { url = (await mint(SI_ENV)).j.url; } finally { n.restore(); }
+  try { url = (await invite()).j.url; } finally { n.restore(); }
   const tk = tokenOf(url);
 
   {
@@ -766,9 +823,10 @@ const REG_BODY = {
     try {
       let r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: SI_ENV });
       const b = await r.json();
-      siT('الرمز الصحيح يكشف القطاع وشرط النطاق فقط',
-        r.status === 200 && b.sector === 'الصيانة والتشغيل' && b.domain === 'aldeyabi.com'
-        && !('email' in b) && !('users' in b));
+      siT('الرمز الصحيح يكشف بيانات المدعوّ لتعبئة الصفحة',
+        r.status === 200 && b.email === 'saleh@aldeyabi.com' && b.display_name === 'صالح الميداني'
+        && b.sector === 'الصيانة والتشغيل' && b.job_title === 'فنّي صيانة');
+      siT('ولا يكشف من دعاه ولا أي مستخدم آخر', !('by' in b) && !('users' in b));
 
       r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}x`), env: SI_ENV });
       siT('ورمز معبوث يُرفض', r.status === 401);
@@ -777,77 +835,90 @@ const REG_BODY = {
       siT('ورمز بمفتاح آخر يُرفض', r.status === 401);
     } finally { n2.restore(); }
   }
-  // الإبطال: كل رمز صدر قبل epoch يسقط
   {
     const n3 = siNet({ epoch: Date.now() + 60000 });
     try {
       const r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: SI_ENV });
-      siT('وإبطال المالك يُسقِط كل الروابط الصادرة قبله', r.status === 401);
+      siT('وإبطال المالك يُسقِط كل الدعوات الصادرة قبله', r.status === 401);
     } finally { n3.restore(); }
   }
 }
 
-/* (ج) التسجيل: الحقول والنطاق — وأنّ الحساب لا يمنح صلاحية */
+/* (و) الإتمام: الهويّة من الرمز حصراً، والحساب نشط */
 {
   const n0 = siNet();
   let tk = '';
-  try { tk = tokenOf((await mint(SI_ENV)).j.url); } finally { n0.restore(); }
-  const REG = (body, t = tk) => SI_REQ(`?t=${encodeURIComponent(t)}`, { method:'POST', body: JSON.stringify(body) });
+  try { tk = tokenOf((await invite()).j.url); } finally { n0.restore(); }
+  const DONE = (body, t = tk) => SI_REQ(`?t=${encodeURIComponent(t)}`, { method:'POST', body: JSON.stringify(body) });
 
   {
     const n = siNet();
     try {
-      let r = await si.onRequestPost({ request: REG({ ...REG_BODY, email:'saleh@gmail.com' }), env: SI_ENV });
-      siT('بريد خارج نطاق الشركة يُرفض (وإلّا لم يصله إشعار أصلاً)', r.status === 400);
-
-      r = await si.onRequestPost({ request: REG({ ...REG_BODY, password:'123' }), env: SI_ENV });
-      siT('وكلمة مرور قصيرة تُرفض', r.status === 400);
-
-      r = await si.onRequestPost({ request: REG({ ...REG_BODY, display_name:'ا' }), env: SI_ENV });
-      siT('واسم ناقص يُرفض', r.status === 400);
-
-      r = await si.onRequestPost({ request: REG(REG_BODY, tk + 'x'), env: SI_ENV });
+      let r = await si.onRequestPost({ request: DONE({ password:'123' }), env: SI_ENV });
+      siT('كلمة مرور قصيرة تُرفض', r.status === 400);
+      r = await si.onRequestPost({ request: DONE({ password:'Passw0rd!' }, tk + 'x'), env: SI_ENV });
       siT('ورمز غير صالح يُرفض قبل أي كتابة', r.status === 401);
     } finally { n.restore(); }
   }
 
-  /* ⚠️ جوهر الأمان: القطاع من الرمز، والدور والصلاحيات مفروضة، والحساب موقوف —
-     حتى لو أرسل العميل عكس ذلك صراحةً. */
+  /* ⚠️ جوهر الأمان بعد التحوّل: العميل يُرسل بريداً وقطاعاً ودوراً مخالفة —
+     ويجب أن **يُتجاهَل كلّه** لصالح ما في الرمز. */
   {
     const n = siNet();
     try {
-      const r = await si.onRequestPost({ request: REG({
-        ...REG_BODY, role: 'admin', active: true,
+      const r = await si.onRequestPost({ request: DONE({
+        password:'Passw0rd!', mobile:'0500000000',
+        email: 'attacker@aldeyabi.com', display_name: 'منتحِل',
+        sector: 'الإدارة العامة', job_title: 'مدير عام',
+        role: 'admin', active: true,
         scope_sectors: ['الإنشاءات','الإدارة العامة'],
         permissions: { can_view_amounts: true, can_manage_users: true },
       }), env: SI_ENV });
       const b = await r.json();
       const wrote = n.calls.find(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
       const row = JSON.parse(wrote.body);
-      siT('التسجيل ينجح ويُبلِغ أنّه بانتظار التفعيل', r.status === 200 && b.ok && b.pending === true);
-      siT('الحساب يُنشأ **موقوفاً** (رابط مسرَّب لا يفتح النظام)', row.active === false);
-      siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
-      siT('والقطاع من **الرمز** لا من العميل',
+      const auth = JSON.parse(n.calls.find(c => c.url.includes('/auth/v1/admin/users') && c.method === 'POST').body);
+      siT('الإتمام ينجح ويُبلِغ أنّ الحساب نشط', r.status === 200 && b.ok && b.active === true);
+      siT('والحساب يُنشأ **نشطاً** (قرار المالك: المراجعة تمّت عند الدعوة)', row.active === true);
+      siT('والبريد من **الرمز** لا من العميل (لا انتحال بريد غيره)',
+        row.email === 'saleh@aldeyabi.com' && auth.email === 'saleh@aldeyabi.com');
+      siT('والاسم والمسمّى من الرمز',
+        row.display_name === 'صالح الميداني' && row.job_title === 'فنّي صيانة');
+      siT('والقطاع من الرمز لا من العميل',
         JSON.stringify(row.scope_sectors) === JSON.stringify(['الصيانة والتشغيل']));
+      siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
       siT('والصلاحيات ميدانية ثابتة (لا مبالغ ولا إدارة مستخدمين)',
         row.permissions.can_receive_po === true && row.permissions.can_view_amounts === false
         && !('can_manage_users' in row.permissions));
-      siT('وبياناته تُحفظ كما أدخلها (بريد/جوال/وظيفة)',
-        row.email === 'saleh@aldeyabi.com' && row.mobile === '0500000000' && row.job_title === 'فنّي صيانة');
+      siT('والجوال وحده يُقبل من العميل', row.mobile === '0500000000');
       const mail = n.calls.find(c => c.url.includes('api.resend.com'));
-      siT('ويصل المدير تنبيه بالتفعيل (وإلّا انتظر الموظّف بلا علم أحد)',
-        !!mail && JSON.parse(mail.body).to.includes('abdullah@aldeyabi.com'));
+      siT('ويصل الداعي إشعار بالإتمام لا «بانتظار التفعيل»',
+        !!mail && JSON.parse(mail.body).to.includes('abdullah@aldeyabi.com')
+        && /فعّل حسابه/.test(JSON.parse(mail.body).subject));
     } finally { n.restore(); }
   }
 
-  // مسجَّل مسبقاً: لا صفّ ثانٍ، ولا إفشاء لحالته
+  /* أحاديّة الاستعمال بلا جدول رموز: بعد الإتمام يوجد صفّ، فإعادة الضغط تسقط. */
   {
     const n = siNet({ existing: [{ username:'saleh', active:true }] });
     try {
-      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
+      const r = await si.onRequestPost({ request: DONE({ password:'Passw0rd!' }), env: SI_ENV });
       const b = await r.json();
       const wrote = n.calls.filter(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
-      siT('ومن له حساب لا يُنشأ له صفّ ثانٍ', r.status === 200 && b.already === true && wrote.length === 0);
+      siT('وإعادة استعمال الرابط بعد الإتمام لا تُنشئ صفّاً ثانياً',
+        r.status === 200 && b.already === true && wrote.length === 0);
+    } finally { n.restore(); }
+  }
+
+  /* ⚠️ فشل قراءة الحسابات القائمة يجب أن **يمنع** لا أن يمرّ: تمريره يفتح
+     الباب لصفّ مكرَّر بحساب دخول ثانٍ لنفس البريد. */
+  {
+    const n = siNet({ existingFail: true });
+    try {
+      const r = await si.onRequestPost({ request: DONE({ password:'Passw0rd!' }), env: SI_ENV });
+      const wrote = n.calls.filter(c => c.url.includes('/rest/v1/proc_users') && c.method === 'POST');
+      siT('وتعذّر فحص الحسابات القائمة يفشل مغلقاً (لا صفّ مكرَّر)',
+        r.status === 502 && wrote.length === 0);
     } finally { n.restore(); }
   }
 
@@ -855,18 +926,9 @@ const REG_BODY = {
   {
     const n = siNet({ profileFail: true });
     try {
-      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
+      const r = await si.onRequestPost({ request: DONE({ password:'Passw0rd!' }), env: SI_ENV });
       const del = n.calls.find(c => c.url.includes('/auth/v1/admin/users/') && c.method === 'DELETE');
       siT('وفشل حفظ الملف يحذف حساب الدخول (لا حساب يتيم)', r.status === 400 && !!del);
-    } finally { n.restore(); }
-  }
-
-  // سقف الصفوف المعلّقة
-  {
-    const n = siNet({ pending: Array.from({ length: 41 }, (_, i) => ({ username: 'u' + i })) });
-    try {
-      const r = await si.onRequestPost({ request: REG(REG_BODY), env: SI_ENV });
-      siT('وسقف الصفوف المعلّقة يمنع إغراق اللوحة برابط مسرَّب', r.status === 429);
     } finally { n.restore(); }
   }
 }
