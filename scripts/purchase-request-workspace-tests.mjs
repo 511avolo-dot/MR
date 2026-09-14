@@ -14,6 +14,9 @@ function test(name, condition) { if (!condition) throw new Error(`FAIL: ${name}`
 
 // The launch module lives in the main system and the historical URL only redirects.
 test('purchase request workspace is integrated in index', /async function renderPRPortal\(\)/.test(html) && /id="pr-root"/.test(html));
+test('module uses the agreed three-zone workspace', /class="pr-work-rail"/.test(html) && /class="pr-work-queue"/.test(html) && /class="pr-work-detail"/.test(html));
+test('request cockpit exposes all operational tabs', ['نظرة عامة','البنود','المناقشات','الموافقات','الارتباطات','محضر الطلب'].every(x=>html.includes(x)));
+test('workspace remains scoped to purchase requests', /#page-pr>\.page-header\{display:none\}/.test(html) && !/#page-purchase-orders[^}]*display:none/.test(html));
 test('standalone request page redirects into the main system', /location\.replace\('\/'\+location\.search\+location\.hash\)/.test(redirect));
 test('email deep link opens a request detail in the main module', /function openDeepLink\(\)/.test(html) && /prGoView\('track', pr\)/.test(html));
 test('two approval gates are visible in the module', /مسار الاعتماد والقرارات/.test(html) && /بانتظار اعتمادي/.test(html));
