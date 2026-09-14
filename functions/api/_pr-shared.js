@@ -162,9 +162,14 @@ export async function resolveStageApprovers(env, base, pr, stage) {
   }
   if (stage.role_key) {
     try {
-      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions`, { headers: svcHeaders(env) });
+      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
       const users = await ur.json();
-      const explicit = (users || []).filter((u) => u.permissions && u.permissions[stage.role_key] === true).map((u) => u.username);
+      const explicit = (users || []).filter((u) =>
+        (u.permissions && u.permissions[stage.role_key] === true)
+        || (u.pr_permission_overrides && u.pr_permission_overrides[stage.role_key] === true)
+        || (stage.role_key === 'pr_approve_maintenance' && u.pr_profile_key === 'maintenance_manager')
+        || (stage.role_key === 'pr_authorize_pricing' && u.pr_profile_key === 'procurement_manager')
+      ).map((u) => u.username);
       return explicit.length ? explicit : (users || []).filter((u) => u.role === 'admin').map((u) => u.username);
     } catch (_) {}
   }
@@ -217,11 +222,11 @@ const META = {
   answer:           ['وصل ردّ على استفسارك', '#0891b2', '↪'],
 };
 const LINES = (title) => ({
-  pending:   `لديك طلب شراء بانتظار اعتمادك ضمن سلسلة الموافقات. يمكنك اتخاذ القرار مباشرةً من هذا البريد، أو فتح البوابة لمراجعة كامل التفاصيل.`,
-  approved:  `تم اعتماد طلبك «${title}» نهائياً عبر كامل سلسلة الموافقات، وسيُحوَّل إلى المشتريات لبدء عروض الأسعار والتوريد.`,
+  pending:   `لديك طلب شراء بانتظار قرارك في المرحلة الحالية. راجع الحاجة والبنود ثم اتخذ القرار مباشرةً من هذا البريد أو من مساحة الطلب.`,
+  approved:  `اكتملت موافقة مدير الصيانة، وسمح مدير المشتريات ببدء تسعير طلبك «${title}». ستظهر روابط أوامر الشراء وتغطية البنود في مساحة الطلب.`,
   rejected:  `نأسف لإبلاغك بأن طلبك «${title}» قد رُفض.`,
   returned:  `أُعيد طلبك «${title}» إليك للتعديل. يرجى مراجعته وتحديث المطلوب ثم إعادة إرساله.`,
-  submitted: `تم استلام طلبك «${title}» ووصل فريق المشتريات. ستصلك التحديثات تلقائياً في كل خطوة حتى يصدر أمر الشراء.`,
+  submitted: `تم استلام طلبك «${title}» وإرساله إلى مدير الصيانة والتشغيل لاعتماد الحاجة. ستصلك التحديثات تلقائياً حتى اكتمال التنفيذ.`,
   proc_started:     `بدأ فريق المشتريات العمل فعلياً على طلبك «${title}»: جارٍ التواصل مع الموردين وجمع عروض الأسعار. ستصلك التحديثات في كل خطوة.`,
   quotes_collected: `اكتمل جمع عروض الأسعار لطلبك «${title}»، وهو الآن في مرحلة المقارنة تمهيداً لإصدار أمر الشراء.`,
   po_issued:        `صدر أمر الشراء لطلبك «${title}». يمكنك متابعة التوريد من شاشة الطلب في النظام — لا حاجة للاتصال بالمشتريات.`,
@@ -387,9 +392,12 @@ export function buildProcurementEmail(pr, origin) {
 export async function notifyProcurement(env, base, pr, origin) {
   let recips = [];
   try {
-    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
+    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
     const users = await ur.json();
-    let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+    let pick = (users || []).filter((u) =>
+      (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
+      || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
+      || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
     if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
     // البريد الحقيقي المخزَّن إن وُجد، وإلا الاشتقاق.
     recips = pick.filter((u) => u.username !== pr.requester)
@@ -416,9 +424,12 @@ export async function notifyProcurementEvent(env, base, pr, event, origin, comme
   }
   if (!recips.length) {
     try {
-      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
+      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
       const users = await ur.json();
-      let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+      let pick = (users || []).filter((u) =>
+        (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
+        || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
+        || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
       if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
       recips = pick.filter((u) => u.username !== pr.requester)
         .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));

@@ -2752,7 +2752,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && /contentType: check\.ct/.test(PRDOC));
   T('الرؤية تُفحص بهوية المتصل (RLS هي الحكم) وتفشل مغلقةً',
     /rpc\/proc_can_see_pr/.test(PRDOC)
-    && /return \(await r\.json\(\)\) === true;/.test(PRDOC)
+    && /return response\.ok && \(await response\.json\(\)\) === true;/.test(PRDOC)
     && /catch \(_\) \{ return false; \}/.test(PRDOC));
   /* ⚠️ الفحص على **الوصول الفعليّ** لا على ذِكر الاسم: التعليق يشرح العزل
      ويسمّي حاوية البوابة، وحظر النصّ كان سيمنع توثيق القاعدة نفسها. */
@@ -2827,16 +2827,19 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
 
   /* الحقول الحوكمية مفروضة نصّاً في الخادم — لا تُقرأ من جسم الطلب إطلاقاً.
      ⚠️ و`active: true` الآن بقرار المالك: المراجعة تمّت لحظة الدعوة بالاسم. */
-  T('الدور والصلاحيات والحالة مفروضة خادميّاً لا من العميل',
-    /role: 'user', permissions: FIELD_PERMISSIONS, active: true,/.test(SINV)
-    && /scope_sectors: \[sector\]/.test(SINV)
-    && /FIELD_PERMISSIONS = \{ can_receive_po: true, can_view_amounts: false \}/.test(SINV));
+  T('الدور وملف الصلاحيات والإدارة والحالة مفروضة خادميّاً لا من العميل',
+    /role: 'user', permissions: \{\}, active: true,/.test(SINV)
+    && /pr_profile_key: profileKey, pr_permission_overrides: \{\}/.test(SINV)
+    && /department_id: departmentId \|\| null/.test(SINV)
+    && /INVITE_PROFILES\.has\(String\(p\.pk\)\)/.test(SINV));
   /* ⚠️ الحارس الأهمّ بعد التحوّل: الرمز صار **الاعتماد**، فلو قرأ الخادم
      البريد أو القطاع من جسم الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو
      منح نفسه قطاعاً آخر. المسار العامّ لا يقرأ من `body` إلا كلمة المرور والجوال. */
   T('والهويّة من الرمز لا من جسم الطلب في المسار العامّ',
     /const email = String\(p\.e\)\.toLowerCase\(\);/.test(SINV)
-    && /const sector = String\(p\.s\);/.test(SINV)
+    && /const sector = String\(p\.s \|\| ''\);/.test(SINV)
+    && /const departmentId = String\(p\.d \|\| ''\);/.test(SINV)
+    && /const profileKey = INVITE_PROFILES\.has\(String\(p\.pk\)\)/.test(SINV)
     && !/body\.email/.test(SINV.split("المسار العامّ")[1] || '')
     && !/body\.sector/.test(SINV.split("المسار العامّ")[1] || '')
     && !/body\.display_name/.test(SINV.split("المسار العامّ")[1] || ''));
@@ -2844,9 +2847,9 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ولا تُرسَل كلمة مرور في بريد الدعوة',
     !/password[^)]{0,40}(inviteEmail|sendResend)/.test(SINV)
     && !/inviteEmail\(\{[^}]*password/.test(SINV));
-  /* رمز v1 القديم (قطاع بلا بريد) يجب أن يسقط — وإلّا بقيت الروابط المشتركة حيّة. */
-  T('ورمز الرابط المشترك القديم يسقط (يشترط بريداً في الحمولة)',
-    /if \(!p \|\| !p\.e \|\| !p\.s/.test(SINV)
+  /* رمز v1 القديم (قطاع بلا بريد) يجب أن يسقط؛ v2 الشخصي يبقى حتى انتهاء مهلة رابطه. */
+  T('ورمز الرابط المشترك القديم يسقط وتبقى الدعوة الشخصية السابقة متوافقة',
+    /if \(!p \|\| !p\.e \|\| \(!p\.d && !p\.s\)/.test(SINV)
     && /if \(!EMAIL_RE\.test\(String\(p\.e\)\)\) return null;/.test(SINV));
 
   /* الصفحة العامّة: بلا فهرسة وبلا أي مصدر خارجيّ (آمنة CSP كصفحات المورّدين). */
@@ -2874,11 +2877,10 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ونافذته المُلحَقة وقت التشغيل تُزال عند الإغلاق',
     /id='modal-staff-invite'; el\.dataset\.ephemeral='1'/.test(CODE)
     && /syncScrollLock\(\); a11yWire\(el\);/.test(CODE));
-  /* ⚠️ الخادم يشترط `role==='admin'`؛ بوّابة الواجهة على `can_manage_users`
-     وحدها كانت تُظهر الزرّ لمن سيُرفَض بعد النقر. */
-  T('وبوّابة الزرّ توافق شرط الخادم (أدمن لا مجرّد مفتاح)',
+  T('وبوّابة الخادم تقبل مدير النظام أو مدير الموديل المخوّل فقط',
     /STATE\.currentUser\?\.role !== 'admin'/.test(CODE)
-    && /x\.role === 'admin' && x\.active !== false/.test(SINV));
+    && /x\.role === 'admin' \|\| x\.pr_profile_key === 'module_admin'/.test(SINV)
+    && /over\.pr_manage_users === true/.test(SINV));
   /* ⚠️ الإنتاج يحمل صفَّين يختلفان بحالة الأحرف فقط (`Abdullah` أدمن نشط ·
      `abdullah` موقوف)، و`emailToUsername` تُعيد الاسم بحروف صغيرة — فمطابقة
      `eq.` كانت ترفض المالك نفسه بـ403. (السلوك مُغطّى بتأكيد سلوكيّ كذلك.) */

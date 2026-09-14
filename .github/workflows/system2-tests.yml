@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'requests.html'
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
@@ -18,6 +19,7 @@ on:
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
       - 'db/system2-request-tracking.sql'
+      - 'db/system2-purchase-request-workspace.sql'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
       - 'db/system2-scoped-least-privilege.sql'
@@ -26,12 +28,16 @@ on:
       - 'db/workflows.sql'
       - 'db/system2-tests/**'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/admin-users.js'
       - 'staff-register.html'
-      - 'db/system2-tests/**'
+      - 'scripts/purchase-request-workspace-tests.mjs'
+      - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'package.json'
       - '.github/workflows/system2-tests.yml'
   pull_request:
     paths:
       - 'index.html'
+      - 'requests.html'
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
@@ -41,6 +47,7 @@ on:
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
       - 'db/system2-request-tracking.sql'
+      - 'db/system2-purchase-request-workspace.sql'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
       - 'db/system2-scoped-least-privilege.sql'
@@ -49,8 +56,11 @@ on:
       - 'db/workflows.sql'
       - 'db/system2-tests/**'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/admin-users.js'
       - 'staff-register.html'
-      - 'db/system2-tests/**'
+      - 'scripts/purchase-request-workspace-tests.mjs'
+      - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'package.json'
       - '.github/workflows/system2-tests.yml'
   workflow_dispatch:
 
@@ -87,6 +97,9 @@ jobs:
 
       - name: حزمة تأكيدات النظام 2
         run: node scripts/system2-tests.mjs
+
+      - name: عقد مساحة طلبات الشراء وحدود مستندات R2
+        run: npm run test:purchase-workspace
 
   # حزمة نطاق موظفي الصيانة (RLS). ⚠️ بلا هذه الوظيفة تبقى **الحدود الأمنية
   # نفسها** بلا تغطية آلية: تعديلٌ يُسقِط `NOT proc_is_scoped()` من سياسة

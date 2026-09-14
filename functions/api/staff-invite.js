@@ -3,11 +3,11 @@
  *
  * طلب المالك (2026-09-13): «اجعله يرسل بتمبلت احترافيّ عن طريق Resend — فقط
  * أضع اسم الموظف وإيميله وأحدّد الوظيفة ويتم الإرسال». وقراراته:
- * **القطاع + مسمّى نصّيّ** · **يدخل مباشرةً بعد ضبط كلمة مروره** ·
+ * **الإدارة + ملف صلاحيات + مسمّى نصّيّ** · **يدخل مباشرةً بعد ضبط كلمة مروره** ·
  * **الرابط المشترك يُحذَف** (لم يعُد له `action:'mint'`).
  *
  * ⚠️ المبدأ الحاكم بعد التحوّل: **الرمز صار شخصيّاً، فهو الاعتماد.** الاسم
- * والبريد والقطاع والمسمّى كلّها **داخل الرمز الموقَّع**، والعميل لا يُقدّم إلا
+ * والبريد والإدارة وملف الصلاحيات والمسمّى كلّها **داخل الرمز الموقَّع**، والعميل لا يُقدّم إلا
  * كلمة المرور والجوال. فلا يستطيع حاملُ الرابط تغيير بريده ولا قطاعه ولا أن
  * يمنح نفسه صلاحية. وقُوّة الضمان = أنّ الرابط سُلّم إلى **صندوق بريد الشركة
  * لذلك الموظّف وحده** (نفس نموذج أي دعوة بالبريد).
@@ -33,10 +33,13 @@ const EMAIL_RE = /^[a-z0-9._%+-]+@aldeyabi\.com$/i;
 const DEFAULT_DAYS = 14;
 const MAX_DAYS = 60;
 
-/* صلاحيات الموظّف الميدانيّ — **ثابتة هنا لا تأتي من العميل**. المبالغ محجوبة
-   افتراضاً بقرار المالك، والاستلام ممنوح لأنّه جوهر عمله. أي توسعة يمنحها
-   المالك بنفسه من لوحة المستخدمين. */
-const FIELD_PERMISSIONS = { can_receive_po: true, can_view_amounts: false };
+/* ملفات الموديل التي يجوز للمدير تضمينها في دعوة شخصية. القائمة الخادمية تمنع
+   تمرير اسم ملف ملفّق من المتصفح. تفاصيل كل ملف مصدرها جدول
+   proc_pr_permission_profiles؛ الدعوة لا تحمل صلاحيات خاماً. */
+const INVITE_PROFILES = new Set([
+  'requester', 'maintenance_manager', 'procurement_officer',
+  'procurement_manager', 'module_admin',
+]);
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -87,9 +90,10 @@ async function readToken(env, token) {
   if (!timingSafeEq(expect, parts[1])) return null;
   let p = null;
   try { p = JSON.parse(new TextDecoder().decode(b64u.dec(parts[0]))); } catch (_) { return null; }
-  /* ⚠️ الرمز الشخصيّ يجب أن يحمل بريداً وقطاعاً — ورمز v1 القديم (قطاع فقط)
-     لا يحملهما فيسقط هنا. وهذا مقصود: الروابط المشتركة القديمة تموت مع الحذف. */
-  if (!p || !p.e || !p.s || !p.exp || !p.iat) return null;
+  /* v3 يحمل الإدارة وملف الصلاحيات. نبقي v2 (القطاع) صالحاً حتى انتهاء روابطه
+     الطبيعية كي لا تنكسر دعوة أُرسلت قبل نشر هذا التحديث. */
+  if (!p || !p.e || (!p.d && !p.s) || !p.exp || !p.iat) return null;
+  if (p.pk && !INVITE_PROFILES.has(String(p.pk))) return null;
   if (!EMAIL_RE.test(String(p.e))) return null;
   if (Date.now() > Number(p.exp)) return null;
   if (Number(p.iat) < await inviteEpoch(env)) return null;   // أُبطلت كل الدعوات بعده
@@ -127,16 +131,21 @@ async function callerProfile(env, request) {
        وتهريب أحرف البدل (% _ \) يمنع مطابقة أوسع تلتقط مستخدماً آخر. */
     const safe = String(uname).replace(/[\\%_]/g, (c) => '\\' + c);
     const pr = await fetch(
-      `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,display_name,email,role,active`,
+      `${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,display_name,email,role,active,permissions,pr_profile_key,pr_permission_overrides`,
       { headers: svcHeaders(env) });
     if (!pr.ok) return null;
     const rows = await pr.json();
     const lower = String(uname).toLowerCase();
     /* ومع تعدّد المطابقات نختار **الأدمن النشط** صراحةً لا أوّل صفّ يعود —
        ترتيب PostgREST ليس عقداً، فاختيار «الأوّل» يجعل الصلاحية رهن الحظّ. */
-    return (Array.isArray(rows) ? rows : []).find(
-      (x) => String(x.username).toLowerCase() === lower
-        && x.role === 'admin' && x.active !== false) || null;
+    return (Array.isArray(rows) ? rows : []).find((x) => {
+      if (String(x.username).toLowerCase() !== lower || x.active === false) return false;
+      const legacy = x.permissions && typeof x.permissions === 'object' ? x.permissions : {};
+      const over = x.pr_permission_overrides && typeof x.pr_permission_overrides === 'object'
+        ? x.pr_permission_overrides : {};
+      return x.role === 'admin' || x.pr_profile_key === 'module_admin'
+        || legacy.can_manage_users === true || over.pr_manage_users === true;
+    }) || null;
   } catch (_) { return null; }
 }
 
@@ -183,8 +192,9 @@ export async function onRequestGet({ request, env }) {
   const p = await readToken(env, token);
   if (!p) return json({ error: 'الرابط غير صالح أو انتهت صلاحيته' }, 401);
   /* بيانات المدعوّ نفسه — وهي بياناته هو، والرابط وصل صندوقَه. */
-  return json({ ok: true, display_name: p.n || '', email: p.e, sector: p.s,
-    job_title: p.j || '', expires_at: new Date(Number(p.exp)).toISOString(), domain: COMPANY_DOMAIN });
+  return json({ ok: true, display_name: p.n || '', email: p.e, sector: p.s || '',
+    department_id: p.d || '', profile_key: p.pk || 'requester', job_title: p.j || '',
+    expires_at: new Date(Number(p.exp)).toISOString(), domain: COMPANY_DOMAIN });
 }
 
 export async function onRequestPost({ request, env }) {
@@ -215,7 +225,9 @@ export async function onRequestPost({ request, env }) {
     if (body.action === 'invite') {
       const displayName = String(body.display_name || '').trim();
       const email = String(body.email || '').trim().toLowerCase();
+      const departmentId = String(body.department_id || '').trim();
       const sector = String(body.sector || '').trim();
+      const profileKey = String(body.profile_key || 'requester').trim();
       const jobTitle = String(body.job_title || '').trim().slice(0, 60);
       const days = Math.min(MAX_DAYS, Math.max(1, Number(body.days) || DEFAULT_DAYS));
 
@@ -224,7 +236,17 @@ export async function onRequestPost({ request, env }) {
       // `_pr-shared.js` تُسقِط أي بريد خارج النطاق فلا يصل شيء. و`sendResend`
       // تُصفّي المستلمين بالنطاق نفسه، فبريد خارجيّ = دعوة لا تُرسَل أصلاً.
       if (!EMAIL_RE.test(email)) return json({ error: `يجب استخدام بريد الشركة (@${COMPANY_DOMAIN})` }, 400);
-      if (!sector) return json({ error: 'القطاع مطلوب' }, 400);
+      if (!departmentId) return json({ error: 'الإدارة مطلوبة' }, 400);
+      if (!INVITE_PROFILES.has(profileKey)) return json({ error: 'ملف الصلاحيات غير صالح' }, 400);
+      const mayGrantModuleAdmin = admin.role === 'admin' || admin.pr_profile_key === 'module_admin';
+      if (profileKey === 'module_admin' && !mayGrantModuleAdmin) {
+        return json({ error: 'منح إدارة الموديل يتطلّب مدير نظام أو مدير موديل' }, 403);
+      }
+      const dep = await fetch(`${base}/rest/v1/proc_departments?id=eq.${encodeURIComponent(departmentId)}&active=eq.true&select=id,name_ar,sector`, { headers: svcHeaders(env) });
+      const depRows = dep.ok ? await dep.json().catch(() => []) : [];
+      if (!dep.ok || !Array.isArray(depRows) || !depRows[0]) return json({ error: 'الإدارة غير موجودة أو غير نشطة' }, 400);
+      const departmentName = String(depRows[0].name_ar || departmentId);
+      const effectiveSector = sector || String(depRows[0].sector || '');
 
       const username = usernameFrom(email);
       if (username.length < 2) return json({ error: 'تعذّر اشتقاق اسم مستخدم من هذا البريد' }, 400);
@@ -236,21 +258,22 @@ export async function onRequestPost({ request, env }) {
 
       const now = Date.now();
       const t = await mintToken(env, {
-        n: displayName, e: email, s: sector, j: jobTitle,
-        by: admin.username, iat: now, exp: now + days * 86400000, v: 2,
+        n: displayName, e: email, d: departmentId, dn: departmentName,
+        s: effectiveSector, pk: profileKey, j: jobTitle,
+        by: admin.username, iat: now, exp: now + days * 86400000, v: 3,
       });
       const origin = publicOrigin(env, url.origin);
       const link = `${origin}/staff-register.html?t=${encodeURIComponent(t)}`;
 
       const sent = await sendResend(env, [email],
         'دعوة للانضمام إلى نظام متابعة المشتريات | مجموعة الذيابي',
-        inviteEmail({ displayName, sector, jobTitle, email, username, link,
+        inviteEmail({ displayName, department: departmentName, profileKey, sector: effectiveSector, jobTitle, email, username, link,
           expiresAt: now + days * 86400000, inviter: admin.display_name || admin.username }));
 
       /* ⚠️ الرابط يُعاد للمدير **حتى عند نجاح الإرسال**: بريدٌ يقع في مجلّد
          المهملات يترك الموظّف بلا طريق، فالنسخ اليدويّ هو المخرج. */
       return json({
-        ok: true, url: link, email, sector,
+        ok: true, url: link, email, department_id: departmentId, profile_key: profileKey,
         expires_at: new Date(now + days * 86400000).toISOString(),
         sent: !!(sent && sent.ok),
         send_error: (sent && (sent.error || sent.skipped)) ? (sent.detail || sent.reason || 'send_failed') : null,
@@ -266,7 +289,9 @@ export async function onRequestPost({ request, env }) {
 
   const email = String(p.e).toLowerCase();
   const displayName = String(p.n || '').trim() || email.split('@')[0];
-  const sector = String(p.s);
+  const sector = String(p.s || '');
+  const departmentId = String(p.d || '');
+  const profileKey = INVITE_PROFILES.has(String(p.pk)) ? String(p.pk) : 'requester';
   const jobTitle = String(p.j || '').trim();
   const password = String(body.password || '');
   const mobile = String(body.mobile || '').trim();
@@ -306,18 +331,19 @@ export async function onRequestPost({ request, env }) {
         : 'تعذّر إنشاء حساب الدخول' }, already ? 409 : 400);
     }
 
-    /* ⚠️ كل الحقول الحوكمية مفروضة هنا لا من العميل: الدور `user`، والصلاحيات
-       الميدانية الثابتة، والقطاع والاسم والبريد من **الرمز**.
-       و`active: true` بقرار المالك — المراجعة تمّت لحظة الدعوة بالاسم. */
+    /* كل الحقول الحوكمية مفروضة هنا لا من العميل: الملف والإدارة والاسم والبريد
+       من الرمز الموقّع. المستخدم لا يستطيع رفع صلاحياته أثناء التسجيل. */
     const prof = await fetch(`${base}/rest/v1/proc_users`, {
       method: 'POST', headers: { ...svcHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
         username, display_name: displayName, email, mobile: mobile || null,
         job_title: jobTitle || null, password_hash: 'managed_by_supabase_auth',
-        role: 'user', permissions: FIELD_PERMISSIONS, active: true,
-        scope_sectors: [sector], requested_role: 'field_staff',
+        role: 'user', permissions: {}, active: true,
+        department_id: departmentId || null, pr_department_ids: departmentId ? [departmentId] : [],
+        pr_profile_key: profileKey, pr_permission_overrides: {},
+        scope_sectors: sector ? [sector] : [], requested_role: profileKey,
         created_by: 'staff_invite',
-        notes: `انضمّ عبر دعوة شخصية${p.by ? ` من ${p.by}` : ''} — قطاع «${sector}»`,
+        notes: `انضمّ عبر دعوة شخصية${p.by ? ` من ${p.by}` : ''} — إدارة «${p.dn || departmentId || '—'}»`,
       }),
     });
     if (!prof.ok) {
@@ -330,7 +356,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     // إشعار الداعي بالإتمام — لا «بانتظار التفعيل»، فالحساب صار نشطاً.
-    try { await notifyInviter(env, base, p.by, { displayName, email, mobile, jobTitle, sector }); } catch (_) {}
+    try { await notifyInviter(env, base, p.by, { displayName, email, mobile, jobTitle, sector, department: p.dn || departmentId, profileKey }); } catch (_) {}
 
     return json({ ok: true, active: true });
   } catch (_) {
@@ -341,7 +367,7 @@ export async function onRequestPost({ request, env }) {
 /* ═══════════ قالب بريد الدعوة ═══════════
    جداول لا flexbox، وأنماط سطريّة، وألوان BRAND — فعملاء البريد (Outlook
    خاصّة) لا يدعمون الشبكات الحديثة ولا الأنماط الخارجية. */
-function inviteEmail({ displayName, sector, jobTitle, email, username, link, expiresAt, inviter }) {
+function inviteEmail({ displayName, department, profileKey, sector, jobTitle, email, username, link, expiresAt, inviter }) {
   const until = new Date(expiresAt).toISOString().slice(0, 10);
   const row = (k, v) => v
     ? `<tr>
@@ -372,7 +398,7 @@ function inviteEmail({ displayName, sector, jobTitle, email, username, link, exp
 
       <table style="width:100%;border-collapse:collapse;background:${BRAND.wash};
              border:1px solid ${BRAND.line};border-radius:10px;margin:0 0 22px">
-        ${row('القطاع', sector)}${row('المسمّى الوظيفيّ', jobTitle)}
+        ${row('الإدارة', department)}${row('ملف الصلاحيات', profileKey)}${row('القطاع', sector)}${row('المسمّى الوظيفيّ', jobTitle)}
         ${row('اسم الدخول', username)}${row('بريدك', email)}
       </table>
 

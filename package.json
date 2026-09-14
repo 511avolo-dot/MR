@@ -10,6 +10,8 @@
     "test:browser-fixture": "node scripts/e2e/browser-fixture.test.mjs",
     "test:enterprise-contract": "node scripts/e2e/enterprise-ui-contract.test.mjs && node scripts/e2e/portal-doc-authorization.test.mjs && node scripts/e2e/portal-upload-cleanup.test.mjs",
     "test:system2": "node scripts/system2-tests.mjs",
+    "test:purchase-workspace": "node scripts/purchase-request-workspace-tests.mjs && node scripts/e2e/purchase-request-doc.test.mjs",
+    "test:purchase-workspace-visual": "node scripts/e2e/purchase-workspace-visual.test.mjs",
     "build:invite-card": "node scripts/build-invite-card.mjs"
   },
   "devDependencies": {

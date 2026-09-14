@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>بوابة طلبات الشراء — مجموعة الذيابي</title>
+<title>مساحة عمل طلبات الشراء — مجموعة الذيابي</title>
 <link rel="icon" href="logo-mark.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,9 +85,9 @@
   label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:6px;letter-spacing:.01em}
   .req{color:var(--danger);font-weight:700}
 
-  /* ════════ Login / Signup ════════ */
-  #login,#signup:not(.hidden){min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden}
-  #login::before,#signup:not(.hidden)::before{content:'';position:absolute;inset:0;z-index:0;
+  /* ════════ Login ════════ */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden}
+  #login::before{content:'';position:absolute;inset:0;z-index:0;
     background:
       radial-gradient(1100px 540px at 50% -12%,rgba(194,160,99,.20),transparent 60%),
       radial-gradient(800px 600px at 12% 110%,rgba(34,55,90,.10),transparent 55%);pointer-events:none}
@@ -266,36 +266,7 @@
   .now-bar.rej{background:var(--danger-bg);border-color:var(--danger-line);color:#8a322d}
   .now-bar.ret{background:var(--info-bg);border-color:var(--info-line);color:#2f4a7d}
 
-  /* ════════ Workflow builder ════════ */
-  .wf{margin:8px auto;max-width:600px}
-  .wf-node{border-radius:14px;padding:15px 18px;text-align:center;font-weight:600;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:9px}
-  .wf-node.start{background:linear-gradient(180deg,var(--navy-3),var(--navy));color:#f6efe0;box-shadow:0 12px 24px -14px rgba(15,26,46,.6)}
-  .wf-node.start .i{color:var(--gold)}
-  .wf-node.end{background:var(--ok-bg);border:1.5px solid var(--ok-line);color:var(--ok)}
-  .wf-conn{width:2px;height:20px;background:linear-gradient(var(--gold),var(--gold-2));margin:0 auto;border-radius:2px}
-  .wf-step{background:var(--surface);border:1px solid var(--gold-soft);border-radius:15px;padding:16px;box-shadow:var(--sh-2);animation:rise .35s var(--ease) both}
-  .wf-step-top{display:flex;align-items:center;gap:10px}
-  .wf-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(155deg,var(--gold),var(--gold-2));color:var(--navy);display:grid;place-items:center;font-weight:700;font-size:12.5px;flex-shrink:0;box-shadow:0 4px 10px -4px rgba(163,127,67,.6)}
-  .wf-label{flex:1;font-weight:600}
-  .wf-ctrls{display:flex;gap:4px;flex-shrink:0}
-  .wf-ctrls .ic{width:32px;height:32px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;display:grid;place-items:center;color:var(--muted);transition:.16s var(--ease)}
-  .wf-ctrls .ic:hover:not(:disabled){border-color:var(--gold);color:var(--ink);transform:translateY(-1px)}
-  .wf-ctrls .ic:disabled{opacity:.3;cursor:default}
-  .wf-ctrls .ic.del{color:var(--danger);border-color:var(--danger-line)}
-  .wf-ctrls .ic.del:hover{background:var(--danger-bg)}
-  .wf-approver{display:flex;align-items:center;gap:9px;margin-top:13px;flex-wrap:wrap}
-  .wf-ap-lbl{font-size:12px;color:var(--muted);font-weight:700}
-  .wf-approver .select{flex:1;min-width:160px}
-  .wf-addrow{text-align:center}
-  .wf-rule{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);font-size:13px}
-  .wf-rule:last-child{border-bottom:none}
-
-  /* ════════ New-user modal ════════ */
-  .nu-overlay{position:fixed;inset:0;background:rgba(11,20,38,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:400;padding:18px}
-  .nu-overlay.show{display:flex;animation:fadein .2s ease}
   @keyframes fadein{from{opacity:0}to{opacity:1}}
-  .nu-card{background:var(--surface);border-radius:20px;padding:26px;width:100%;max-width:410px;box-shadow:var(--sh-3);animation:rise .28s var(--ease) both}
-  .nu-title{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
 
   /* ════════ Settings subtabs ════════ */
   .subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:0}
@@ -307,16 +278,6 @@
   .perms{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:10px}
   .pchk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);margin:0;cursor:pointer;font-weight:500}
   .pchk input{width:auto;accent-color:var(--gold-2);cursor:pointer;width:16px;height:16px}
-
-  /* ════════ Flowchart ════════ */
-  .flowchart{display:flex;align-items:center;gap:0;flex-wrap:wrap;padding:8px 0}
-  .fc-node{background:var(--surface-2);border:1px solid var(--gold-soft);border-radius:12px;padding:10px 14px;text-align:center;min-width:118px;box-shadow:var(--sh-1)}
-  .fc-node.start{background:linear-gradient(180deg,var(--navy-3),var(--navy));color:#f6efe0;border-color:transparent}
-  .fc-node.end{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
-  .fc-t{font-weight:700;font-size:12.5px}
-  .fc-s{font-size:10.5px;color:var(--muted);margin-top:3px}
-  .fc-node.start .fc-s,.fc-node.end .fc-s{color:inherit;opacity:.8}
-  .fc-arrow{color:var(--gold-2);font-weight:700;padding:0 9px;font-size:18px}
 
   details summary{outline:none}
   details summary::-webkit-details-marker{color:var(--gold-2)}
@@ -333,7 +294,7 @@
   @media print{
     @page{size:A4;margin:18mm 16mm 22mm}
     body{background:#fff !important;color:#000;font-size:12px}
-    .topbar,.tabs,.bell,.logout,.top-actions,.ocr-bar,.row-act,.toast,.nu-overlay,
+    .topbar,.tabs,.bell,.logout,.top-actions,.ocr-bar,.row-act,.toast,
     .btn,.subtabs,details,.tab-refresh,.now-bar,#act-c{display:none !important}
     .wrap{max-width:100%;margin:0;padding:0}
     #view>.card:first-of-type{margin-top:0}
@@ -344,12 +305,12 @@
     .sec-title{border-color:#d8d2c4}
     /* official header on every printed page */
     .wrap::before{
-      content:'مجموعة الذيابي · بوابة طلبات الشراء';
+      content:'مجموعة الذيابي · مساحة عمل طلبات الشراء';
       display:block;font-size:15px;font-weight:700;color:#16243d;
       padding-bottom:10px;margin-bottom:16px;border-bottom:2px solid #c2a063;letter-spacing:-.01em
     }
     .dot{box-shadow:none !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .badge,.dot,.bar-row .bf,.wf-num,.kpi .kv,thead th,.it-table thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .badge,.dot,.bar-row .bf,.kpi .kv,thead th,.it-table thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     /* signature row */
     #view::after{
       content:'';display:flex
@@ -369,6 +330,44 @@
   .empty-ill svg{width:40px;height:40px}
   .empty-t{font-size:16.5px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
   .empty-s{font-size:13px;color:var(--muted);margin-top:6px}
+
+  /* ════════ Purchase request enterprise workspace ════════ */
+  .wrap{max-width:none;margin:0;padding:20px 24px 48px}
+  .workbench{display:grid;grid-template-columns:330px minmax(0,1fr);min-height:calc(100vh - 155px);background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:var(--sh-3)}
+  .queue-pane{background:#f8fafc;border-inline-end:1px solid #dfe6ec;display:flex;flex-direction:column;min-height:0}
+  .queue-head{padding:22px 20px 14px;display:flex;align-items:flex-end;justify-content:space-between}
+  .queue-head h2{font-size:21px;line-height:1.2;color:#142d43}.eyebrow{display:block;font-size:10px;font-weight:700;letter-spacing:.12em;color:#6f8292;text-transform:uppercase;margin-bottom:4px}
+  .queue-count{min-width:30px;height:30px;padding:0 9px;display:grid;place-items:center;border-radius:10px;background:#e4edf4;color:#193f60;font-weight:700;font-size:12px}
+  .queue-search{padding:0 16px 10px}.queue-search .input{background:white;border-color:#d9e2e9}
+  .queue-filters{display:flex;gap:6px;padding:0 16px 14px;overflow:auto;scrollbar-width:none}.queue-filters::-webkit-scrollbar{display:none}
+  .filter-chip{white-space:nowrap;border:1px solid #dce5ec;background:white;color:#536a7d;border-radius:999px;padding:6px 10px;font:600 11px inherit;cursor:pointer}
+  .filter-chip.active{background:#193f60;border-color:#193f60;color:white}
+  .queue-list{padding:0 10px 14px;overflow:auto;flex:1}
+  .queue-card{width:100%;display:block;text-align:start;border:1px solid transparent;border-radius:14px;background:transparent;padding:14px 13px;margin-bottom:6px;color:var(--ink);font:inherit;cursor:pointer;transition:.18s var(--ease)}
+  .queue-card:hover{background:white;border-color:#dfe7ed;box-shadow:var(--sh-1)}.queue-card.active{background:white;border-color:#b7cad8;box-shadow:0 9px 22px -15px rgba(25,63,96,.5);position:relative}
+  .queue-card.active:before{content:'';position:absolute;right:-1px;top:14px;bottom:14px;width:3px;border-radius:3px;background:#193f60}
+  .queue-card-top,.queue-meta,.queue-next{display:flex;justify-content:space-between;gap:10px;align-items:center}.queue-card-top>b{font-size:11px;color:#5c7080}.queue-card .badge{padding:2px 7px;font-size:9px}
+  .queue-title{font-weight:700;font-size:14px;color:#19364d;margin:7px 0 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-meta{font-size:11px;color:#718291}.queue-next{border-top:1px solid #edf1f4;margin-top:10px;padding-top:8px;font-size:10px;color:#6d7f8e}.queue-next strong{color:#284b67}
+  .coverage-mini{height:3px;background:#e8edf1;border-radius:4px;margin-top:9px;overflow:hidden}.coverage-mini i{display:block;height:100%;background:#3a876a}
+  .queue-empty{padding:38px 18px;text-align:center;color:#718291;font-size:13px}
+  .request-pane{min-width:0;background:#fff;padding:28px 32px 48px;overflow:auto}
+  .request-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.request-id{font-size:11px;color:#6d8191;font-weight:700;letter-spacing:.05em}.request-hero h1{font-size:26px;color:#142f46;line-height:1.35;margin:4px 0}.request-hero p{font-size:13px;color:#687b8a}.hero-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .process-path{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:26px 0 18px;position:relative}.process-path:before{content:'';position:absolute;top:15px;right:8%;left:8%;height:2px;background:#e1e8ed}.path-step{text-align:center;position:relative;color:#8a99a6}.path-step span{width:31px;height:31px;border-radius:50%;display:grid;place-items:center;margin:0 auto 7px;background:white;border:2px solid #d9e2e8;font-size:11px;font-weight:700;position:relative;z-index:1}.path-step b{display:block;font-size:10px;font-weight:600}.path-step.done span{background:#2c7257;border-color:#2c7257;color:white}.path-step.done b{color:#2c7257}.path-step.current span{background:#193f60;border-color:#193f60;color:white;box-shadow:0 0 0 5px #e7f0f6}.path-step.current b{color:#193f60;font-weight:700}
+  .next-action{padding:15px 17px;border-radius:13px;background:#f2f6f9;border:1px solid #dbe5ec;display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:18px}.next-action.needs-me{background:#fff8e9;border-color:#e7ca8d}.next-action strong{display:block;color:#183b57}.next-action small{display:block;color:#718290;margin-top:3px}.decision-flag{padding:5px 9px;border-radius:9px;background:#bd852f;color:white;font-size:11px;font-weight:700}
+  .detail-tabs{display:flex;gap:4px;border-bottom:1px solid #dfe6eb;margin-bottom:20px;overflow:auto}.detail-tabs button{border:0;background:transparent;padding:11px 12px;color:#637788;font:600 12px inherit;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}.detail-tabs button.active{color:#173e5e;border-bottom-color:#173e5e}.detail-tabs i{font-style:normal;padding:1px 5px;border-radius:9px;background:#e7eef3;font-size:9px;margin-inline-start:3px}
+  .detail-content{max-width:1180px}.panel{border:1px solid #e0e7ec;border-radius:15px;padding:20px;margin-bottom:15px;background:white}.panel-title{font-size:16px;font-weight:700;color:#19384f}.panel-head{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:12px}.coverage-score{text-align:center}.coverage-score b{display:block;font-size:22px;color:#22694f}.coverage-score span{font-size:9px;color:#728493}
+  .info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#e4eaf0;border:1px solid #e4eaf0;border-radius:14px;overflow:hidden;margin-bottom:15px}.info-grid>div{background:#f9fbfc;padding:14px}.info-grid span{display:block;color:#778896;font-size:10px}.info-grid b{display:block;color:#19384f;font-size:13px;margin-top:4px}
+  .table-scroll{overflow:auto}.panel table small{display:block;color:#7c8c98;margin-top:3px}.coverage-cell{width:76px;height:5px;border-radius:6px;background:#e6ecef;overflow:hidden;display:inline-block;margin-inline-end:6px}.coverage-cell span{display:block;height:100%;background:#2d7659}
+  .decision-panel{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(300px,1.2fr);gap:24px;padding:20px;border:1px solid #e6c986;background:linear-gradient(135deg,#fff9eb,#fffdf8);border-radius:15px;margin-bottom:15px}.decision-panel p{color:#756744;font-size:12px;margin-top:5px}.decision-form textarea{background:white;min-height:72px;margin-bottom:9px}.danger-btn{color:var(--danger);border-color:var(--danger-line)}
+  .approval-row{display:grid;grid-template-columns:38px 1fr auto;gap:12px;align-items:start;padding:14px 0;border-bottom:1px solid #e9eef2}.approval-row:last-child{border:0}.approval-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#eef3f6;color:#627786;font-weight:700}.approval-row.done .approval-icon{background:#e5f3ec;color:#25694f}.approval-row-row b,.approval-row small{display:block}.approval-row small{color:#758692;margin-top:3px}.approval-row>span:last-child{font-size:10px;color:#71828f}.approval-row p{font-size:12px;color:#4f6271;margin-top:6px}
+  .messages{margin-top:12px}.message{display:grid;grid-template-columns:38px 1fr;gap:10px;padding:14px 0;border-bottom:1px solid #e8edf1}.avatar{width:34px;height:34px;border-radius:11px;background:#193f60;color:white;display:grid;place-items:center;font-weight:700}.message header{display:flex;justify-content:space-between;gap:10px}.message time{font-size:10px;color:#84939f}.message p{margin-top:4px;white-space:pre-wrap;color:#3c5263}.composer{margin-top:16px;padding-top:15px;border-top:1px solid #e3eaef}.composer textarea{margin-bottom:8px;background:#f9fbfc}
+  .document-list{display:grid;gap:9px;margin-top:13px}.document-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid #e1e8ed;border-radius:12px;padding:12px;background:#fbfcfd}.document-icon{width:40px;height:40px;border-radius:11px;background:#e9f0f5;color:#1c4a6c;display:grid;place-items:center}.document-row b,.document-row small{display:block}.document-row small{color:#7a8b98;margin-top:3px}.upload-panel{border-style:dashed;background:#f8fafb}.upload-controls{display:grid;grid-template-columns:minmax(180px,280px) auto;gap:10px;align-items:end;margin-top:14px}.upload-note{font-size:10px;color:#7c8b96;margin-top:8px}
+  .alloc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0 16px}.alloc-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;background:#f7f9fb;border:1px solid #e3e9ee;border-radius:10px;margin:0}.alloc-line span{font-size:12px;color:#314b60}.alloc-line small{display:block;color:#82909b}.alloc-line input{width:100px;padding:7px;text-align:center}
+  .report-sheet{border:1px solid #dce4e9;padding:34px;background:white}.report-brand{display:flex;justify-content:space-between;border-bottom:2px solid #193f60;padding-bottom:15px;margin-bottom:20px}.report-brand h2{color:#173a56}.report-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.report-meta span{font-size:10px;color:#788996;display:block}.report-meta b{font-size:12px}.report-foot{border-top:1px solid #dfe6eb;margin-top:22px;padding-top:12px;color:#788996;font-size:10px}
+  .permission-details{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}.permission-details summary{cursor:pointer;font-weight:700;color:#284960}.permission-matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.perm-group{border:1px solid #e1e7ec;border-radius:11px;padding:11px;background:#fafcfd}.perm-group>b{display:block;color:#173e5e;font-size:11px;margin-bottom:7px}.perm-group .pchk{display:block;margin:5px 0}
+  @media(max-width:980px){.workbench{grid-template-columns:280px minmax(0,1fr)}.request-pane{padding:24px 20px}.info-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:760px){.wrap{padding:10px}.workbench{display:block}.queue-pane{border-inline-end:0;border-bottom:1px solid #dfe6ec;max-height:390px}.request-pane{padding:20px 14px}.process-path{overflow:auto;grid-template-columns:repeat(5,110px)}.decision-panel{grid-template-columns:1fr}.alloc-grid,.info-grid,.upload-controls{grid-template-columns:1fr}.document-row{grid-template-columns:42px minmax(0,1fr)}.document-row .btn{grid-column:1/-1}.request-hero{display:block}.hero-actions{margin-top:10px}}
+  @media print{.topbar,.tabs,.queue-pane,.detail-tabs,.next-action,.decision-panel,.link-panel,.hero-actions{display:none!important}.wrap{padding:0}.workbench{display:block;border:0;box-shadow:none}.request-pane{padding:0}.detail-content{max-width:none}.report-sheet{border:0;padding:0}}
 </style>
 </head>
 <body>
@@ -377,42 +376,22 @@
 <div id="login">
   <div class="login-card">
     <div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"></div>
-    <div class="login-title">بوابة طلبات الشراء</div>
+    <div class="login-title">مساحة عمل طلبات الشراء</div>
     <div class="login-sub">مجموعة الذيابي · ادخل بحسابك المخصّص</div>
     <div class="field"><label>البريد الإلكتروني أو اسم المستخدم</label><input class="input" id="lg-user" autocomplete="username" placeholder="name@aldeyabi.com"></div>
     <div class="field"><label>كلمة المرور</label><input class="input" id="lg-pass" type="password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" id="lg-btn" style="width:100%" onclick="doLogin()">دخول</button>
     <div class="err" id="lg-err"></div>
-    <div class="muted" style="text-align:center;margin-top:14px;font-size:11.5px">ليس لديك حساب؟ <a onclick="showSignup('')" style="cursor:pointer;color:var(--gold-2);font-weight:600">إنشاء حساب جديد</a></div>
-  </div>
-</div>
-
-<!-- ════ SIGNUP (تسجيل ذاتي عبر رابط دعوة) ════ -->
-<div id="signup" class="hidden">
-  <div class="login-card">
-    <div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"></div>
-    <div class="login-title">إنشاء حساب — بوابة الطلبات</div>
-    <div class="login-sub">مجموعة الذيابي · للموظفين</div>
-    <div class="field"><label>الاسم الكامل</label><input class="input" id="su-name" placeholder="مثال: علي أحمد"></div>
-    <div class="field"><label>البريد الإلكتروني (نطاق الشركة)</label><input class="input" id="su-email" dir="ltr" autocomplete="email" placeholder="name@aldeyabi.com"></div>
-    <div class="field"><label>كلمة المرور</label><input class="input" id="su-pass" type="password" placeholder="8 أحرف على الأقل"></div>
-    <div class="field"><label>تأكيد كلمة المرور</label><input class="input" id="su-pass2" type="password" placeholder="••••••••"></div>
-    <div class="field"><label>نوع الحساب المطلوب</label>
-      <label class="pchk" style="display:block;margin:4px 0"><input type="radio" name="su-role" value="employee" checked> موظف (مقدّم طلبات)</label>
-      <label class="pchk" style="display:block;margin:4px 0"><input type="radio" name="su-role" value="approver"> أرغب بصلاحية اعتماد <span class="muted" style="font-size:11px">(يفعّلها الأدمن)</span></label>
-    </div>
-    <div class="field"><label>رمز الدعوة</label><input class="input" id="su-code" dir="ltr" placeholder="الرمز الذي زوّدتك به الإدارة"></div>
-    <button class="btn btn-primary" id="su-btn" style="width:100%" onclick="doSignup()">إنشاء الحساب</button>
-    <div class="err" id="su-err"></div>
-    <div class="muted" style="text-align:center;margin-top:12px;font-size:11.5px"><a onclick="showLogin()" style="cursor:pointer;color:var(--gold-2);font-weight:600">← لديّ حساب — تسجيل الدخول</a></div>
+    <div class="muted" style="text-align:center;margin-top:14px;font-size:11.5px">الحسابات تُنشأ بدعوة شخصية من إدارة النظام.</div>
   </div>
 </div>
 
 <!-- ════ APP ════ -->
 <div id="app" class="hidden">
   <div class="topbar">
-    <div class="brand"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"><div><div class="ttl">بوابة طلبات الشراء</div><div class="ttl-sub">مجموعة الذيابي</div></div></div>
+    <div class="brand"><img src="logo-mark.png" alt="" onerror="this.style.display='none'"><div><div class="ttl">مساحة عمل طلبات الشراء</div><div class="ttl-sub">مجموعة الذيابي</div></div></div>
     <div class="top-actions">
+      <button class="btn btn-ghost btn-sm logout" onclick="location.href='index.html'" title="العودة إلى نظام المشتريات الأساسي">النظام الأساسي</button>
       <button class="bell" id="bell" onclick="go('inbox')" title="بانتظار اعتمادك"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="bell-dot hidden" id="bell-dot">0</span></button>
       <span class="who" id="who"></span>
       <button class="btn btn-ghost btn-sm logout" onclick="doLogout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>خروج</button>
@@ -421,19 +400,6 @@
   <div class="wrap">
     <div class="tabs" id="tabs"></div>
     <div id="view"></div>
-  </div>
-</div>
-
-<!-- ════ NEW USER MODAL (من داخل باني سير العمل) ════ -->
-<div class="nu-overlay" id="nu-modal">
-  <div class="nu-card">
-    <div class="nu-title">＋ مستخدم معتمِد جديد</div>
-    <div class="muted" style="margin-bottom:12px;font-size:12px">يُنشأ حساب الدخول تلقائياً ويُسنَد للخطوة فوراً — لا حاجة لأي خطوة في Supabase.</div>
-    <div class="field"><label>الاسم الكامل</label><input class="input" id="nu-name" placeholder="مثال: علي حسن"></div>
-    <div class="field"><label>اسم الدخول</label><input class="input" id="nu-login" dir="ltr" placeholder="ali" oninput="nuLoginHint()"><div class="muted" id="nu-hint" style="font-size:11px;margin-top:3px"></div></div>
-    <div class="field"><label>كلمة المرور</label><input class="input" id="nu-pass" type="text" dir="ltr" placeholder="6 أحرف على الأقل"></div>
-    <div class="err" id="nu-err"></div>
-    <div style="display:flex;gap:10px;margin-top:6px"><button class="btn btn-primary" id="nu-create" onclick="wfCreateNU()">إنشاء وإسناد</button><button class="btn btn-ghost" onclick="wfCloseNU()">إلغاء</button></div>
   </div>
 </div>
 
@@ -449,7 +415,7 @@
       <path d="M0,-92 L20,0 L0,92 L-20,0 Z" fill="#c2a063"/>
       <circle cx="0" cy="0" r="17" fill="#16243d"/>
     </g>
-    <text x="600" y="610" text-anchor="middle" fill="#eaddc1" font-family="IBM Plex Sans Arabic, Tahoma, sans-serif" font-size="46" font-weight="700">بوابة طلبات الشراء</text>
+    <text x="600" y="610" text-anchor="middle" fill="#eaddc1" font-family="IBM Plex Sans Arabic, Tahoma, sans-serif" font-size="46" font-weight="700">مساحة عمل طلبات الشراء</text>
     <text x="600" y="664" text-anchor="middle" fill="#c2a063" font-family="IBM Plex Sans Arabic, Tahoma, sans-serif" font-size="26" letter-spacing="6">مجموعة الذيابي</text>
   </svg>
 </template>
@@ -463,17 +429,27 @@ const AUTH_EMAIL_DOMAIN='aldeyabi.com';
 const AUTH_EMAIL_MAP={ abdullah:'abdullah@aldeyabi.com', mostafa:'supply@aldeyabi.com', mahmoud:'mahmoud@aldeyabi.com' };
 const SUPA_CDNS=['/lib/supabase.min.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js','https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js'];
 const PRIORITIES=['عاجل','عالي','متوسط','منخفض'];
-const STATUS_META={draft:{l:'مسودة',c:'neutral'},in_review:{l:'قيد الاعتماد',c:'warn'},returned:{l:'مُعاد للتعديل',c:'info'},approved:{l:'معتمد',c:'ok'},rejected:{l:'مرفوض',c:'danger'},rfq_issued:{l:'طلب تسعير صادر',c:'info'},converted_to_po:{l:'تحوّل لأمر شراء',c:'ok'},cancelled:{l:'ملغى',c:'danger'}};
+const STATUS_META={draft:{l:'مسودة',c:'neutral'},in_review:{l:'قيد القرار',c:'warn'},returned:{l:'مُعاد للاستكمال',c:'info'},approved:{l:'مصرّح بالتسعير',c:'ok'},rejected:{l:'مرفوض',c:'danger'},rfq_issued:{l:'التسعير جارٍ',c:'info'},converted_to_po:{l:'مرتبط بأمر شراء',c:'ok'},cancelled:{l:'ملغى',c:'danger'}};
+const WORKFLOW_META={draft:'مسودة',maintenance_review:'اعتماد مدير الصيانة',procurement_review:'إذن مدير المشتريات',pricing:'التسعير والمقارنة',partially_ordered:'تنفيذ جزئي',ordered:'صدرت أوامر الشراء',returned:'بانتظار استكمال الموظف',rejected:'مرفوض',completed:'مكتمل'};
 const SECTORS=['المقاولات العامة','البنية التحتية','الإنشاءات','الصيانة والتشغيل','النقليات','الإدارة العامة'];
 
-let SB=null, ME=null, DEPTS=[], RULES=[], VIEW='create', TRACK_ID=null, DRAFT=[], MYREQS=[];
-let USERS=[], PSET={}, SET_TAB='workflow', RULE_DRAFT=null, NU_STEP=null;
+let SB=null, ME=null, DEPTS=[], PROJECTS=[], PROFILE_DEFS=[], POS=[], VIEW='workspace', TRACK_ID=null, DETAIL_TAB='overview', QUEUE_FILTER='all', QUEUE_QUERY='', EDIT_PR_ID=null, DRAFT=[], MYREQS=[];
+let USERS=[], PSET={}, SET_TAB='users';
 const PERM_DEFS=[
-  {k:'can_verify_stock',l:'تدقيق المستودع'},
-  {k:'can_approve_l1',l:'اعتماد مدير القسم/القطاع'},
-  {k:'can_approve_l2',l:'اعتماد المدير العام'},
-  {k:'can_manage_rfq',l:'مسؤول المشتريات'},
-  {k:'can_manage_users',l:'إدارة البوابة (أدمن)'},
+  {k:'pr_create',g:'الطلبات',l:'إنشاء طلب شراء'},
+  {k:'pr_view_own',g:'الاطلاع',l:'عرض طلباته'},
+  {k:'pr_view_department',g:'الاطلاع',l:'عرض طلبات الإدارة'},
+  {k:'pr_view_all',g:'الاطلاع',l:'عرض جميع الطلبات'},
+  {k:'pr_comment',g:'التعاون',l:'إضافة مناقشات'},
+  {k:'pr_upload_attachments',g:'التعاون',l:'رفع مستندات داعمة للطلب'},
+  {k:'pr_approve_maintenance',g:'القرارات',l:'اعتماد الحاجة — مدير الصيانة'},
+  {k:'pr_authorize_pricing',g:'القرارات',l:'السماح ببدء التسعير — مدير المشتريات'},
+  {k:'pr_manage_pricing',g:'التنفيذ',l:'إدارة التسعير والمتابعة'},
+  {k:'pr_link_purchase_orders',g:'التنفيذ',l:'ربط أوامر الشراء وتوزيع الكميات'},
+  {k:'pr_view_financials',g:'البيانات الحساسة',l:'عرض الأسعار والمبالغ'},
+  {k:'pr_print',g:'التقارير',l:'طباعة تقارير الطلب'},
+  {k:'pr_manage_workflows',g:'الإدارة',l:'إدارة إعدادات المسار'},
+  {k:'pr_manage_users',g:'الإدارة',l:'إدارة مستخدمي الموديل'},
 ];
 const RESOLVERS=[['dept_manager','مدير القسم/القطاع (تلقائي)'],['role','حسب الصلاحية']];
 const ROLE_KEYS=[['can_verify_stock','أمين المستودع'],['can_approve_l1','مدير القسم'],['can_manage_rfq','مسؤول المشتريات'],['can_approve_l2','المدير العام']];
@@ -488,9 +464,16 @@ function usernameToEmail(u){const k=String(u||'').trim().toLowerCase();return AU
 function emailToUsername(email){const e=String(email||'').toLowerCase();for(const k in AUTH_EMAIL_MAP){if(AUTH_EMAIL_MAP[k].toLowerCase()===e)return k;}return e.split('@')[0];}
 let _tt;
 function toast(m,type){const t=$('toast');t.textContent=m;t.className='toast show '+(type||'');clearTimeout(_tt);_tt=setTimeout(()=>t.className='toast',2600);}
-function can(key){return !!ME && (ME.role==='admin' || (ME.permissions||{})[key]===true);}
-function isApprover(){return can('can_verify_stock')||can('can_approve_l1')||can('can_approve_l2')||can('can_manage_rfq');}
-function isPortalAdmin(){return !!ME && (ME.role==='admin' || can('can_manage_users'));}
+function can(key){
+  if(!ME)return false;if(ME.role==='admin')return true;
+  const p=ME.effective_permissions||ME.pr_permission_overrides||ME.permissions||{};
+  if(p[key]===true)return true;
+  const legacy={pr_approve_maintenance:'can_approve_l1',pr_authorize_pricing:'can_approve_l2',pr_manage_pricing:'can_manage_rfq',pr_link_purchase_orders:'can_manage_rfq',pr_manage_users:'can_manage_users',pr_view_financials:'can_view_amounts'};
+  return !!(legacy[key]&&(ME.permissions||{})[legacy[key]]===true);
+}
+function isApprover(){return can('pr_approve_maintenance')||can('pr_authorize_pricing')||can('pr_manage_pricing');}
+function isPortalAdmin(){return !!ME && (ME.role==='admin' || can('pr_manage_users'));}
+function canManageModule(){return isPortalAdmin()||can('pr_manage_workflows');}
 async function authHeader(){ try{ const {data}=await SB.auth.getSession(); const t=data&&data.session&&data.session.access_token; return t?{'Authorization':'Bearer '+t}:{}; }catch(e){ return {}; } }
 
 /* تفقيط مبسّط */
@@ -552,54 +535,46 @@ async function loadProfile(idOrEmail){
   ME = prof || {username:emailToUsername(key), display_name:key, role:'user', permissions:{}};
   if(typeof ME.permissions==='string'){ try{ME.permissions=JSON.parse(ME.permissions);}catch(e){ME.permissions={};} }
 }
-/* ── التسجيل الذاتي ── */
-function showSignup(code){ $('login').classList.add('hidden'); $('app').classList.add('hidden'); const s=$('signup'); if(s){ s.classList.remove('hidden'); if(code&&$('su-code'))$('su-code').value=code; } }
-function showLogin(){ const s=$('signup'); if(s)s.classList.add('hidden'); $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
-async function doSignup(){
-  const name=val('su-name').trim(), email=val('su-email').trim().toLowerCase(), p=val('su-pass'), p2=val('su-pass2'), code=val('su-code').trim();
-  const role=(document.querySelector('input[name=su-role]:checked')||{}).value||'employee';
-  $('su-err').textContent='';
-  if(name.length<3){$('su-err').textContent='أدخل الاسم الكامل';return;}
-  if(!/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){$('su-err').textContent='يجب أن يكون البريد ضمن نطاق @aldeyabi.com';return;}
-  if(p.length<8){$('su-err').textContent='كلمة المرور 8 أحرف على الأقل';return;}
-  if(p!==p2){$('su-err').textContent='كلمتا المرور غير متطابقتين';return;}
-  if(!code){$('su-err').textContent='أدخل رمز الدعوة';return;}
-  const btn=$('su-btn'); btn.disabled=true; btn.textContent='جارٍ الإنشاء...';
-  try{
-    const r=await fetch('/api/portal-signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password:p,requested_role:role,invite_code:code})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
-    $('signup').innerHTML='<div class="login-card" style="text-align:center"><div class="login-logo"><img src="logo-mark.png" alt="" onerror="this.style.display=\'none\'"></div><div class="login-title">تم إنشاء حسابك ✓</div><div class="login-sub" style="margin-top:10px;line-height:1.8">حسابك الآن <b>بانتظار تفعيل الإدارة</b>.<br>ستتمكّن من الدخول بعد التفعيل بـ<b dir="ltr">'+esc(email)+'</b>.</div><button class="btn btn-primary" style="width:100%;margin-top:18px" onclick="location.href=location.pathname">حسناً</button></div>';
-  }catch(e){ $('su-err').textContent=e.message||'تعذّر إنشاء الحساب'; btn.disabled=false; btn.textContent='إنشاء الحساب'; }
-}
 async function loadRefs(){
-  try{
-    const [d,r]=await Promise.all([SB.from('proc_departments').select('*'),SB.from('proc_approval_rules').select('*').order('priority',{ascending:true})]);
-    DEPTS=d.data||[]; RULES=(r.data||[]).filter(x=>x.active!==false);
-  }catch(e){ DEPTS=[]; RULES=[]; }
+  const settled=await Promise.allSettled([
+      SB.from('proc_departments').select('*').eq('active',true),
+      SB.from('proc_settings').select('value').eq('key','projects_registry').maybeSingle(),
+      SB.from('proc_pr_permission_profiles').select('*').eq('active',true).order('sort_order'),
+      SB.from('proc_purchase_orders').select('po_number,project,supplier,status,total').order('created_at',{ascending:false}).limit(500)
+  ]);
+  const result=i=>settled[i]&&settled[i].status==='fulfilled'&&!settled[i].value.error?settled[i].value:{data:null};
+  const d=result(0),ps=result(1),pf=result(2),po=result(3);
+  DEPTS=d.data||[];
+  let pv=ps.data&&ps.data.value;if(typeof pv==='string'){try{pv=JSON.parse(pv);}catch(_){pv=null;}}
+  PROJECTS=pv&&Array.isArray(pv.projects)?pv.projects.filter(x=>x&&x.active!==false&&x.name):[];
+  PROFILE_DEFS=pf.data||[]; POS=po.data||[];
+}
+async function loadEffectiveAccess(){
+  if(!ME||!SB)return;
+  try{const {data,error}=await SB.rpc('pr_effective_permissions',{p_username:ME.username});if(!error&&data)ME.effective_permissions=typeof data==='string'?JSON.parse(data):data;}catch(_){ }
 }
 async function afterLogin(){
+  await loadEffectiveAccess();
   await loadRefs();
-  if(isPortalAdmin()){ try{ await loadAdminData(); }catch(e){} }
+  if(canManageModule()){ try{ await loadAdminData(); }catch(e){} }
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
   $('who').textContent='مرحباً، '+(ME.display_name||ME.username);
-  VIEW='create';
+  VIEW='workspace';
+  await loadMyReqs();
   render();
 }
 async function loadAdminData(){
   try{
-    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active,delegate_to,is_away,email,requested_role').order('username');
+    const u=await SB.from('proc_users').select('username,display_name,role,permissions,active,delegate_to,is_away,email,requested_role,department_id,job_title,pr_profile_key,pr_permission_overrides,pr_department_ids').order('username');
     USERS=(u.data||[]).map(x=>{ if(typeof x.permissions==='string'){try{x.permissions=JSON.parse(x.permissions);}catch(e){x.permissions={};}} return x; });
   }catch(e){ USERS=[]; }
   try{ const s=await SB.from('proc_settings').select('value').eq('key','portal_settings').maybeSingle(); PSET=(s.data&&s.data.value)?(typeof s.data.value==='string'?JSON.parse(s.data.value):s.data.value):{}; }catch(e){ PSET={}; }
 }
 async function doLogout(){ try{ await SB.auth.signOut(); }catch(e){} location.reload(); }
 
-/* استعادة الجلسة عند إعادة الفتح + توجيه رابط التسجيل */
+/* استعادة الجلسة عند إعادة الفتح */
 window.addEventListener('DOMContentLoaded', async ()=>{
-  const params=new URLSearchParams(location.search);
-  if(params.has('signup')){ showSignup(params.get('signup')||''); return; }  // رابط الدعوة → شاشة التسجيل
   try{
     await loadLib();
     SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -620,55 +595,65 @@ async function loadMyReqs(){
     const PAGE=1000; let from=0, prs=[];
     while(true){
       let q=SB.from('proc_purchase_requests').select('*').order('created_at',{ascending:false});
-      if(!isApprover()) q=q.eq('requester',ME.username);
       const {data,error}=await q.range(from,from+PAGE-1);
       if(error) throw error; if(!data||!data.length) break;
       prs=prs.concat(data); if(data.length<PAGE) break; from+=PAGE; if(from>50000) break;
     }
     const ids=prs.map(p=>p.id);
-    let items=[], appr=[];
+    let items=[], appr=[], messages=[], links=[], allocations=[], attachments=[];
     if(ids.length){
-      const [it,ap]=await Promise.all([
+      const detailResults=await Promise.allSettled([
         SB.from('proc_pr_items').select('*').in('pr_id',ids),
         SB.from('proc_pr_approvals').select('*').in('pr_id',ids),
+        SB.from('proc_pr_messages').select('*').in('pr_id',ids).order('created_at',{ascending:true}),
+        SB.from('proc_pr_po_links').select('*').in('pr_id',ids).eq('active',true).order('linked_at',{ascending:true}),
+        SB.from('proc_pr_attachments').select('*').in('pr_id',ids).is('deleted_at',null).order('created_at',{ascending:true}),
       ]);
-      items=it.data||[]; appr=ap.data||[];
+      const detail=(i,label)=>{
+        const x=detailResults[i];
+        if(!x||x.status!=='fulfilled'||x.value.error){console.warn('[purchase-workspace] تعذّر تحميل '+label,x&&x.status==='fulfilled'?x.value.error:x&&x.reason);return {data:[]};}
+        return x.value;
+      };
+      const it=detail(0,'البنود'),ap=detail(1,'القرارات'),msg=detail(2,'المناقشات'),ln=detail(3,'روابط الأوامر'),att=detail(4,'المستندات');
+      items=it.data||[]; appr=ap.data||[]; messages=msg.data||[]; links=ln.data||[]; attachments=att.data||[];
+      const linkIds=links.map(x=>x.id);
+      if(linkIds.length){const al=await SB.from('proc_pr_item_allocations').select('*').in('link_id',linkIds);if(al.error)console.warn('[purchase-workspace] تعذّر تحميل التوزيعات',al.error);else allocations=al.data||[];}
     }
-    const bi={},ba={};
+    const bi={},ba={},bm={},bl={},bal={},bat={};
     items.forEach(x=>{(bi[x.pr_id]=bi[x.pr_id]||[]).push(x);});
     appr.forEach(x=>{(ba[x.pr_id]=ba[x.pr_id]||[]).push(x);});
-    prs.forEach(p=>{p.items=(bi[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));p.approvals=(ba[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));});
+    messages.forEach(x=>{(bm[x.pr_id]=bm[x.pr_id]||[]).push(x);});
+    attachments.forEach(x=>{(bat[x.pr_id]=bat[x.pr_id]||[]).push(x);});
+    allocations.forEach(x=>{(bal[x.link_id]=bal[x.link_id]||[]).push(x);});
+    links.forEach(x=>{x.allocations=bal[x.id]||[];(bl[x.pr_id]=bl[x.pr_id]||[]).push(x);});
+    prs.forEach(p=>{
+      p.items=(bi[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
+      p.approvals=(ba[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
+      p.messages=bm[p.id]||[];
+      p.attachments=bat[p.id]||[];
+      if(p.doc_key&&!p.attachments.some(a=>a.object_key===p.doc_key))p.attachments.unshift({
+        id:'legacy:'+p.id,object_key:p.doc_key,file_name:p.doc_name||'نموذج الطلب السابق',
+        kind:'source_form',storage_provider:'r2',uploaded_by:p.requester,
+        created_at:p.submitted_at||p.created_at,size_bytes:null
+      });
+      p.po_links=bl[p.id]||[];
+    });
     MYREQS=prs;
   }catch(e){ console.warn(e); }
 }
 
-/* ════════════ محرّك السلسلة ════════════ */
-function matchRule(pr){
-  const total=num0(pr.est_total);
-  return [...RULES].sort((a,b)=>(a.priority??100)-(b.priority??100)).find(r=>{
-    if(r.department_id && r.department_id!==pr.department_id) return false;
-    if(r.category && r.category!==pr.title) return false;
-    if(total<num0(r.min_total)) return false;
-    if(r.max_total!=null && total>Number(r.max_total)) return false;
-    return true;
-  })||null;
-}
-function resolveApprover(pr,stage){
-  if(stage.approver) return stage.approver;                       // شخص مُحدَّد بالاسم
-  if(stage.resolver==='dept_manager'||stage.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); return d?(d.manager_user||null):null; }
-  return null;
-}
+/* ════════════ محرك القرار ════════════ */
 function currentStage(pr){ if(pr.status!=='in_review')return null; return (pr.approvals||[]).filter(a=>a.decision==='pending').sort((a,b)=>(a.seq||0)-(b.seq||0))[0]||null; }
 // المفوَّض عن مستخدم في إجازة (أو null)
 function delegOf(username){ const u=USERS.find(x=>x.username===username); return (u&&u.is_away&&u.delegate_to)?u.delegate_to:null; }
 function canActOn(pr){
   const st=currentStage(pr); if(!st) return null;
   if(pr.requester===ME.username) return null; // فصل المهام
-  let ok=false;
-  if(st.approver){ ok = (st.approver===ME.username)||(delegOf(st.approver)===ME.username); } // الشخص المُحدَّد أو مفوَّضه
-  else if(st.resolver==='dept_manager'||st.mode==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); const m=d&&d.manager_user; ok=(m===ME.username)||(!!m&&delegOf(m)===ME.username); }
-  else if(st.role_key){ ok = can(st.role_key); }                                          // توافق خلفي (قواعد قديمة)
-  ok = ok || ME.role==='admin' || can('can_approve_l2');                                  // تجاوز المدير الأعلى/الأدمن
+  const required=st.role_key||(st.stage_key==='maintenance_need'?'pr_approve_maintenance':st.stage_key==='procurement_pricing'?'pr_authorize_pricing':'');
+  const mine=String(st.approver||'').toLowerCase()===String(ME.username||'').toLowerCase();
+  const delegated=!!st.approver&&String(delegOf(st.approver)||'').toLowerCase()===String(ME.username||'').toLowerCase();
+  let ok=(mine||delegated)&&(!required||can(required));
+  ok = ok || ME.role==='admin';
   return ok?st:null;
 }
 
@@ -715,14 +700,17 @@ function render(){
   // جرس الإشعارات
   const bell=$('bell'),bd=$('bell-dot');
   if(bell){ if(isApprover()){ bell.style.display=''; if(bd){ if(inbox.length){bd.textContent=inbox.length;bd.classList.remove('hidden');}else bd.classList.add('hidden'); } } else bell.style.display='none'; }
-  const tabs=[['create','create','رفع طلب'],['mine','mine','طلباتي']];
+  const tabs=[['workspace','dash','مركز الطلبات']];
+  if(can('pr_create')) tabs.push(['create','create','طلب جديد']);
+  tabs.push(['mine','mine','طلباتي']);
   if(isApprover()) tabs.push(['inbox','inbox','بانتظار اعتمادي'+(inbox.length?` <span class="cnt">${inbox.length}</span>`:'')]);
   if(isApprover()) tabs.push(['dash','dash','لوحة المعلومات']);
-  if(isPortalAdmin()){ const pend=(USERS||[]).filter(u=>u.active===false).length; tabs.push(['settings','settings','لوحة التحكّم'+(pend?` <span class="cnt">${pend}</span>`:'')]); }
+  if(canManageModule()){ const pend=isPortalAdmin()?(USERS||[]).filter(u=>u.active===false).length:0; tabs.push(['settings','settings','لوحة التحكّم'+(pend?` <span class="cnt">${pend}</span>`:'')]); }
   $('tabs').innerHTML = tabs.map(([k,icn,l])=>`<button class="tab${VIEW===k?' active':''}" onclick="go('${k}')">${ic(icn,16)}<span>${l}</span></button>`).join('')
     + `<button class="tab tab-refresh" style="margin-inline-start:auto" onclick="refresh()" title="تحديث">${ic('refresh',15)}</button>`;
   const v=$('view');
-  if(VIEW==='create') v.innerHTML=builderHTML(), initBuilder();
+  if(VIEW==='workspace'){if(!TRACK_ID&&MYREQS[0])TRACK_ID=MYREQS[0].id;v.innerHTML=workspaceHTML();if(TRACK_ID)loadTimeline(TRACK_ID);}
+  else if(VIEW==='create') v.innerHTML=builderHTML(), initBuilder();
   else if(VIEW==='track') v.innerHTML=trackHTML(TRACK_ID);
   else if(VIEW==='inbox') v.innerHTML=inboxHTML(inbox);
   else if(VIEW==='dash'){ v.innerHTML=dashHTML(); requestAnimationFrame(function(){animateCounters();animateBars();}); }
@@ -737,6 +725,134 @@ function holderOf(pr){
   if(st.resolver==='dept_manager'){ const d=DEPTS.find(x=>x.id===pr.department_id); return d&&d.manager_user?d.manager_user:'مدير القسم'; }
   const rk=(ROLE_KEYS.find(r=>r[0]===st.role_key)||[])[1]||st.role_key||'—';
   return 'حملة صلاحية: '+rk;
+}
+function workflowLabel(pr){return WORKFLOW_META[pr.workflow_state]||((STATUS_META[pr.status]||{}).l)||pr.status||'—';}
+function nextAction(pr){
+  if(pr.status==='returned')return ['مقدّم الطلب','استكمال الملاحظات وإعادة الإرسال'];
+  if(pr.workflow_state==='maintenance_review')return [holderOf(pr),'مراجعة الحاجة والكمية ثم اتخاذ القرار'];
+  if(pr.workflow_state==='procurement_review')return [holderOf(pr),'السماح ببدء التسعير أو إعادة الطلب'];
+  if(pr.workflow_state==='pricing')return ['فريق المشتريات','استكمال التسعير وربط أمر الشراء'];
+  if(pr.workflow_state==='partially_ordered')return ['فريق المشتريات','استكمال تغطية البنود بأوامر الشراء'];
+  if(pr.workflow_state==='ordered')return ['مالك الطلب والمشتريات','متابعة التنفيذ والإقفال'];
+  if(pr.status==='rejected')return ['—','لا إجراء — الطلب مرفوض'];
+  return ['مقدّم الطلب','استكمال المسودة'];
+}
+function requestCoverage(pr){
+  const allocated={};(pr.po_links||[]).forEach(l=>(l.allocations||[]).forEach(a=>allocated[a.pr_item_id]=(allocated[a.pr_item_id]||0)+num0(a.allocated_qty)));
+  const total=(pr.items||[]).reduce((s,x)=>s+num0(x.requested_qty),0);
+  const covered=(pr.items||[]).reduce((s,x)=>s+Math.min(num0(x.requested_qty),allocated[x.id]||0),0);
+  return {allocated,total,pct:total?Math.min(100,Math.round(covered/total*100)):0};
+}
+function setQueueFilter(v){QUEUE_FILTER=v;render();}
+function setQueueQuery(v){QUEUE_QUERY=String(v||'').trim().toLowerCase();render();}
+function setDetailTab(v){DETAIL_TAB=v;render();if(v==='audit'&&TRACK_ID)loadTimeline(TRACK_ID);}
+function queueRequests(){
+  return MYREQS.filter(p=>{
+    if(QUEUE_FILTER==='decision'&&!canActOn(p))return false;
+    if(QUEUE_FILTER==='mine'&&String(p.requester).toLowerCase()!==String(ME.username).toLowerCase())return false;
+    if(QUEUE_FILTER==='pricing'&&!['pricing','partially_ordered'].includes(p.workflow_state))return false;
+    if(QUEUE_FILTER==='late'&&ageDays(p)<=num0(PSET.sla_days||3))return false;
+    if(QUEUE_QUERY&&!`${p.id} ${p.title} ${p.department} ${p.project} ${p.requester_name}`.toLowerCase().includes(QUEUE_QUERY))return false;
+    return true;
+  });
+}
+function workspaceHTML(){
+  const list=queueRequests();if(!TRACK_ID&&list[0])TRACK_ID=list[0].id;
+  if(TRACK_ID&&!MYREQS.some(x=>x.id===TRACK_ID)&&list[0])TRACK_ID=list[0].id;
+  const cards=list.map(p=>{const nx=nextAction(p),active=p.id===TRACK_ID,cv=requestCoverage(p);return `<button class="queue-card ${active?'active':''}" onclick="TRACK_ID='${esc(p.id)}';DETAIL_TAB='overview';render()">
+    <div class="queue-card-top"><b dir="ltr">${esc(p.id)}</b>${statusBadge(p.status)}</div>
+    <div class="queue-title">${esc(p.title||'طلب شراء')}</div>
+    <div class="queue-meta"><span>${esc(p.project||p.department||'—')}</span><span>${ageDays(p)} يوم</span></div>
+    <div class="queue-next"><span>لدى ${esc(nx[0])}</span><strong>${esc(workflowLabel(p))}</strong></div>
+    ${(p.po_links||[]).length?`<div class="coverage-mini"><i style="width:${cv.pct}%"></i></div>`:''}
+  </button>`;}).join('')||'<div class="queue-empty">لا توجد طلبات تطابق المرشح.</div>';
+  const pr=MYREQS.find(x=>x.id===TRACK_ID);
+  return `<div class="workbench">
+    <aside class="queue-pane">
+      <div class="queue-head"><div><span class="eyebrow">مساحة العمل</span><h2>طلبات الشراء</h2></div><span class="queue-count">${list.length}</span></div>
+      <div class="queue-search"><input class="input" value="${esc(QUEUE_QUERY)}" placeholder="ابحث بالرقم أو المشروع…" oninput="setQueueQuery(this.value)"></div>
+      <div class="queue-filters">
+        ${[['all','الكل'],['decision','تحتاج قراري'],['mine','طلباتي'],['pricing','قيد التنفيذ'],['late','متأخرة']].map(x=>`<button class="filter-chip ${QUEUE_FILTER===x[0]?'active':''}" onclick="setQueueFilter('${x[0]}')">${x[1]}</button>`).join('')}
+      </div><div class="queue-list">${cards}</div>
+    </aside>
+    <main class="request-pane">${pr?requestWorkspaceDetail(pr):emptyBox('clipboard','لا توجد طلبات','أنشئ طلباً جديداً لبدء دورة العمل.')}</main>
+  </div>`;
+}
+function requestWorkspaceDetail(pr){
+  const nx=nextAction(pr),cv=requestCoverage(pr),acts=canActOn(pr);
+  const steps=['رفع الطلب','اعتماد الحاجة','السماح بالتسعير','التسعير والربط','التنفيذ'];
+  const idx={draft:0,maintenance_review:1,procurement_review:2,pricing:3,partially_ordered:4,ordered:5,completed:5,returned:1,rejected:1}[pr.workflow_state]??0;
+  const path=steps.map((s,i)=>`<div class="path-step ${i<idx?'done':i===idx?'current':''}"><span>${i<idx?'✓':i+1}</span><b>${s}</b></div>`).join('');
+  const tabs=[['overview','الملخص والبنود'],['discussion','المناقشات'],['documents','المستندات'],['relations','أوامر الشراء'],['approvals','القرارات'],['audit','السجل'],['report','التقرير']];
+  return `<div class="request-hero">
+    <div><div class="request-id" dir="ltr">${esc(pr.id)} · V${esc(pr.revision||1)}</div><h1>${esc(pr.title||'طلب شراء')}</h1><p>${esc(pr.project||'دون مشروع')} · ${esc(pr.department||'—')}</p></div>
+    <div class="hero-actions">${statusBadge(pr.status)}${['draft','returned'].includes(pr.status)&&String(pr.requester).toLowerCase()===String(ME.username).toLowerCase()?`<button class="btn btn-primary btn-sm" onclick="editRequest('${esc(pr.id)}')">${ic('create',15)} استكمال الطلب</button>`:''}${can('pr_print')?`<button class="btn btn-ghost btn-sm" onclick="DETAIL_TAB='report';render();setTimeout(()=>window.print(),50)">${ic('file',15)} طباعة</button>`:''}</div>
+  </div>
+  <div class="process-path">${path}</div>
+  <section class="next-action ${acts?'needs-me':''}"><div><span class="eyebrow">المطلوب الآن</span><strong>${esc(nx[1])}</strong><small>المسؤول: ${esc(nx[0])}</small></div>${acts?'<span class="decision-flag">تحتاج قرارك</span>':''}</section>
+  <nav class="detail-tabs">${tabs.map(x=>`<button class="${DETAIL_TAB===x[0]?'active':''}" onclick="setDetailTab('${x[0]}')">${x[1]}${x[0]==='discussion'&&pr.messages?.length?` <i>${pr.messages.length}</i>`:''}${x[0]==='documents'&&pr.attachments?.length?` <i>${pr.attachments.length}</i>`:''}${x[0]==='relations'&&pr.po_links?.length?` <i>${pr.po_links.length}</i>`:''}</button>`).join('')}</nav>
+  <div class="detail-content">${requestTabHTML(pr,DETAIL_TAB,cv,acts)}</div>`;
+}
+function requestTabHTML(pr,tab,cv,acts){
+  if(tab==='discussion')return discussionHTML(pr);
+  if(tab==='documents')return documentsHTML(pr);
+  if(tab==='relations')return relationsHTML(pr,cv);
+  if(tab==='approvals')return approvalsHTML(pr,acts);
+  if(tab==='audit')return `<div class="panel"><div class="panel-title">سجل غير قابل للمحو</div><div class="stepper" id="timeline"><div class="muted">جارٍ تحميل السجل…</div></div></div>`;
+  if(tab==='report')return reportHTML(pr,cv);
+  const alloc=cv.allocated;
+  const items=(pr.items||[]).map((it,i)=>{const a=alloc[it.id]||0,p=num0(it.requested_qty),pct=p?Math.min(100,Math.round(a/p*100)):0;return `<tr><td>${i+1}</td><td><b>${esc(it.description)}</b>${it.notes?`<small>${esc(it.notes)}</small>`:''}</td><td>${esc(it.unit||'—')}</td><td class="num">${fmt(p)}</td><td class="num">${fmt(a)}</td><td><div class="coverage-cell"><span style="width:${pct}%"></span></div><small>${pct}%</small></td></tr>`;}).join('');
+  return `${acts?decisionPanelHTML(pr,acts):''}<div class="info-grid">
+    ${[['مقدّم الطلب',pr.requester_name||pr.requester],['الإدارة',pr.department],['المشروع',pr.project],['الأولوية',pr.priority],['تاريخ الحاجة',pr.needed_by],['مالك الخطوة',nxName(pr)]].map(x=>`<div><span>${x[0]}</span><b>${esc(x[1]||'—')}</b></div>`).join('')}
+  </div><div class="panel"><div class="panel-head"><div><span class="eyebrow">نطاق الطلب</span><div class="panel-title">البنود والتغطية</div></div><div class="coverage-score"><b>${cv.pct}%</b><span>مغطى بأوامر</span></div></div>
+  <div class="table-scroll"><table><thead><tr><th>#</th><th>البند</th><th>الوحدة</th><th>المطلوب</th><th>المرتبط</th><th>التغطية</th></tr></thead><tbody>${items}</tbody></table></div></div>`;
+}
+function nxName(pr){return nextAction(pr)[0];}
+function decisionPanelHTML(pr,step){return `<div class="decision-panel"><div><span class="eyebrow">بوابة قرار</span><div class="panel-title">${esc(step.stage_label||'اتخاذ قرار')}</div><p>يسجل القرار باسمك ووقته وتعليقه في سجل التدقيق.</p></div><div class="decision-form"><textarea id="act-c" placeholder="أضف ملاحظة القرار؛ السبب إلزامي عند الإرج أو الرفض"></textarea><div class="row-act"><button class="btn btn-primary" onclick="act('${esc(pr.id)}','approve')">${ic('check',15)} موافقة</button><button class="btn" onclick="act('${esc(pr.id)}','return')">${ic('undo',15)} إرجاع للاستكمال</button><button class="btn danger-btn" onclick="act('${esc(pr.id)}','reject')">${ic('x',15)} رفض</button></div></div></div>`;}
+function approvalsHTML(pr,acts){
+  const rows=(pr.approvals||[]).map(a=>{const cls=a.decision==='approved'?'done':a.decision==='returned'?'ret':a.decision==='rejected'?'rej':(currentStage(pr)?.id===a.id?'active':'wait');return `<div class="approval-row ${cls}"><span class="approval-icon">${a.decision==='approved'?'✓':a.seq}</span><div><b>${esc(a.stage_label||'مرحلة')}</b><small>${esc(userName(a.approver)||'غير معيّن')} · ${a.acted_at?esc(a.acted_at.slice(0,16).replace('T',' ')):'بانتظار القرار'}</small>${a.comment?`<p>«${esc(a.comment)}»</p>`:''}</div><span>${esc(a.decision==='pending'?'معلّق':a.decision)}</span></div>`;}).join('');
+  return `${acts?decisionPanelHTML(pr,acts):''}<div class="panel"><div class="panel-title">سلسلة القرارات</div>${rows||'<div class="muted">لم تُنشأ مراحل بعد.</div>'}</div>`;
+}
+function discussionHTML(pr){
+  const rows=(pr.messages||[]).map(m=>`<article class="message"><div class="avatar">${esc((m.author_name||m.author||'?').slice(0,1))}</div><div><header><b>${esc(m.author_name||m.author)}</b><time>${esc(String(m.created_at||'').slice(0,16).replace('T',' '))}</time></header><p>${esc(m.body)}</p></div></article>`).join('')||'<div class="queue-empty">لا توجد مناقشات بعد.</div>';
+  return `<div class="panel"><div class="panel-title">مناقشة موحّدة حول الطلب</div><p class="muted">تبقى الأسئلة والإجابات مرتبطة بالطلب بدل أن تضيع في الرسائل المنفصلة.</p><div class="messages">${rows}</div>${can('pr_comment')?`<div class="composer"><textarea id="msg-body" placeholder="اكتب سؤالاً أو تحديثاً واضحاً…"></textarea><button class="btn btn-primary" onclick="postMessage('${esc(pr.id)}')">${ic('send',15)} إرسال</button></div>`:''}</div>`;
+}
+async function postMessage(id){const body=val('msg-body');if(body.length<2){toast('اكتب الرسالة أولاً','err');return;}try{const {error}=await SB.rpc('pr_post_message',{p_pr_id:id,p_body:body,p_kind:'message'});if(error)throw error;toast('أُضيفت المناقشة','ok');TRACK_ID=id;DETAIL_TAB='discussion';await refresh();}catch(e){toast('تعذّر الإرسال: '+(e.message||''),'err');}}
+const ATTACHMENT_KINDS={source_form:'نموذج أو طلب أصلي',quote:'عرض سعر',support:'مستند داعم',technical:'مستند فني',comparison:'مقارنة عروض',other:'مستند آخر'};
+function fileSize(bytes){const n=Number(bytes)||0;if(!n)return 'حجم غير مسجّل';if(n<1024)return n+' بايت';if(n<1048576)return (n/1024).toFixed(1)+' ك.ب';return (n/1048576).toFixed(1)+' م.ب';}
+function documentsHTML(pr){
+  const rows=(pr.attachments||[]).map(a=>`<div class="document-row"><span class="document-icon">${ic('docs',19)}</span><div><b>${esc(a.file_name||a.storage_path||a.path||'مرفق قديم')}</b><small>${esc(ATTACHMENT_KINDS[a.kind]||'مستند داعم')} · ${esc(a.uploaded_by||'سجل قديم')} · ${esc(String(a.created_at||'').slice(0,10)||'—')} · ${fileSize(a.size_bytes)}</small></div><button class="btn btn-ghost btn-sm" onclick="openAttachment('${esc(a.id)}')">${ic('file',14)} فتح</button></div>`).join('')||'<div class="queue-empty">لا توجد مستندات مرتبطة بهذا الطلب.</div>';
+  const upload=can('pr_upload_attachments')?`<div class="panel upload-panel"><div class="panel-title">إضافة مستند إلى سجل الطلب</div><p class="muted">اختر نوع المستند، وسيُحفظ الملف مع اسم رافعه ووقته داخل الطلب.</p><div class="upload-controls"><div><label>نوع المستند</label><select class="select" id="attachment-kind">${Object.entries(ATTACHMENT_KINDS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div><button class="btn btn-primary" id="attachment-upload" onclick="pickAttachment('${esc(pr.id)}')">${ic('up',15)} رفع مستند</button></div><div class="upload-note">PDF أو JPG أو PNG فقط · الحد الأقصى 10 ميجابايت · لا تُحذف المستندات من السجل.</div></div>`:'';
+  return `<div class="panel"><div class="panel-head"><div><span class="eyebrow">ملف الطلب</span><div class="panel-title">المستندات المرتبطة</div></div><span class="queue-count">${(pr.attachments||[]).length}</span></div><div class="document-list">${rows}</div></div>${upload}`;
+}
+function pickAttachment(prId){const input=document.createElement('input');input.type='file';input.accept='application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png';input.onchange=()=>{const file=input.files&&input.files[0];if(file)uploadAttachment(prId,file);};input.click();}
+async function uploadAttachment(prId,file){
+  if(file.size>10*1024*1024){toast('حجم الملف يتجاوز 10 ميجابايت','err');return;}
+  const btn=$('attachment-upload');if(btn){btn.disabled=true;btn.textContent='جارٍ الرفع والتسجيل…';}
+  try{const kind=val('attachment-kind')||'support';const headers=Object.assign({'x-file-name':encodeURIComponent(file.name)},await authHeader());const r=await fetch('/api/pr-doc?pr_id='+encodeURIComponent(prId)+'&kind='+encodeURIComponent(kind),{method:'POST',headers,body:file});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw new Error(d.error||('HTTP '+r.status));toast('أُضيف المستند إلى سجل الطلب','ok');TRACK_ID=prId;DETAIL_TAB='documents';await refresh();}
+  catch(e){toast('تعذّر رفع المستند: '+(e.message||''),'err');if(btn){btn.disabled=false;btn.innerHTML=ic('up',15)+' رفع مستند';}}
+}
+async function openAttachment(id){
+  const pr=MYREQS.find(x=>x.id===TRACK_ID),a=pr&&(pr.attachments||[]).find(x=>String(x.id)===String(id));if(!a){toast('تعذّر العثور على المرفق','err');return;}
+  try{
+    if(a.object_key){const r=await fetch('/api/pr-doc?key='+encodeURIComponent(a.object_key),{headers:await authHeader()});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||('HTTP '+r.status));}const blob=await r.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=a.file_name||'attachment';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return;}
+    const path=String(a.storage_path||a.path||'').trim();if(!path)throw new Error('مسار الملف القديم غير مسجّل');if(/^https:\/\//i.test(path)){window.open(path,'_blank','noopener');return;}
+    const known=['purchase-requests','procurement','pr-attachments'],parts=path.split('/').filter(Boolean),explicit=known.includes(parts[0])?parts.shift():null,candidates=explicit?[explicit]:known;
+    for(const bucket of candidates){const objectPath=explicit?parts.join('/'):path;const {data,error}=await SB.storage.from(bucket).createSignedUrl(objectPath,60,{download:a.file_name||true});if(!error&&data&&data.signedUrl){window.open(data.signedUrl,'_blank','noopener');return;}}
+    throw new Error('تعذّر توقيع رابط الملف القديم');
+  }catch(e){toast('تعذّر فتح المرفق: '+(e.message||''),'err');}
+}
+function relationsHTML(pr,cv){
+  const rows=(pr.po_links||[]).map(l=>{const po=POS.find(x=>x.po_number===l.po_number)||{};return `<tr><td dir="ltr"><b>${esc(l.po_number)}</b></td><td>${esc(po.supplier||'—')}</td><td>${esc(l.linked_at?.slice(0,10)||'—')}</td><td>${can('pr_view_financials')?fmt(po.total)+' ر.س':'••••••'}</td><td>${esc(l.note||'—')}</td></tr>`;}).join('')||'<tr><td colspan="5" class="center muted">لم يُربط أمر شراء بعد.</td></tr>';
+  const options=POS.map(p=>`<option value="${esc(p.po_number)}">${esc(p.po_number)} · ${esc(p.supplier||'')}</option>`).join('');
+  const allocInputs=(pr.items||[]).map(i=>`<label class="alloc-line"><span>${esc(i.description)} <small>المطلوب ${fmt(i.requested_qty)}</small></span><input class="input num" data-alloc-item="${i.id}" type="number" min="0" max="${num0(i.requested_qty)}" step="any" placeholder="0"></label>`).join('');
+  return `<div class="panel"><div class="panel-head"><div><span class="eyebrow">علاقة متعدد إلى متعدد</span><div class="panel-title">أوامر الشراء المرتبطة</div></div><div class="coverage-score"><b>${cv.pct}%</b><span>تغطية الكميات</span></div></div><div class="table-scroll"><table><thead><tr><th>الأمر</th><th>المورّد</th><th>تاريخ الربط</th><th>القيمة</th><th>ملاحظة</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  ${can('pr_link_purchase_orders')&&pr.status==='approved'?`<div class="panel link-panel"><div class="panel-title">ربط أمر وتوزيع كمياته</div><div class="grid"><div><label>أمر الشراء المسجّل</label><select class="select" id="link-po"><option value="">— اختر —</option>${options}</select></div><div><label>ملاحظة الربط</label><input class="input" id="link-note"></div></div><div class="alloc-grid">${allocInputs}</div><button class="btn btn-primary" onclick="linkPurchaseOrder('${esc(pr.id)}')">${ic('link',15)} حفظ الربط والتوزيع</button></div>`:''}`;
+}
+async function linkPurchaseOrder(id){const po=val('link-po');const allocations=[];document.querySelectorAll('[data-alloc-item]').forEach(x=>{const q=num0(x.value);if(q>0)allocations.push({item_id:Number(x.dataset.allocItem),qty:q});});if(!po||!allocations.length){toast('اختر أمر الشراء ووزّع كمية واحدة على الأقل','err');return;}try{const {error}=await SB.rpc('pr_link_purchase_order',{p_pr_id:id,p_po_number:po,p_allocations:allocations,p_note:val('link-note')||null});if(error)throw error;toast('تم ربط أمر الشراء وتحديث التغطية','ok');await refresh();TRACK_ID=id;DETAIL_TAB='relations';render();}catch(e){toast('تعذّر الربط: '+(e.message||''),'err');}}
+function reportHTML(pr,cv){
+  const items=(pr.items||[]).map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.description)}</td><td>${esc(x.unit||'—')}</td><td>${fmt(x.requested_qty)}</td></tr>`).join('');
+  return `<article class="report-sheet"><header class="report-brand"><div><span>مجموعة الذيابي</span><h2>تقرير متابعة طلب شراء</h2></div><b dir="ltr">${esc(pr.id)}</b></header><div class="report-meta"><p><span>المشروع</span><b>${esc(pr.project||'—')}</b></p><p><span>الإدارة</span><b>${esc(pr.department||'—')}</b></p><p><span>مقدم الطلب</span><b>${esc(pr.requester_name||pr.requester)}</b></p><p><span>الحالة</span><b>${esc(workflowLabel(pr))}</b></p></div><table><thead><tr><th>#</th><th>البند</th><th>الوحدة</th><th>الكمية</th></tr></thead><tbody>${items}</tbody></table><div class="report-foot"><b>نسبة تغطية البنود: ${cv.pct}%</b><span>طُبع من سجل النظام بتاريخ ${new Date().toLocaleDateString('ar-SA')}</span></div></article>`;
 }
 function dashHTML(){
   const all=MYREQS, by={}; all.forEach(p=>by[p.status]=(by[p.status]||0)+1);
@@ -761,7 +877,8 @@ function dashHTML(){
     <div class="card"><div class="sec-title">${ic('clock',16)} الطلبات المتأخّرة (الأطول انتظاراً)</div>${odRows}</div>`;
 }
 async function refresh(){ const _v=$('view'); if(_v)_v.innerHTML=skeleton(VIEW); await loadMyReqs(); render(); }
-function go(view,id){ VIEW=view; TRACK_ID=id||null; if(view==='create')DRAFT=[]; render(); if(view!=='create'&&view!=='track'){} }
+function go(view,id){ VIEW=view; if(id)TRACK_ID=id; if(view==='create'){DRAFT=[];EDIT_PR_ID=null;} render(); }
+function editRequest(id){const pr=MYREQS.find(x=>x.id===id);if(!pr||!['draft','returned'].includes(pr.status)){toast('لا يمكن تعديل الطلب في حالته الحالية','err');return;}EDIT_PR_ID=id;DRAFT=(pr.items||[]).map(x=>({description:x.description||'',unit:x.unit||'',stock_balance:x.stock_balance??'',requested_qty:x.requested_qty??''}));VIEW='create';render();}
 async function goLoad(view,id){ VIEW=view; TRACK_ID=id||null; const _v=$('view'); if(_v)_v.innerHTML=skeleton(view); await loadMyReqs(); render(); if(view==='track'&&TRACK_ID) loadTimeline(TRACK_ID); }
 
 /* ── الخط الزمني الموحّد (سجلّ التدقيق proc_pr_audit) ── */
@@ -771,6 +888,7 @@ const TL_META={
   approved:['checkcircle','اعتُمد نهائياً','done'], rejected:['ban','مرفوض','rej'], returned:['undo','أُعيد للتعديل','ret'],
   escalated:['clock','تصعيد لتجاوز المهلة','ret'], rfq_issued:['send','حُوّل لعروض أسعار','wait'],
   converted_to_po:['docs','أمر شراء','done'], cancelled:['ban','أُلغي','rej'],
+  attachment_added:['docs','أُضيف مستند للطلب','done'], po_linked:['link','رُبط أمر شراء','done'], po_unlinked:['undo','فُك ربط أمر شراء','ret'],
   proc_in_progress:['factory','بدأت المشتريات العمل عليه','active'], proc_quotes_collected:['docs','تم جمع عروض الأسعار','done'], proc_completed:['flag','اكتملت المعالجة','done']
 };
 const CH_LBL={portal:'من البوابة',email:'من البريد',system:'تلقائي'};
@@ -788,7 +906,7 @@ function renderTimeline(rows){
     const lbl=(r.event.indexOf('stage_')===0&&d.stage_label)?(m[1]+' — '+d.stage_label):m[1];
     const who=r.actor?esc(r.actor):''; const when=r.created_at?String(r.created_at).slice(0,16).replace('T',' '):'';
     const ch=r.channel&&CH_LBL[r.channel]?(' · '+CH_LBL[r.channel]):'';
-    const note=d.comment?(' · «'+esc(d.comment)+'»'):'';
+    const note=d.comment?(' · «'+esc(d.comment)+'»'):d.file_name?(' · '+esc(d.file_name)):d.po_number?(' · '+esc(d.po_number)):'';
     return `<div class="step ${m[2]}"><div class="dot">${ic(m[0],16)}</div><div><div class="lbl">${esc(lbl)}</div><div class="sub">${who}${who&&when?' · ':''}${when}${ch}${note}</div></div></div>`;
   }).join('');
 }
@@ -808,26 +926,29 @@ async function notifyPR(event, prId, comment){
 
 /* ── رفع طلب ── */
 function builderHTML(){
-  const deptOpts=['<option value="">— اختر القسم —</option>'].concat(DEPTS.map(d=>`<option value="${esc(d.id)}">${esc(d.name_ar||d.id)}</option>`)).join('');
-  const secOpts=['<option value=""></option>'].concat(SECTORS.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`)).join('');
-  const prio=PRIORITIES.map(p=>`<option ${p==='متوسط'?'selected':''}>${p}</option>`).join('');
+  const editing=EDIT_PR_ID?MYREQS.find(x=>x.id===EDIT_PR_ID):null;
+  const chosenDept=editing?.department_id||ME.department_id||'';
+  const deptOpts=['<option value="">— اختر القسم —</option>'].concat(DEPTS.map(d=>`<option value="${esc(d.id)}" ${chosenDept===d.id?'selected':''}>${esc(d.name_ar||d.id)}</option>`)).join('');
+  const secOpts=['<option value=""></option>'].concat(SECTORS.map(s=>`<option value="${esc(s)}" ${editing?.sector===s?'selected':''}>${esc(s)}</option>`)).join('');
+  const projectOpts=['<option value="">— اختر من السجل المعتمد —</option>'].concat(PROJECTS.map(p=>`<option value="${esc(p.name)}" ${editing?.project===p.name?'selected':''}>${esc(p.name)}${p.code?' · '+esc(p.code):''}</option>`)).join('');
+  const prio=PRIORITIES.map(p=>`<option ${p===(editing?.priority||'متوسط')?'selected':''}>${p}</option>`).join('');
   return `
   <div class="card">
     <div class="ocr-bar">
       <button class="btn btn-primary btn-sm" onclick="ocrParse()">${ic('file',16)} رفع نموذج الطلب وقراءته آلياً</button>
       <span class="muted">ارفع ملف <b>Excel</b> لنموذج «طلب شراء مواد» — يُقرأ فوراً وبدقّة تامّة بلا إنترنت. (الصور وملفات PDF تُقرأ بالذكاء كخيار احتياطي.) راجع البيانات ثم أرسل.</span>
     </div>
-    <div class="sec-title">بيانات الطلب</div>
+    <div class="sec-title">${editing?'تعديل '+esc(editing.id):'بيانات الطلب'}</div>
     <div class="grid">
-      <div><label>اسم مُقدّم الطلب <span class="req">*</span></label><input class="input" id="f-name" value="${esc(ME.display_name||'')}"></div>
-      <div><label>القسم / الإدارة <span class="req">*</span></label><select class="select" id="f-dept">${deptOpts}</select></div>
-      <div><label>الجوال <span class="req">*</span></label><input class="input" id="f-mobile" dir="ltr" placeholder="05xxxxxxxx"></div>
-      <div><label>نوع/فئة المواد <span class="req">*</span></label><input class="input" id="f-title" placeholder="مثل: البوفية، أغراض معيشة"></div>
-      <div><label>القطاع</label><select class="select" id="f-sector">${secOpts}</select></div>
-      <div><label>المشروع / الموقع</label><input class="input" id="f-project" placeholder="اختياري"></div>
+      <div><label>مُقدّم الطلب (من الحساب) <span class="req">*</span></label><input class="input" id="f-name" value="${esc(ME.display_name||'')}" readonly></div>
+      <div><label>القسم / الإدارة <span class="req">*</span></label><select class="select" id="f-dept" onchange="syncDeptSector()">${deptOpts}</select></div>
+      <div><label>الجوال</label><input class="input" id="f-mobile" dir="ltr" value="${esc(editing?.requester_mobile||ME.mobile||'')}" placeholder="05xxxxxxxx"></div>
+      <div><label>نوع/فئة المواد <span class="req">*</span></label><input class="input" id="f-title" value="${esc(editing?.title||'')}" placeholder="مثل: البوفية، أغراض معيشة"></div>
+      <div><label>القطاع (من سجل الإدارة)</label><select class="select" id="f-sector" disabled>${secOpts}</select></div>
+      <div><label>المشروع / الموقع <span class="req">*</span></label><select class="select" id="f-project">${projectOpts}</select></div>
       <div><label>الأولوية</label><select class="select" id="f-priority">${prio}</select></div>
-      <div><label>تاريخ التوريد المطلوب</label><input type="date" class="input" id="f-needed"></div>
-    </div>
+      <div><label>تاريخ التوريد المطلوب</label><input type="date" class="input" id="f-needed" value="${esc(editing?.needed_by||'')}"></div>
+    </div><div class="field"><label>مبرر الحاجة والملاحظات</label><textarea id="f-justification" rows="3" placeholder="اشرح الحاجة والسياق وأي قيد يجب أن يعرفه مدير الصيانة أو المشتريات">${esc(editing?.justification||'')}</textarea></div>
     <div class="sec-title">البنود المطلوبة</div>
     <div style="overflow-x:auto">
       <table class="it-table">
@@ -837,12 +958,14 @@ function builderHTML(){
     </div>
     <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addItem();renderItems()">${ic('plus',15)} إضافة بند</button>
     <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="submitReq()">${ic('send',15)} إرسال الطلب للاعتماد</button>
-      <button class="btn btn-ghost" onclick="go('mine');goLoad('mine')">إلغاء</button>
+      <button class="btn btn-primary" onclick="submitReq(true)">${ic('send',15)} إرسال لمدير الصيانة</button>
+      <button class="btn" onclick="submitReq(false)">${ic('save',15)} حفظ مسودة</button>
+      <button class="btn btn-ghost" onclick="go('workspace')">إلغاء</button>
     </div>
   </div>`;
 }
-function initBuilder(){ if(!DRAFT.length) addItem(); renderItems(); }
+function syncDeptSector(){const d=DEPTS.find(x=>x.id===val('f-dept'));const s=$('f-sector');if(s)s.value=(d&&d.sector)||'';}
+function initBuilder(){ if(!DRAFT.length) addItem(); syncDeptSector(); renderItems(); }
 function addItem(){ DRAFT.push({description:'',unit:'',stock_balance:'',requested_qty:''}); }
 function delItem(i){ DRAFT.splice(i,1); if(!DRAFT.length)addItem(); renderItems(); }
 function collectItems(){ const b=$('it-body'); if(!b)return; b.querySelectorAll('tr[data-i]').forEach(tr=>{const i=+tr.getAttribute('data-i');if(!DRAFT[i])return;tr.querySelectorAll('[data-f]').forEach(inp=>DRAFT[i][inp.getAttribute('data-f')]=inp.value);}); }
@@ -857,44 +980,25 @@ function renderItems(){
     <td class="center"><button class="btn btn-ghost btn-sm" onclick="delItem(${i})">✕</button></td>
   </tr>`).join('');
 }
-async function nextPRNo(){
-  const y=new Date().getFullYear();
-  try{ const {data}=await SB.from('proc_purchase_requests').select('id').like('id','PR-DG'+y+'-%').order('id',{ascending:false}).limit(1);
-    let max=0; if(data&&data[0]){const m=String(data[0].id).match(/(\d+)\s*$/);if(m)max=+m[1];}
-    return 'PR-DG'+y+'-'+String(max+1).padStart(4,'0');
-  }catch(e){ return 'PR-DG'+y+'-'+String(Date.now()).slice(-4); }
-}
-async function submitReq(){
+async function submitReq(asSubmit=true){
   collectItems();
-  const name=val('f-name'), deptId=val('f-dept'), mobile=val('f-mobile'), title=val('f-title');
-  if(!name||!deptId||!mobile||!title){ toast('أكمل: الاسم، القسم، الجوال، نوع المواد','err'); return; }
+  const name=val('f-name'), deptId=val('f-dept'), mobile=val('f-mobile'), title=val('f-title'), project=val('f-project');
+  if(!name||!deptId||!title){toast('أكمل الاسم والإدارة ونوع المواد','err');return;}
+  if(asSubmit&&!project){ toast('اختر المشروع من السجل المعتمد','err'); return; }
   const items=DRAFT.filter(it=>(it.description||'').trim() && num0(it.requested_qty)>0);
-  if(!items.length){ toast('أضف بنداً واحداً على الأقل بكمية مطلوبة','err'); return; }
+  if(asSubmit&&!items.length){ toast('أضف بنداً واحداً على الأقل بكمية مطلوبة','err'); return; }
   const dept=DEPTS.find(d=>d.id===deptId);
-  const id=await nextPRNo();
-  const total=0; // الأسعار تُضاف من المشتريات لاحقاً
-  const pr={ id, title, department_id:deptId, department:dept?dept.name_ar:null,
-    sector:val('f-sector')||null, project:val('f-project')||null,
-    requester:ME.username, requester_name:name, requester_mobile:mobile,
-    request_date:new Date().toISOString().slice(0,10), needed_by:val('f-needed')||null,
-    priority:val('f-priority')||'متوسط', est_total:total, total_in_words:null, currency:'SAR',
-    status:'in_review', current_seq:1, created_by:ME.username, created_at:new Date().toISOString() };
+  const req={title,department_id:deptId,department:dept?dept.name_ar:null,sector:val('f-sector')||null,project:project||null,
+    requester_name:name,requester_mobile:mobile||null,needed_by:val('f-needed')||null,priority:val('f-priority')||'متوسط',justification:val('f-justification')||null};
+  const rows=items.map(it=>({description:it.description,unit:it.unit||null,stock_balance:(it.stock_balance===''?null:num0(it.stock_balance)),requested_qty:num0(it.requested_qty)}));
   try{
-    const {error}=await SB.from('proc_purchase_requests').upsert(pr); if(error) throw error;
-    const rows=items.map((it,i)=>({pr_id:id,seq:i+1,description:it.description,unit:it.unit||null,stock_balance:(it.stock_balance===''?null:num0(it.stock_balance)),requested_qty:num0(it.requested_qty)}));
-    const ri=await SB.from('proc_pr_items').insert(rows); if(ri.error) throw ri.error;
-    // بناء سلسلة الاعتماد
-    const rule=matchRule(pr); const stages=(rule&&Array.isArray(rule.stages))?rule.stages:[];
-    if(rule){ await SB.from('proc_purchase_requests').update({approval_rule_id:rule.id}).eq('id',id); }
-    if(stages.length){
-      const ar=stages.map(s=>({pr_id:id,seq:s.seq,stage_label:s.label,resolver:s.resolver,role_key:s.role_key,approver:resolveApprover(pr,s),decision:'pending'}));
-      await SB.from('proc_pr_approvals').insert(ar);
-    }
-    toast('تم إرسال الطلب رقم '+id,'ok');
-    notifyPR('submitted', id);
-    notifyPR('pending', id);
-    DRAFT=[];
-    await goLoad('track',id);
+    if(EDIT_PR_ID&&MYREQS.find(x=>x.id===EDIT_PR_ID)?.status==='returned')req.revision_reason='استكمال الطلب بعد الإرجاع';
+    const {data,error}=await SB.rpc('pr_save_request',{p_request:req,p_items:rows,p_submit:!!asSubmit,p_pr_id:EDIT_PR_ID||null});if(error)throw error;
+    const id=data&&data.id;if(!id)throw new Error('لم يُرجع الخادم رقم الطلب');
+    toast(asSubmit?'تم الإرسال لمدير الصيانة — '+id:'حُفظت المسودة — '+id,'ok');
+    if(asSubmit){notifyPR('submitted',id);notifyPR('pending',id);}
+    DRAFT=[];EDIT_PR_ID=null;
+    TRACK_ID=id;DETAIL_TAB='overview';await goLoad('workspace',id);
   }catch(e){ toast('تعذّر الإرسال: '+(e.message||''),'err'); }
 }
 
@@ -976,14 +1080,14 @@ async function act(id,action,comment){
   if((action==='reject'||action==='return')&&!String(comment||'').trim()){ toast('اكتب السبب','err'); return; }
   try{
     // التنفيذ على الخادم عبر آلة الحالة الموثوقة (تتحقّق من المُعتمِد وفصل المهام).
-    const {data,error}=await SB.rpc('pr_transition',{p_pr_id:id,p_action:action,p_comment:comment||null});
+    const {data,error}=await SB.rpc('pr_decide',{p_pr_id:id,p_action:action,p_comment:comment||null});
     if(error) throw error;
-    const fin = data ? !!data.finalized : (action!=='approve');
-    toast(action==='approve'?(fin?'اعتُمد الطلب نهائياً':'اعتُمدت مرحلتك'):action==='reject'?'رُفض الطلب':'أُعيد للتعديل','ok');
-    if(action==='approve'){ if(fin) notifyPR('approved',id); else notifyPR('pending',id); }
+    const finalStage = data && data.workflow_state === 'pricing';
+    toast(action==='approve'?(finalStage?'سُمح ببدء التسعير':'اعتُمدت الحاجة وانتقل الطلب لمدير المشتريات'):action==='reject'?'رُفض الطلب':'أُعيد للاستكمال','ok');
+    if(action==='approve'){ if(finalStage) notifyPR('approved',id); else notifyPR('pending',id); }
     else if(action==='reject') notifyPR('rejected',id,comment);
     else notifyPR('returned',id,comment);
-    await goLoad('inbox');
+    TRACK_ID=id;DETAIL_TAB='overview';await goLoad('workspace',id);
   }catch(err){ toast('تعذّر التنفيذ: '+(err.message||''),'err'); }
 }
 
@@ -1105,158 +1209,26 @@ function ocrApply(o){
 }
 
 /* ════════════════════ لوحة التحكّم والإعدادات ════════════════════ */
-function setGo(t){ SET_TAB=t; RULE_DRAFT=null; render(); }
+function setGo(t){ SET_TAB=t; render(); }
 function settingsHTML(){
   const pend=(USERS||[]).filter(u=>u.active===false).length;
-  const sub=[['workflow',ic('route',15)+' سير الموافقات'],['depts',ic('building',15)+' الأقسام'],['users',ic('person',15)+' المستخدمون'+(pend?` <span class="cnt">${pend}</span>`:'')],['general',ic('tools',15)+' عام']];
+  const sub=[];
+  if(isPortalAdmin())sub.push(['users',ic('person',15)+' الصلاحيات والمستخدمون'+(pend?` <span class="cnt">${pend}</span>`:'')]);
+  if(can('pr_manage_workflows')||ME.role==='admin')sub.push(['workflow',ic('route',15)+' مسار القرار'],['depts',ic('building',15)+' الإدارات والمدراء'],['general',ic('tools',15)+' عام']);
+  if(!sub.some(x=>x[0]===SET_TAB))SET_TAB=sub[0]?sub[0][0]:'workflow';
   const bar=`<div class="subtabs">${sub.map(([k,l])=>`<button class="subtab${SET_TAB===k?' active':''}" onclick="setGo('${k}')">${l}</button>`).join('')}</div>`;
   let body='';
   if(SET_TAB==='depts') body=deptsHTML();
   else if(SET_TAB==='users') body=usersHTML();
   else if(SET_TAB==='general') body=generalHTML();
-  else body=workflowHTML();
+  else body=governanceHTML();
   return bar+body;
 }
+function governanceHTML(){return `<div class="card"><span class="eyebrow">محرك الطلبات</span><div class="sec-title">المسار التشغيلي المعتمد</div><div class="process-path" style="margin-top:10px">${['رفع الطلب','مدير الصيانة','مدير المشتريات','التسعير والربط','التنفيذ'].map((x,i)=>`<div class="path-step ${i===0?'done':i===1?'current':''}"><span>${i===0?'✓':i+1}</span><b>${x}</b></div>`).join('')}</div><div class="info-grid"><div><span>البوابة الأولى</span><b>مدير الصيانة يعتمد الحاجة</b></div><div><span>البوابة الثانية</span><b>مدير المشتريات يسمح بالتسعير</b></div><div><span>الربط</span><b>عدة طلبات ↔ عدة أوامر شراء</b></div><div><span>حماية البيانات</span><b>المبالغ بصلاحية مستقلة</b></div><div><span>التدقيق</span><b>كل قرار ومناقشة مؤرخة</b></div><div><span>المشروع</span><b>من السجل المعتمد فقط</b></div></div><p class="muted">تُعيّن أسماء أصحاب القرار من الإدارة وملفات الصلاحيات. تغيير صلاحية المستخدم ينعكس على الطلبات الجديدة، بينما تبقى القرارات السابقة محفوظة باسم من اتخذها.</p></div>`;}
 
 /* ── سير الموافقات (مخطّط بصري + باني بسيط بالأسماء) ── */
 function userName(u){ if(!u) return ''; const x=USERS.find(y=>y.username===u); return x?(x.display_name||x.username):u; }
-function stageWho(s){
-  if(s.approver) return userName(s.approver);
-  if(s.mode==='dept_manager'||s.resolver==='dept_manager') return 'مدير القسم (تلقائي)';
-  if(s.role_key) return (ROLE_KEYS.find(r=>r[0]===s.role_key)||[])[1]||s.role_key;
-  return 'غير محدّد';
-}
-function flowchart(stages){
-  if(!stages||!stages.length) return '<div class="muted">لا مراحل بعد — أضف خطوة.</div>';
-  const start='<div class="fc-node start">'+ic('person',15)+' مُقدّم الطلب</div>';
-  const nodes=stages.slice().sort((a,b)=>(a.seq||0)-(b.seq||0)).map(s=>`<div class="fc-arrow">${ic('arrowr',16)}</div><div class="fc-node"><div class="fc-t">${esc(s.label||'مرحلة')}</div><div class="fc-s">${ic('person',13)} ${esc(stageWho(s))}</div></div>`).join('');
-  const end='<div class="fc-arrow">'+ic('arrowr',16)+'</div><div class="fc-node end">'+ic('check',15)+' معتمَد نهائياً</div>';
-  return `<div class="flowchart">${start}${nodes}${end}</div>`;
-}
-/* مسار افتراضي = قاعدة بلا شروط */
-function wfLoadDefault(){
-  const def=RULES.find(r=>!r.department_id && !r.category && (!r.min_total||num0(r.min_total)===0) && (r.max_total==null));
-  if(def) RULE_DRAFT={id:def.id,name:def.name||'مسار الاعتماد',priority:def.priority??100,department_id:'',category:'',min_total:0,max_total:'',stages:JSON.parse(JSON.stringify(Array.isArray(def.stages)?def.stages:[]))};
-  else RULE_DRAFT={id:null,name:'مسار الاعتماد',priority:100,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'اعتماد مدير القسم',mode:'dept_manager',approver:''}]};
-}
-function wfApproverSelect(s){
-  const isDept=(s.mode==='dept_manager')||(!s.approver && !s.role_key);
-  return `<option value="__dept__" ${isDept?'selected':''}>👔 مدير القسم (تلقائياً)</option>`
-    + USERS.map(u=>`<option value="${esc(u.username)}" ${s.approver===u.username?'selected':''}>👤 ${esc(u.display_name||u.username)}</option>`).join('');
-}
-function wfStepCard(s,i,n){
-  return `<div class="wf-conn"></div>
-  <div class="wf-step" data-step="${i}">
-    <div class="wf-step-top"><span class="wf-num">${i+1}</span>
-      <input class="input wf-label" data-wf="label" value="${esc(s.label||'')}" placeholder="اسم خطوة الموافقة (مثل: اعتماد المدير المباشر)">
-      <span class="wf-ctrls">
-        <button class="ic" title="أعلى" ${i===0?'disabled':''} onclick="wfMove(${i},-1)">${ic('up',15)}</button>
-        <button class="ic" title="أسفل" ${i===n-1?'disabled':''} onclick="wfMove(${i},1)">${ic('down',15)}</button>
-        <button class="ic del" title="حذف الخطوة" onclick="wfDelStep(${i})">${ic('trash',15)}</button>
-      </span>
-    </div>
-    <div class="wf-approver"><span class="wf-ap-lbl">المعتمِد:</span>
-      <select class="select" data-wf="who" onchange="wfSync()">${wfApproverSelect(s)}</select>
-      <button class="btn btn-ghost btn-sm" onclick="wfNewUser(${i})">${ic('userplus',15)} مستخدم جديد</button>
-    </div>
-  </div>`;
-}
-function workflowHTML(){
-  if(!RULE_DRAFT) wfLoadDefault();
-  const d=RULE_DRAFT, n=(d.stages||[]).length;
-  const steps=(d.stages||[]).map((s,i)=>wfStepCard(s,i,n)).join('');
-  const advRules=RULES.filter(r=>r.id!==d.id && (r.department_id||r.category||num0(r.min_total)>0||r.max_total!=null));
-  const advList=advRules.map(r=>{
-    const cond=[r.department_id?('قسم: '+r.department_id):'',r.category?('فئة: '+r.category):'',(num0(r.min_total)>0||r.max_total!=null)?`قيمة: ${fmt(r.min_total||0)}${r.max_total!=null?'–'+fmt(r.max_total):'+'}`:''].filter(Boolean).join(' · ');
-    return `<div class="wf-rule"><div><b>${esc(r.name||'مسار')}</b> <span class="muted">${esc(cond)}</span></div>
-      <div class="row-act"><button class="btn btn-ghost btn-sm" onclick="wfEdit(${r.id})">تعديل</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="ruleDel(${r.id})">حذف</button></div></div>`;
-  }).join('');
-  const isCond=(d.department_id||d.category||num0(d.min_total)>0||(d.max_total!==''&&d.max_total!=null));
-  const deptOpts=['<option value="">كل الأقسام</option>'].concat(DEPTS.map(x=>`<option value="${esc(x.id)}" ${d.department_id===x.id?'selected':''}>${esc(x.name_ar||x.id)}</option>`)).join('');
-  return `<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <input class="input" id="wf-name" value="${esc(d.name||'مسار الاعتماد')}" style="max-width:280px;font-weight:700">
-      ${d.id?'<span class="badge ok">محفوظ</span>':'<span class="badge warn">غير محفوظ</span>'}
-    </div>
-    <div class="muted" style="margin:8px 0 14px">صمّم خطوات الموافقة بالترتيب من الأعلى للأسفل. الطلب يمرّ عبرها واحدةً تلو الأخرى. أضِف/احذف/رتّب أي خطوة بسهولة، واختر المعتمِد لكل خطوة.</div>
-    <div class="wf">
-      <div class="wf-node start">${ic('person',17)} مُقدّم الطلب — يرفع الطلب</div>
-      ${steps}
-      <div class="wf-conn"></div>
-      <div class="wf-addrow"><button class="btn btn-primary btn-sm" onclick="wfAddStep()">${ic('plus',15)} إضافة خطوة موافقة</button></div>
-      <div class="wf-conn"></div>
-      <div class="wf-node end">${ic('check',17)} معتمَد نهائياً — يُحوَّل إلى المشتريات</div>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="wfSave()">${ic('save',15)} حفظ المسار</button>
-      <button class="btn btn-ghost" onclick="RULE_DRAFT=null;render()">${ic('undo',15)} المسار الافتراضي</button>
-      <button class="btn btn-ghost" onclick="wfNewRule()">${ic('plus',15)} مسار مشروط (لقسم/قيمة)</button>
-    </div>
-    <details ${isCond?'open':''} style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--muted)">${ic('settings',14)} شروط تطبيق هذا المسار (اختياري — للمسارات الخاصة بقسم أو قيمة معيّنة)</summary>
-      <div class="grid" style="margin-top:10px">
-        <div><label>خاص بقسم</label><select class="select" id="wf-dept">${deptOpts}</select></div>
-        <div><label>خاص بفئة</label><input class="input" id="wf-cat" value="${esc(d.category)}" placeholder="أي فئة"></div>
-        <div><label>أدنى قيمة (ر.س)</label><input class="input num" id="wf-min" value="${esc(d.min_total)}"></div>
-        <div><label>أعلى قيمة (فارغ=بلا حد)</label><input class="input num" id="wf-max" value="${esc(d.max_total)}"></div>
-      </div></details>
-  </div>
-  ${advList?`<div class="card"><div class="sec-title">مسارات مشروطة إضافية</div><div class="muted" style="margin-bottom:8px">تُطبَّق قبل المسار الافتراضي حسب شروطها (قسم/قيمة).</div>${advList}</div>`:''}`;
-}
-function wfCollect(){
-  const d=RULE_DRAFT; if(!d)return;
-  if($('wf-name')) d.name=$('wf-name').value||'مسار الاعتماد';
-  if($('wf-dept')) d.department_id=$('wf-dept').value;
-  if($('wf-cat'))  d.category=$('wf-cat').value;
-  if($('wf-min'))  d.min_total=num0($('wf-min').value);
-  if($('wf-max'))  d.max_total=$('wf-max').value;
-  const cards=document.querySelectorAll('.wf-step'); const st=[];
-  cards.forEach((c,i)=>{
-    const label=(c.querySelector('[data-wf="label"]')||{}).value||'';
-    const who=(c.querySelector('[data-wf="who"]')||{}).value||'__dept__';
-    const o={seq:i+1,label}; if(who==='__dept__'){o.mode='dept_manager';o.approver='';}else{o.mode='user';o.approver=who;}
-    st.push(o);
-  });
-  d.stages=st;
-}
-function wfSync(){ wfCollect(); }
-function wfAddStep(){ wfCollect(); RULE_DRAFT.stages.push({label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}); render(); }
-function wfDelStep(i){ wfCollect(); RULE_DRAFT.stages.splice(i,1); render(); }
-function wfMove(i,dir){ wfCollect(); const a=RULE_DRAFT.stages,j=i+dir; if(j<0||j>=a.length)return; const t=a[i];a[i]=a[j];a[j]=t; render(); }
-function wfEdit(id){ const r=RULES.find(x=>x.id===id); if(!r)return; RULE_DRAFT={id:r.id,name:r.name||'مسار',priority:r.priority??50,department_id:r.department_id||'',category:r.category||'',min_total:r.min_total||0,max_total:r.max_total==null?'':r.max_total,stages:JSON.parse(JSON.stringify(Array.isArray(r.stages)?r.stages:[]))}; render(); }
-function wfNewRule(){ wfCollect(); RULE_DRAFT={id:null,name:'مسار مشروط',priority:10,department_id:'',category:'',min_total:0,max_total:'',stages:[{seq:1,label:'',mode:(USERS[0]?'user':'dept_manager'),approver:(USERS[0]?USERS[0].username:'')}]}; render(); }
-async function wfSave(){
-  wfCollect(); const d=RULE_DRAFT;
-  if(!(d.stages||[]).length){ toast('أضف خطوة واحدة على الأقل','err'); return; }
-  for(const s of d.stages){ if(!String(s.label||'').trim()){ toast('اكتب اسم كل خطوة موافقة','err'); return; } }
-  const row={ name:d.name||'مسار الاعتماد', priority:num0(d.priority)||100, active:true,
-    department_id:d.department_id||null, category:d.category||null,
-    min_total:num0(d.min_total), max_total:(d.max_total===''||d.max_total==null?null:num0(d.max_total)),
-    stages:d.stages.map((s,i)=>({seq:i+1,label:s.label,mode:s.mode||(s.approver?'user':'dept_manager'),approver:s.approver||null})) };
-  try{
-    if(d.id){ const e=(await SB.from('proc_approval_rules').update(row).eq('id',d.id)).error; if(e)throw e; }
-    else{ const r=await SB.from('proc_approval_rules').insert(row).select('id'); if(r.error)throw r.error; if(r.data&&r.data[0])d.id=r.data[0].id; }
-    toast('حُفظ المسار ✅','ok'); await loadRefs(); RULE_DRAFT=null; render();
-  }catch(e){ toast('تعذّر الحفظ: '+(e.message||''),'err'); }
-}
-/* إنشاء مستخدم معتمِد جديد من داخل الباني (يُنشئ حساب الدخول تلقائياً) */
-function wfNewUser(stepIdx){ wfCollect(); NU_STEP=stepIdx; const m=$('nu-modal'); if(m){ m.classList.add('show'); $('nu-name').value='';$('nu-login').value='';$('nu-pass').value='';$('nu-err').textContent=''; setTimeout(()=>$('nu-name').focus(),50); } }
-function wfCloseNU(){ const m=$('nu-modal'); if(m)m.classList.remove('show'); NU_STEP=null; }
-function nuLoginHint(){ const e=$('nu-hint'); if(e) e.textContent = val('nu-login') ? ('بريد الدخول: '+val('nu-login').toLowerCase().replace(/\s+/g,'')+'@aldeyabi.com') : ''; }
-async function wfCreateNU(){
-  const name=val('nu-name'), login=val('nu-login').toLowerCase().replace(/\s+/g,''), pass=val('nu-pass');
-  if(!name||!login||pass.length<6){ $('nu-err').textContent='أكمل: الاسم، اسم الدخول، وكلمة مرور (6 أحرف على الأقل)'; return; }
-  const btn=$('nu-create'); btn.disabled=true; btn.textContent='جارٍ الإنشاء...';
-  try{
-    await adminApi({action:'create',username:login,displayName:name,password:pass,role:'user',permissions:{},active:true});
-    await loadAdminData();
-    if(NU_STEP!=null && RULE_DRAFT && RULE_DRAFT.stages[NU_STEP]){ RULE_DRAFT.stages[NU_STEP].mode='user'; RULE_DRAFT.stages[NU_STEP].approver=login; }
-    wfCloseNU(); toast('أُنشئ المستخدم وأُسنِد للخطوة ✅','ok'); render();
-  }catch(e){ $('nu-err').textContent='تعذّر: '+(e.message||''); }
-  finally{ btn.disabled=false; btn.textContent='إنشاء وإسناد'; }
-}
-async function ruleDel(id){ if(!confirm('حذف هذه القاعدة؟'))return; try{ const e=(await SB.from('proc_approval_rules').delete().eq('id',id)).error; if(e)throw e; toast('حُذفت','ok'); await loadRefs(); render(); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); } }
-
-/* ── الأقسام ── */
+/* الإدارات المعتمدة ومالكو بوابة اعتماد الحاجة. */
 function deptsHTML(){
   const uOpt=(u)=>['<option value="">— بلا —</option>'].concat(USERS.map(x=>`<option value="${esc(x.username)}" ${u===x.username?'selected':''}>${esc(x.display_name||x.username)}</option>`)).join('');
   const rows=DEPTS.map(d=>`<tr><td dir="ltr" style="text-align:start">${esc(d.id)}</td><td>${esc(d.name_ar||'—')}</td><td>${esc(d.sector||'—')}</td>
@@ -1278,26 +1250,33 @@ async function deptAdd(){
   try{ const e=(await SB.from('proc_departments').upsert({id,name_ar:name,sector:val('d-sector')||null,manager_user:val('d-mgr')||null})).error; if(e)throw e; toast('أُضيف','ok'); await loadRefs(); render(); }catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
 async function deptSetMgr(id,m){ try{ await SB.from('proc_departments').update({manager_user:m||null}).eq('id',id); const d=DEPTS.find(x=>x.id===id); if(d)d.manager_user=m||null; toast('حُدّث المدير','ok'); }catch(e){ toast('تعذّر','err'); } }
-async function deptDel(id){ if(!confirm('حذف القسم؟'))return; try{ await SB.from('proc_departments').delete().eq('id',id); toast('حُذف','ok'); await loadRefs(); render(); }catch(e){ toast('تعذّر','err'); } }
+async function deptDel(id){ if(!confirm('تعطيل الإدارة مع الاحتفاظ بسجلها؟'))return; try{ const e=(await SB.from('proc_departments').update({active:false}).eq('id',id)).error;if(e)throw e;toast('عُطّلت الإدارة','ok');await loadRefs();render(); }catch(e){ toast('تعذّر','err'); } }
 
 /* ── المستخدمون ── */
 function usersHTML(){
   const delegOpt=(sel,selfU)=>['<option value="">— بلا —</option>'].concat(USERS.filter(x=>x.username!==selfU).map(x=>`<option value="${esc(x.username)}" ${sel===x.username?'selected':''}>${esc(x.display_name||x.username)}</option>`)).join('');
-  const reqBadge=(u)=> u.requested_role==='approver' ? '<span class="badge info">طلب: صلاحية اعتماد</span>' : (u.requested_role==='employee'?'<span class="badge neutral">طلب: موظف</span>':'');
+  const mayGrantModuleAdmin=ME.role==='admin'||ME.pr_profile_key==='module_admin';
+  const profileOpt=(sel)=>PROFILE_DEFS.filter(p=>p.profile_key!=='module_admin'||mayGrantModuleAdmin||sel==='module_admin').map(p=>`<option value="${esc(p.profile_key)}" ${sel===p.profile_key?'selected':''} ${p.profile_key==='module_admin'&&!mayGrantModuleAdmin?'disabled':''}>${esc(p.name_ar)}</option>`).join('');
+  const deptOpt=(sel)=>['<option value="">— اختر الإدارة —</option>'].concat(DEPTS.map(d=>`<option value="${esc(d.id)}" ${sel===d.id?'selected':''}>${esc(d.name_ar||d.id)}</option>`)).join('');
   const card=(u)=>{
-    const perms=PERM_DEFS.map(p=>`<label class="pchk"><input type="checkbox" ${u.role==='admin'||((u.permissions||{})[p.k]===true)?'checked':''} ${u.role==='admin'?'disabled':''} onchange="userPerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`).join('');
+    const base=(PROFILE_DEFS.find(p=>p.profile_key===(u.pr_profile_key||'requester'))||{}).permissions||{};
+    const over=u.pr_permission_overrides||{};
+    const groups=[...new Set(PERM_DEFS.map(p=>p.g))].map(g=>`<div class="perm-group"><b>${esc(g)}</b>${PERM_DEFS.filter(p=>p.g===g).map(p=>{const effective=p.k in over?over[p.k]:base[p.k]===true,locked=u.role==='admin'||(p.k==='pr_manage_users'&&!mayGrantModuleAdmin);return `<label class="pchk"><input type="checkbox" ${u.role==='admin'||effective?'checked':''} ${locked?'disabled':''} onchange="userModulePerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`;}).join('')}</div>`).join('');
     const pending=u.active===false;
     return `<div class="card"${pending?' style="border-color:var(--gold)"':''}>
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
-        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">أدمن</span>':''} ${pending?'<span class="badge warn">بانتظار التفعيل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''} ${pending?reqBadge(u):''}</div>
-        <div class="row-act">${pending?`<button class="btn btn-primary btn-sm" onclick="userActive('${esc(u.username)}',true)">${ic('check',14)} تفعيل</button>`:''}<button class="btn btn-ghost btn-sm" onclick="userReset('${esc(u.username)}')">كلمة مرور</button>${pending?'':`<button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',false)">تعطيل</button>`}</div>
+        <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">مدير النظام</span>':''} ${pending?'<span class="badge warn">معطّل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''}</div>
+        <div class="row-act">${pending?`<button class="btn btn-primary btn-sm" onclick="userActive('${esc(u.username)}',true)">${ic('check',14)} تفعيل</button>`:`<button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',false)">تعطيل</button>`}</div>
       </div>
-      <div class="perms">${perms}</div>
-      <div class="grid" style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+      <div class="grid" style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+        <div><label>ملف الصلاحيات</label><select class="select" onchange="userProfile('${esc(u.username)}',this.value)">${profileOpt(u.pr_profile_key||'requester')}</select></div>
+        <div><label>الإدارة الأساسية</label><select class="select" onchange="userDepartment('${esc(u.username)}',this.value)">${deptOpt(u.department_id)}</select></div>
         <div><label>البريد الإلكتروني</label><input class="input" dir="ltr" value="${esc(u.email||'')}" placeholder="name@aldeyabi.com" onchange="userSetEmail('${esc(u.username)}',this.value)"></div>
         <div><label>المفوَّض عند الغياب</label><select class="select" onchange="userDeleg('${esc(u.username)}',this.value)">${delegOpt(u.delegate_to,u.username)}</select></div>
-        <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل الموافقات للمفوَّض)</label></div>
+        <div><label>المسمى الوظيفي</label><input class="input" value="${esc(u.job_title||'')}" onchange="userJobTitle('${esc(u.username)}',this.value)"></div>
+        <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل القرارات للمفوَّض)</label></div>
       </div>
+      <details class="permission-details"><summary>الصلاحيات التفصيلية والتجاوزات</summary><div class="permission-matrix">${groups}</div><p class="muted">تغيير أي مفتاح ينشئ تجاوزاً خاصاً لهذا المستخدم فوق ملف الصلاحيات.</p></details>
     </div>`;
   };
   const pending=USERS.filter(u=>u.active===false), activeU=USERS.filter(u=>u.active!==false);
@@ -1306,22 +1285,28 @@ function usersHTML(){
     html+=`<div class="card" style="border-color:var(--gold);background:rgba(184,146,61,.06)"><div class="sec-title">${ic('clock',16)} بانتظار التفعيل (${pending.length})</div><div class="muted" style="font-size:12.5px">حسابات سجّلت ذاتياً عبر رابط الدعوة. راجعها، امنح صلاحيات الاعتماد للمطلوب منها، ثم اضغط «تفعيل».</div></div>`;
     html+=pending.map(card).join('');
   }
-  html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px"><div class="sec-title" style="margin:0">المستخدمون النشطون (${activeU.length})</div><button class="btn btn-primary btn-sm" onclick="userAddForm()">${ic('plus',15)} مستخدم جديد</button></div>
+  html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px"><div><span class="eyebrow">حوكمة الوصول</span><div class="sec-title" style="margin:0">مستخدمو موديل طلبات الشراء (${activeU.length})</div></div><button class="btn btn-primary btn-sm" onclick="userAddForm()">${ic('mail',15)} دعوة مستخدم</button></div>
     <div class="card hidden" id="u-form">
-      <div class="sec-title">مستخدم جديد</div>
+      <div class="sec-title">دعوة شخصية عبر بريد الشركة</div>
+      <p class="muted" style="margin-bottom:14px">يصل الموظف رابط شخصي عبر Resend ويضبط كلمة مروره بنفسه. الإدارة وملف الصلاحيات موقّعان داخل الدعوة ولا يمكن تغييرهما من رابط التسجيل.</p>
       <div class="grid">
-        <div><label>اسم المستخدم <span class="req">*</span></label><input class="input" id="u-user" dir="ltr"></div>
         <div><label>الاسم الظاهر <span class="req">*</span></label><input class="input" id="u-name"></div>
-        <div><label>البريد الإلكتروني</label><input class="input" id="u-email" dir="ltr" placeholder="name@aldeyabi.com"></div>
-        <div><label>كلمة المرور <span class="req">*</span></label><input class="input" id="u-pass" dir="ltr"></div>
+        <div><label>البريد الإلكتروني <span class="req">*</span></label><input class="input" id="u-email" dir="ltr" placeholder="name@aldeyabi.com"></div>
+        <div><label>الإدارة <span class="req">*</span></label><select class="select" id="u-dept">${deptOpt('')}</select></div>
+        <div><label>ملف الصلاحيات <span class="req">*</span></label><select class="select" id="u-profile">${profileOpt('requester')}</select></div>
+        <div><label>المسمى الوظيفي</label><input class="input" id="u-job"></div>
       </div>
-      <div class="perms" id="u-perms">${PERM_DEFS.map(p=>`<label class="pchk"><input type="checkbox" data-pk="${p.k}"> ${esc(p.l)}</label>`).join('')}</div>
-      <div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="userAdd()">إنشاء الحساب</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('u-form').classList.add('hidden')">إلغاء</button></div>
+      <div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="sendStaffInvite()">${ic('send',15)} إرسال الدعوة</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById('u-form').classList.add('hidden')">إلغاء</button></div><div id="invite-result" class="muted" style="margin-top:10px"></div>
     </div>`;
   html+=activeU.map(card).join('')||`<div class="empty">لا مستخدمون نشطون</div>`;
   return html;
 }
 function userAddForm(){ const f=$('u-form'); if(f)f.classList.remove('hidden'); }
+async function sendStaffInvite(){
+  const display_name=val('u-name'),email=val('u-email').toLowerCase(),department_id=val('u-dept'),profile_key=val('u-profile'),job_title=val('u-job');
+  if(display_name.length<3||!department_id||!profile_key||!/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){toast('أكمل الاسم وبريد الشركة والإدارة وملف الصلاحيات','err');return;}
+  try{const r=await fetch('/api/staff-invite',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify({action:'invite',display_name,email,department_id,profile_key,job_title})});const d=await r.json().catch(()=>({}));if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));const el=$('invite-result');if(el)el.innerHTML=`أُرسلت الدعوة إلى <b dir="ltr">${esc(email)}</b>${d.sent?'':' · لم يؤكد مزود البريد الإرسال'}<br><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${esc(d.url||'')}')">نسخ الرابط الاحتياطي</button>`;toast('أُنشئت الدعوة الشخصية','ok');}catch(e){toast('تعذّرت الدعوة: '+(e.message||''),'err');}
+}
 async function adminApi(payload){
   const r=await fetch('/api/admin-users',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},await authHeader()),body:JSON.stringify(payload)});
   const d=await r.json().catch(()=>({})); if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status)); return d;
@@ -1348,6 +1333,22 @@ async function userPerm(username,key,on){
   try{ await adminApi({action:'setProfile',username,permissions:perms}); u.permissions=perms; toast('حُدّثت الصلاحية','ok'); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); render(); }
 }
+async function userProfile(username,profile){
+  const u=USERS.find(x=>x.username===username);if(!u)return;
+  try{await adminApi({action:'setProfile',username,pr_profile_key:profile,pr_permission_overrides:{}});u.pr_profile_key=profile;u.pr_permission_overrides={};toast('طُبق ملف الصلاحيات','ok');render();}
+  catch(e){toast('تعذّر: '+(e.message||''),'err');render();}
+}
+async function userModulePerm(username,key,on){
+  const u=USERS.find(x=>x.username===username);if(!u)return;
+  const over=Object.assign({},u.pr_permission_overrides||{});over[key]=!!on;
+  try{await adminApi({action:'setProfile',username,pr_permission_overrides:over});u.pr_permission_overrides=over;toast('حُفظ تجاوز الصلاحية','ok');}
+  catch(e){toast('تعذّر: '+(e.message||''),'err');render();}
+}
+async function userDepartment(username,department_id){
+  try{await adminApi({action:'setProfile',username,department_id:department_id||null,pr_department_ids:department_id?[department_id]:[]});const u=USERS.find(x=>x.username===username);if(u){u.department_id=department_id||null;u.pr_department_ids=department_id?[department_id]:[];}toast('حُدّث نطاق الإدارة','ok');}
+  catch(e){toast('تعذّر: '+(e.message||''),'err');render();}
+}
+async function userJobTitle(username,job_title){try{await adminApi({action:'setProfile',username,job_title});const u=USERS.find(x=>x.username===username);if(u)u.job_title=job_title;toast('حُدّث المسمى','ok');}catch(e){toast('تعذّر: '+(e.message||''),'err');}}
 async function userDeleg(username,to){
   try{ await adminApi({action:'setProfile',username,delegate_to:to||null}); const u=USERS.find(x=>x.username===username); if(u)u.delegate_to=to||null; toast('حُدّث المفوَّض','ok'); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
@@ -1371,16 +1372,7 @@ function generalHTML(){
       <label class="pchk"><input type="checkbox" id="g-wa" ${PSET.whatsapp_on?'checked':''} disabled> واتساب (يُفعّل بعد ربط المزوّد)</label>
     </div>
     <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveGeneral()">${ic('save',15)} حفظ</button>
-    <div class="muted" style="margin-top:10px">رابط البوابة: <b dir="ltr">/requests.html</b> · وزّعه على الموظفين والمعتمِدين.</div>
-  </div>
-  <div class="card"><div class="sec-title">${ic('link',16)} التسجيل الذاتي للموظفين</div>
-    <div class="muted" style="margin-bottom:10px;font-size:12.5px">اضبط رمز دعوة سرّياً ثم وزّع رابط الدعوة. يسجّل الموظف بنفسه (ببريد <b>@aldeyabi.com</b>) ويظهر لك في «المستخدمون ▸ بانتظار التفعيل» لتفعيله ومنح صلاحياته.</div>
-    <div class="grid">
-      <div><label>رمز دعوة التسجيل</label><input class="input" id="g-invite" dir="ltr" value="${esc(PSET.invite_code||'')}" placeholder="رمز سرّي"></div>
-      <div style="display:flex;align-items:flex-end;gap:8px"><button class="btn btn-ghost btn-sm" onclick="genInvite()">${ic('shuffle',15)} توليد رمز</button></div>
-    </div>
-    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="saveGeneral()">${ic('save',15)} حفظ الرمز</button>
-    ${PSET.invite_code?`<div style="margin-top:12px;background:var(--wash,#f6f4ee);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div class="muted" style="font-size:11.5px;margin-bottom:4px">رابط الدعوة (انسخه وأرسله للموظفين):</div><div dir="ltr" style="font-size:12px;word-break:break-all;color:var(--gold-2);font-weight:600" id="invite-link">${esc(location.origin)}/requests.html?signup=${encodeURIComponent(PSET.invite_code)}</div><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyInvite()">${ic('copy',15)} نسخ الرابط</button></div>`:''}
+    <div class="muted" style="margin-top:10px">رابط الموديل: <b dir="ltr">/requests.html</b> · وزّعه على الموظفين والمعتمِدين.</div>
   </div>
   <div class="card"><div class="sec-title">${ic('mail',16)} تشخيص البريد</div>
     <div class="muted" style="margin-bottom:10px">يرسل رسالة تجريبية إلى بريدك أنت (<b dir="ltr">${esc(usernameToEmail(ME.username))}</b>) ويكشف أي خلل في خط الإرسال فوراً.</div>
@@ -1415,13 +1407,10 @@ async function saveGeneral(){
   if($('g-name')) patch.org_name=val('g-name');
   if($('g-sla')) patch.sla_days=num0(val('g-sla'));
   if($('g-em')) patch.email_on=$('g-em').checked;
-  if($('g-invite')) patch.invite_code=val('g-invite').trim();
   PSET=Object.assign({},PSET,patch);
   try{ const e=(await SB.from('proc_settings').upsert({key:'portal_settings',value:PSET,description:'إعدادات بوابة الطلبات',updated_by:ME.username,updated_at:new Date().toISOString()},{onConflict:'key'})).error; if(e)throw e; toast('حُفظت الإعدادات','ok'); render(); }
   catch(e){ toast('تعذّر: '+(e.message||''),'err'); }
 }
-function genInvite(){ const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<10;i++)s+=a[Math.floor(Math.random()*a.length)]; const el=$('g-invite'); if(el)el.value=s; }
-function copyInvite(){ const el=$('invite-link'); if(!el)return; const t=el.textContent; navigator.clipboard?.writeText(t).then(()=>toast('نُسخ الرابط','ok'),()=>toast('انسخه يدوياً','err')); }
 
 /* ════════════ تحميل skeleton + لوحة بيانات حيّة ════════════ */
 function skeleton(view){

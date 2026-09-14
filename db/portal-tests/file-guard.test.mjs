@@ -650,11 +650,11 @@ if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);
 
 /* ── تأكيدات نقطة دعوة الموظّف الشخصية (/api/staff-invite) ──────────────────
-   قرار المالك (2026-09-13): المدير يُدخل الاسم والبريد والقطاع والمسمّى، ويصل
+   قرار المالك (2026-09-13): المدير يُدخل الاسم والبريد والإدارة وملف الصلاحيات والمسمّى، ويصل
    الموظّف **بريد دعوة** يضبط منه كلمة مروره ويدخل مباشرةً. الرابط المشترك حُذِف.
 
    ⚠️ المبدأ الحاكم المُختبَر هنا: **الرمز صار الاعتماد**، فالهويّة كلّها من
-   داخله — البريد والقطاع والاسم والمسمّى. لو قرأ الخادم أيّاً منها من جسم
+   داخله — البريد والإدارة وملف الصلاحيات والاسم والمسمّى. لو قرأ الخادم أيّاً منها من جسم
    الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو منح نفسه قطاعاً آخر. */
 const si = await import('../../functions/api/staff-invite.js');
 
@@ -698,6 +698,9 @@ function siNet(opts = {}) {
     }
     if (u.includes('/rest/v1/proc_settings') && m === 'GET') {
       return new Response(JSON.stringify([{ value: { epoch: opts.epoch || 0 } }]), { status: 200 });
+    }
+    if (u.includes('/rest/v1/proc_departments') && m === 'GET') {
+      return new Response(JSON.stringify([{ id:'DEP-MAINT', name_ar:'إدارة الصيانة والتشغيل', sector:'الصيانة والتشغيل' }]), { status: 200 });
     }
     if (u.includes('/rest/v1/proc_users') && m === 'GET') {
       if (u.includes('or=(')) {
@@ -755,7 +758,7 @@ const siT = (name, cond, extra = '') => {
   console.log(`${cond ? '✓' : '✗ FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
 };
 const INVITE = { action:'invite', display_name:'صالح الميداني', email:'saleh@aldeyabi.com',
-                 sector:'الصيانة والتشغيل', job_title:'فنّي صيانة' };
+                 department_id:'DEP-MAINT', profile_key:'requester', job_title:'فنّي صيانة' };
 const invite = async (env = SI_ENV, headers = ADMIN, body = INVITE) => {
   const r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify(body) }, headers), env });
   return { status: r.status, j: await r.json() };
@@ -778,7 +781,7 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
     siT('وبريد خارج نطاق الشركة يُرفض (وإلّا لم يصله شيء أصلاً)',
       (await invite(SI_ENV, ADMIN, { ...INVITE, email:'saleh@gmail.com' })).status === 400);
     siT('واسم ناقص يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, display_name:'ا' })).status === 400);
-    siT('وقطاع فارغ يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, sector:'' })).status === 400);
+    siT('وإدارة فارغة تُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, department_id:'' })).status === 400);
 
     const ok = await invite();
     siT('والأدمن يُصدرها برابط الصفحة العامّة',
@@ -848,6 +851,7 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
       const b = await r.json();
       siT('الرمز الصحيح يكشف بيانات المدعوّ لتعبئة الصفحة',
         r.status === 200 && b.email === 'saleh@aldeyabi.com' && b.display_name === 'صالح الميداني'
+        && b.department_id === 'DEP-MAINT' && b.profile_key === 'requester'
         && b.sector === 'الصيانة والتشغيل' && b.job_title === 'فنّي صيانة');
       siT('ولا يكشف من دعاه ولا أي مستخدم آخر', !('by' in b) && !('users' in b));
 
@@ -910,9 +914,10 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
       siT('والقطاع من الرمز لا من العميل',
         JSON.stringify(row.scope_sectors) === JSON.stringify(['الصيانة والتشغيل']));
       siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
-      siT('والصلاحيات ميدانية ثابتة (لا مبالغ ولا إدارة مستخدمين)',
-        row.permissions.can_receive_po === true && row.permissions.can_view_amounts === false
-        && !('can_manage_users' in row.permissions));
+      siT('وملف الصلاحيات والإدارة من الرمز بلا صلاحيات خام من العميل',
+        row.pr_profile_key === 'requester' && row.department_id === 'DEP-MAINT'
+        && JSON.stringify(row.pr_department_ids) === JSON.stringify(['DEP-MAINT'])
+        && JSON.stringify(row.permissions) === '{}');
       siT('والجوال وحده يُقبل من العميل', row.mobile === '0500000000');
       const mail = n.calls.find(c => c.url.includes('api.resend.com'));
       siT('ويصل الداعي إشعار بالإتمام لا «بانتظار التفعيل»',
