@@ -3789,6 +3789,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             <!-- ⚠️ تقرير المتابعة الميدانيّ هنا لا في شاشة تقارير ثالثة: نطاق
                  الموظّف شاشتان فقط، والقدرة تبقى في متناوله على أوامره نفسها. -->
             <button class="btn btn-ghost btn-sm" id="po-followup-btn" data-scoped-only-inline
+                    data-requires-perm="can_print_followup"
                     data-tooltip="ورقة متابعة ميدانية لأوامرك — بلا مبالغ">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
               طباعة متابعة
@@ -5875,11 +5876,22 @@ const PERMISSION_DEFS = [
   { key:'can_edit_po',              label:'تعديل أمر شراء',                short:'تعديل أمر',     cat:'أوامر الشراء', userDefault:true  },
   { key:'can_approve_po',           label:'اعتماد أمر شراء',               short:'اعتماد أمر',    cat:'أوامر الشراء', userDefault:false },
   { key:'can_delete_po',            label:'حذف أمر شراء',                  short:'حذف أمر',       cat:'أوامر الشراء', userDefault:false },
-  { key:'can_receive_po',           label:'تسجيل استلام البضاعة',           short:'استلام',        cat:'أوامر الشراء', userDefault:false },
+  { key:'can_receive_po',           label:'تسجيل استلام البضاعة',           short:'استلام',        cat:'أوامر الشراء', userDefault:false, field:true },
   // ⚠️ userDefault:true مقصود: صفوف المستخدمين القائمة لا تحمل هذا المفتاح،
   //    و`hasPermission` تسقط للافتراضيّ حين يغيب — فلا يفقد أحدٌ مبالغه.
   //    (ونظيرتها على الخادم `proc_can_view_amounts` بالافتراضيّ نفسه.)
-  { key:'can_view_amounts',         label:'عرض المبالغ والأسعار',           short:'المبالغ',       cat:'أوامر الشراء', userDefault:true  },
+  { key:'can_view_amounts',         label:'عرض المبالغ والأسعار',           short:'المبالغ',       cat:'أوامر الشراء', userDefault:true, field:true },
+  // ── الميدان (الصيانة والتشغيل) ──
+  // ⚠️ هذه قدرات موظّف الميدان **الفعلية**، وكانت بلا مفاتيح إطلاقاً: من كان
+  //    مُنطَّقاً امتلكها كلّها ضمنيّاً فلا يملك المدير منحها ولا سحبها. الخادم كان
+  //    يحرسها بالرؤية/الملكية («أنت صاحب الطلب») لا بصلاحية قابلة للضبط.
+  //    `userDefault:true` فموظّف المكتب **بلا أي تغيير** (مفتوحة له اليوم)، والمُنطَّق
+  //    يخضع لصرامة `hasPermission` (الغياب = منع) فتُمنَح صراحةً — ورابط الدعوة يكتبها.
+  //    ونظائرها على الخادم في `db/system2-field-permissions.sql` بالدلالة نفسها.
+  { key:'can_create_pr',            label:'رفع طلبات الشراء (وتعديلها وقوالبها)', short:'رفع طلبات', cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_upload_docs',          label:'رفع المستندات والسندات',          short:'رفع مستند',    cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_comment',              label:'التعليق والردّ داخل النظام',       short:'تعليق',        cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_print_followup',       label:'طباعة تقرير المتابعة الميدانيّ',   short:'تقرير متابعة', cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
   { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
   { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
   { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
@@ -5894,6 +5906,24 @@ const DEFAULT_PERMISSIONS = {
   admin: Object.fromEntries(PERMISSION_KEYS.map(k => [k, true])),
   user:  Object.fromEntries(PERMISSION_DEFS.map(d => [d.key, d.userDefault])),
 };
+
+// ── قوالب أدوار الميدان (قرار المالك 2026-09-13) ──
+// المدير كان يواجه 22 مربّعاً أكثرها لا يخصّ موظّف الصيانة (RFQ · ذكاء اصطناعي ·
+// كتالوج · سحابة). القالب يضبط **كل** المفاتيح دفعةً ثمّ تبقى قابلة للتعديل قبل
+// الحفظ — فهو نقطة انطلاق لا قفل. مفاتيح المكتب تُصفَّر عمداً: موظّف الميدان لا
+// يملكها أصلاً على الخادم، فإظهارها ممنوحة يوهم بقدرة غير قائمة.
+const FIELD_PERMISSION_KEYS = PERMISSION_DEFS.filter(d => d.field).map(d => d.key);
+const ROLE_PRESETS = [
+  { key:'field', label:'👷 موظّف ميدانيّ',
+    hint:'يرفع طلباته وسندها، ويسجّل الاستلام، ويعلّق، ويطبع تقرير المتابعة — بلا مبالغ.',
+    on:['can_create_pr','can_upload_docs','can_comment','can_print_followup','can_receive_po'] },
+  { key:'supervisor', label:'🧭 مشرف قطاع',
+    hint:'كل قدرات الميدان، ويرى مبالغ أوامر قطاعه.',
+    on:['can_create_pr','can_upload_docs','can_comment','can_print_followup','can_receive_po','can_view_amounts'] },
+  { key:'viewer', label:'👁 متابعة فقط',
+    hint:'يتابع أوامر قطاعه وطلباته — بلا رفع ولا استلام ولا مبالغ.',
+    on:[] },
+];
 
 // ── Supabase Auth ──
 // المصادقة الحقيقية تتم عبر Supabase Auth (JWT) لتُفعّل سياسات RLS على الخادم.
@@ -12407,6 +12437,7 @@ function prRenderDocChip(){
 /* الرفع يمرّ بنقطة خادمية: حارس الملفات الطبقيّ + مفتاح مولَّد خادميّاً +
    فحص رؤية الطلب بهوية المتصل. ثم يُثبَّت المفتاح بـ`pr_set_doc`. */
 async function prUploadDoc(prId, file){
+  if(!hasPermission('can_upload_docs')) throw new Error('لا تملك صلاحية رفع المستندات — راجع مدير النظام');
   const headers = Object.assign({'Content-Type':'application/octet-stream'}, await prAuthHeader());
   const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}`,
     { method:'POST', headers, body: await file.arrayBuffer() });
@@ -12530,6 +12561,7 @@ async function prNextNumber(){
    يعني **الكتابة فوق طلب قائم** وحذف بنوده بصمت. الإدراج يفشل بـ23505 فيُكشف
    التعارض بدل أن يُبتلَع. */
 async function prSaveCloud(pr, items, mode){
+  if(!hasPermission('can_create_pr')) throw new Error('لا تملك صلاحية رفع طلبات الشراء — راجع مدير النظام');
   if(!prCloudReady()) throw new Error('يجب الاتصال بالسحابة لحفظ الطلب');
   pr.updated_at = new Date().toISOString();
   pr.updated_by = STATE.currentUser?.username || null;
@@ -12723,6 +12755,9 @@ async function renderPRPortal(){
   // مباشرةً، والاعتماد يقع على الورق ودليله المرفق الموقَّع.
   let view = STATE.prView || 'list';
   if(view==='inbox' || view==='depts') view = 'list';
+  // من سُحبت منه صلاحية الرفع لا يرى النموذج ولا القوالب — ولو بقيت الحالة قديمة.
+  const canCreatePR = hasPermission('can_create_pr');
+  if(!canCreatePR && (view==='create' || view==='templates')) view = 'list';
   // ⚠️ تبويبان لا يخصّان الموظّف الميدانيّ: «الوارد للمشتريات» شاشة مقفلة عليه
   // أصلاً (prIncomingHTML)، و«بانتظار اعتمادي» لا تمتلئ له أبداً — عرضهما بعدّاد
   // ضجيجٌ يوهمه بعملٍ ينتظره. يظهران لمن يعنيانه فقط، وسلوك القائمين لم يتغيّر.
@@ -12732,8 +12767,8 @@ async function renderPRPortal(){
   const tplN = (STATE.prTemplates||[]).length;
   const tabs = `
     <div class="pr-tabs">
-      ${prTab('create','➕ طلب جديد', view==='create')}
-      ${prTab('templates', `⭐ القوالب${tplN?` <span class="pr-tab-count">${tplN}</span>`:''}`, view==='templates')}
+      ${canCreatePR ? prTab('create','➕ طلب جديد', view==='create') : ''}
+      ${canCreatePR ? prTab('templates', `⭐ القوالب${tplN?` <span class="pr-tab-count">${tplN}</span>`:''}`, view==='templates') : ''}
       ${prTab('list','📋 الطلبات', view==='list')}
       ${isProc ? prTab('incoming', incomingLabel, view==='incoming') : ''}
       <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="__prLoaded=false;renderPRPortal()">↻ تحديث</button>
@@ -12756,7 +12791,16 @@ async function renderPRPortal(){
 function prTab(key,label,active){
   return `<button class="pr-tab${active?' active':''}" onclick="prGoView('${key}')">${label}</button>`;
 }
-function prGoView(view, id){ STATE.prView=view; STATE.prTrackId=id||null; if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; } renderPRPortal(); }
+/* ⚠️ بوّابة الوجهة = بوّابة الفعل: من لا يملك `can_create_pr` لا يفتح النموذج
+   أصلاً (تبويباه مخفيّان)، فلا يملأ صفحةً ثمّ يُرفَض عند الحفظ. */
+function prGoView(view, id){
+  if((view==='create' || view==='templates') && !hasPermission('can_create_pr')){
+    if(!requirePermission('can_create_pr', 'رفع طلبات الشراء')) { view='list'; id=null; }
+  }
+  STATE.prView=view; STATE.prTrackId=id||null;
+  if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; }
+  renderPRPortal();
+}
 
 function prListHTML(){
   const me = STATE.currentUser?.username;
@@ -13044,6 +13088,7 @@ function prApplyTemplateFields(t){
 }
 
 async function prSaveTemplate(){
+  if(!requirePermission('can_create_pr', 'حفظ قالب طلب')) return;
   if(!prCloudReady()){ toast('error','غير متصل','حفظ القوالب يتطلّب اتصالاً بالسحابة'); return; }
   const nameEl = document.getElementById('pr-tpl-name');
   const name = ((nameEl && nameEl.value)||'').trim();
@@ -13458,7 +13503,9 @@ function prThreadHTML(pr){
   const kind = isProc && !isOwner ? 'question' : 'answer';
   const ph   = kind==='question' ? 'اكتب استفساراً لمُقدّم الطلب…' : 'اكتب ردّك لفريق المشتريات…';
   const btn  = kind==='question' ? '؟ إرسال استفسار' : '↪ إرسال الردّ';
-  const canPost = isProc || isOwner;
+  // بوّابة الصندوق = بوّابة الفعل (`prPostMessage`): من سُحب منه التعليق يقرأ
+  // المحادثة ولا يرى مربّع الكتابة — لا يكتب ثمّ يُرفَض.
+  const canPost = (isProc || isOwner) && hasPermission('can_comment');
   return `<div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">المحادثة والاستفسارات${msgs.length?` (${msgs.length})`:''}</div>
       ${items || '<div style="font-size:12.5px;color:var(--muted)">لا استفسارات على هذا الطلب.</div>'}
@@ -13470,6 +13517,7 @@ function prThreadHTML(pr){
 }
 
 async function prPostMessage(prId, kind){
+  if(!requirePermission('can_comment', 'الردّ داخل النظام')) return;
   const el = document.getElementById('pr-msg-input');
   const txt = (el && el.value || '').trim();
   if(!txt){ toast('warn','فارغة','اكتب نصّ الرسالة أولاً'); return; }
@@ -14335,7 +14383,7 @@ function reportsCatalog(){
     //    لا يرى إلا ما وُسِم بها صراحةً — فتقريرٌ جديد يُضاف بلا العلامة
     //    يُحجَب عنه تلقائياً بدل أن يتسرّب. (وتُعاد الفحوص في `reportRun`
     //    لأن الفهرس يُستدعى من onclick، فإخفاء البطاقة وحده ليس بوّابة.)
-    { group:'المشتريات', perm:null, icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
+    { group:'المشتريات', perm:'can_print_followup', icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
       title:'متابعة أوامر الشراء — بلا مبالغ', desc:'ورقة متابعة ميدانية لموظفي الصيانة: الأوامر والبنود المنتظَرة وحالة التسليم — بلا أي أسعار أو إجماليات.',
       noMoney:true,
       fields:[
@@ -14868,16 +14916,45 @@ function renderUserFormPermissions(){
   if(!grid || grid.dataset.built === '1') return;
   const cats = [];
   PERMISSION_DEFS.forEach(d => { if(!cats.includes(d.cat)) cats.push(d.cat); });
-  grid.innerHTML = cats.map(cat => `
+  // صفّ القوالب أوّلاً: المدير الذي يُنشئ موظّف صيانة يضغط قالباً واحداً بدل
+  // مراجعة 26 مربّعاً أكثرها لا يخصّه. القالب يضبط الكلّ ويبقى قابلاً للتعديل.
+  const presets = `
+    <div style="margin:-2px 0 12px;padding:10px;background:var(--surface);border:1px dashed var(--border);border-radius:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:8px">قوالب جاهزة — اضغط ثمّ عدّل ما تشاء</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${ROLE_PRESETS.map(p =>
+          `<button type="button" class="btn btn-ghost btn-sm" data-uf-preset="${escapeAttr(p.key)}"
+                   data-tooltip="${escapeAttr(p.hint)}">${escapeHtml(p.label)}</button>`
+        ).join('')}
+      </div>
+      <div id="uf-preset-hint" style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.6"></div>
+    </div>`;
+  grid.innerHTML = presets + cats.map(cat => `
     <div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:6px">${escapeHtml(cat)}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
         ${PERMISSION_DEFS.filter(d => d.cat === cat).map(d =>
-          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}</label>`
+          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"${d.field?' title="قدرة ميدانية — تخصّ موظفي الصيانة والتشغيل"':''}><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}${d.field?' <span style="font-size:10px;color:var(--accent-2)">◈</span>':''}</label>`
         ).join('')}
       </div>
     </div>`).join('');
+  grid.querySelectorAll('[data-uf-preset]').forEach(b =>
+    b.addEventListener('click', () => applyUserFormPreset(b.dataset.ufPreset)));
   grid.dataset.built = '1';
+}
+
+/* يطبّق قالب دور على مربّعات النموذج. ⚠️ يضبط **كل** المفاتيح لا مفاتيح القالب
+   وحدها: مفاتيح المكتب تُصفَّر عمداً لأن موظّف الميدان لا يملكها على الخادم،
+   فتركُها مُحدَّدة يوهم المدير بقدرة غير قائمة. ولا يحفظ شيئاً — الحفظ بزرّه. */
+function applyUserFormPreset(key){
+  const p = ROLE_PRESETS.find(x => x.key === key);
+  if(!p) return;
+  const on = new Set(p.on);
+  document.querySelectorAll('#uf-perms-grid [data-perm]').forEach(cb => {
+    cb.checked = on.has(cb.dataset.perm);
+  });
+  const hint = document.getElementById('uf-preset-hint');
+  if(hint) hint.textContent = `طُبِّق «${p.label}»: ${p.hint} — راجع المربّعات ثمّ احفظ.`;
 }
 
 // القيمة **الفعّالة** لمفتاح صلاحية — نفس دلالة hasPermission بالضبط:
@@ -18079,13 +18156,14 @@ function poCommentsHtml(po){
   const n = escapeAttr(po.po_number);
   return `<div class="po-drawer-sec"><h4>ملاحظات المتابعة${list.length?` (${list.length})`:''}</h4>
     ${items || '<div style="font-size:12.5px;color:var(--muted)">لا ملاحظات بعد.</div>'}
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+    ${hasPermission('can_comment') ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <input id="po-comment-input" class="input" style="flex:1;min-width:180px"
              placeholder="اكتب ملاحظة متابعة…" maxlength="2000">
       <button class="btn btn-ghost btn-sm" onclick="poAddComment('${n}')">إضافة</button>
-    </div></div>`;
+    </div>` : ''}</div>`;
 }
 async function poAddComment(num){
+  if(!requirePermission('can_comment', 'إضافة ملاحظة متابعة')) return;
   const el = document.getElementById('po-comment-input');
   const txt = (el && el.value || '').trim();
   if(!txt){ toast('warn','فارغة','اكتب نصّ الملاحظة أولاً'); return; }
@@ -19654,6 +19732,8 @@ function init(){
   });
   const btnFollow = document.getElementById('po-followup-btn');
   if(btnFollow) btnFollow.addEventListener('click', ()=>{
+    // بوّابة الزرّ = بوّابة البطاقة في مركز التقارير (perm:'can_print_followup').
+    if(!requirePermission('can_print_followup', 'طباعة تقرير المتابعة')) return;
     // بلا مرشّحات: أوامره كلّها (RLS تحصرها في قطاعه أصلاً)
     try{ buildPOFollowupReport({}); }catch(e){ reportError('poFollowupBtn', e); }
   });
@@ -20740,12 +20820,38 @@ function startApp(){
      أكثر قيمها مبالغُ محجوبة عنه («قيمة المشتريات —»)، فيمرّ على الجوال بسبع
      بطاقات مؤشّرات قبل أن يبلغ أوّل أمر شراء. قائمة أوامره هي عمله. */
   if(isScopedUser()){ STATE.poView = 'list'; try{ navigate(SCOPED_HOME); }catch(e){} }
+  try{ openDeepLink(); }catch(e){ reportError('openDeepLink', e); }
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
   try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
   try{ mobileTableWrap(); }catch(e){}
   try{ mobileViewportCheck(); }catch(e){}   // بلاغ «النظام صغير جداً»: يقيس ويُخبر
   startCloudAutoReconnect();
   try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
+}
+
+/* ── الرابط العميق من البريد: `?pr=<id>` و`?po=<رقم>` ──
+   بلاغ المالك (2026-09-13): بريد الطلب كان يفتح صفحة أخرى («بوابة الطلبات» =
+   `requests.html` القديمة) **ولا يفتح الطلب مباشرةً** بل قائمةً يبحث فيها.
+   النظام لم يكن يقرأ أي معامل رابط إطلاقاً (صفر `location.search`).
+   ⚠️ يُنادى **بعد** `init()` وتسجيل الدخول: البيانات تصل لاحقاً، فـ`prGoView`
+   تعرض «يحمّل…» ثمّ الطلب. والمعامل يُنظَّف من الشريط بـ`replaceState` فلا
+   يُعاد فتح الطلب مع كل إعادة تحميل، ولا يُخزَّن في تاريخ المتصفّح.
+   ⚠️ ولا يُمنَح به أي وصول: الرابط يفتح شاشةً فقط، وRLS هي التي تقرّر ما يُرى —
+   طلبٌ خارج نطاق المستلِم يعرض «الطلب غير موجود» لا محتواه. */
+function openDeepLink(){
+  let q; try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  const pr = (q.get('pr')||'').trim();
+  const po = (q.get('po')||'').trim();
+  if(!pr && !po) return;
+  try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
+  if(pr){
+    navigate('pr');
+    // الشاشة تُرسَم لاتزامنياً (prLoadAll)، فالانتقال للمتابعة بعد أوّل رسم.
+    setTimeout(()=>{ try{ prGoView('track', pr); }catch(e){ reportError('deepLinkPR', e); } }, 120);
+  } else {
+    navigate('purchase-orders');
+    setTimeout(()=>{ try{ openPODrawer(po); }catch(e){ reportError('deepLinkPO', e); } }, 200);
+  }
 }
 
 async function bootstrap(){

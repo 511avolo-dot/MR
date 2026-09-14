@@ -2630,7 +2630,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     ].join('\n\n');
     return new Function(src + `; return {STATE, window, prDaysSince, prSinceText,
       prJourneyHTML, prThreadHTML, prTemplatesHTML,
-      setUser:(u,proc)=>{ STATE.currentUser=u; __proc=!!proc; }};`)();
+      setUser:(u,proc,perms)=>{ STATE.currentUser=u; __proc=!!proc; __perms = perms || {}; }};`)();
   })();
 
   const daysAgo = n => new Date(Date.now() - n*86400000).toISOString();
@@ -2668,16 +2668,25 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   const pr = { id:'PR-9', requester:'field1', messages:[
     {id:1, kind:'question', body:'هل الكمية 10 أم 100؟', author:'proc1', author_name:'أحمد', created_at:'2026-09-01T08:00:00Z'},
     {id:2, kind:'answer',   body:'100', author:'field1', author_name:'سالم', created_at:'2026-09-01T09:00:00Z'}]};
-  R.setUser({username:'proc1', role:'user'}, true);
+  R.setUser({username:'proc1', role:'user'}, true, {can_comment:true});
   const th1 = R.prThreadHTML(pr);
   T('المشتريات ترى صندوق استفهام والحوار كاملاً',
     th1.includes("prPostMessage('PR-9','question')")
     && th1.includes('هل الكمية 10 أم 100؟') && th1.includes('أحمد'));
-  R.setUser({username:'field1', role:'user'}, false);
+  R.setUser({username:'field1', role:'user'}, false, {can_comment:true});
   T('والطالب يرى صندوق الردّ لا الاستفهام',
     R.prThreadHTML(pr).includes("prPostMessage('PR-9','answer')")
     && !R.prThreadHTML(pr).includes("'question')"));
-  R.setUser({username:'other', role:'user'}, false);
+  /* ⚠️ بلاغ المالك (2026-09-13): قدرات الميدان كانت بلا مفاتيح — من كان مُنطَّقاً
+     امتلكها كلّها ولا يملك المدير سحبها. الآن سحب `can_comment` يُخفي **مربّع
+     الكتابة** ويُبقي الحوار مقروءاً: بوّابة الصندوق = بوّابة `prPostMessage`
+     حرفيّاً، فلا يكتب المستخدم ثمّ يُرفَض. */
+  R.setUser({username:'field1', role:'user'}, false, {});
+  const thNo = R.prThreadHTML(pr);
+  T('وسحب «التعليق والردّ» يُخفي مربّع الكتابة ويُبقي الحوار مقروءاً',
+    !thNo.includes('prPostMessage') && !thNo.includes('pr-msg-input')
+    && thNo.includes('هل الكمية 10 أم 100؟'));
+  R.setUser({username:'other', role:'user'}, false, {can_comment:true});
   T('وغريبٌ بلا رسائل لا يرى اللوحة أصلاً',
     R.prThreadHTML({ id:'PR-8', requester:'field1', messages:[] }) === '');
 
@@ -2830,7 +2839,14 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('الدور والصلاحيات والحالة مفروضة خادميّاً لا من العميل',
     /role: 'user', permissions: FIELD_PERMISSIONS, active: true,/.test(SINV)
     && /scope_sectors: \[sector\]/.test(SINV)
-    && /FIELD_PERMISSIONS = \{ can_receive_po: true, can_view_amounts: false \}/.test(SINV));
+    && /can_receive_po: true,/.test(SINV) && /can_view_amounts: false,/.test(SINV));
+  /* ⚠️ المفاتيح الأربعة الجديدة تُكتب **صراحةً**: المُنطَّق افتراضه «المنح صريح
+     أو لا شيء» في الواجهة (`hasPermission`) والخادم (`proc_has_perm`) معاً، فلو
+     غابت هنا وصل المدعوّ إلى حسابٍ لا يرفع فيه طلباً ولا مستنداً ولا يعلّق —
+     يعمل على الورق ومشلولٌ فعليّاً. وهي نفس مجموعة قالب «موظّف ميدانيّ». */
+  T('ورابط الدعوة يكتب مفاتيح الميدان الأربعة صراحةً (وإلّا وصل المدعوّ مشلولاً)',
+    ['can_create_pr','can_upload_docs','can_comment','can_print_followup']
+      .every(k => new RegExp(k + ': true,').test(SINV)));
   /* ⚠️ الحارس الأهمّ بعد التحوّل: الرمز صار **الاعتماد**، فلو قرأ الخادم
      البريد أو القطاع من جسم الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو
      منح نفسه قطاعاً آخر. المسار العامّ لا يقرأ من `body` إلا كلمة المرور والجوال. */
@@ -3153,6 +3169,130 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('والشارة تشترك معه في المصدر نفسه (لا جدولان يتفارقان)',
     S.procStatusBadge({proc_status:'po_issued'}).includes('صدر أمر الشراء')
     && (CODE.match(/const PROC_STAGE_LABEL/g) || []).length === 1);
+}
+
+/* ═══════════ ٣٤) صلاحيات الميدان: قابلة للمنح والسحب فعلاً ═══════════
+   بلاغ المالك (2026-09-13): «لا يوجد إدارة صلاحيات للمستخدمين الخاصين بالصيانة
+   والتشغيل مثل رفع مستند وغيره من الأدوات — لا صلاحيات ممكن إعطاؤها أو سحبها».
+   القياس أكّده: من تسع قدرات، اثنتان فقط لهما مفتاح؛ والباقي محروس بالرؤية/
+   الملكية وهي حراسة **نطاق** لا **صلاحية**. */
+{
+  const FIELD_KEYS = ['can_create_pr','can_upload_docs','can_comment','can_print_followup'];
+
+  T('المفاتيح الأربعة في كتالوج الصلاحيات وموسومة قدرةً ميدانية',
+    FIELD_KEYS.every(k => new RegExp(`key:'${k}'[^}]*field:true`).test(CODE)));
+  /* ⚠️ `userDefault:true` ليس تراخياً بل **حارس عدم الانحدار**: صفوف موظفي
+     المكتب لا تحمل المفاتيح الجديدة، فبـfalse كانوا سيفقدون رفع الطلبات
+     والمستندات والتعليق لحظة النشر. والمُنطَّق لا ينتفع بها (الصرامة تسبقها). */
+  T('وافتراضها true فلا يفقد موظّف المكتب قدرةً يملكها اليوم',
+    FIELD_KEYS.every(k => new RegExp(`key:'${k}'[^}]*userDefault:true`).test(CODE)));
+  T('والمفتاحان القائمان موسومان ميدانيَّين كذلك',
+    /key:'can_receive_po'[^}]*field:true/.test(CODE)
+    && /key:'can_view_amounts'[^}]*field:true/.test(CODE));
+
+  // بوّابة الفعل — كلٌّ بمفتاحه، لا مفتاح واحد يحكم الكلّ
+  T('رفع الطلب محكوم بـcan_create_pr في مسار الحفظ نفسه',
+    /async function prSaveCloud[\s\S]{0,220}hasPermission\('can_create_pr'\)/.test(CODE));
+  T('ورفع المستند بـcan_upload_docs',
+    /async function prUploadDoc[\s\S]{0,200}hasPermission\('can_upload_docs'\)/.test(CODE));
+  T('والتعليق والردّ بـcan_comment في الدالّتين معاً',
+    /async function prPostMessage[\s\S]{0,160}requirePermission\('can_comment'/.test(CODE)
+    && /async function poAddComment[\s\S]{0,160}requirePermission\('can_comment'/.test(CODE));
+  T('والقوالب تتبع رفع الطلبات (قرار المالك: أربعة مفاتيح لا سبعة)',
+    /async function prSaveTemplate[\s\S]{0,160}requirePermission\('can_create_pr'/.test(CODE));
+
+  /* ⚠️ «بوّابة الزرّ = بوّابة الفعل حرفيّاً» — سابقة زرّ الاستلام: بوّابة أضيق
+     من الفعل تُخفي عمل الموظّف، وأوسع منه تجعله يطرق باباً مغلقاً. */
+  T('وبوّابة الزرّ = بوّابة الفعل: تبويبا الرفع يختفيان بلا can_create_pr',
+    /const canCreatePR = hasPermission\('can_create_pr'\)/.test(CODE)
+    && /canCreatePR \? prTab\('create'/.test(CODE)
+    && /canCreatePR \? prTab\('templates'/.test(CODE));
+  T('والوجهة نفسها محروسة فلا تُفتَح بحالة قديمة',
+    /if\(!canCreatePR && \(view==='create' \|\| view==='templates'\)\) view = 'list'/.test(CODE)
+    && /function prGoView[\s\S]{0,240}requirePermission\('can_create_pr'/.test(CODE));
+  T('وتقرير المتابعة: بطاقةُ الكتالوج وزرُّ الشاشة بالمفتاح نفسه',
+    /title:'متابعة أوامر الشراء — بلا مبالغ'/.test(CODE)
+    && /perm:'can_print_followup'/.test(CODE)
+    && /requirePermission\('can_print_followup'/.test(CODE)
+    && /id="po-followup-btn"[\s\S]{0,160}data-requires-perm="can_print_followup"/.test(HTML));
+
+  // قوالب الأدوار — الحلّ الذي اختاره المالك لإدارتها
+  T('ثلاثة قوالب أدوار في النموذج تضبط المجموعة بضغطة',
+    /const ROLE_PRESETS = \[/.test(CODE)
+    && /key:'field'/.test(CODE) && /key:'supervisor'/.test(CODE) && /key:'viewer'/.test(CODE)
+    && /function applyUserFormPreset/.test(CODE)
+    && /data-uf-preset/.test(CODE));
+  /* ⚠️ القالب يضبط **كل** المربّعات لا مفاتيحه وحدها: مفاتيح المكتب تُصفَّر
+     عمداً — تركُها مُحدَّدة يوهم المدير بقدرة لا يملكها الموظّف على الخادم. */
+  T('والقالب يُصفّر ما لا يشمله بدل تركه محدَّداً (لا قدرة موهومة)',
+    /applyUserFormPreset[\s\S]{0,400}cb\.checked = on\.has\(cb\.dataset\.perm\)/.test(CODE));
+  T('و«متابعة فقط» بلا أي قدرة كتابة',
+    /key:'viewer'[\s\S]{0,200}on:\[\]/.test(CODE));
+
+  // سلوكيّ: القالب على مربّعات حقيقية
+  {
+    const boxes = ['can_create_pr','can_upload_docs','can_comment','can_print_followup',
+                   'can_receive_po','can_view_amounts','can_import','can_delete_po']
+      .map(k => ({ dataset:{ perm:k }, checked:true }));
+    const run = new Function('BOXES', `
+      const document = { querySelectorAll:(s)=> s.includes('data-perm') ? BOXES : [],
+                         getElementById:()=>null };
+      ${grabConst('PERMISSION_DEFS')}
+      const PERMISSION_KEYS = PERMISSION_DEFS.map(d => d.key);
+      ${grabConst('ROLE_PRESETS')}
+      ${grab('applyUserFormPreset')}
+      applyUserFormPreset('field');
+      const on = BOXES.filter(b=>b.checked).map(b=>b.dataset.perm).sort();
+      applyUserFormPreset('viewer');
+      const none = BOXES.filter(b=>b.checked).length;
+      return { on, none };
+    `)(boxes);
+    /* المتوقَّع **الخمسة** بالضبط: أربع قدرات الميدان + الاستلام. و`can_view_amounts`
+       غائب (قرار المالك: «كل قدرات الميدان عدا المبالغ»)، ومفاتيح المكتب
+       (`can_import`/`can_delete_po`) مُصفَّرة — وهو جوهر «لا قدرة موهومة». */
+    T('تطبيق «موظّف ميدانيّ» يمنح قدرات الميدان ويُصفّر مفاتيح المكتب والمبالغ',
+      run.on.join(',') === ['can_comment','can_create_pr','can_print_followup',
+                            'can_receive_po','can_upload_docs'].sort().join(','));
+    T('وتطبيق «متابعة فقط» يُصفّر كل شيء',  run.none === 0);
+  }
+}
+
+/* ═══════════ ٣٥) الرابط العميق من البريد يفتح الطلب في النظام الحاليّ ═══════════
+   بلاغ المالك (2026-09-13): «الرابط لبوابة الطلبات وهو النظام الآخر، ولا يفتح
+   على الطلب مباشرة». القياس أكّده: الأزرار الثلاثة كانت `${origin}/requests.html`
+   — صفحة الطلبات القديمة المستقلّة لا شاشة الفريق اليوم — ونصّها «فتح بوابة
+   الطلبات»؛ و`index.html` **لا يقرأ أي معامل رابط إطلاقاً**. */
+{
+  /* ⚠️ التعليقات تُجرَّد قبل الفحص: شرحُ العلّة يذكر العبارة القديمة («فتح بوابة
+     الطلبات») واسم ملفّ نظام 3 — فاختبارٌ على النصّ الخام يقيس تعليقي لا كودي
+     ويفشل بينما الكود سليم. (سابقة `CODE` أعلاه، والقاعدة واحدة.) */
+  const SH = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  T('لم يبقَ في بريد الطلبات أي رابط إلى الصفحة القديمة',
+    !/\$\{origin\}\/requests\.html/.test(SH));
+  T('والرابط صار عميقاً على الطلب نفسه عبر مُساعد واحد',
+    /export function requestUrl\(origin, prId\)/.test(SH)
+    && /\$\{origin\}\/\?pr=\$\{encodeURIComponent\(prId\)\}/.test(SH)
+    && (SH.match(/requestUrl\(origin, pr\.id\)/g) || []).length === 3);
+  T('ونصّ الزرّ لم يعُد يقول «بوابة» فيقرأه المستلِم نظاماً آخر',
+    !/فتح بوابة الطلبات/.test(SH) && /فتح الطلب في النظام/.test(SH));
+  /* ⚠️ عزل نظام 3 محفوظ: بوابة الموافقات لها روابطها في `_portal-shared.js`
+     ولا تتأثّر بهذا المُساعد إطلاقاً. */
+  T('ولا مساس ببوابة نظام 3 المعزولة',
+    !/purchase-portal/.test(SH) && !/portal_/.test(SH));
+
+  T('والنظام يقرأ المعامل عند الإقلاع (لم يكن يقرأ شيئاً)',
+    /function openDeepLink\(\)/.test(CODE)
+    && /new URLSearchParams\(location\.search\)/.test(CODE)
+    && /openDeepLink\(\)/.test(CODE.replace(/function openDeepLink\(\)/, '')));
+  T('ويفتح متابعة الطلب لا القائمة',
+    /function openDeepLink[\s\S]{0,700}prGoView\('track', pr\)/.test(CODE));
+  /* ⚠️ يُنظَّف المعامل من الشريط: وإلّا أُعيد فتح الطلب مع كل إعادة تحميل،
+     وبقي معرّفه في تاريخ المتصفّح وفي أي لقطة شاشة للشريط. */
+  T('ويُنظَّف المعامل فلا يُعاد فتحه مع كل تحميل',
+    /function openDeepLink[\s\S]{0,500}history\.replaceState\(null, '', location\.pathname/.test(CODE));
+  T('ولا يمنح وصولاً: RLS تبقى الحكم (شاشة فقط)',
+    /function openDeepLink[\s\S]{0,900}navigate\('pr'\)/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

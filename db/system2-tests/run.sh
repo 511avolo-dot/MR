@@ -18,7 +18,8 @@ for f in db/system2-tests/00_stub.sql db/system2-staff-scope.sql db/system2-test
          db/system2-request-numbering.sql db/system2-tests/14_numbering.sql \
          db/system2-scoped-least-privilege.sql db/system2-tests/15_least_privilege.sql \
          db/system2-notifications-hardening.sql db/system2-tests/16_notifications.sql \
-         db/system2-scoped-table-lockdown.sql db/system2-tests/17_scoped_lockdown.sql; do
+         db/system2-scoped-table-lockdown.sql db/system2-tests/17_scoped_lockdown.sql \
+         db/system2-field-permissions.sql db/system2-tests/18_field_permissions.sql; do
   printf '  %-42s' "$(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/s2t.err \
     && echo "ok" \
@@ -34,6 +35,7 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-notifications-hardening.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-request-numbering.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-scoped-table-lockdown.sql >/dev/null 2>&1 \
+  && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-field-permissions.sql >/dev/null 2>&1 \
   && echo "ok" || { echo "FAILED"; exit 1; }
 
 psql -q -d postgres -c "DROP DATABASE IF EXISTS $DB;" >/dev/null

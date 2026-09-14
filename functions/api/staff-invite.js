@@ -36,7 +36,22 @@ const MAX_DAYS = 60;
 /* صلاحيات الموظّف الميدانيّ — **ثابتة هنا لا تأتي من العميل**. المبالغ محجوبة
    افتراضاً بقرار المالك، والاستلام ممنوح لأنّه جوهر عمله. أي توسعة يمنحها
    المالك بنفسه من لوحة المستخدمين. */
-const FIELD_PERMISSIONS = { can_receive_po: true, can_view_amounts: false };
+/* صلاحيات الموظّف الميدانيّ المفروضة خادميّاً (قرار المالك 2026-09-13:
+   «كل قدرات الميدان ممنوحة عدا المبالغ»، والمدير يسحب ما لا يريده من اللوحة).
+   ⚠️ المفاتيح الأربعة الجديدة **تُكتب صراحةً ولا تُترك للافتراضيّ**: المُنطَّق
+   افتراضه «المنح صريح أو لا شيء» في `hasPermission` و`proc_has_perm` معاً، فلو
+   غابت هنا وصل المدعوّ إلى نظامٍ لا يرفع فيه طلباً ولا مستنداً ولا يعلّق —
+   حسابٌ يعمل على الورق ومشلولٌ فعليّاً. (هذا نفس سبب كتابة `can_view_amounts:false`
+   صراحةً بدل الاتّكال على افتراضٍ.)
+   ونظيرتها في الواجهة: قالب «👷 موظّف ميدانيّ» في `ROLE_PRESETS` — نفس المجموعة. */
+const FIELD_PERMISSIONS = {
+  can_create_pr: true,
+  can_upload_docs: true,
+  can_comment: true,
+  can_print_followup: true,
+  can_receive_po: true,
+  can_view_amounts: false,
+};
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
