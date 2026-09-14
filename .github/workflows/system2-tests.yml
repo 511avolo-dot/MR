@@ -32,6 +32,7 @@ on:
       - 'staff-register.html'
       - 'scripts/purchase-request-workspace-tests.mjs'
       - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'scripts/e2e/purchase-request-admin.test.mjs'
       - 'package.json'
       - '.github/workflows/system2-tests.yml'
   pull_request:
@@ -60,6 +61,7 @@ on:
       - 'staff-register.html'
       - 'scripts/purchase-request-workspace-tests.mjs'
       - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'scripts/e2e/purchase-request-admin.test.mjs'
       - 'package.json'
       - '.github/workflows/system2-tests.yml'
   workflow_dispatch:

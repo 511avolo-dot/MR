@@ -1,6 +1,10 @@
 \set ON_ERROR_STOP on
 
 -- Launch workspace: profiles, two gates, atomic creation, and many-to-many PO links.
+-- Test fixtures are trusted provisioning data. The production guard intentionally
+-- rejects these account/configuration writes for ordinary authenticated users.
+SELECT set_config('request.jwt.claims','{"role":"service_role"}',false);
+
 INSERT INTO proc_users(username,display_name,email,role,permissions,active,department_id)
 VALUES
  ('requester1','طالب الصيانة','requester1@aldeyabi.com','user','{}',true,'DEP-MAINT'),
@@ -27,6 +31,8 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value;
 INSERT INTO proc_purchase_orders(po_number,project,supplier,status,total)
 VALUES('PO-TEST-1','مشروع المقر الرئيسي','مورد الاختبار','صادر',1500)
 ON CONFLICT(po_number) DO NOTHING;
+
+SELECT set_config('request.jwt.claims','{}',false);
 
 DO $test$
 DECLARE r jsonb; v_id text; v_item bigint; v_draft text;
@@ -119,6 +125,7 @@ BEGIN
   END;
 
   -- A delegate must be active and carry the permission required by the gate.
+  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
   UPDATE proc_users SET is_away=true,delegate_to='requester2' WHERE username='maintmgr';
   PERFORM set_config('request.jwt.claims','{"email":"requester1@aldeyabi.com","role":"authenticated"}',true);
   r := pr_save_request(
@@ -133,6 +140,7 @@ BEGIN
     IF SQLERRM='WS27 unqualified delegate approved' THEN RAISE; END IF;
     IF SQLERRM<>'هذه المرحلة ليست مسندة إليك' THEN RAISE EXCEPTION 'WS27 unexpected denial: %',SQLERRM; END IF;
   END;
+  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
   UPDATE proc_users SET is_away=false,delegate_to=NULL WHERE username='maintmgr';
 
   -- Separation of duties applies even when the requester owns the approval profile.
