@@ -1259,22 +1259,24 @@ function usersHTML(){
   const profileOpt=(sel)=>PROFILE_DEFS.filter(p=>p.profile_key!=='module_admin'||mayGrantModuleAdmin||sel==='module_admin').map(p=>`<option value="${esc(p.profile_key)}" ${sel===p.profile_key?'selected':''} ${p.profile_key==='module_admin'&&!mayGrantModuleAdmin?'disabled':''}>${esc(p.name_ar)}</option>`).join('');
   const deptOpt=(sel)=>['<option value="">— اختر الإدارة —</option>'].concat(DEPTS.map(d=>`<option value="${esc(d.id)}" ${sel===d.id?'selected':''}>${esc(d.name_ar||d.id)}</option>`)).join('');
   const card=(u)=>{
+    const targetLocked=(u.role==='admin'&&ME.role!=='admin')||(u.pr_profile_key==='module_admin'&&!mayGrantModuleAdmin);
+    const disabled=targetLocked?' disabled':'';
     const base=(PROFILE_DEFS.find(p=>p.profile_key===(u.pr_profile_key||'requester'))||{}).permissions||{};
     const over=u.pr_permission_overrides||{};
-    const groups=[...new Set(PERM_DEFS.map(p=>p.g))].map(g=>`<div class="perm-group"><b>${esc(g)}</b>${PERM_DEFS.filter(p=>p.g===g).map(p=>{const effective=p.k in over?over[p.k]:base[p.k]===true,locked=u.role==='admin'||(p.k==='pr_manage_users'&&!mayGrantModuleAdmin);return `<label class="pchk"><input type="checkbox" ${u.role==='admin'||effective?'checked':''} ${locked?'disabled':''} onchange="userModulePerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`;}).join('')}</div>`).join('');
+    const groups=[...new Set(PERM_DEFS.map(p=>p.g))].map(g=>`<div class="perm-group"><b>${esc(g)}</b>${PERM_DEFS.filter(p=>p.g===g).map(p=>{const effective=p.k in over?over[p.k]:base[p.k]===true,locked=targetLocked||u.role==='admin'||(p.k==='pr_manage_users'&&!mayGrantModuleAdmin);return `<label class="pchk"><input type="checkbox" ${u.role==='admin'||effective?'checked':''} ${locked?'disabled':''} onchange="userModulePerm('${esc(u.username)}','${p.k}',this.checked)"> ${esc(p.l)}</label>`;}).join('')}</div>`).join('');
     const pending=u.active===false;
     return `<div class="card"${pending?' style="border-color:var(--gold)"':''}>
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
         <div><b>${esc(u.display_name||u.username)}</b> <span class="muted" dir="ltr">@${esc(u.username)}</span> ${u.role==='admin'?'<span class="badge ok">مدير النظام</span>':''} ${pending?'<span class="badge warn">معطّل</span>':''} ${u.is_away?'<span class="badge warn">في إجازة</span>':''}</div>
-        <div class="row-act">${pending?`<button class="btn btn-primary btn-sm" onclick="userActive('${esc(u.username)}',true)">${ic('check',14)} تفعيل</button>`:`<button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',false)">تعطيل</button>`}</div>
+        <div class="row-act">${targetLocked?'<span class="badge neutral">صلاحية أعلى</span>':u.username===ME.username?'<span class="badge neutral">حسابك الحالي</span>':pending?`<button class="btn btn-primary btn-sm" onclick="userActive('${esc(u.username)}',true)">${ic('check',14)} تفعيل</button>`:`<button class="btn btn-ghost btn-sm" onclick="userActive('${esc(u.username)}',false)">تعطيل</button>`}</div>
       </div>
       <div class="grid" style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
-        <div><label>ملف الصلاحيات</label><select class="select" onchange="userProfile('${esc(u.username)}',this.value)">${profileOpt(u.pr_profile_key||'requester')}</select></div>
-        <div><label>الإدارة الأساسية</label><select class="select" onchange="userDepartment('${esc(u.username)}',this.value)">${deptOpt(u.department_id)}</select></div>
-        <div><label>البريد الإلكتروني</label><input class="input" dir="ltr" value="${esc(u.email||'')}" placeholder="name@aldeyabi.com" onchange="userSetEmail('${esc(u.username)}',this.value)"></div>
-        <div><label>المفوَّض عند الغياب</label><select class="select" onchange="userDeleg('${esc(u.username)}',this.value)">${delegOpt(u.delegate_to,u.username)}</select></div>
-        <div><label>المسمى الوظيفي</label><input class="input" value="${esc(u.job_title||'')}" onchange="userJobTitle('${esc(u.username)}',this.value)"></div>
-        <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل القرارات للمفوَّض)</label></div>
+        <div><label>ملف الصلاحيات</label><select class="select"${disabled} onchange="userProfile('${esc(u.username)}',this.value)">${profileOpt(u.pr_profile_key||'requester')}</select></div>
+        <div><label>الإدارة الأساسية</label><select class="select"${disabled} onchange="userDepartment('${esc(u.username)}',this.value)">${deptOpt(u.department_id)}</select></div>
+        <div><label>البريد الإلكتروني</label><input class="input" dir="ltr" value="${esc(u.email||'')}" readonly></div>
+        <div><label>المفوَّض عند الغياب</label><select class="select"${disabled} onchange="userDeleg('${esc(u.username)}',this.value)">${delegOpt(u.delegate_to,u.username)}</select></div>
+        <div><label>المسمى الوظيفي</label><input class="input"${disabled} value="${esc(u.job_title||'')}" onchange="userJobTitle('${esc(u.username)}',this.value)"></div>
+        <div style="display:flex;align-items:flex-end"><label class="pchk"><input type="checkbox" ${u.is_away?'checked':''}${disabled} onchange="userAway('${esc(u.username)}',this.checked)"> في إجازة (تحويل القرارات للمفوَّض)</label></div>
       </div>
       <details class="permission-details"><summary>الصلاحيات التفصيلية والتجاوزات</summary><div class="permission-matrix">${groups}</div><p class="muted">تغيير أي مفتاح ينشئ تجاوزاً خاصاً لهذا المستخدم فوق ملف الصلاحيات.</p></details>
     </div>`;
@@ -1282,7 +1284,7 @@ function usersHTML(){
   const pending=USERS.filter(u=>u.active===false), activeU=USERS.filter(u=>u.active!==false);
   let html='';
   if(pending.length){
-    html+=`<div class="card" style="border-color:var(--gold);background:rgba(184,146,61,.06)"><div class="sec-title">${ic('clock',16)} بانتظار التفعيل (${pending.length})</div><div class="muted" style="font-size:12.5px">حسابات سجّلت ذاتياً عبر رابط الدعوة. راجعها، امنح صلاحيات الاعتماد للمطلوب منها، ثم اضغط «تفعيل».</div></div>`;
+    html+=`<div class="card" style="border-color:var(--gold);background:rgba(184,146,61,.06)"><div class="sec-title">${ic('clock',16)} حسابات معطّلة (${pending.length})</div><div class="muted" style="font-size:12.5px">راجع سبب التعطيل وملف الصلاحيات والإدارة قبل إعادة تفعيل أي حساب.</div></div>`;
     html+=pending.map(card).join('');
   }
   html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 10px"><div><span class="eyebrow">حوكمة الوصول</span><div class="sec-title" style="margin:0">مستخدمو موديل طلبات الشراء (${activeU.length})</div></div><button class="btn btn-primary btn-sm" onclick="userAddForm()">${ic('mail',15)} دعوة مستخدم</button></div>

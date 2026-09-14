@@ -498,6 +498,19 @@ $fn$;
 
 -- Same state machine for signed one-time email actions. The API calls this with
 -- service_role; the intended approver and permission are revalidated here.
+CREATE TABLE IF NOT EXISTS proc_email_tokens (
+  token text PRIMARY KEY,
+  pr_id text NOT NULL REFERENCES proc_purchase_requests(id) ON DELETE CASCADE,
+  seq integer NOT NULL,
+  approver text NOT NULL,
+  used boolean NOT NULL DEFAULT false,
+  used_at timestamptz,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_prtok_pr ON proc_email_tokens(pr_id);
+ALTER TABLE proc_email_tokens ENABLE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION pr_transition_email(p_token text, p_action text, p_comment text DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
@@ -722,6 +735,7 @@ REVOKE INSERT, UPDATE, DELETE ON proc_purchase_requests, proc_pr_items, proc_pr_
   proc_pr_permission_profiles FROM authenticated, anon;
 REVOKE INSERT, UPDATE, DELETE ON proc_departments, proc_approval_rules FROM anon;
 REVOKE DELETE ON proc_departments, proc_approval_rules FROM authenticated;
+REVOKE ALL ON proc_email_tokens FROM anon, authenticated;
 GRANT SELECT ON proc_purchase_requests, proc_pr_items, proc_pr_approvals, proc_pr_attachments, proc_pr_messages, proc_pr_audit,
   proc_pr_versions, proc_pr_po_links, proc_pr_item_allocations, proc_pr_permission_profiles TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON proc_departments, proc_approval_rules TO authenticated;

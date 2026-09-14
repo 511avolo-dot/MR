@@ -242,6 +242,9 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setActive') {
     const { username, active } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
+    if (String(username).toLowerCase() === String(callerUsername).toLowerCase() && active === false) {
+      return json({ error: 'لا يمكنك تعطيل حسابك الحالي' }, 400);
+    }
     if (!(await mayMutateTarget(username))) return json({ error: 'لا يمكنك تعديل حساب أعلى من صلاحيتك' }, 403);
     const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (u) {
@@ -291,7 +294,17 @@ export async function onRequestPost({ request, env }) {
       patch.pr_department_ids = payload.pr_department_ids.map(String).filter(Boolean).slice(0, 50);
     }
     if ('job_title' in payload) patch.job_title = String(payload.job_title || '').trim().slice(0, 80) || null;
-    if ('delegate_to' in payload) patch.delegate_to = payload.delegate_to ? String(payload.delegate_to) : null;
+    if ('delegate_to' in payload) {
+      const delegate = payload.delegate_to ? String(payload.delegate_to).trim() : '';
+      if (delegate && delegate.toLowerCase() === String(username).toLowerCase()) {
+        return json({ error: 'لا يمكن تفويض المستخدم إلى نفسه' }, 400);
+      }
+      if (delegate) {
+        const delegateProfile = await api.getProfile(delegate);
+        if (!delegateProfile || delegateProfile.active === false) return json({ error: 'المفوَّض غير موجود أو غير نشط' }, 400);
+        patch.delegate_to = delegateProfile.username;
+      } else patch.delegate_to = null;
+    }
     if ('is_away' in payload) patch.is_away = !!payload.is_away;
     if ('email' in payload) {
       const e = String(payload.email || '').trim().toLowerCase();

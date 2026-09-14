@@ -38,6 +38,7 @@ test('reference sources fail independently', /Promise\.allSettled/.test(html) &&
 
 test('migration defines five permission profiles', ['requester','maintenance_manager','procurement_officer','procurement_manager','module_admin'].every((x) => sql.includes(`('${x}'`)));
 test('migration defines the two required approval gates', /'maintenance_need'/.test(sql) && /'procurement_pricing'/.test(sql));
+test('email decision token storage is ensured and hidden from browsers', /CREATE TABLE IF NOT EXISTS proc_email_tokens/.test(sql) && /REVOKE ALL ON proc_email_tokens FROM anon, authenticated/.test(sql));
 test('server generates request numbers inside atomic save', /v_id := pr_next_number\(\)/.test(sql));
 test('canonical project validation fails closed without a registry', /WHEN NOT EXISTS \(SELECT 1 FROM registry\) THEN false/.test(sql) && /jsonb_array_length[\s\S]*THEN false/.test(sql));
 test('server derives department sector and requester identity', /SELECT d\.name_ar,d\.sector INTO v_department,v_sector/.test(sql) && /SELECT coalesce\(nullif\(btrim\(u\.display_name\)/.test(sql));
@@ -60,6 +61,8 @@ test('invite profile is validated by a server allowlist', /INVITE_PROFILES\.has\
 test('admin API allowlists module permission keys', /MODULE_PERMISSIONS/.test(usersApi) && /cleanPermissionObject/.test(usersApi));
 test('module administration never promotes an invited user to system admin', /role: 'user', permissions: \{\}/.test(invite) && /mayGrantModuleAdmin/.test(invite));
 test('user management enforces caller and target privilege hierarchy', /callerIsSystemAdmin/.test(usersApi) && /mayMutateTarget/.test(usersApi));
+test('user management prevents self-disable and invalid delegation', /لا يمكنك تعطيل حسابك الحالي/.test(usersApi) && /لا يمكن تفويض المستخدم إلى نفسه/.test(usersApi) && /المفوَّض غير موجود أو غير نشط/.test(usersApi));
+test('user cards lock accounts above the caller hierarchy', /const targetLocked=/.test(html) && /صلاحية أعلى/.test(html));
 test('user creation validates privilege before creating an Auth account', usersApi.indexOf("if (role === 'admin'") < usersApi.indexOf('const r = await api.createAuthUser'));
 test('document API compensates failed database registration', /await registerAttachment/.test(docsApi) && /await bucket\.delete\(key\)/.test(docsApi));
 test('document download requires an authoritative database reference', /attachmentIsRegistered/.test(docsApi) && /المرفق غير مسجّل على الطلب/.test(docsApi));
