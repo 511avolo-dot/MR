@@ -1,12 +1,20 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { resolveChromiumExecutable } from './chromium-path.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const playwrightPath = 'C:/Users/mo_al/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
-const { chromium } = await import(pathToFileURL(playwrightPath).href);
+let chromium;
+try{
+  ({chromium}=await import('playwright'));
+}catch(primaryError){
+  if(!fs.existsSync(playwrightPath)) throw primaryError;
+  ({chromium}=await import(pathToFileURL(playwrightPath).href));
+}
 const outDir = path.join(os.tmpdir(), 'aldeyabi-purchase-workspace-visual-qa');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -60,37 +68,72 @@ const init = ({ fixtures, profiles }) => {
     from:(t)=>new Query(t),
     rpc:async(name)=>name==='pr_effective_permissions'?{data:profiles.find(x=>x.profile_key==='module_admin').permissions,error:null}:{data:{ok:true},error:null}
   };
+  window.__visualClient=client;
   window.supabase={createClient:()=>client};
 };
 
-const browser = await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.mjs':'application/javascript; charset=utf-8','.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
+const server=http.createServer((req,res)=>{
+  const rel=decodeURIComponent(new URL(req.url,'http://localhost').pathname).replace(/^\/+/, '')||'index.html';
+  const file=path.resolve(ROOT,rel);
+  if(!file.startsWith(ROOT+path.sep)){res.writeHead(403);res.end('forbidden');return;}
+  fs.readFile(file,(error,data)=>{
+    if(error){res.writeHead(404);res.end('not found');return;}
+    res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});
+    res.end(data);
+  });
+});
+await new Promise((resolve,reject)=>server.listen(0,'127.0.0.1',resolve).once('error',reject));
+const origin=`http://127.0.0.1:${server.address().port}`;
+
+const executablePath=resolveChromiumExecutable();
+const browser = await chromium.launch(executablePath?{headless:true,executablePath}:{headless:true});
 try {
   const page = await browser.newPage({viewport:{width:1440,height:1000},deviceScaleFactor:1});
   const errors=[];page.on('pageerror',(e)=>errors.push(e.message));
   await page.addInitScript(init,{fixtures,profiles});
-  await page.goto(pathToFileURL(path.join(ROOT,'requests.html')).href,{waitUntil:'domcontentloaded'});
-  await page.waitForSelector('.workbench');
+  await page.goto(`${origin}/index.html`,{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>typeof window.renderPRPortal==='function');
+  await page.evaluate(async ({fixtures})=>{
+    STATE.currentUser={username:'qa.admin',displayName:'مدير المشتريات',role:'admin',permissions:{},prProfileKey:'module_admin'};
+    STATE.purchaseOrders=fixtures.proc_purchase_orders;
+    CLOUD.enabled=true; CLOUD.client=window.__visualClient;
+    try{ hideLoginScreen(); }catch(_){}
+    try{ navigate('pr'); }catch(_){}
+    __prLoaded=false; STATE.prView='list';
+    await renderPRPortal();
+  },{fixtures});
+  await page.waitForSelector('.pr-command');
   assert.equal(errors.length,0,errors.join('\n'));
-  const desktop = await page.locator('.workbench').boundingBox();
-  assert.ok(desktop.width>1200 && desktop.height>600,'desktop workspace does not use available space');
-  assert.equal(await page.locator('.queue-card').count(),2);
-  assert.match(await page.locator('.request-pane').innerText(),/إذن بدء التسعير/);
-  await page.getByRole('button',{name:/المستندات/}).click();
-  assert.match(await page.locator('.request-pane').innerText(),/المخطط الفني/);
-  await page.getByRole('button',{name:/أوامر الشراء/}).click();
-  assert.match(await page.locator('.request-pane').innerText(),/علاقة متعدد إلى متعدد/);
+  const desktop = await page.locator('#page-pr').boundingBox();
+  assert.ok(desktop.width>800 && desktop.height>450,`integrated workspace is unexpectedly small: ${JSON.stringify(desktop)}`);
+  assert.deepEqual(await page.locator('.pr-command-value').allTextContents(),['2','1','1','1']);
+  assert.equal(await page.locator('.pr-table tbody tr').count(),2);
+  await page.locator('.pr-table tbody tr',{hasText:'PR-DG2026-0148'}).click();
+  assert.match(await page.locator('#pr-root').innerText(),/إذن بدء التسعير/);
+  assert.match(await page.locator('#pr-root').innerText(),/المخطط الفني/);
+  await page.getByRole('button',{name:/رجوع للقائمة/}).click();
+  await page.locator('.pr-table tbody tr',{hasText:'PR-DG2026-0147'}).click();
+  assert.match(await page.locator('#pr-root').innerText(),/أوامر الشراء والتوزيع على البنود/);
+  assert.match(await page.locator('#pr-root').innerText(),/PO-2026-0142/);
   await page.screenshot({path:path.join(outDir,'purchase-workspace-desktop.png'),fullPage:true});
 
   await page.setViewportSize({width:390,height:844});
-  await page.getByRole('button',{name:/الملخص والبنود/}).click();
+  await page.evaluate(()=>{ navDrawer(false); prGoView('list'); });
+  await page.waitForSelector('.pr-command');
+  await page.locator('#sidebar').waitFor({state:'hidden'});
+  const drawer=await page.locator('#sidebar').evaluate(el=>({className:el.className,transform:getComputedStyle(el).transform,visibility:getComputedStyle(el).visibility}));
+  assert.ok(!drawer.className.includes('open') && drawer.visibility==='hidden',`mobile drawer stayed open: ${JSON.stringify(drawer)}`);
   const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   assert.ok(overflow<=1,`mobile horizontal overflow: ${overflow}px`);
-  assert.ok((await page.locator('.queue-pane').boundingBox()).height<=400,'mobile queue should stay compact');
+  assert.equal(await page.locator('.pr-command-metric').count(),4);
+  assert.equal(await page.locator('.pr-command-metrics').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2);
   await page.screenshot({path:path.join(outDir,'purchase-workspace-mobile.png'),fullPage:true});
-  console.log('✓ desktop workspace layout');
-  console.log('✓ request document and PO relation tabs');
+  console.log('✓ integrated desktop workspace and command metrics');
+  console.log('✓ approval, document and purchase-order relations');
   console.log('✓ mobile layout has no page overflow');
   console.log(`✓ screenshots: ${outDir}`);
 } finally {
   await browser.close();
+  await new Promise(resolve=>server.close(resolve));
 }

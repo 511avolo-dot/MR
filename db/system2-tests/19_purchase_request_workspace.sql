@@ -5,6 +5,36 @@
 -- rejects these account/configuration writes for ordinary authenticated users.
 SELECT set_config('request.jwt.claims','{"role":"service_role"}',false);
 
+DO $upgrade_regression$
+BEGIN
+  IF coalesce((SELECT (pr_permission_overrides->>'pr_view_financials')::boolean
+               FROM proc_users WHERE username='ws_legacy_office'),false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'WS30 existing unscoped office amount visibility was not preserved';
+  END IF;
+  IF coalesce((SELECT (pr_permission_overrides->>'pr_view_financials')::boolean
+               FROM proc_users WHERE username='ws_legacy_scoped'),false) IS TRUE THEN
+    RAISE EXCEPTION 'WS31 scoped account received amount visibility';
+  END IF;
+  IF (SELECT count(*) FROM pg_policies WHERE schemaname='public'
+      AND tablename IN ('proc_pr_attachments','proc_pr_audit')
+      AND policyname='no_scoped_access' AND permissive='RESTRICTIVE')<>2 THEN
+    RAISE EXCEPTION 'WS32 restrictive lockdown policies were removed';
+  END IF;
+
+  PERFORM set_config('request.jwt.claims','{"email":"ws_legacy_office@aldeyabi.com","role":"authenticated"}',true);
+  IF NOT proc_can_view_amounts() THEN RAISE EXCEPTION 'WS33 office amount behavior regressed'; END IF;
+  IF NOT pr_has_perm('can_create_pr') OR NOT pr_has_perm('can_comment') THEN
+    RAISE EXCEPTION 'WS34 compatibility permission mapping failed';
+  END IF;
+  PERFORM set_config('request.jwt.claims','{"email":"ws_legacy_scoped@aldeyabi.com","role":"authenticated"}',true);
+  IF proc_can_view_amounts() THEN RAISE EXCEPTION 'WS35 scoped amount behavior regressed'; END IF;
+  IF pr_has_perm('can_create_pr') OR pr_has_perm('can_upload_docs') OR pr_has_perm('can_comment') THEN
+    RAISE EXCEPTION 'WS35 scoped opt-in behavior regressed';
+  END IF;
+  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+END
+$upgrade_regression$;
+
 INSERT INTO proc_users(username,display_name,email,role,permissions,active,department_id)
 VALUES
  ('requester1','طالب الصيانة','requester1@aldeyabi.com','user','{}',true,'DEP-MAINT'),
@@ -53,9 +83,13 @@ BEGIN
                 AND requester_name='طالب الصيانة') THEN
     RAISE EXCEPTION 'WS25 authoritative organization or requester identity failed';
   END IF;
+  IF NOT proc_can_see_pr(v_id) THEN RAISE EXCEPTION 'WS36 requester cannot see own request'; END IF;
+  PERFORM set_config('request.jwt.claims','{"email":"requester2@aldeyabi.com","role":"authenticated"}',true);
+  IF proc_can_see_pr(v_id) THEN RAISE EXCEPTION 'WS37 unrelated requester can see another request'; END IF;
 
   -- maintenance manager gate.
   PERFORM set_config('request.jwt.claims','{"email":"maintmgr@aldeyabi.com","role":"authenticated"}',true);
+  IF NOT proc_can_see_pr(v_id) THEN RAISE EXCEPTION 'WS38 assigned manager cannot see request'; END IF;
   r := pr_decide(v_id,'approve','الحاجة مؤكدة حسب خطة الصيانة');
   IF r->>'workflow_state'<>'procurement_review' THEN RAISE EXCEPTION 'WS5 maintenance decision'; END IF;
 
@@ -156,6 +190,15 @@ BEGIN
     IF SQLERRM='WS28 requester self-approval accepted' THEN RAISE; END IF;
     IF SQLERRM<>'لا يجوز لمقدم الطلب اعتماد طلبه' THEN RAISE EXCEPTION 'WS28 unexpected denial: %',SQLERRM; END IF;
   END;
+
+  -- The historical RFQ award-approval panel remains usable through guarded RPCs.
+  PERFORM set_config('request.jwt.claims','{"email":"buyer1@aldeyabi.com","role":"authenticated"}',true);
+  r := pr_submit_award_request('ترسية اختبار','مورد الاختبار',100,'{}'::jsonb,1);
+  v_id := r->>'id';
+  IF v_id NOT LIKE 'apr_%' THEN RAISE EXCEPTION 'WS39 award request id'; END IF;
+  PERFORM set_config('request.jwt.claims','{"email":"procmgr@aldeyabi.com","role":"authenticated"}',true);
+  r := pr_decide_award_request(v_id,true,'موافق');
+  IF r->>'status'<>'approved' THEN RAISE EXCEPTION 'WS40 award decision compatibility'; END IF;
 END $test$;
 
 DO $grants$

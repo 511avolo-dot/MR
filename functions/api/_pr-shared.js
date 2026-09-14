@@ -53,6 +53,20 @@ export function publicOrigin(env, fallbackOrigin) {
   return /^https?:\/\//i.test(o) ? o : (fallbackOrigin || '');
 }
 
+/* رابط الطلب داخل النظام الحاليّ — **رابط عميق يفتح الطلب نفسه**.
+   ⚠️ بلاغ المالك (2026-09-13): كانت الأزرار الثلاثة تشير إلى `/requests.html`
+   وهي **صفحة الطلبات القديمة المستقلّة** لا الشاشة التي يعمل عليها الفريق اليوم
+   (`index.html` ← تبويب الطلبات)، وزرّها كان مكتوباً «فتح بوابة الطلبات»
+   فيقرؤه المستلِم نظاماً آخر — وهو محقّ: واجهة مختلفة، ولا تفتح الطلب بعينه
+   بل قائمةً يبحث فيها. الآن: جذر النظام + `?pr=<id>` يفتح متابعة ذلك الطلب مباشرةً
+   (`index.html` يقرأ المعامل عند الإقلاع).
+   ⚠️ ولا علاقة لهذا ببوابة نظام 3 (`purchase-portal.html`) — تلك روابطها في
+   `_portal-shared.js` المعزول. */
+export function requestUrl(origin, prId) {
+  if (!origin) return '';
+  return prId ? `${origin}/?pr=${encodeURIComponent(prId)}` : `${origin}/`;
+}
+
 // نسخة نصّية (text/plain) من قالب HTML — لإرسال multipart/alternative.
 // غياب النسخة النصّية إشارة سبام معروفة (MIME_HTML_ONLY)؛ وجودها يرفع الوصول للوارد.
 export function htmlToText(html) {
@@ -272,7 +286,7 @@ function prMetaBox(pr) {
 // بريد «بانتظار اعتمادك» مع أزرار اتخاذ القرار من داخل البريد (لكل معتمِد رمزه الخاص).
 export function buildActionEmail(pr, origin, actionBase, stageLabel) {
   const B = BRAND; const title = pr.title || 'طلب شراء';
-  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const portalUrl = requestUrl(origin, pr.id);
   const approveUrl = `${actionBase}&do=approve`;
   const returnUrl = `${actionBase}&do=return`;
   const rejectUrl = `${actionBase}&do=reject`;
@@ -286,7 +300,7 @@ export function buildActionEmail(pr, origin, actionBase, stageLabel) {
       <td width="2%"></td>
       <td width="49%" align="center" bgcolor="#dc2626" style="background:#dc2626;border-radius:12px"><a href="${esc(rejectUrl)}" style="display:block;padding:12px 14px;color:#fff;text-decoration:none;font-weight:700;font-size:14px">✕ رفض</a></td>
     </tr></table>` : '';
-  const portalBtn = portalUrl ? `<p style="text-align:center;margin:12px 0 0"><a href="${esc(portalUrl)}" style="color:${B.navy};font-size:13px;font-weight:700;text-decoration:underline">فتح البوابة لمراجعة كامل التفاصيل</a></p>` : '';
+  const portalBtn = portalUrl ? `<p style="text-align:center;margin:12px 0 0"><a href="${esc(portalUrl)}" style="color:${B.navy};font-size:13px;font-weight:700;text-decoration:underline">فتح الطلب في النظام لمراجعة كامل التفاصيل</a></p>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc(LINES(title).pending)}</p>
     ${stageNote}
@@ -301,9 +315,9 @@ export function buildActionEmail(pr, origin, actionBase, stageLabel) {
 // بريد نتيجة (للطالب): approved | rejected | returned | submitted.
 export function buildResultEmail(event, pr, origin, comment) {
   const B = BRAND; const title = pr.title || 'طلب شراء';
-  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const portalUrl = requestUrl(origin, pr.id);
   const cmt = comment ? `<div dir="rtl" style="text-align:right;background:${B.wash};border:1px solid ${B.line};border-right:4px solid ${(META[event] || META.submitted)[1]};border-radius:12px;padding:12px 16px;margin:14px 0;font-size:13.5px;color:${B.ink}"><b>ملاحظة:</b> ${esc(comment)}</div>` : '';
-  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
+  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح الطلب في النظام</a></td></tr></table>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc((LINES(title)[event]) || LINES(title).submitted)}</p>
     ${cmt}${btn}
@@ -373,8 +387,8 @@ export async function notifyResult(env, base, pr, event, origin, comment) {
 // بريد المشتريات عند الاعتماد النهائي — طلب جاهز للمعالجة (توريد/تسعير داخل النظام أو خارجه).
 export function buildProcurementEmail(pr, origin) {
   const B = BRAND;
-  const portalUrl = origin ? `${origin}/requests.html` : '';
-  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
+  const portalUrl = requestUrl(origin, pr.id);
+  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح الطلب في النظام</a></td></tr></table>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">اعتُمد طلب الشراء «${esc(pr.title || 'طلب شراء')}» نهائياً عبر كامل سلسلة الموافقات، وهو الآن <b>جاهز لمعالجة المشتريات</b> (عروض أسعار / توريد). راجع التفاصيل والبنود في البوابة.</p>
     ${btn}

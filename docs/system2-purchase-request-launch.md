@@ -2,7 +2,7 @@
 
 ## النطاق المعتمد
 
-هذا الإصدار يخص `requests.html` داخل نظام المشتريات الأساسي. لا يغيّر بوابة الطلبات والموافقات المنفصلة (النظام 3).
+هذا الإصدار يخص شاشة طلبات الشراء داخل `index.html` في نظام المشتريات الأساسي. المسار القديم `requests.html` يعيد التوجيه إلى الشاشة المدمجة، ولا يغيّر بوابة الطلبات والموافقات المنفصلة (النظام 3).
 
 دورة الطلب المعتمدة:
 
@@ -18,6 +18,7 @@
 2. طبّق الملفات السابقة بالترتيب المدون أعلى ملف الهجرة إذا لم تكن مطبقة، ثم طبّق:
 
    ```text
+   db/system2-field-permissions.sql
    db/system2-purchase-request-workspace.sql
    ```
 
@@ -53,7 +54,24 @@
 
 ## فحوص ما قبل فتح الاستخدام
 
-نفّذ الاستعلامات التالية للقراءة فقط:
+قبل تطبيق هجرة مساحة العمل، نفّذ هذا الاستعلام على قاعدة الإنتاج واحفظ ناتجه مع سجل الإطلاق:
+
+```sql
+select username, role, pr_profile_key,
+       permissions ? 'can_view_amounts' as has_key,
+       permissions->>'can_view_amounts' as val,
+       permissions->>'can_manage_rfq' as rfq,
+       permissions->>'can_approve_l1' as l1,
+       permissions->>'can_approve_l2' as l2,
+       scope_sectors
+from proc_users
+where active
+order by username;
+```
+
+توقف عن الإطلاق إذا ظهر حساب مكتبي قائم يرى المبالغ اليوم ولا يملك منحًا صريحًا يمكن حفظه، أو ظهر حساب مقيّد بقطاع من دون القيم المقصودة. الهجرة تحفظ وصول الحسابات المكتبية غير المقيّدة للمبالغ، وتحوّل غياب المنح في الحسابات المقيّدة إلى رفض صريح.
+
+بعد تطبيق الهجرتين، نفّذ الاستعلامات التالية للقراءة فقط:
 
 ```sql
 select profile_key, name_ar, active
@@ -74,6 +92,12 @@ order by u.pr_profile_key, u.username;
 select value
 from proc_settings
 where key='projects_registry';
+
+select username, pr_profile_key, pr_permission_overrides,
+       pr_effective_permissions(username) as effective_permissions
+from proc_users
+where active
+order by username;
 ```
 
 يجب أن تكون نتيجة كل إدارة نشطة مرتبطة بمدير صالح، وأن يحتوي سجل المشاريع على الأسماء التي سيختارها الموظفون حرفيًا.
@@ -106,4 +130,4 @@ where workflow_state in ('maintenance_review','procurement_review')
 
 ## الرجوع الآمن
 
-عند ظهور مشكلة، أعد نشر آخر نسخة مستقرة من Pages وأوقف دخول المستخدمين إلى `requests.html` مؤقتًا. لا تحذف جداول الربط أو الإصدارات أو المرفقات؛ فهي سجلات تشغيلية. الهجرة إضافية وتبقي `po_number` و`doc_key` وحقول Supabase القديمة للقراءة، لذلك يمكن للواجهة السابقة العمل أثناء معالجة السبب. أصلح السبب في هجرة لاحقة ثم أعد فتح الموديل.
+عند ظهور مشكلة، أعد نشر آخر نسخة مستقرة من Pages وأخفِ وجهة «طلبات الشراء» من الصلاحيات مؤقتًا. لا تحذف جداول الربط أو الإصدارات أو المرفقات؛ فهي سجلات تشغيلية. الهجرة إضافية وتبقي `po_number` و`doc_key` وحقول Supabase القديمة للقراءة، لذلك يمكن للواجهة السابقة العمل أثناء معالجة السبب. أصلح السبب في هجرة لاحقة ثم أعد فتح الموديل.

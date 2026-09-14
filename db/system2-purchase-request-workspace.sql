@@ -65,6 +65,37 @@ SET pr_profile_key = CASE
 END
 WHERE pr_profile_key IS NULL;
 
+-- Preserve the live System 2 rule during the one-time upgrade: an existing
+-- unscoped office account with no explicit amount flag already sees amounts.
+-- Recording that grant prevents a silent regression, while explicit denials
+-- and sector-scoped accounts remain denied.
+UPDATE proc_users
+SET pr_permission_overrides = coalesce(pr_permission_overrides,'{}'::jsonb)
+                              || '{"pr_view_financials":true}'::jsonb
+WHERE coalesce(active,true)
+  AND coalesce(jsonb_array_length(CASE WHEN jsonb_typeof(scope_sectors)='array' THEN scope_sectors ELSE '[]'::jsonb END),0)=0
+  AND NOT (coalesce(permissions,'{}'::jsonb) ? 'can_view_amounts')
+  AND NOT (coalesce(pr_permission_overrides,'{}'::jsonb) ? 'pr_view_financials');
+
+-- A sector-scoped legacy account used explicit opt-in. Mapping every account
+-- to the requester profile must not silently grant missing field abilities.
+UPDATE proc_users
+SET pr_permission_overrides = coalesce(pr_permission_overrides,'{}'::jsonb)
+  || CASE WHEN NOT (coalesce(permissions,'{}'::jsonb) ? 'can_create_pr')
+           AND NOT (coalesce(pr_permission_overrides,'{}'::jsonb) ? 'pr_create')
+          THEN '{"pr_create":false}'::jsonb ELSE '{}'::jsonb END
+  || CASE WHEN NOT (coalesce(permissions,'{}'::jsonb) ? 'can_upload_docs')
+           AND NOT (coalesce(pr_permission_overrides,'{}'::jsonb) ? 'pr_upload_attachments')
+          THEN '{"pr_upload_attachments":false}'::jsonb ELSE '{}'::jsonb END
+  || CASE WHEN NOT (coalesce(permissions,'{}'::jsonb) ? 'can_comment')
+           AND NOT (coalesce(pr_permission_overrides,'{}'::jsonb) ? 'pr_comment')
+          THEN '{"pr_comment":false}'::jsonb ELSE '{}'::jsonb END
+  || CASE WHEN NOT (coalesce(permissions,'{}'::jsonb) ? 'can_view_amounts')
+           AND NOT (coalesce(pr_permission_overrides,'{}'::jsonb) ? 'pr_view_financials')
+          THEN '{"pr_view_financials":false}'::jsonb ELSE '{}'::jsonb END
+WHERE coalesce(active,true)
+  AND coalesce(jsonb_array_length(CASE WHEN jsonb_typeof(scope_sectors)='array' THEN scope_sectors ELSE '[]'::jsonb END),0)>0;
+
 ALTER TABLE proc_users ALTER COLUMN pr_profile_key SET DEFAULT 'requester';
 
 CREATE OR REPLACE FUNCTION pr_effective_permissions(p_username text DEFAULT NULL)
@@ -82,16 +113,18 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
     WHERE p.active
   ), legacy AS (
     SELECT jsonb_strip_nulls(jsonb_build_object(
-      'pr_create', true,
+      'pr_create', CASE WHEN me.permissions ? 'can_create_pr' THEN (me.permissions->>'can_create_pr')::boolean ELSE NULL END,
       'pr_view_own', true,
-      'pr_view_department', CASE WHEN coalesce(me.permissions->>'can_approve_l1','false')='true' THEN true ELSE NULL END,
-      'pr_view_all', CASE WHEN coalesce(me.permissions->>'can_manage_rfq','false')='true' THEN true ELSE NULL END,
-      'pr_approve_maintenance', CASE WHEN coalesce(me.permissions->>'can_approve_l1','false')='true' THEN true ELSE NULL END,
-      'pr_authorize_pricing', CASE WHEN coalesce(me.permissions->>'can_approve_l2','false')='true' THEN true ELSE NULL END,
-      'pr_manage_pricing', CASE WHEN coalesce(me.permissions->>'can_manage_rfq','false')='true' THEN true ELSE NULL END,
-      'pr_link_purchase_orders', CASE WHEN coalesce(me.permissions->>'can_manage_rfq','false')='true' THEN true ELSE NULL END,
-      'pr_view_financials', CASE WHEN coalesce(me.permissions->>'can_view_amounts','false')='true' THEN true ELSE NULL END,
-      'pr_manage_users', CASE WHEN coalesce(me.permissions->>'can_manage_users','false')='true' THEN true ELSE NULL END
+      'pr_comment', CASE WHEN me.permissions ? 'can_comment' THEN (me.permissions->>'can_comment')::boolean ELSE NULL END,
+      'pr_upload_attachments', CASE WHEN me.permissions ? 'can_upload_docs' THEN (me.permissions->>'can_upload_docs')::boolean ELSE NULL END,
+      'pr_view_department', CASE WHEN me.permissions ? 'can_approve_l1' THEN (me.permissions->>'can_approve_l1')::boolean ELSE NULL END,
+      'pr_view_all', CASE WHEN me.permissions ? 'can_manage_rfq' THEN (me.permissions->>'can_manage_rfq')::boolean ELSE NULL END,
+      'pr_approve_maintenance', CASE WHEN me.permissions ? 'can_approve_l1' THEN (me.permissions->>'can_approve_l1')::boolean ELSE NULL END,
+      'pr_authorize_pricing', CASE WHEN me.permissions ? 'can_approve_l2' THEN (me.permissions->>'can_approve_l2')::boolean ELSE NULL END,
+      'pr_manage_pricing', CASE WHEN me.permissions ? 'can_manage_rfq' THEN (me.permissions->>'can_manage_rfq')::boolean ELSE NULL END,
+      'pr_link_purchase_orders', CASE WHEN me.permissions ? 'can_manage_rfq' THEN (me.permissions->>'can_manage_rfq')::boolean ELSE NULL END,
+      'pr_view_financials', CASE WHEN me.permissions ? 'can_view_amounts' THEN (me.permissions->>'can_view_amounts')::boolean ELSE NULL END,
+      'pr_manage_users', CASE WHEN me.permissions ? 'can_manage_users' THEN (me.permissions->>'can_manage_users')::boolean ELSE NULL END
     )) AS permissions FROM me
   )
   SELECT CASE WHEN EXISTS (SELECT 1 FROM me WHERE role='admin')
@@ -112,6 +145,9 @@ $fn$;
 CREATE OR REPLACE FUNCTION pr_has_perm(p_key text) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
   SELECT CASE p_key
+    WHEN 'can_create_pr'   THEN pr_has_module_perm('pr_create')
+    WHEN 'can_upload_docs' THEN pr_has_module_perm('pr_upload_attachments')
+    WHEN 'can_comment'     THEN pr_has_module_perm('pr_comment')
     WHEN 'can_approve_l1'  THEN pr_has_module_perm('pr_approve_maintenance')
     WHEN 'can_approve_l2'  THEN pr_has_module_perm('pr_authorize_pricing')
     WHEN 'can_manage_rfq'  THEN pr_has_module_perm('pr_manage_pricing')
@@ -133,6 +169,26 @@ ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS closed_by text;
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS closed_at timestamptz;
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS revision integer NOT NULL DEFAULT 1;
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS return_reason text;
+
+-- Compatibility with the RFQ award-approval panel already hosted by index.html.
+-- These rows share the historical table but use an `apr_` id and never enter the
+-- maintenance request state machine.
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS supplier text;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS amount numeric DEFAULT 0;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS details jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS requested_by text;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS requested_by_name text;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS required_level integer DEFAULT 1;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS decided_by text;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS decided_at timestamptz;
+ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS decision_note text;
+ALTER TABLE proc_purchase_requests ALTER COLUMN requested_by DROP NOT NULL;
+UPDATE proc_purchase_requests SET workflow_state=CASE status
+  WHEN 'pending' THEN 'award_review'
+  WHEN 'approved' THEN 'award_approved'
+  WHEN 'rejected' THEN 'award_rejected'
+  ELSE workflow_state END
+WHERE requested_by IS NOT NULL AND coalesce(requester,'')='' AND workflow_state='draft';
 
 ALTER TABLE proc_pr_approvals ADD COLUMN IF NOT EXISTS stage_key text;
 ALTER TABLE proc_pr_approvals ADD COLUMN IF NOT EXISTS assigned_at timestamptz NOT NULL DEFAULT now();
@@ -240,6 +296,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
     WHERE r.id=p_pr_id AND (
       pr_has_module_perm('pr_view_all')
       OR (pr_has_module_perm('pr_view_own') AND lower(coalesce(r.requester,''))=lower(me.username))
+      OR (pr_has_module_perm('pr_view_own') AND lower(coalesce(r.requested_by,''))=lower(me.username))
       OR (pr_has_module_perm('pr_view_department') AND (
         r.department_id=me.department_id OR r.department_id=ANY(coalesce(me.pr_department_ids,'{}'::text[]))
       ))
@@ -708,6 +765,94 @@ END;
 $fn$;
 
 -- ───────────────────────── Secure direct access ────────────────────────────
+CREATE OR REPLACE FUNCTION pr_attach_rfq(p_pr_id text, p_rfq_id text)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text:=proc_me(); v_rfq text:=btrim(coalesce(p_rfq_id,'')); v_now timestamptz:=now();
+BEGIN
+  IF v_me IS NULL OR NOT (pr_has_module_perm('pr_manage_pricing') OR pr_is_admin()) THEN
+    RAISE EXCEPTION 'لا تملك صلاحية إدارة التسعير';
+  END IF;
+  IF v_rfq='' OR NOT EXISTS(SELECT 1 FROM proc_rfqs WHERE id=v_rfq) THEN
+    RAISE EXCEPTION 'طلب التسعير غير موجود في النظام';
+  END IF;
+  PERFORM 1 FROM proc_purchase_requests
+    WHERE id=p_pr_id AND status IN ('approved','rfq_issued','converted_to_po') FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'لا يمكن ربط التسعير قبل اكتمال الاعتماد'; END IF;
+  PERFORM set_config('app.pr_transition','1',true);
+  UPDATE proc_purchase_requests SET rfq_id=v_rfq,status='rfq_issued',proc_status='rfq_issued',
+    updated_by=v_me,updated_at=v_now WHERE id=p_pr_id;
+  INSERT INTO proc_audit_log(username,action,entity_type,entity_id,new_value)
+  VALUES(v_me,'pr_rfq_linked','pr',p_pr_id,jsonb_build_object('rfq_id',v_rfq));
+  INSERT INTO proc_pr_audit(pr_id,event,actor,channel,detail)
+  VALUES(p_pr_id,'rfq_linked',v_me,'portal',jsonb_build_object('rfq_id',v_rfq));
+  RETURN jsonb_build_object('ok',true,'id',p_pr_id,'rfq_id',v_rfq);
+END;
+$fn$;
+
+-- Compatibility RPCs for the RFQ award-approval panel already in index.html.
+CREATE OR REPLACE FUNCTION pr_submit_award_request(
+  p_title text, p_supplier text, p_amount numeric, p_details jsonb DEFAULT '{}'::jsonb,
+  p_required_level integer DEFAULT 1
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text:=proc_me(); v_name text; v_id text; v_now timestamptz:=now(); v_level integer:=p_required_level;
+BEGIN
+  IF v_me IS NULL OR NOT (pr_has_module_perm('pr_manage_pricing') OR pr_is_admin()) THEN
+    RAISE EXCEPTION 'لا تملك صلاحية إرسال طلب اعتماد الترسية';
+  END IF;
+  IF btrim(coalesce(p_title,''))='' OR coalesce(p_amount,0)<=0 OR v_level NOT IN (1,2) THEN
+    RAISE EXCEPTION 'بيانات طلب اعتماد الترسية غير مكتملة';
+  END IF;
+  SELECT coalesce(nullif(btrim(display_name),''),v_me) INTO v_name
+    FROM proc_users WHERE lower(username)=lower(v_me) AND coalesce(active,true) LIMIT 1;
+  v_id:='apr_'||to_char(clock_timestamp(),'YYYYMMDDHH24MISSMS')||'_'||substr(md5(random()::text),1,6);
+  PERFORM set_config('app.pr_transition','1',true);
+  INSERT INTO proc_purchase_requests(
+    id,title,supplier,amount,currency,details,requested_by,requested_by_name,
+    status,required_level,workflow_state,created_by,created_at,updated_by,updated_at
+  ) VALUES(
+    v_id,btrim(p_title),nullif(btrim(coalesce(p_supplier,'')),''),p_amount,'SAR',coalesce(p_details,'{}'::jsonb),
+    v_me,coalesce(v_name,v_me),'pending',v_level,'award_review',v_me,v_now,v_me,v_now
+  );
+  INSERT INTO proc_audit_log(username,action,entity_type,entity_id,new_value)
+  VALUES(v_me,'award_request_submitted','purchase_request',v_id,
+    jsonb_build_object('amount',p_amount,'required_level',v_level));
+  RETURN jsonb_build_object('ok',true,'id',v_id,'required_level',v_level);
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION pr_decide_award_request(p_pr_id text, p_approve boolean, p_note text DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_me text:=proc_me(); v_req proc_purchase_requests%ROWTYPE; v_status text; v_now timestamptz:=now();
+BEGIN
+  SELECT * INTO v_req FROM proc_purchase_requests
+    WHERE id=p_pr_id AND workflow_state='award_review' AND status='pending' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'طلب اعتماد الترسية غير موجود أو سبق البت فيه'; END IF;
+  IF v_me IS NULL OR NOT (pr_is_admin() OR
+      (v_req.required_level=1 AND (pr_has_perm('can_approve_l1') OR pr_has_perm('can_approve_l2'))) OR
+      (v_req.required_level=2 AND pr_has_perm('can_approve_l2'))) THEN
+    RAISE EXCEPTION 'لا تملك اعتماد هذا المستوى';
+  END IF;
+  IF lower(coalesce(v_req.requested_by,''))=lower(v_me) THEN
+    RAISE EXCEPTION 'لا يجوز لمقدم الطلب اعتماد طلبه';
+  END IF;
+  v_status:=CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END;
+  PERFORM set_config('app.pr_transition','1',true);
+  UPDATE proc_purchase_requests SET status=v_status,workflow_state='award_'||v_status,
+    decided_by=v_me,decided_at=v_now,decision_note=nullif(btrim(coalesce(p_note,'')),''),
+    updated_by=v_me,updated_at=v_now WHERE id=p_pr_id;
+  INSERT INTO proc_audit_log(username,action,entity_type,entity_id,old_value,new_value)
+  VALUES(v_me,CASE WHEN p_approve THEN 'approve' ELSE 'reject' END,'purchase_request',p_pr_id,
+    jsonb_build_object('status','pending'),jsonb_build_object('status',v_status,'note',p_note));
+  RETURN jsonb_build_object('ok',true,'id',p_pr_id,'status',v_status);
+END;
+$fn$;
+
 ALTER TABLE proc_pr_permission_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE proc_pr_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE proc_pr_po_links ENABLE ROW LEVEL SECURITY;
@@ -721,7 +866,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY['proc_purchase_requests','proc_pr_items','proc_pr_approvals','proc_pr_attachments','proc_pr_messages','proc_pr_audit',
                             'proc_pr_versions','proc_pr_po_links','proc_pr_item_allocations','proc_pr_permission_profiles',
                             'proc_departments','proc_approval_rules'] LOOP
-    FOR p IN SELECT policyname FROM pg_policies WHERE schemaname='public' AND tablename=t LOOP
+    FOR p IN SELECT policyname FROM pg_policies
+      WHERE schemaname='public' AND tablename=t AND permissive='PERMISSIVE' LOOP
       EXECUTE format('DROP POLICY IF EXISTS %I ON %I',p.policyname,t);
     END LOOP;
   END LOOP;
@@ -770,6 +916,9 @@ REVOKE ALL ON FUNCTION pr_decide(text,text,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION pr_link_purchase_order(text,text,jsonb,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION pr_unlink_purchase_order(text,text,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION pr_register_attachment(text,text,text,text,text,bigint) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION pr_attach_rfq(text,text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION pr_submit_award_request(text,text,numeric,jsonb,integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION pr_decide_award_request(text,boolean,text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION pr_transition_email(text,text,text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION pr_effective_permissions(text), pr_has_module_perm(text), pr_has_perm(text),
   pr_can_view_request(text), proc_can_view_amounts(), proc_can_see_pr(text),
@@ -779,6 +928,7 @@ GRANT EXECUTE ON FUNCTION pr_effective_permissions(text), pr_has_module_perm(tex
   pr_can_view_request(text), proc_can_view_amounts(), proc_can_see_pr(text),
   pr_save_request(jsonb,jsonb,boolean,text), pr_decide(text,text,text),
   pr_link_purchase_order(text,text,jsonb,text), pr_unlink_purchase_order(text,text,text),
-  pr_register_attachment(text,text,text,text,text,bigint) TO authenticated;
+  pr_register_attachment(text,text,text,text,text,bigint), pr_attach_rfq(text,text),
+  pr_submit_award_request(text,text,numeric,jsonb,integer), pr_decide_award_request(text,boolean,text) TO authenticated;
 
 COMMIT;
