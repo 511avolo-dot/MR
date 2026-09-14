@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS proc_users (
   username TEXT PRIMARY KEY, display_name TEXT, email TEXT, password_hash TEXT NOT NULL DEFAULT 'x',
   role TEXT DEFAULT 'user', permissions JSONB DEFAULT '{}'::jsonb, active BOOLEAN DEFAULT true,
   department_id TEXT, manager_user TEXT, delegate_to TEXT, is_away BOOLEAN DEFAULT false,
+  requested_role TEXT,
   job_title TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(), last_login TIMESTAMPTZ, notes TEXT
 );
