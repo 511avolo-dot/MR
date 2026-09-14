@@ -3273,6 +3273,78 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /function openDeepLink[\s\S]{0,900}navigate\('pr'\)/.test(CODE));
 }
 
+/* ═══════════ ٣٦) الإلغاء والأرشفة والإقفال — دورة الطلب حتى نهايتها ═══════════
+   طلب المالك (2026-09-14): «الغاء الطلب في حال تكنسل · ارشفة الطلبات بعد اقفالها
+   وربطها بأمر ثم اقفاله باستلام كامل». الطبقة الخادميّة محكومة في
+   `db/system2-request-closure.sql` (CL1–CL12). هنا نُثبِت أنّ الواجهة **تطابقها**:
+   الطابور يُخلى من المؤرشَف، ووضع «الأرشيف» يعرضه، وبوّابة الإلغاء تُحاكي حارس
+   الخادم حرفيّاً — فلا يظهر زرٌّ فعلُه مرفوض ولا يُخفى فعلٌ مسموح. */
+{
+  G('٣٦) الإلغاء والأرشفة والإقفال (دورة الطلب حتى نهايتها)');
+  const C = (() => {
+    const src = [
+      `const STATE = { currentUser:null, purchaseRequests:[], prWorkspaceFilter:'all', prWorkspaceSearch:'' };`,
+      `let __scoped=false, __perms={};`,
+      `function isScopedUser(){ return __scoped; }`,
+      `function hasPermission(k){ return __perms[k]===true; }`,
+      `function prPendingApproval(){ return false; }`,
+      `function prIsLive(){ return false; }`,
+      `function prAgeDays(){ return 0; }`,
+      `function prWorkspaceNeedsAction(){ return false; }`,
+      `function prWorkspaceIsBlocked(){ return false; }`,
+      grab('prPermStrict'), grabConst('PR_TEAM_KEYS'), grab('prCanSeeAll'),
+      grab('prWorkspaceVisible'), grab('prIsArchived'), grab('prArchiveCount'),
+      grab('prWorkspaceQueueData'), grab('prCanCancel'),
+    ].join('\n\n');
+    return new Function(src + `; return {STATE,
+      prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
+      set:(u,scoped,perms)=>{ STATE.currentUser=u; __scoped=!!scoped; __perms=perms||{}; } };`)();
+  })();
+
+  // ── الأرشفة: خروج المؤرشَف من الطابور، وظهوره في وضع «الأرشيف» وحده ──
+  // (can_manage_rfq ⇒ prCanSeeAll فيرى المشتري كل الطلبات لا طلباته وحدها)
+  C.set({ username:'proc', role:'admin' }, false, { can_manage_rfq:true });
+  C.STATE.purchaseRequests = [
+    { id:'PR-1', requester:'field', status:'in_review', workflow_state:'in_review', updated_at:'2026-09-10' },
+    { id:'PR-2', requester:'field', status:'closed',    workflow_state:'closed', archived_at:'2026-09-11', updated_at:'2026-09-11' },
+    { id:'PR-3', requester:'field', status:'cancelled', archived_at:'2026-09-12', updated_at:'2026-09-12' },
+  ];
+  T('علم الأرشفة يُقرأ من archived_at وحده',
+    C.prIsArchived({archived_at:'2026-09-11'}) === true
+    && C.prIsArchived({archived_at:null}) === false && C.prIsArchived(null) === false);
+  T('الطابور الافتراضيّ يُخلى من المؤرشَف',
+    C.prWorkspaceQueueData('all').map(p=>p.id).join(',') === 'PR-1');
+  T('ووضع «الأرشيف» يعرض المؤرشَف وحده (الأحدث أولاً)',
+    C.prWorkspaceQueueData('archive').map(p=>p.id).join(',') === 'PR-3,PR-2');
+  T('وعدّاد الأرشيف يَعُدّ المؤرشَف من المرئيّ',  C.prArchiveCount() === 2);
+
+  // ── الإلغاء: بوّابة الواجهة = حارس الخادم (CL1–CL5, CL10) ──
+  // المشتريات/الأدمن: يلغي أي حالة قبل الإقفال؛ المُقفَل والملغى مستثنيان.
+  C.set({ username:'proc', role:'admin' }, false, {});
+  T('المشتريات تُلغي طلباً حيّاً',
+    C.prCanCancel({ requester:'field', status:'in_review', workflow_state:'in_review' }) === true
+    && C.prCanCancel({ requester:'field', status:'approved', workflow_state:'ordered' }) === true);
+  T('ولا يُلغى طلبٌ مُقفَل أو ملغىً حتى للمشتريات (استعمل مرتجعاً)',
+    C.prCanCancel({ requester:'field', status:'closed' }) === false
+    && C.prCanCancel({ requester:'field', status:'cancelled' }) === false
+    && C.prCanCancel({ requester:'field', workflow_state:'closed' }) === false);
+  // الطالب: يلغي طلبه قبل صدور أمر الشراء فقط.
+  C.set({ username:'field', role:'user' }, false, {});
+  T('الطالب يُلغي طلبه قبل صدور أمر الشراء',
+    C.prCanCancel({ requester:'field', status:'in_review', workflow_state:'maintenance_review' }) === true
+    && C.prCanCancel({ requester:'field', status:'draft' }) === true);
+  T('ولا يُلغيه بعد صدور أمر الشراء (يرجع للمشتريات)',
+    C.prCanCancel({ requester:'field', status:'approved', workflow_state:'ordered' }) === false
+    && C.prCanCancel({ requester:'field', status:'approved', workflow_state:'partially_ordered' }) === false);
+  T('وطلبُ غيره ليس له أن يُلغيه',
+    C.prCanCancel({ requester:'other', status:'in_review', workflow_state:'in_review' }) === false);
+  // موظّف مُنطَّق يحمل can_manage_rfq في صفّه (لا افتراضاً) لا يُعامَل مشترياتٍ
+  // إلا إن مُنِح المفتاح صراحةً — نفس صرامة prPermStrict.
+  C.set({ username:'scopedguy', role:'user', permissions:{} }, true, {});
+  T('ومُنطَّقٌ بلا مفتاح رفع لا يرث دور المشتريات في الإلغاء',
+    C.prCanCancel({ requester:'other', status:'in_review', workflow_state:'in_review' }) === false);
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
