@@ -53,11 +53,17 @@ await asUser(FIELD_ALL, ['الصيانة والتشغيل']);
 await page.evaluate(() => { navigate('pr'); prGoView('list'); });
 await page.waitForTimeout(400);
 
-const tabs = () => page.evaluate(() =>
-  [...document.querySelectorAll('.pr-tab')].map(t => t.textContent.trim().replace(/\s+/g,' ')));
-let t = await tabs();
-ok('الممنوح يرى تبويبَي الرفع والقوالب',
-  t.some(x => x.includes('طلب جديد')) && t.some(x => x.includes('القوالب')), t.join(' | '));
+const createAccess = () => page.evaluate(() => ({
+  newButton: [...document.querySelectorAll('.pr-work-iconbtn')]
+    .some((button) => button.getAttribute('title') === 'طلب جديد'),
+  view: STATE.prView,
+}));
+let access = await createAccess();
+await page.evaluate(() => prGoView('templates'));
+await page.waitForTimeout(300);
+access.templates = await page.evaluate(() => STATE.prView === 'templates' && !!document.querySelector('.pr-workspace'));
+ok('الممنوح يرى إنشاء الطلب ويستطيع فتح القوالب',
+  access.newButton && access.templates, JSON.stringify(access));
 
 ok('وزرّ تقرير المتابعة ظاهر له',
   await page.evaluate(() => {
@@ -67,11 +73,14 @@ ok('وزرّ تقرير المتابعة ظاهر له',
 
 /* ══════════ ٢) المسحوبة منه القدرات — «متابعة فقط» ══════════ */
 await asUser({ can_receive_po:true, can_view_amounts:false }, ['الصيانة والتشغيل']);
-await page.evaluate(() => { STATE.prView='create'; renderPRPortal(); });
+await page.evaluate(() => { STATE.prView='list'; renderPRPortal(); });
 await page.waitForTimeout(400);
-t = await tabs();
-ok('والمسحوبة منه لا يرى تبويب الرفع ولا القوالب',
-  !t.some(x => x.includes('طلب جديد')) && !t.some(x => x.includes('القوالب')), t.join(' | '));
+access = await createAccess();
+await page.evaluate(() => prGoView('templates'));
+await page.waitForTimeout(300);
+access.templatesBlocked = await page.evaluate(() => STATE.prView === 'list');
+ok('والمسحوبة منه لا يرى إنشاء الطلب ولا يستطيع فتح القوالب',
+  !access.newButton && access.templatesBlocked, JSON.stringify(access));
 ok('ولا تفتح له شاشة النموذج ولو بقيت الحالة قديمة',
   await page.evaluate(() => !document.getElementById('pr-title')));
 ok('وزرّ تقرير المتابعة يختفي عنه (بوّابة الزرّ = بوّابة الفعل)',
@@ -140,25 +149,43 @@ ok('والقدرات الميدانية موسومة في الشبكة بفئت�
     try { hideLoginScreen(); } catch (e) {}
     try { hydSettle('ready'); } catch (e) {}
     CLOUD.enabled = true; CLOUD.dataLoaded = true;
+    const rows = {
+      proc_purchase_requests: [{
+        id:'PR-DG2026-0007', title:'طلب اختبار الرابط', status:'in_review',
+        workflow_state:'maintenance_review', requester:'saleh', requester_name:'صالح',
+        department_id:'DEP-MAINT', department:'الصيانة والتشغيل', project:'مشروع اختبار',
+        created_at:'2026-09-13T08:00:00Z',
+      }],
+      proc_pr_items: [], proc_departments: [], proc_pr_messages: [], proc_pr_templates: [],
+      proc_pr_approvals: [], proc_pr_attachments: [], proc_pr_audit: [], proc_pr_po_links: [],
+      proc_pr_item_allocations: [],
+    };
+    const query = (table) => ({
+      select(){ return this; }, order(){ return this; },
+      range(){ return Promise.resolve({ data:rows[table] || [], error:null }); },
+    });
     CLOUD.client = { auth:{ getSession: async () => ({ data:{ session:null } }) },
-      from: () => ({ select: () => ({ order: async () => ({ data:[], error:null }) }) }),
+      from: (table) => query(table),
       rpc: async () => ({ data:null, error:null }),
       channel: () => ({ on(){ return this; }, subscribe(){ return this; } }) };
-    window.__prLoaded = true; try { __prLoaded = true; } catch (e) {}
+    window.__prLoaded = false; try { __prLoaded = false; } catch (e) {}
     STATE.purchaseRequests = []; STATE.departments = []; STATE.prTemplates = [];
     const before = location.search;
     openDeepLink();
     return { before, afterSearch: location.search };
   });
-  await p2.waitForTimeout(500);
+  await p2.waitForFunction(() => STATE.prTrackId === 'PR-DG2026-0007'
+    && (document.querySelector('.pr-work-breadcrumb')?.textContent || '').includes('PR-DG2026-0007'),
+    { timeout:5000 });
   const landed = await p2.evaluate(() => ({
     page: STATE.page, view: STATE.prView, id: STATE.prTrackId,
     active: (document.querySelector('.page.active')||{}).id || '',
+    detail: (document.querySelector('.pr-work-breadcrumb')?.textContent || '').trim(),
   }));
   ok('الرابط العميق يهبط على شاشة الطلبات لا القائمة العامّة',
     landed.page === 'pr' && landed.active === 'page-pr', JSON.stringify(landed));
   ok('ويفتح متابعة الطلب المقصود بعينه',
-    landed.view === 'track' && landed.id === 'PR-DG2026-0007', JSON.stringify(landed));
+    landed.id === 'PR-DG2026-0007' && landed.detail.includes('PR-DG2026-0007'), JSON.stringify(landed));
   ok('ويُنظَّف المعامل من شريط العنوان فلا يُعاد فتحه',
     deep.before.includes('pr=') && deep.afterSearch === '', JSON.stringify(deep));
   ok('صفر خطأ صفحة على مسار الرابط العميق', errs2.length === 0, errs2[0]);

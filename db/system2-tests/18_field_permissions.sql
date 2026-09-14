@@ -206,6 +206,15 @@ DELETE FROM proc_pr_templates WHERE id LIKE 'FPT-%';
 DELETE FROM proc_pr_items WHERE pr_id LIKE 'FP-%';
 DELETE FROM proc_purchase_requests WHERE id LIKE 'FP-%';
 DELETE FROM proc_users WHERE username IN ('fp_office','fp_field','fp_field_no','fp_admin');
+
+-- Upgrade sentinels consumed by test 19: they exist before the workspace
+-- migration so its one-time compatibility behavior is tested, not simulated.
+INSERT INTO proc_users(username,display_name,email,role,permissions,active,scope_sectors)
+VALUES
+ ('ws_legacy_office','Legacy office','ws_legacy_office@aldeyabi.com','user','{}'::jsonb,true,NULL),
+ ('ws_legacy_scoped','Legacy scoped','ws_legacy_scoped@aldeyabi.com','user','{}'::jsonb,true,'["الصيانة والتشغيل"]'::jsonb)
+ON CONFLICT(username) DO UPDATE SET permissions='{}'::jsonb,active=true,
+  scope_sectors=excluded.scope_sectors;
 SELECT set_config('request.jwt.claims', '', false);
 
 DO $$ BEGIN RAISE NOTICE 'FP1–FP10 نجحت'; END $$;

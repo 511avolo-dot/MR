@@ -650,12 +650,12 @@ if (drFailed) { console.error(`\n❌ نقطة /api/doc-renew: ${drFailed} فشل
 console.log(`\n✅ نقطة /api/doc-renew: ${drTotal}/${drTotal} PASS`);
 
 /* ── تأكيدات نقطة دعوة الموظّف الشخصية (/api/staff-invite) ──────────────────
-   قرار المالك (2026-09-13): المدير يُدخل الاسم والبريد والقطاع والمسمّى، ويصل
+   قرار المالك (2026-09-13): المدير يُدخل الاسم والبريد والإدارة وملف الصلاحيات والمسمّى، ويصل
    الموظّف **بريد دعوة** يضبط منه كلمة مروره ويدخل مباشرةً. الرابط المشترك حُذِف.
 
    ⚠️ المبدأ الحاكم المُختبَر هنا: **الرمز صار الاعتماد**، فالهويّة كلّها من
-   داخله — البريد والقطاع والاسم والمسمّى. لو قرأ الخادم أيّاً منها من جسم
-   الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو منح نفسه قطاعاً آخر. */
+   داخله — البريد والإدارة وملف الصلاحيات والاسم والمسمّى. لو قرأ الخادم أيّاً منها من جسم
+   الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو منح نفسه إدارة أو ملف صلاحيات آخر. */
 const si = await import('../../functions/api/staff-invite.js');
 
 const SI_ENV = {
@@ -698,6 +698,9 @@ function siNet(opts = {}) {
     }
     if (u.includes('/rest/v1/proc_settings') && m === 'GET') {
       return new Response(JSON.stringify([{ value: { epoch: opts.epoch || 0 } }]), { status: 200 });
+    }
+    if (u.includes('/rest/v1/proc_departments') && m === 'GET') {
+      return new Response(JSON.stringify([{ id:'DEP-MAINT', name_ar:'إدارة الصيانة والتشغيل', sector:'الصيانة والتشغيل' }]), { status: 200 });
     }
     if (u.includes('/rest/v1/proc_users') && m === 'GET') {
       if (u.includes('or=(')) {
@@ -754,8 +757,8 @@ const siT = (name, cond, extra = '') => {
   siTotal++; if (!cond) siFailed++;
   console.log(`${cond ? '✓' : '✗ FAIL'}  ${name}${extra ? '  — ' + extra : ''}`);
 };
-const INVITE = { action:'invite', display_name:'صالح الميداني', email:'saleh@aldeyabi.com',
-                 sector:'الصيانة والتشغيل', job_title:'فنّي صيانة' };
+const INVITE = { action:'invite', display_name:'صالح الصيانة', email:'saleh@aldeyabi.com',
+                 department_id:'DEP-MAINT', profile_key:'requester', job_title:'فنّي صيانة' };
 const invite = async (env = SI_ENV, headers = ADMIN, body = INVITE) => {
   const r = await si.onRequestPost({ request: SI_REQ('', { method:'POST', body: JSON.stringify(body) }, headers), env });
   return { status: r.status, j: await r.json() };
@@ -778,7 +781,7 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
     siT('وبريد خارج نطاق الشركة يُرفض (وإلّا لم يصله شيء أصلاً)',
       (await invite(SI_ENV, ADMIN, { ...INVITE, email:'saleh@gmail.com' })).status === 400);
     siT('واسم ناقص يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, display_name:'ا' })).status === 400);
-    siT('وقطاع فارغ يُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, sector:'' })).status === 400);
+    siT('وإدارة فارغة تُرفض', (await invite(SI_ENV, ADMIN, { ...INVITE, department_id:'' })).status === 400);
 
     const ok = await invite();
     siT('والأدمن يُصدرها برابط الصفحة العامّة',
@@ -805,7 +808,7 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
     siT('والرسالة تحمل رابط الدعوة نفسه',
       !!body && body.html.includes(ok.j.url.replace(/&/g, '&amp;')));
     siT('وتذكر اسم المدعوّ وقطاعه ومسمّاه',
-      !!body && body.html.includes('صالح الميداني') && body.html.includes('الصيانة والتشغيل')
+      !!body && body.html.includes('صالح الصيانة') && body.html.includes('الصيانة والتشغيل')
       && body.html.includes('فنّي صيانة'));
     /* ⚠️ الحارس الجوهريّ: لا كلمة مرور في البريد إطلاقاً — الرابط دعوة لا اعتماد. */
     siT('ولا تحمل كلمة مرور إطلاقاً',
@@ -847,7 +850,8 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
       let r = await si.onRequestGet({ request: SI_REQ(`?t=${encodeURIComponent(tk)}`), env: SI_ENV });
       const b = await r.json();
       siT('الرمز الصحيح يكشف بيانات المدعوّ لتعبئة الصفحة',
-        r.status === 200 && b.email === 'saleh@aldeyabi.com' && b.display_name === 'صالح الميداني'
+        r.status === 200 && b.email === 'saleh@aldeyabi.com' && b.display_name === 'صالح الصيانة'
+        && b.department_id === 'DEP-MAINT' && b.profile_key === 'requester'
         && b.sector === 'الصيانة والتشغيل' && b.job_title === 'فنّي صيانة');
       siT('ولا يكشف من دعاه ولا أي مستخدم آخر', !('by' in b) && !('users' in b));
 
@@ -906,13 +910,14 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
       siT('والبريد من **الرمز** لا من العميل (لا انتحال بريد غيره)',
         row.email === 'saleh@aldeyabi.com' && auth.email === 'saleh@aldeyabi.com');
       siT('والاسم والمسمّى من الرمز',
-        row.display_name === 'صالح الميداني' && row.job_title === 'فنّي صيانة');
-      siT('والقطاع من الرمز لا من العميل',
+        row.display_name === 'صالح الصيانة' && row.job_title === 'فنّي صيانة');
+      siT('والدعوة المكتبية تُقيّد البيانات بقطاع الرمز ولا تقبل نطاق العميل',
         JSON.stringify(row.scope_sectors) === JSON.stringify(['الصيانة والتشغيل']));
       siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
-      siT('والصلاحيات ميدانية ثابتة (لا مبالغ ولا إدارة مستخدمين)',
-        row.permissions.can_receive_po === true && row.permissions.can_view_amounts === false
-        && !('can_manage_users' in row.permissions));
+      siT('وملف الصلاحيات والإدارة من الرمز بلا صلاحيات خام من العميل',
+        row.pr_profile_key === 'requester' && row.department_id === 'DEP-MAINT'
+        && JSON.stringify(row.pr_department_ids) === JSON.stringify(['DEP-MAINT'])
+        && JSON.stringify(row.permissions) === '{}');
       siT('والجوال وحده يُقبل من العميل', row.mobile === '0500000000');
       const mail = n.calls.find(c => c.url.includes('api.resend.com'));
       siT('ويصل الداعي إشعار بالإتمام لا «بانتظار التفعيل»',

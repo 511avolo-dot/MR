@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS proc_users (
   username TEXT PRIMARY KEY, display_name TEXT, email TEXT, password_hash TEXT NOT NULL DEFAULT 'x',
   role TEXT DEFAULT 'user', permissions JSONB DEFAULT '{}'::jsonb, active BOOLEAN DEFAULT true,
   department_id TEXT, manager_user TEXT, delegate_to TEXT, is_away BOOLEAN DEFAULT false,
+  requested_role TEXT,
   job_title TEXT, created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(), last_login TIMESTAMPTZ, notes TEXT
 );
@@ -49,6 +50,10 @@ CREATE TABLE IF NOT EXISTS proc_purchase_orders (
   items JSONB, status_history JSONB, receipts JSONB, source JSONB,
   created_by TEXT, created_at TIMESTAMPTZ DEFAULT now(),
   updated_by TEXT, updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS proc_departments (
+  id TEXT PRIMARY KEY, name_ar TEXT NOT NULL, sector TEXT, cost_center TEXT,
+  manager_user TEXT, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT);
 CREATE TABLE IF NOT EXISTS proc_suppliers(id TEXT PRIMARY KEY, name TEXT, phone TEXT, iban TEXT);
@@ -84,7 +89,11 @@ CREATE TABLE IF NOT EXISTS proc_pr_items (
   unit TEXT, contract_qty NUMERIC, stock_balance NUMERIC, requested_qty NUMERIC,
   unit_price NUMERIC, line_total NUMERIC, category TEXT, notes TEXT
 );
-CREATE TABLE IF NOT EXISTS proc_pr_approvals (id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT);
+CREATE TABLE IF NOT EXISTS proc_pr_approvals (
+  id BIGSERIAL PRIMARY KEY, pr_id TEXT, seq INT, stage_label TEXT, resolver TEXT,
+  decision TEXT DEFAULT 'pending', approver TEXT, role_key TEXT, comment TEXT,
+  acted_at TIMESTAMPTZ, channel TEXT
+);
 CREATE TABLE IF NOT EXISTS proc_approval_rules (id BIGSERIAL PRIMARY KEY, priority INT, department_id TEXT, category TEXT, min_total NUMERIC, max_total NUMERIC, stages JSONB, active BOOLEAN DEFAULT true);
 CREATE TABLE IF NOT EXISTS proc_settings (key TEXT PRIMARY KEY, value JSONB);
 CREATE TABLE IF NOT EXISTS proc_audit_log (
