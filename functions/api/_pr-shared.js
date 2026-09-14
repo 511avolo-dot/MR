@@ -53,6 +53,20 @@ export function publicOrigin(env, fallbackOrigin) {
   return /^https?:\/\//i.test(o) ? o : (fallbackOrigin || '');
 }
 
+/* رابط الطلب داخل النظام الحاليّ — **رابط عميق يفتح الطلب نفسه**.
+   ⚠️ بلاغ المالك (2026-09-13): كانت الأزرار الثلاثة تشير إلى `/requests.html`
+   وهي **صفحة الطلبات القديمة المستقلّة** لا الشاشة التي يعمل عليها الفريق اليوم
+   (`index.html` ← تبويب الطلبات)، وزرّها كان مكتوباً «فتح بوابة الطلبات»
+   فيقرؤه المستلِم نظاماً آخر — وهو محقّ: واجهة مختلفة، ولا تفتح الطلب بعينه
+   بل قائمةً يبحث فيها. الآن: جذر النظام + `?pr=<id>` يفتح متابعة ذلك الطلب مباشرةً
+   (`index.html` يقرأ المعامل عند الإقلاع).
+   ⚠️ ولا علاقة لهذا ببوابة نظام 3 (`purchase-portal.html`) — تلك روابطها في
+   `_portal-shared.js` المعزول. */
+export function requestUrl(origin, prId) {
+  if (!origin) return '';
+  return prId ? `${origin}/?pr=${encodeURIComponent(prId)}` : `${origin}/`;
+}
+
 // نسخة نصّية (text/plain) من قالب HTML — لإرسال multipart/alternative.
 // غياب النسخة النصّية إشارة سبام معروفة (MIME_HTML_ONLY)؛ وجودها يرفع الوصول للوارد.
 export function htmlToText(html) {
@@ -162,9 +176,14 @@ export async function resolveStageApprovers(env, base, pr, stage) {
   }
   if (stage.role_key) {
     try {
-      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions`, { headers: svcHeaders(env) });
+      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
       const users = await ur.json();
-      const explicit = (users || []).filter((u) => u.permissions && u.permissions[stage.role_key] === true).map((u) => u.username);
+      const explicit = (users || []).filter((u) =>
+        (u.permissions && u.permissions[stage.role_key] === true)
+        || (u.pr_permission_overrides && u.pr_permission_overrides[stage.role_key] === true)
+        || (stage.role_key === 'pr_approve_maintenance' && u.pr_profile_key === 'maintenance_manager')
+        || (stage.role_key === 'pr_authorize_pricing' && u.pr_profile_key === 'procurement_manager')
+      ).map((u) => u.username);
       return explicit.length ? explicit : (users || []).filter((u) => u.role === 'admin').map((u) => u.username);
     } catch (_) {}
   }
@@ -217,11 +236,11 @@ const META = {
   answer:           ['وصل ردّ على استفسارك', '#0891b2', '↪'],
 };
 const LINES = (title) => ({
-  pending:   `لديك طلب شراء بانتظار اعتمادك ضمن سلسلة الموافقات. يمكنك اتخاذ القرار مباشرةً من هذا البريد، أو فتح البوابة لمراجعة كامل التفاصيل.`,
-  approved:  `تم اعتماد طلبك «${title}» نهائياً عبر كامل سلسلة الموافقات، وسيُحوَّل إلى المشتريات لبدء عروض الأسعار والتوريد.`,
+  pending:   `لديك طلب شراء بانتظار قرارك في المرحلة الحالية. راجع الحاجة والبنود ثم اتخذ القرار مباشرةً من هذا البريد أو من مساحة الطلب.`,
+  approved:  `اكتملت موافقة مدير الصيانة، وسمح مدير المشتريات ببدء تسعير طلبك «${title}». ستظهر روابط أوامر الشراء وتغطية البنود في مساحة الطلب.`,
   rejected:  `نأسف لإبلاغك بأن طلبك «${title}» قد رُفض.`,
   returned:  `أُعيد طلبك «${title}» إليك للتعديل. يرجى مراجعته وتحديث المطلوب ثم إعادة إرساله.`,
-  submitted: `تم استلام طلبك «${title}» ووصل فريق المشتريات. ستصلك التحديثات تلقائياً في كل خطوة حتى يصدر أمر الشراء.`,
+  submitted: `تم استلام طلبك «${title}» وإرساله إلى مدير الصيانة والتشغيل لاعتماد الحاجة. ستصلك التحديثات تلقائياً حتى اكتمال التنفيذ.`,
   proc_started:     `بدأ فريق المشتريات العمل فعلياً على طلبك «${title}»: جارٍ التواصل مع الموردين وجمع عروض الأسعار. ستصلك التحديثات في كل خطوة.`,
   quotes_collected: `اكتمل جمع عروض الأسعار لطلبك «${title}»، وهو الآن في مرحلة المقارنة تمهيداً لإصدار أمر الشراء.`,
   po_issued:        `صدر أمر الشراء لطلبك «${title}». يمكنك متابعة التوريد من شاشة الطلب في النظام — لا حاجة للاتصال بالمشتريات.`,
@@ -267,7 +286,7 @@ function prMetaBox(pr) {
 // بريد «بانتظار اعتمادك» مع أزرار اتخاذ القرار من داخل البريد (لكل معتمِد رمزه الخاص).
 export function buildActionEmail(pr, origin, actionBase, stageLabel) {
   const B = BRAND; const title = pr.title || 'طلب شراء';
-  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const portalUrl = requestUrl(origin, pr.id);
   const approveUrl = `${actionBase}&do=approve`;
   const returnUrl = `${actionBase}&do=return`;
   const rejectUrl = `${actionBase}&do=reject`;
@@ -281,7 +300,7 @@ export function buildActionEmail(pr, origin, actionBase, stageLabel) {
       <td width="2%"></td>
       <td width="49%" align="center" bgcolor="#dc2626" style="background:#dc2626;border-radius:12px"><a href="${esc(rejectUrl)}" style="display:block;padding:12px 14px;color:#fff;text-decoration:none;font-weight:700;font-size:14px">✕ رفض</a></td>
     </tr></table>` : '';
-  const portalBtn = portalUrl ? `<p style="text-align:center;margin:12px 0 0"><a href="${esc(portalUrl)}" style="color:${B.navy};font-size:13px;font-weight:700;text-decoration:underline">فتح البوابة لمراجعة كامل التفاصيل</a></p>` : '';
+  const portalBtn = portalUrl ? `<p style="text-align:center;margin:12px 0 0"><a href="${esc(portalUrl)}" style="color:${B.navy};font-size:13px;font-weight:700;text-decoration:underline">فتح الطلب في النظام لمراجعة كامل التفاصيل</a></p>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc(LINES(title).pending)}</p>
     ${stageNote}
@@ -296,9 +315,9 @@ export function buildActionEmail(pr, origin, actionBase, stageLabel) {
 // بريد نتيجة (للطالب): approved | rejected | returned | submitted.
 export function buildResultEmail(event, pr, origin, comment) {
   const B = BRAND; const title = pr.title || 'طلب شراء';
-  const portalUrl = origin ? `${origin}/requests.html` : '';
+  const portalUrl = requestUrl(origin, pr.id);
   const cmt = comment ? `<div dir="rtl" style="text-align:right;background:${B.wash};border:1px solid ${B.line};border-right:4px solid ${(META[event] || META.submitted)[1]};border-radius:12px;padding:12px 16px;margin:14px 0;font-size:13.5px;color:${B.ink}"><b>ملاحظة:</b> ${esc(comment)}</div>` : '';
-  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
+  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح الطلب في النظام</a></td></tr></table>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc((LINES(title)[event]) || LINES(title).submitted)}</p>
     ${cmt}${btn}
@@ -368,8 +387,8 @@ export async function notifyResult(env, base, pr, event, origin, comment) {
 // بريد المشتريات عند الاعتماد النهائي — طلب جاهز للمعالجة (توريد/تسعير داخل النظام أو خارجه).
 export function buildProcurementEmail(pr, origin) {
   const B = BRAND;
-  const portalUrl = origin ? `${origin}/requests.html` : '';
-  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح بوابة الطلبات</a></td></tr></table>` : '';
+  const portalUrl = requestUrl(origin, pr.id);
+  const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح الطلب في النظام</a></td></tr></table>` : '';
   const inner = `<tr><td dir="rtl" style="padding:24px 30px 8px;text-align:right">
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">اعتُمد طلب الشراء «${esc(pr.title || 'طلب شراء')}» نهائياً عبر كامل سلسلة الموافقات، وهو الآن <b>جاهز لمعالجة المشتريات</b> (عروض أسعار / توريد). راجع التفاصيل والبنود في البوابة.</p>
     ${btn}
@@ -387,9 +406,12 @@ export function buildProcurementEmail(pr, origin) {
 export async function notifyProcurement(env, base, pr, origin) {
   let recips = [];
   try {
-    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
+    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
     const users = await ur.json();
-    let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+    let pick = (users || []).filter((u) =>
+      (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
+      || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
+      || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
     if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
     // البريد الحقيقي المخزَّن إن وُجد، وإلا الاشتقاق.
     recips = pick.filter((u) => u.username !== pr.requester)
@@ -416,9 +438,12 @@ export async function notifyProcurementEvent(env, base, pr, event, origin, comme
   }
   if (!recips.length) {
     try {
-      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email`, { headers: svcHeaders(env) });
+      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
       const users = await ur.json();
-      let pick = (users || []).filter((u) => u.permissions && u.permissions.can_manage_rfq === true);
+      let pick = (users || []).filter((u) =>
+        (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
+        || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
+        || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
       if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
       recips = pick.filter((u) => u.username !== pr.requester)
         .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));

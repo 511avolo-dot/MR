@@ -36,6 +36,29 @@ const emailToUsername = (email) => {
   for (const [u, m] of Object.entries(AUTH_EMAIL_MAP)) { if (m.toLowerCase() === e) return u; }
   return e.split('@')[0];
 };
+const MODULE_PROFILES = new Set([
+  'requester', 'maintenance_manager', 'procurement_officer',
+  'procurement_manager', 'module_admin',
+]);
+const MODULE_PERMISSIONS = new Set([
+  'pr_create', 'pr_view_own', 'pr_view_department', 'pr_view_all', 'pr_comment', 'pr_upload_attachments',
+  'pr_print', 'pr_approve_maintenance', 'pr_authorize_pricing', 'pr_manage_pricing',
+  'pr_link_purchase_orders', 'pr_view_financials', 'pr_manage_workflows', 'pr_manage_users',
+]);
+const LEGACY_PERMISSIONS = new Set([
+  'can_verify_stock', 'can_approve_l1', 'can_approve_l2', 'can_manage_rfq',
+  'can_manage_users', 'can_view_amounts', 'can_receive_po',
+]);
+function cleanPermissionObject(value, allowed = MODULE_PERMISSIONS) {
+  if (value == null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const out = {};
+  for (const [key, on] of Object.entries(value)) {
+    if (!allowed.has(key) || typeof on !== 'boolean') return null;
+    out[key] = on;
+  }
+  return out;
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -68,7 +91,7 @@ function sb(env) {
       // مطابقة غير حسّاسة لحالة الأحرف (البريد lowercase وusername قد يكون Abdullah)،
       // مع تهريب أحرف البدل في ILIKE (% _ \) لمنع مطابقة أوسع تُطابق مستخدماً آخر.
       const safe = String(username).replace(/[\\%_]/g, c => '\\' + c);
-      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active,email`, { headers });
+      const r = await fetch(`${base}/rest/v1/proc_users?username=ilike.${encodeURIComponent(safe)}&select=username,role,active,email,permissions,pr_profile_key,pr_permission_overrides`, { headers });
       if (!r.ok) return null;
       const rows = await r.json();
       // تأكيد المطابقة الدقيقة (بلا حساسية حالة) دفاعياً
@@ -139,8 +162,26 @@ export async function onRequestPost({ request, env }) {
   // 2) تأكّد أنه مدير نشط
   const callerUsername = emailToUsername(caller.email || '');
   const callerProfile = await api.getProfile(callerUsername);
-  if (!callerProfile || callerProfile.role !== 'admin' || callerProfile.active === false) {
+  const callerLegacy = callerProfile && callerProfile.permissions && typeof callerProfile.permissions === 'object'
+    ? callerProfile.permissions : {};
+  const callerOverrides = callerProfile && callerProfile.pr_permission_overrides && typeof callerProfile.pr_permission_overrides === 'object'
+    ? callerProfile.pr_permission_overrides : {};
+  const mayManageUsers = callerProfile && callerProfile.active !== false && (
+    callerProfile.role === 'admin' || callerProfile.pr_profile_key === 'module_admin'
+    || callerLegacy.can_manage_users === true || callerOverrides.pr_manage_users === true
+  );
+  if (!mayManageUsers) {
     return json({ error: 'هذه العملية متاحة للمدير فقط' }, 403);
+  }
+  const callerIsSystemAdmin = callerProfile.role === 'admin';
+  const callerIsModuleAdmin = callerIsSystemAdmin || callerProfile.pr_profile_key === 'module_admin';
+
+  async function mayMutateTarget(username) {
+    const target = await api.getProfile(username);
+    if (!target) return true;
+    if (target.role === 'admin' && !callerIsSystemAdmin) return false;
+    if (target.pr_profile_key === 'module_admin' && !callerIsModuleAdmin) return false;
+    return true;
   }
 
   // 3) نفّذ العملية
@@ -156,7 +197,13 @@ export async function onRequestPost({ request, env }) {
     // البريد الحقيقي (إن أُدخل) أو المشتقّ — يجب أن يكون ضمن نطاق الشركة.
     const realEmail = (email && /^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(String(email).trim()))
       ? String(email).trim().toLowerCase() : usernameToEmail(username);
-    const r = await api.createAuthUser(realEmail, password, { username, role });
+    const cleanLegacy = cleanPermissionObject(permissions, new Set([...LEGACY_PERMISSIONS, ...MODULE_PERMISSIONS]));
+    if (cleanLegacy === null) return json({ error: 'تتضمن الصلاحيات مفتاحاً غير مسموح' }, 400);
+    const profileKey = MODULE_PROFILES.has(payload.pr_profile_key) ? payload.pr_profile_key : 'requester';
+    if (role === 'admin' && !callerIsSystemAdmin) return json({ error: 'إنشاء مدير نظام يتطلّب مدير نظام' }, 403);
+    if ((profileKey === 'module_admin' || cleanLegacy.can_manage_users === true || cleanLegacy.pr_manage_users === true)
+        && !callerIsModuleAdmin) return json({ error: 'منح إدارة الموديل غير مصرّح' }, 403);
+    const r = await api.createAuthUser(realEmail, password, { username, role: role === 'admin' ? 'admin' : 'user' });
     if (!r.ok && !/already|exists|registered/i.test(JSON.stringify(r.data))) {
       return json({ error: 'تعذّر إنشاء حساب الدخول: ' + (r.data.msg || r.data.message || '') }, 400);
     }
@@ -164,16 +211,27 @@ export async function onRequestPost({ request, env }) {
       username, display_name: displayName, email: realEmail,
       password_hash: 'managed_by_supabase_auth',
       role: role === 'admin' ? 'admin' : 'user',
-      permissions: permissions || {}, active: active !== false,
+      permissions: cleanLegacy, active: active !== false,
+      pr_profile_key: profileKey, pr_permission_overrides: {},
+      department_id: payload.department_id ? String(payload.department_id) : null,
+      pr_department_ids: Array.isArray(payload.pr_department_ids)
+        ? payload.pr_department_ids.map(String).filter(Boolean).slice(0, 50) : [],
       created_by: callerUsername,
     });
-    if (!prof.ok) return json({ error: 'أنشئ حساب الدخول لكن فشل حفظ الملف التعريفي: ' + prof.text }, 400);
+    if (!prof.ok) {
+      if (r.ok && r.data && r.data.id) await api.deleteAuthUser(r.data.id);
+      const prefix = r.ok
+        ? 'تعذّر حفظ الملف التعريفي؛ أُلغي حساب الدخول الجديد: '
+        : 'حساب الدخول موجود وتعذّر إنشاء الملف التعريفي: ';
+      return json({ error: prefix + prof.text }, 400);
+    }
     return json({ ok: true });
   }
 
   if (action === 'setPassword') {
     const { username, password } = payload;
     if (!username || String(password || '').length < 6) return json({ error: 'بيانات غير صالحة' }, 400);
+    if (!(await mayMutateTarget(username))) return json({ error: 'لا يمكنك تعديل حساب أعلى من صلاحيتك' }, 403);
     const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (!u) return json({ error: 'لا يوجد حساب دخول لهذا المستخدم' }, 404);
     const r = await api.updateAuthUser(u.id, { password });
@@ -184,12 +242,18 @@ export async function onRequestPost({ request, env }) {
   if (action === 'setActive') {
     const { username, active } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
+    if (String(username).toLowerCase() === String(callerUsername).toLowerCase() && active === false) {
+      return json({ error: 'لا يمكنك تعطيل حسابك الحالي' }, 400);
+    }
+    if (!(await mayMutateTarget(username))) return json({ error: 'لا يمكنك تعديل حساب أعلى من صلاحيتك' }, 403);
     const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
     if (u) {
       // حظر/فك حظر على مستوى Auth (يمنع إصدار JWT جديد للمعطّل)
-      await api.updateAuthUser(u.id, { ban_duration: active ? 'none' : '876000h' });
+      const authResult = await api.updateAuthUser(u.id, { ban_duration: active ? 'none' : '876000h' });
+      if (!authResult.ok) return json({ error: 'تعذّر تحديث حالة حساب الدخول' }, 502);
     }
-    await api.restWrite('PATCH', `proc_users?username=eq.${encodeURIComponent(username)}`, { active: !!active });
+    const profileResult = await api.restWrite('PATCH', `proc_users?username=eq.${encodeURIComponent(username)}`, { active: !!active });
+    if (!profileResult.ok) return json({ error: 'تعذّر تحديث حالة الملف التعريفي' }, 502);
     return json({ ok: true });
   }
 
@@ -199,13 +263,48 @@ export async function onRequestPost({ request, env }) {
     // (سدّ مسار رفع صلاحية: منع مستخدم عادي من منح نفسه صلاحية أو تحويل تفويض معتمِد).
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
+    if (!(await mayMutateTarget(username))) return json({ error: 'لا يمكنك تعديل حساب أعلى من صلاحيتك' }, 403);
     const patch = {};
     if ('permissions' in payload) {
-      const p = payload.permissions;
-      if (p === null || (typeof p === 'object' && !Array.isArray(p))) patch.permissions = p || {};
-      else return json({ error: 'صيغة الصلاحيات غير صالحة' }, 400);
+      const p = cleanPermissionObject(payload.permissions, new Set([...LEGACY_PERMISSIONS, ...MODULE_PERMISSIONS]));
+      if (p === null) return json({ error: 'صيغة الصلاحيات غير صالحة أو تحتوي مفتاحاً غير مسموح' }, 400);
+      if ((p.can_manage_users === true || p.pr_manage_users === true) && !callerIsModuleAdmin) {
+        return json({ error: 'منح إدارة المستخدمين غير مصرّح' }, 403);
+      }
+      patch.permissions = p;
     }
-    if ('delegate_to' in payload) patch.delegate_to = payload.delegate_to ? String(payload.delegate_to) : null;
+    if ('pr_profile_key' in payload) {
+      if (!MODULE_PROFILES.has(String(payload.pr_profile_key))) return json({ error: 'ملف الصلاحيات غير صالح' }, 400);
+      if (String(payload.pr_profile_key) === 'module_admin' && !callerIsModuleAdmin) {
+        return json({ error: 'منح إدارة الموديل غير مصرّح' }, 403);
+      }
+      patch.pr_profile_key = String(payload.pr_profile_key);
+    }
+    if ('pr_permission_overrides' in payload) {
+      const p = cleanPermissionObject(payload.pr_permission_overrides);
+      if (p === null) return json({ error: 'تجاوزات الصلاحيات غير صالحة' }, 400);
+      if (p.pr_manage_users === true && !callerIsModuleAdmin) {
+        return json({ error: 'منح إدارة المستخدمين غير مصرّح' }, 403);
+      }
+      patch.pr_permission_overrides = p;
+    }
+    if ('department_id' in payload) patch.department_id = payload.department_id ? String(payload.department_id) : null;
+    if ('pr_department_ids' in payload) {
+      if (!Array.isArray(payload.pr_department_ids)) return json({ error: 'نطاق الإدارات غير صالح' }, 400);
+      patch.pr_department_ids = payload.pr_department_ids.map(String).filter(Boolean).slice(0, 50);
+    }
+    if ('job_title' in payload) patch.job_title = String(payload.job_title || '').trim().slice(0, 80) || null;
+    if ('delegate_to' in payload) {
+      const delegate = payload.delegate_to ? String(payload.delegate_to).trim() : '';
+      if (delegate && delegate.toLowerCase() === String(username).toLowerCase()) {
+        return json({ error: 'لا يمكن تفويض المستخدم إلى نفسه' }, 400);
+      }
+      if (delegate) {
+        const delegateProfile = await api.getProfile(delegate);
+        if (!delegateProfile || delegateProfile.active === false) return json({ error: 'المفوَّض غير موجود أو غير نشط' }, 400);
+        patch.delegate_to = delegateProfile.username;
+      } else patch.delegate_to = null;
+    }
     if ('is_away' in payload) patch.is_away = !!payload.is_away;
     if ('email' in payload) {
       const e = String(payload.email || '').trim().toLowerCase();
@@ -222,9 +321,14 @@ export async function onRequestPost({ request, env }) {
     const { username } = payload;
     if (!username) return json({ error: 'اسم المستخدم مطلوب' }, 400);
     if (username === callerUsername) return json({ error: 'لا يمكنك حذف حسابك' }, 400);
+    if (!(await mayMutateTarget(username))) return json({ error: 'لا يمكنك حذف حساب أعلى من صلاحيتك' }, 403);
     const u = await api.findAuthUserByEmail(await api.resolveEmail(username));
-    if (u) await api.deleteAuthUser(u.id);
-    await api.restWrite('DELETE', `proc_users?username=eq.${encodeURIComponent(username)}`);
+    if (u) {
+      const authResult = await api.deleteAuthUser(u.id);
+      if (!authResult.ok) return json({ error: 'تعذّر حذف حساب الدخول' }, 502);
+    }
+    const profileResult = await api.restWrite('DELETE', `proc_users?username=eq.${encodeURIComponent(username)}`);
+    if (!profileResult.ok) return json({ error: 'حُذف حساب الدخول وتعذّر حذف الملف التعريفي؛ يلزم تدخل مدير النظام' }, 502);
     return json({ ok: true });
   }
 

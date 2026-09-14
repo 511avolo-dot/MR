@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'requests.html'
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
@@ -18,6 +19,7 @@ on:
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
       - 'db/system2-request-tracking.sql'
+      - 'db/system2-purchase-request-workspace.sql'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
       - 'db/system2-scoped-least-privilege.sql'
@@ -26,12 +28,22 @@ on:
       - 'db/workflows.sql'
       - 'db/system2-tests/**'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/admin-users.js'
       - 'staff-register.html'
-      - 'db/system2-tests/**'
+      - 'scripts/purchase-request-workspace-tests.mjs'
+      - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'scripts/e2e/purchase-request-admin.test.mjs'
+      - 'scripts/e2e/purchase-workspace-visual.test.mjs'
+      - 'scripts/e2e/field-permissions.mjs'
+      - 'scripts/e2e/chromium-path.mjs'
+      - 'scripts/csp-preview-server.mjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/system2-tests.yml'
   pull_request:
     paths:
       - 'index.html'
+      - 'requests.html'
       - 'scripts/system2-tests.mjs'
       - 'functions/api/doc-renew.js'
       - 'renew-doc.html'
@@ -41,6 +53,7 @@ on:
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
       - 'db/system2-request-tracking.sql'
+      - 'db/system2-purchase-request-workspace.sql'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
       - 'db/system2-scoped-least-privilege.sql'
@@ -49,8 +62,17 @@ on:
       - 'db/workflows.sql'
       - 'db/system2-tests/**'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/admin-users.js'
       - 'staff-register.html'
-      - 'db/system2-tests/**'
+      - 'scripts/purchase-request-workspace-tests.mjs'
+      - 'scripts/e2e/purchase-request-doc.test.mjs'
+      - 'scripts/e2e/purchase-request-admin.test.mjs'
+      - 'scripts/e2e/purchase-workspace-visual.test.mjs'
+      - 'scripts/e2e/field-permissions.mjs'
+      - 'scripts/e2e/chromium-path.mjs'
+      - 'scripts/csp-preview-server.mjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/system2-tests.yml'
   workflow_dispatch:
 
@@ -87,6 +109,49 @@ jobs:
 
       - name: حزمة تأكيدات النظام 2
         run: node scripts/system2-tests.mjs
+
+      - name: عقد مساحة طلبات الشراء وحدود مستندات R2
+        run: npm run test:purchase-workspace
+
+  workspace-browser:
+    runs-on: ubuntu-latest
+    name: Purchase request workspace browser checks
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install pinned browser dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Validate desktop and mobile workspace
+        run: npm run test:purchase-workspace-visual
+
+      - name: Validate permissions and direct request links under production CSP
+        shell: bash
+        run: |
+          node scripts/csp-preview-server.mjs > "$RUNNER_TEMP/pr-csp-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8812/index.html > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat "$RUNNER_TEMP/pr-csp-server.log"
+            exit 1
+          fi
+          node scripts/e2e/field-permissions.mjs
 
   # حزمة نطاق موظفي الصيانة (RLS). ⚠️ بلا هذه الوظيفة تبقى **الحدود الأمنية
   # نفسها** بلا تغطية آلية: تعديلٌ يُسقِط `NOT proc_is_scoped()` من سياسة

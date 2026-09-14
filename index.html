@@ -1508,6 +1508,22 @@ body.print-preview-active .print-document{display:block}
 .rep-locked{opacity:0.55;pointer-events:none;filter:grayscale(0.4)}
 
 /* ============ PURCHASE REQUEST PORTAL ============ */
+.pr-command{
+  position:relative;overflow:hidden;margin-bottom:16px;padding:22px 24px;
+  border:1px solid rgba(196,162,101,.42);border-radius:16px;
+  background:linear-gradient(125deg,#201d1b 0%,#302923 62%,#473b2d 100%);
+  color:#fff8ec;box-shadow:0 18px 38px rgba(35,31,32,.14)
+}
+.pr-command::after{content:'';position:absolute;inset:-80px auto auto -55px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(196,162,101,.24),transparent 68%);pointer-events:none}
+.pr-command-top{position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
+.pr-command-kicker{font-size:10px;font-weight:700;letter-spacing:.12em;color:#d9bd87;margin-bottom:5px}
+.pr-command-title{font-family:'Fraunces',serif;font-size:21px;font-weight:600;line-height:1.35}
+.pr-command-sub{font-size:12px;color:rgba(255,248,236,.66);margin-top:4px;line-height:1.7}
+.pr-command-role{flex-shrink:0;padding:7px 12px;border:1px solid rgba(255,255,255,.15);border-radius:999px;background:rgba(255,255,255,.07);font-size:11px;color:#f5dfb4}
+.pr-command-metrics{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pr-command-metric{min-width:0;padding:12px 14px;border:1px solid rgba(255,255,255,.09);border-radius:11px;background:rgba(255,255,255,.055)}
+.pr-command-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:#f0d39b;line-height:1}
+.pr-command-label{font-size:10.5px;color:rgba(255,248,236,.63);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pr-tabs{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .pr-tab{
   background:var(--surface);border:1px solid var(--border);border-radius:10px;
@@ -1549,6 +1565,49 @@ body.print-preview-active .print-document{display:block}
 .pr-step.ret .pr-step-dot{background:#9A7A45;border-color:#9A7A45;color:#fff}
 .pr-step-label{font-weight:600;color:var(--ink);font-size:13.5px}
 .pr-step-sub{font-size:11.5px;color:var(--muted);margin-top:1px}
+@media(max-width:760px){
+  .pr-command{padding:18px 16px;border-radius:13px}
+  .pr-command-top{display:block;margin-bottom:14px}
+  .pr-command-role{display:inline-flex;margin-top:10px}
+  .pr-command-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pr-command-title{font-size:18px}
+  .pr-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+  .pr-tab{flex:0 0 auto}
+  #page-pr .pr-card{padding:14px}
+  #page-pr .pr-table{min-width:720px}
+  #page-pr .pr-card:has(.pr-table){overflow-x:auto}
+}
+
+/* Purchase request command workspace — scoped to this module only. */
+#page-pr>.page-header{display:none}
+#page-pr{--prw-ink:#231f20;--prw-paper:#fffdf9;--prw-canvas:#f5f2eb;--prw-line:#ded8cb;--prw-gold:#c4a265;--prw-gold-dark:#8b6b38;--prw-green:#28745a;--prw-red:#a63d40;--prw-blue:#315f86}
+.pr-workspace{min-height:calc(100vh - 132px);margin:-32px -36px -60px;background:var(--prw-canvas);border-top:1px solid var(--prw-line);overflow:hidden}
+.pr-work-top{height:72px;padding:0 22px;display:flex;align-items:center;gap:16px;background:var(--prw-ink);color:#f7f2e8;border-bottom:1px solid rgba(255,255,255,.08)}
+.pr-work-brand{display:flex;align-items:center;gap:11px;min-width:230px}
+.pr-work-brandmark{width:38px;height:38px;border:1px solid rgba(196,162,101,.5);border-radius:11px;display:grid;place-items:center;color:#ead49e;font-family:'Fraunces',serif;font-size:18px;font-weight:700;background:linear-gradient(145deg,#322b27,#1d1918)}
+.pr-work-brand strong{display:block;font-size:13px}.pr-work-brand small{display:block;color:#9f968c;font-size:9px;letter-spacing:.14em}
+.pr-work-search{position:relative;flex:1;max-width:650px;margin:auto}.pr-work-search input{width:100%;height:40px;border:1px solid #514a47;border-radius:10px;background:#302b2a;color:#f8f3ea;padding:0 42px 0 14px;font-family:inherit;outline:none}.pr-work-search input:focus{border-color:var(--prw-gold);box-shadow:0 0 0 3px rgba(196,162,101,.12)}.pr-work-search span{position:absolute;inset-inline-start:15px;top:9px;color:#b9afa4}
+.pr-work-top-actions{display:flex;align-items:center;gap:8px}.pr-work-role{padding:7px 11px;border-inline-start:1px solid #4b4441;min-width:150px}.pr-work-role b{display:block;font-size:11.5px;color:#f4ead8}.pr-work-role small{display:block;font-size:9.5px;color:#aa9f95}
+.pr-work-iconbtn{width:38px;height:38px;border:1px solid #514a47;border-radius:9px;background:#302b2a;color:#eadfcf;display:grid;place-items:center;cursor:pointer;font-family:inherit}.pr-work-iconbtn:hover{border-color:var(--prw-gold);color:#f0d39b}
+.pr-work-grid{display:grid;grid-template-columns:76px 316px minmax(0,1fr);min-height:calc(100vh - 204px);direction:rtl}
+.pr-work-rail{background:#312d2d;color:#aaa09a;border-inline-start:1px solid #453f3d;display:flex;flex-direction:column;padding:12px 7px;gap:5px}
+.pr-work-navbtn{min-height:62px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative}.pr-work-navbtn .ico{font-size:18px;line-height:1}.pr-work-navbtn:hover{background:rgba(255,255,255,.05);color:#f4ead8}.pr-work-navbtn.active{background:#242121;color:#e8cf9c}.pr-work-navbtn.active::after{content:'';position:absolute;inset-inline-end:-7px;top:13px;bottom:13px;width:2px;background:var(--prw-gold)}.pr-work-navcount{position:absolute;top:6px;inset-inline-start:9px;min-width:16px;height:16px;border-radius:8px;background:var(--prw-gold);color:#241f1c;font-size:9px;display:grid;place-items:center;font-weight:700}
+.pr-work-queue{background:#fbf9f4;border-inline-start:1px solid var(--prw-line);min-width:0;display:flex;flex-direction:column}.pr-work-queuehead{padding:20px 18px 14px;border-bottom:1px solid var(--prw-line)}.pr-work-kicker{font-size:10px;font-weight:700;color:var(--prw-gold-dark);letter-spacing:.08em}.pr-work-queue-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 13px}.pr-work-queue-title h2{font-family:'Fraunces',serif;font-size:23px;margin:0;color:var(--prw-ink)}.pr-work-total{min-width:28px;height:24px;padding:0 7px;border-radius:8px;background:var(--prw-ink);color:#fff;display:grid;place-items:center;font:600 11px 'IBM Plex Mono',monospace}
+.pr-work-filterrow{display:flex;gap:7px}.pr-work-filterrow input{min-width:0;flex:1;height:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;padding:0 11px;font-family:inherit}.pr-work-filterrow button{width:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;cursor:pointer}.pr-work-quick{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px}.pr-work-chip{border:1px solid var(--prw-line);border-radius:16px;background:#f7f4ee;color:#6e665e;padding:5px 9px;font:inherit;font-size:10.5px;cursor:pointer}.pr-work-chip.active{background:var(--prw-ink);border-color:var(--prw-ink);color:#fff}
+.pr-work-list{padding:10px;overflow:auto;max-height:calc(100vh - 356px)}.pr-work-request{width:100%;padding:13px 12px;margin-bottom:8px;border:1px solid transparent;border-radius:10px;background:transparent;text-align:start;font-family:inherit;cursor:pointer;color:var(--prw-ink);display:block}.pr-work-request:hover{background:#fff;border-color:#e9e2d6}.pr-work-request.active{background:#fff;border-color:#d5c7aa;box-shadow:0 3px 12px rgba(46,39,34,.07)}.pr-work-request-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.pr-work-request-id{font:600 10.5px 'IBM Plex Mono',monospace;direction:ltr;color:#6e665e}.pr-work-request-title{font-size:12.5px;font-weight:700;margin:5px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-request-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#81786f;font-size:10px}.pr-work-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-inline-end:4px;background:var(--prw-blue)}.pr-work-dot.ok{background:var(--prw-green)}.pr-work-dot.warn{background:var(--prw-gold-dark)}.pr-work-dot.danger{background:var(--prw-red)}
+.pr-work-detail{direction:rtl;min-width:0;background:#fffdf9}.pr-work-detailhead{padding:18px 28px 14px;background:#fff;border-bottom:1px solid var(--prw-line)}.pr-work-breadcrumb{font-size:10px;color:#81776d;margin-bottom:8px}.pr-work-titlebar{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.pr-work-titlebar h2{font-family:'Fraunces',serif;font-size:25px;line-height:1.3;margin:0 0 5px;color:var(--prw-ink)}.pr-work-sub{font-size:11px;color:#7d746a}.pr-work-version{display:inline-flex;padding:3px 8px;margin-inline-start:8px;border:1px solid var(--prw-line);border-radius:6px;background:#f7f4ee;font-size:9px;color:#756d64;vertical-align:middle}.pr-work-headbuttons{display:flex;gap:7px;flex-wrap:wrap}.pr-work-headbuttons .btn{min-height:38px}
+.pr-work-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:#312d2d;color:#f6efe5;border-bottom:1px solid #45403e}.pr-work-stat{padding:12px 18px;border-inline-start:1px solid #4b4542;min-width:0}.pr-work-stat:first-child{border-inline-start:0}.pr-work-stat small{display:block;font-size:9px;color:#aca29a;margin-bottom:3px}.pr-work-stat b{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-stat .money{font-family:'IBM Plex Mono',monospace;color:#f0d79f}
+.pr-work-tabs{display:flex;align-items:center;gap:22px;padding:0 28px;background:#fff;border-bottom:1px solid var(--prw-line);overflow-x:auto}.pr-work-tab{min-height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:#756c63;font:inherit;font-size:11.5px;white-space:nowrap;cursor:pointer}.pr-work-tab:hover{color:var(--prw-ink)}.pr-work-tab.active{color:var(--prw-ink);border-color:var(--prw-gold-dark);font-weight:700}.pr-work-tab em{font-style:normal;margin-inline-start:4px;padding:1px 6px;border-radius:8px;background:#efebe3;color:#777067;font-size:9px}
+.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:#fff;border:1px solid var(--prw-line);border-radius:10px;padding:18px;margin-bottom:12px}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid #eee9df}.pr-work-meta dt{font-size:10px;color:#80786f}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
+.pr-work-next{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;margin-bottom:12px;border:1px solid #d9ccb2;border-inline-start:4px solid var(--prw-gold-dark);border-radius:9px;background:#fffaf0}.pr-work-next small{display:block;color:#8a744f;font-size:9.5px}.pr-work-next b{display:block;color:#3b332c;font-size:12.5px;margin-top:2px}.pr-work-next .owner{font-size:10px;color:#766c62;white-space:nowrap}
+.pr-work-steps{display:flex;padding:0;margin:0 0 14px;list-style:none;background:#fff;border:1px solid var(--prw-line);border-radius:9px;overflow:hidden}.pr-work-steps li{flex:1;min-width:105px;padding:10px 12px;border-inline-start:1px solid var(--prw-line);color:#938a80;font-size:10px}.pr-work-steps li:first-child{border-inline-start:0}.pr-work-steps li.done{color:var(--prw-green);background:#f6fbf8}.pr-work-steps li.current{color:#6f5327;background:#fff8e8;font-weight:700}.pr-work-steps span{display:block;font-size:9px;opacity:.75}
+.pr-work-tablewrap{overflow:auto}.pr-work-table{width:100%;min-width:620px;border-collapse:collapse;font-size:11.5px}.pr-work-table th{padding:9px 10px;background:#f4f1ea;color:#756d64;text-align:start;font-size:10px;font-weight:600}.pr-work-table td{padding:11px 10px;border-bottom:1px solid #ebe5da;vertical-align:top}.pr-work-table tbody tr{animation:none}.pr-work-table tbody tr:last-child td{border-bottom:0}.pr-work-table .num{text-align:center;font-variant-numeric:tabular-nums}.pr-work-itemnote{display:block;color:#8b8178;font-size:9.5px;margin-top:2px}
+.pr-work-empty{padding:34px 15px;text-align:center;color:#8a8178;font-size:12px}.pr-work-audit{position:relative;padding:2px 0}.pr-work-event{position:relative;padding:0 22px 17px 0;border-inline-start:1px solid #d8d0c3;margin-inline-start:5px}.pr-work-event::before{content:'';position:absolute;inset-inline-start:-5px;top:4px;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid var(--prw-gold-dark)}.pr-work-event b{display:block;font-size:12px}.pr-work-event small{display:block;color:#827970;font-size:10px;margin-top:2px}
+.pr-work-report{max-width:900px;margin:auto;background:#fff;border:1px solid #d8d1c4;box-shadow:0 8px 24px rgba(45,39,34,.08);padding:30px}.pr-work-reporthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--prw-ink);padding-bottom:14px;margin-bottom:22px}.pr-work-reporthead h3{font-size:17px;margin:0}.pr-work-reporthead small{color:#877d72}.pr-work-report-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--prw-line);border-radius:8px;overflow:hidden;margin-bottom:18px}.pr-work-report-grid div{padding:9px 11px;border-inline-start:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-inline-start:0}.pr-work-report-grid small{display:block;color:#827a71;font-size:8.5px}.pr-work-report-grid b{font-size:10.5px}.pr-work-signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:34px}.pr-work-signatures div{border-top:1px solid #a9a096;padding-top:6px;text-align:center;font-size:9.5px;color:#675f57}
+.pr-work-editor{padding:22px 28px;background:var(--prw-canvas);min-height:calc(100vh - 276px);overflow:auto}.pr-work-editor>.pr-card{background:#fff}
+@media(max-width:1180px){.pr-work-grid{grid-template-columns:68px 270px minmax(0,1fr)}.pr-work-summary{grid-template-columns:repeat(3,1fr)}.pr-work-stat:nth-child(n+4){display:none}.pr-work-search{max-width:420px}}
+@media(max-width:900px){.pr-workspace{margin:-16px -14px -84px;min-height:100vh}.pr-work-top{height:auto;min-height:64px;padding:10px 12px}.pr-work-brand{min-width:0}.pr-work-brand div:last-child,.pr-work-role{display:none}.pr-work-search{max-width:none}.pr-work-top-actions .pr-work-iconbtn:nth-of-type(n+2){display:none}.pr-work-grid{grid-template-columns:1fr;display:block}.pr-work-rail{position:sticky;top:62px;z-index:5;flex-direction:row;padding:5px 8px;overflow-x:auto;border-inline-start:0;border-bottom:1px solid #453f3d}.pr-work-navbtn{min-width:62px;min-height:50px}.pr-work-navbtn.active::after{inset:auto 10px -5px;right:10px;height:2px;width:auto}.pr-work-queue{border-inline-start:0;border-bottom:1px solid var(--prw-line)}.pr-work-queuehead{padding:13px 14px 10px}.pr-work-queue-title{margin-bottom:8px}.pr-work-queue-title h2{font-size:19px}.pr-work-list{display:flex;gap:8px;max-height:none;overflow-x:auto;padding:8px}.pr-work-request{flex:0 0 245px;margin:0}.pr-work-detailhead{padding:15px 16px}.pr-work-titlebar h2{font-size:20px}.pr-work-titlebar{display:block}.pr-work-headbuttons{margin-top:12px}.pr-work-summary{grid-template-columns:repeat(2,1fr)}.pr-work-stat:nth-child(n+3){display:none}.pr-work-tabs{padding:0 16px;gap:16px}.pr-work-canvas,.pr-work-editor{padding:14px;max-height:none}.pr-work-meta{grid-template-columns:1fr}.pr-work-next{align-items:flex-start}.pr-work-steps{overflow-x:auto}.pr-work-steps li{flex:0 0 118px}.pr-work-report{padding:18px}.pr-work-report-grid{grid-template-columns:repeat(2,1fr)}.pr-work-report-grid div:nth-child(3){border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:nth-child(4){border-top:1px solid var(--prw-line)}}
+@media(max-width:520px){.pr-work-top-actions{display:none}.pr-work-titlebar h2{font-size:18px}.pr-work-headbuttons .btn{flex:1}.pr-work-queue-title h2{font-size:18px}.pr-work-summary{grid-template-columns:1fr 1fr}.pr-work-tabs{gap:13px}.pr-work-surface{padding:14px}.pr-work-report-grid{grid-template-columns:1fr}.pr-work-report-grid div{border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-top:0}.pr-work-signatures{gap:10px}}
 
 /* Naming methodology */
 .method-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:20px}
@@ -3763,7 +3822,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
         <div class="page-header">
           <div class="page-eyebrow">بوابة الأقسام</div>
           <h1 class="page-title">طلبات الشراء</h1>
-          <p class="page-subtitle">ارفع طلبك مرفقاً بالنموذج الموقَّع من مديرك، وتابع أين وصل لدى المشتريات حتى يصدر أمر الشراء.</p>
+          <p class="page-subtitle">أنشئ الطلب، تابع اعتماد مدير الصيانة وإذن مدير المشتريات، ثم راقب التسعير وأوامر الشراء المرتبطة.</p>
         </div>
         <div id="pr-root"></div>
       </section>
@@ -3789,6 +3848,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             <!-- ⚠️ تقرير المتابعة الميدانيّ هنا لا في شاشة تقارير ثالثة: نطاق
                  الموظّف شاشتان فقط، والقدرة تبقى في متناوله على أوامره نفسها. -->
             <button class="btn btn-ghost btn-sm" id="po-followup-btn" data-scoped-only-inline
+                    data-requires-perm="can_print_followup"
                     data-tooltip="ورقة متابعة ميدانية لأوامرك — بلا مبالغ">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
               طباعة متابعة
@@ -5396,6 +5456,20 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
             <option value="admin">مدير (Admin)</option>
           </select>
         </label>
+        <label class="form-field">
+          <span class="form-label">ملف صلاحيات طلبات الشراء</span>
+          <select id="uf-pr-profile">
+            <option value="requester">موظف طلبات</option>
+            <option value="maintenance_manager">مدير الصيانة والتشغيل</option>
+            <option value="procurement_officer">موظف مشتريات</option>
+            <option value="procurement_manager">مدير المشتريات</option>
+            <option value="module_admin">مدير الموديل</option>
+          </select>
+        </label>
+        <label class="form-field">
+          <span class="form-label">الإدارة داخل موديل الطلبات</span>
+          <select id="uf-pr-department"><option value="">— بلا إدارة محددة —</option></select>
+        </label>
       </div>
       <div style="margin-top:16px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--ink)">الصلاحيات التفصيلية</div>
@@ -5875,11 +5949,22 @@ const PERMISSION_DEFS = [
   { key:'can_edit_po',              label:'تعديل أمر شراء',                short:'تعديل أمر',     cat:'أوامر الشراء', userDefault:true  },
   { key:'can_approve_po',           label:'اعتماد أمر شراء',               short:'اعتماد أمر',    cat:'أوامر الشراء', userDefault:false },
   { key:'can_delete_po',            label:'حذف أمر شراء',                  short:'حذف أمر',       cat:'أوامر الشراء', userDefault:false },
-  { key:'can_receive_po',           label:'تسجيل استلام البضاعة',           short:'استلام',        cat:'أوامر الشراء', userDefault:false },
+  { key:'can_receive_po',           label:'تسجيل استلام البضاعة',           short:'استلام',        cat:'أوامر الشراء', userDefault:false, field:true },
   // ⚠️ userDefault:true مقصود: صفوف المستخدمين القائمة لا تحمل هذا المفتاح،
   //    و`hasPermission` تسقط للافتراضيّ حين يغيب — فلا يفقد أحدٌ مبالغه.
   //    (ونظيرتها على الخادم `proc_can_view_amounts` بالافتراضيّ نفسه.)
-  { key:'can_view_amounts',         label:'عرض المبالغ والأسعار',           short:'المبالغ',       cat:'أوامر الشراء', userDefault:true  },
+  { key:'can_view_amounts',         label:'عرض المبالغ والأسعار',           short:'المبالغ',       cat:'أوامر الشراء', userDefault:true, field:true },
+  // ── الميدان (الصيانة والتشغيل) ──
+  // ⚠️ هذه قدرات موظّف الميدان **الفعلية**، وكانت بلا مفاتيح إطلاقاً: من كان
+  //    مُنطَّقاً امتلكها كلّها ضمنيّاً فلا يملك المدير منحها ولا سحبها. الخادم كان
+  //    يحرسها بالرؤية/الملكية («أنت صاحب الطلب») لا بصلاحية قابلة للضبط.
+  //    `userDefault:true` فموظّف المكتب **بلا أي تغيير** (مفتوحة له اليوم)، والمُنطَّق
+  //    يخضع لصرامة `hasPermission` (الغياب = منع) فتُمنَح صراحةً — ورابط الدعوة يكتبها.
+  //    ونظائرها على الخادم في `db/system2-field-permissions.sql` بالدلالة نفسها.
+  { key:'can_create_pr',            label:'رفع طلبات الشراء (وتعديلها وقوالبها)', short:'رفع طلبات', cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_upload_docs',          label:'رفع المستندات والسندات',          short:'رفع مستند',    cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_comment',              label:'التعليق والردّ داخل النظام',       short:'تعليق',        cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
+  { key:'can_print_followup',       label:'طباعة تقرير المتابعة الميدانيّ',   short:'تقرير متابعة', cat:'الميدان (الصيانة والتشغيل)', userDefault:true, field:true },
   { key:'can_use_ai',               label:'استخدام مساعد الذكاء الاصطناعي', short:'ذكاء اصطناعي',  cat:'التحليلات',  userDefault:true  },
   { key:'can_view_audit',           label:'عرض سجل التدقيق',               short:'تدقيق',         cat:'التحليلات',  userDefault:true  },
   { key:'can_manage_cloud',         label:'إدارة الإعدادات السحابية',       short:'سحابة',         cat:'النظام',     userDefault:false },
@@ -5894,6 +5979,24 @@ const DEFAULT_PERMISSIONS = {
   admin: Object.fromEntries(PERMISSION_KEYS.map(k => [k, true])),
   user:  Object.fromEntries(PERMISSION_DEFS.map(d => [d.key, d.userDefault])),
 };
+
+// ── قوالب أدوار الميدان (قرار المالك 2026-09-13) ──
+// المدير كان يواجه 22 مربّعاً أكثرها لا يخصّ موظّف الصيانة (RFQ · ذكاء اصطناعي ·
+// كتالوج · سحابة). القالب يضبط **كل** المفاتيح دفعةً ثمّ تبقى قابلة للتعديل قبل
+// الحفظ — فهو نقطة انطلاق لا قفل. مفاتيح المكتب تُصفَّر عمداً: موظّف الميدان لا
+// يملكها أصلاً على الخادم، فإظهارها ممنوحة يوهم بقدرة غير قائمة.
+const FIELD_PERMISSION_KEYS = PERMISSION_DEFS.filter(d => d.field).map(d => d.key);
+const ROLE_PRESETS = [
+  { key:'field', label:'👷 موظّف ميدانيّ',
+    hint:'يرفع طلباته وسندها، ويسجّل الاستلام، ويعلّق، ويطبع تقرير المتابعة — بلا مبالغ.',
+    on:['can_create_pr','can_upload_docs','can_comment','can_print_followup','can_receive_po'] },
+  { key:'supervisor', label:'🧭 مشرف قطاع',
+    hint:'كل قدرات الميدان، ويرى مبالغ أوامر قطاعه.',
+    on:['can_create_pr','can_upload_docs','can_comment','can_print_followup','can_receive_po','can_view_amounts'] },
+  { key:'viewer', label:'👁 متابعة فقط',
+    hint:'يتابع أوامر قطاعه وطلباته — بلا رفع ولا استلام ولا مبالغ.',
+    on:[] },
+];
 
 // ── Supabase Auth ──
 // المصادقة الحقيقية تتم عبر Supabase Auth (JWT) لتُفعّل سياسات RLS على الخادم.
@@ -6028,14 +6131,32 @@ async function fetchCloudUsers(force){
     const {data, error} = await CLOUD.client.from('proc_users').select('*');
     if(error) throw error;
     if(!data) return null;
+    let profiles=[];
+    try{ const r=await CLOUD.client.from('proc_pr_permission_profiles').select('profile_key,permissions,active'); profiles=r.data||[]; }catch(_){}
+    const profileMap=Object.fromEntries(profiles.map(p=>[p.profile_key,p.permissions||{}]));
+    const moduleLegacyDefaults={can_create_pr:false,can_upload_docs:false,can_comment:false,
+      can_approve_l1:false,can_approve_l2:false,can_manage_rfq:false,can_view_amounts:false,can_manage_users:false};
+    const legacyFromModule=p=>Object.fromEntries(Object.entries({
+      can_create_pr:p.pr_create,can_upload_docs:p.pr_upload_attachments,can_comment:p.pr_comment,
+      can_approve_l1:p.pr_approve_maintenance,can_approve_l2:p.pr_authorize_pricing,
+      can_manage_rfq:p.pr_manage_pricing,can_view_amounts:p.pr_view_financials,can_manage_users:p.pr_manage_users
+    }).filter(([,v])=>v!==undefined));
     const map = {};
     data.forEach(u => {
+      const modulePerms=Object.assign({},profileMap[u.pr_profile_key]||{},u.pr_permission_overrides||{});
+      const effectivePerms=Object.assign({},DEFAULT_PERMISSIONS[u.role]||DEFAULT_PERMISSIONS.user,
+        u.pr_profile_key?moduleLegacyDefaults:{},legacyFromModule(profileMap[u.pr_profile_key]||{}),
+        u.permissions||{},legacyFromModule(modulePerms));
       map[u.username] = {
         username: u.username,
         displayName: u.display_name,
         password_hash: u.password_hash,
         role: u.role,
-        permissions: u.permissions || DEFAULT_PERMISSIONS[u.role] || DEFAULT_PERMISSIONS.user,
+        permissions: effectivePerms,
+        prProfileKey:u.pr_profile_key||null,
+        prPermissionOverrides:u.pr_permission_overrides||{},
+        departmentId:u.department_id||null,
+        prDepartmentIds:Array.isArray(u.pr_department_ids)?u.pr_department_ids:[],
         active: u.active !== false,
         // نطاق القطاعات — كان المُخطِّط يُسقِطه فلا تراه الواجهة إطلاقاً.
         scopeSectors: normScopeSectors(u.scope_sectors),
@@ -6088,6 +6209,8 @@ async function attemptLogin(username, password){
   // المحلّي (AUTH_BOOTSTRAP_USERS) لا يمنحان نطاقاً أبداً: لا يُصكّ حساب
   // مُنطَّق من قائمة مضمَّنة في الكود. محروس بتأكيد بنيويّ.
   let validScope = [];
+  let validPrProfile = null;
+  let validDepartment = null;
 
   // If cloud is enabled, authenticate via Supabase Auth (never the local
   // bootstrap passwords — those are only for pre-cloud first-time setup).
@@ -6150,6 +6273,8 @@ async function attemptLogin(username, password){
       validPermissions = (profile && profile.permissions) ? profile.permissions
                          : (DEFAULT_PERMISSIONS[validRole] || DEFAULT_PERMISSIONS.user);
       validScope = profile ? normScopeSectors(profile.scopeSectors) : [];
+      validPrProfile = profile?.prProfileKey || null;
+      validDepartment = profile?.departmentId || null;
     }
     // if auth failed → fall through to invalid count
   } else {
@@ -6196,6 +6321,8 @@ async function attemptLogin(username, password){
     displayName: validDisplayName,
     permissions: validPermissions,
     scopeSectors: validScope,
+    prProfileKey: validPrProfile,
+    departmentId: validDepartment,
     loginTime: Date.now()
   };
   try{ sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session)); }catch(e){}
@@ -6415,6 +6542,8 @@ async function refreshCurrentUserSession(){
     displayName: u.displayName,
     permissions: u.permissions,
     scopeSectors: normScopeSectors(u.scopeSectors),
+    prProfileKey:u.prProfileKey||null,
+    departmentId:u.departmentId||null,
     loginTime: STATE.currentUser.loginTime || Date.now()
   };
   STATE.currentUser = newSession;
@@ -6518,7 +6647,9 @@ async function createUser(data){
   if(await adminApiAvailable()){
     const res = await adminUsersCall('create', {
       username: data.username, password: data.password, displayName: data.displayName,
-      role, permissions, active: data.active !== false
+      role, permissions, active: data.active !== false,
+      pr_profile_key:data.prProfileKey||'requester',department_id:data.departmentId||null,
+      pr_department_ids:data.departmentId?[data.departmentId]:[]
     });
     if(!res.ok) return {ok:false, error: res.error};
     pushAuditToCloud({
@@ -6553,6 +6684,10 @@ async function createUser(data){
     password_hash,
     role,
     permissions,
+    pr_profile_key:data.prProfileKey||'requester',
+    pr_permission_overrides:{},
+    department_id:data.departmentId||null,
+    pr_department_ids:data.departmentId?[data.departmentId]:[],
     active: data.active !== false,
     // [] يُخزَّن null: «بلا نطاق» = وصول كامل، وهو الافتراضيّ.
     scope_sectors: (normScopeSectors(data.scopeSectors).length
@@ -6613,6 +6748,16 @@ async function updateUser(username, updates){
   if(updates.scopeSectors !== undefined){
     const sc = normScopeSectors(updates.scopeSectors);
     payload.scope_sectors = sc.length ? sc : null;
+  }
+  if(updates.prProfileKey!==undefined || updates.departmentId!==undefined || updates.permissions!==undefined){
+    const profileRes=await adminUsersCall('setProfile',{
+      username,permissions:updates.permissions||target.permissions,
+      pr_profile_key:updates.prProfileKey||target.prProfileKey||'requester',
+      department_id:updates.departmentId||null,
+      pr_department_ids:updates.departmentId?[updates.departmentId]:[]
+    });
+    if(!profileRes.ok) return {ok:false,error:profileRes.error};
+    delete payload.permissions;
   }
   if(updates.password){
     if(updates.password.length < 6) return {ok:false, error:'كلمة السر يجب أن تكون 6 أحرف على الأقل'};
@@ -7039,8 +7184,7 @@ function renderTasksPanel(){
       go:()=>{ navigate('registrations'); try{ loadRegistrations(1); }catch(e){}
                setTimeout(()=>{ try{ supDocSetFilter('issues'); document.getElementById('supdoc-body')?.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }, 700); }});
   }
-  // ⚠️ لا بطاقة اعتماد: النموذج متابعة لا وورك فلو (قرار المالك). البطاقة الآن
-  // «طلبات وصلت المشتريات ولم يصدر لها أمر شراء بعد» — وهي المتابعة المطلوبة.
+  // بطاقة العمل التشغيلي المتبقي بعد اكتمال الاعتماد.
   if(TASKS.prPending!=null || prIsProcurement()){
     cards.push({n:TASKS.prPending, cls:'danger', l:'طلبات شراء لم يصدر لها أمر بعد', a:'تابعها واربطها بأمر الشراء', go:()=>navigate('pr')});
   }
@@ -12362,9 +12506,7 @@ async function printHistoryReport(fromDate, toDate, options){
 const PR_PRIORITIES = ['عاجل','عالي','متوسط','منخفض'];
 const PR_STATUS_META = {
   draft:           {label:'مسودة',           cls:'neutral'},
-  // ⚠️ نموذج المتابعة: الطلب يصل المشتريات مباشرةً. `in_review`/`approved`
-  // تبقيان للتوافق مع أي طلب أُنشئ قبل التصحيح (لا شيء منها في الإنتاج).
-  submitted:       {label:'لدى المشتريات',   cls:'info'},
+  submitted:       {label:'مُرسل',           cls:'info'},
   in_review:       {label:'قيد الاعتماد',    cls:'warn'},
   returned:        {label:'مُعاد للتعديل',   cls:'info'},
   approved:        {label:'معتمد',           cls:'ok'},
@@ -12376,13 +12518,10 @@ const PR_STATUS_META = {
 let __prLoaded = false;
 let __prDraftItems = [];   // بنود مسودة الإنشاء الحالية
 let __prTplPrefill = null; // قالب بانتظار تعبئة حقول النموذج بعد رسمه
-let __prDraftDoc   = null; // ملف الطلب الموقَّع من المدير (دليل الاعتماد الورقيّ)
+let __prDraftDoc   = null; // مرفق داعم اختياري؛ الاعتماد يتم إلكترونياً في النظام
 let __prEditId     = null; // مسودّة قائمة قيد التعديل (تُحدَّث بمعرّفها لا تُنشأ من جديد)
 
-/* ══════════ مرفق الطلب الموقَّع ══════════
-   قرار المالك: لا اعتمادات داخل النظام — «إلا إذا مكنتهم من رفع الطلب PDF
-   موقع من المدير». فالمرفق **هو** الاعتماد، ولذلك إرساله شرط لا تحسين:
-   طلبٌ بلا سند يجعل المشتريات تلاحق الورقة، وهو بالضبط ما نلغيه. */
+/* ══════════ المرفقات الداعمة ══════════ */
 const PR_DOC_TYPES = ['application/pdf','image/jpeg','image/png'];
 const PR_DOC_MAX   = 10 * 1024 * 1024;
 
@@ -12404,18 +12543,15 @@ function prRenderDocChip(){
        <button class="btn btn-ghost btn-sm" onclick="__prDraftDoc=null;const i=document.getElementById('pr-doc-input');if(i)i.value='';prRenderDocChip()">إزالة</button>`
     : '<span style="color:var(--muted)">لم يُرفق بعد</span>';
 }
-/* الرفع يمرّ بنقطة خادمية: حارس الملفات الطبقيّ + مفتاح مولَّد خادميّاً +
-   فحص رؤية الطلب بهوية المتصل. ثم يُثبَّت المفتاح بـ`pr_set_doc`. */
+/* الرفع يمرّ بنقطة خادمية تسجل المرفق في سجل R2 غير القابل للتعديل. */
 async function prUploadDoc(prId, file){
-  const headers = Object.assign({'Content-Type':'application/octet-stream'}, await prAuthHeader());
-  const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}`,
+  if(!hasPermission('can_upload_docs')) throw new Error('لا تملك صلاحية رفع المستندات — راجع مدير النظام');
+  const headers = Object.assign({'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)}, await prAuthHeader());
+  const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}&kind=supporting`,
     { method:'POST', headers, body: await file.arrayBuffer() });
   const out = await r.json().catch(()=>({}));
   if(!r.ok || !out.ok) throw new Error(out.error || 'تعذّر رفع المرفق');
-  const { error } = await CLOUD.client.rpc('pr_set_doc',
-    { p_pr_id: prId, p_key: out.key, p_name: file.name });
-  if(error) throw error;
-  return out.key;
+  return out.attachment?.object_key || out.key;
 }
 /* عرض المرفق داخل النظام (لا تبويب خارجيّ ولا رابط تخزين مكشوف). */
 async function prViewDoc(prId){
@@ -12430,9 +12566,19 @@ async function prViewDoc(prId){
        ذاكرته تحت مفتاح المسار، فلا يستدعي `regDocFetch` إطلاقاً (السطر
        `DOCV.blobs.get(path) || await regDocFetch(path)`). */
     DOCV.blobs.set(pr.doc_key, blob);
-    docvOpen([{ path: pr.doc_key, label: pr.doc_name || 'الطلب الموقَّع من المدير' }],
+    docvOpen([{ path: pr.doc_key, label: pr.doc_name || 'مرفق الطلب' }],
              0, `مرفق الطلب ${prId}`);
   }catch(e){ reportError('prViewDoc', e, {pr:prId}, {title:'تعذّر فتح المرفق', body:e.message||''}); }
+}
+async function prViewAttachment(prId,key,name){
+  if(!key){ return prViewDoc(prId); }
+  try{
+    const headers=await prAuthHeader();
+    const r=await fetch(`/api/pr-doc?key=${encodeURIComponent(key)}`,{headers});
+    if(!r.ok) throw new Error('تعذّر فتح المرفق');
+    const blob=await r.blob(); DOCV.blobs.set(key,blob);
+    docvOpen([{path:key,label:name||'مرفق الطلب'}],0,`مرفقات الطلب ${prId}`);
+  }catch(e){ reportError('prViewAttachment',e,{pr:prId},{title:'تعذّر فتح المرفق',body:e.message||''}); }
 }
 
 function prStatusBadge(s){
@@ -12469,27 +12615,40 @@ async function prLoadAll(){
     return out;
   };
   try{
-    // ⚠️ أُسقِط جلب `proc_pr_approvals` و`proc_approval_rules`: بعد تصحيح النموذج
-    // إلى «متابعة لا وورك فلو» لا يقرأهما أحد — كانا رحلتَي شبكة في كل تحميل.
-    const [prs, items, depts] = await Promise.all([
+    const [allPrs, items, depts] = await Promise.all([
       fetchAll('proc_purchase_requests','created_at'),
       fetchAll('proc_pr_items','id'),
       fetchAll('proc_departments','id'),
     ]);
+    const prs=(allPrs||[]).filter(p=>!String(p.id||'').startsWith('apr_') && !String(p.workflow_state||'').startsWith('award_'));
     // ⚠️ جدولان اختياريّان (`db/system2-request-flow.sql`): يُجلبان **بتسامح**
     // فالواجهة تعمل قبل تطبيق الترقية حيّاً وبعدها بلا فرع نشر. غيابهما يُخفي
     // اللوحتين لا يُعطّل تحميل الطلبات كلّه.
-    let msgs=[], tpls=[];
+    let msgs=[], tpls=[], approvals=[], attachments=[], audits=[], poLinks=[], allocations=[];
     try{ msgs = await fetchAll('proc_pr_messages','id');       window.__prMsgOK = true; }
     catch(_){ msgs=[]; window.__prMsgOK = false; }
     try{ tpls = await fetchAll('proc_pr_templates','created_at'); window.__prTplOK = true; }
     catch(_){ tpls=[]; window.__prTplOK = false; }
-    const byPr={}, msByPr={};
+    try{ approvals = await fetchAll('proc_pr_approvals','id'); }catch(_){ approvals=[]; }
+    try{ attachments = await fetchAll('proc_pr_attachments','id'); }catch(_){ attachments=[]; }
+    try{ audits = await fetchAll('proc_pr_audit','id'); }catch(_){ audits=[]; }
+    try{ poLinks = await fetchAll('proc_pr_po_links','id'); }catch(_){ poLinks=[]; }
+    try{ allocations = await fetchAll('proc_pr_item_allocations','id'); }catch(_){ allocations=[]; }
+    const byPr={}, msByPr={}, apByPr={}, atByPr={}, auByPr={}, poByPr={};
     items.forEach(it=>{ (byPr[it.pr_id]=byPr[it.pr_id]||[]).push(it); });
     msgs.forEach(m=>{ (msByPr[m.pr_id]=msByPr[m.pr_id]||[]).push(m); });
+    approvals.forEach(a=>{ (apByPr[a.pr_id]=apByPr[a.pr_id]||[]).push(a); });
+    attachments.forEach(a=>{ if(!a.deleted_at)(atByPr[a.pr_id]=atByPr[a.pr_id]||[]).push(a); });
+    audits.forEach(a=>{ (auByPr[a.pr_id]=auByPr[a.pr_id]||[]).push(a); });
+    poLinks.forEach(l=>{ if(l.active!==false)(poByPr[l.pr_id]=poByPr[l.pr_id]||[]).push(l); });
     prs.forEach(p=>{
       p.items     = (byPr[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
       p.messages  = (msByPr[p.id]||[]).sort((a,b)=>(a.id||0)-(b.id||0)); // الأقدم أوّلاً (قراءة حوار)
+      p.approvals = (apByPr[p.id]||[]).sort((a,b)=>(a.seq||0)-(b.seq||0));
+      p.attachments=(atByPr[p.id]||[]).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+      p.audit=(auByPr[p.id]||[]).sort((a,b)=>new Date(a.created_at||a.at||0)-new Date(b.created_at||b.at||0));
+      p.po_links=(poByPr[p.id]||[]).map(l=>Object.assign({},l,{allocations:allocations.filter(a=>a.link_id===l.id)}));
+      if(!p.doc_key && p.attachments[0]){ p.doc_key=p.attachments[0].object_key; p.doc_name=p.attachments[0].file_name; }
     });
     STATE.purchaseRequests = prs;
     STATE.departments = depts||[];
@@ -12529,34 +12688,23 @@ async function prNextNumber(){
    ⚠️ لا `upsert` بعد اليوم: مع ترقيمٍ كان يُشتقّ من قائمة مُصفّاة، رقمٌ مكرّر
    يعني **الكتابة فوق طلب قائم** وحذف بنوده بصمت. الإدراج يفشل بـ23505 فيُكشف
    التعارض بدل أن يُبتلَع. */
-async function prSaveCloud(pr, items, mode){
+async function prSaveCloud(pr, items, mode, submit){
+  if(!hasPermission('can_create_pr')) throw new Error('لا تملك صلاحية رفع طلبات الشراء — راجع مدير النظام');
   if(!prCloudReady()) throw new Error('يجب الاتصال بالسحابة لحفظ الطلب');
-  pr.updated_at = new Date().toISOString();
-  pr.updated_by = STATE.currentUser?.username || null;
-  const tbl = CLOUD.client.from('proc_purchase_requests');
-  const {error} = (mode === 'update')
-    ? await tbl.update(pr).eq('id', pr.id)
-    : await tbl.insert(pr);
+  const request={title:pr.title,department_id:pr.department_id,project:pr.project,needed_by:pr.needed_by,
+    priority:pr.priority,justification:pr.justification,requester_mobile:pr.requester_mobile||null};
+  const rows=(items||[]).map(it=>({item_code:it.item_code||null,description:it.description,unit:it.unit||null,
+    contract_qty:num0(it.contract_qty),stock_balance:num0(it.stock_balance),requested_qty:num0(it.requested_qty),
+    category:it.category||null,notes:it.notes||null}));
+  const {data,error}=await CLOUD.client.rpc('pr_save_request',{
+    p_request:request,p_items:rows,p_submit:!!submit,p_pr_id:mode==='update'?pr.id:null
+  });
   if(error) throw error;
-  await CLOUD.client.from('proc_pr_items').delete().eq('pr_id', pr.id);
-  if(items && items.length){
-    const rows = items.map((it,i)=>({
-      pr_id:pr.id, seq:i+1, item_code:it.item_code||null, description:it.description,
-      unit:it.unit||null, contract_qty:num0(it.contract_qty), stock_balance:num0(it.stock_balance),
-      requested_qty:num0(it.requested_qty), unit_price:(it.unit_price===''||it.unit_price==null)?null:Number(it.unit_price),
-      line_total:(it.unit_price?num0(it.requested_qty)*Number(it.unit_price):null), category:it.category||null, notes:it.notes||null
-    }));
-    const {error:e2} = await CLOUD.client.from('proc_pr_items').insert(rows);
-    if(e2) throw e2;
-  }
+  return data;
 }
 function num0(v){ const n=Number(v); return isNaN(n)?0:n; }
 
-/* ⚠️ حُذفت هنا كتلة سلسلة الاعتماد الإلكترونية (prBuildChain · prCurrentStage ·
-   prCanActOn · prInbox · prAct) بقرار المالك «متابعة لا وورك فلو». كانت غير
-   قابلة للوصول من `renderPRPortal` لكنّها **دوالّ عامّة**، فـ`prAct` تبقى
-   قابلة للاستدعاء من طرفية المتصفّح وتكتب قرارات اعتماد في نموذجٍ لم يعُد فيه
-   اعتماد. جداول القاعدة وبذرة القواعد تبقى معطّلة لا محذوفة (إحياء بلا هجرة). */
+/* قرارات الاعتماد تُعرض من بيانات المراحل التي يولدها الخادم. */
 
 /* ---------- P4: التحويل التلقائي إلى طلب تسعير (RFQ) ---------- */
 function prItemBaseline(it){
@@ -12583,12 +12731,8 @@ async function prToRFQ(pr){
   if(!res || !res.ok) return {ok:false};
   // توليد روابط بوابة الموردين (أفضل جهد)
   for(const s of suppliers){ try{ await rfqEnsureToken(res.id, s); }catch(_){} }
-  // ربط الطلب وتحديث حالته
-  try{
-    await CLOUD.client.from('proc_purchase_requests')
-      .update({ rfq_id:res.id, status:'rfq_issued', updated_at:new Date().toISOString(), updated_by:STATE.currentUser?.username||null })
-      .eq('id', pr.id);
-  }catch(_){}
+  const {error:linkError}=await CLOUD.client.rpc('pr_attach_rfq',{p_pr_id:pr.id,p_rfq_id:res.id});
+  if(linkError) throw linkError;
   try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'convert', entity_type:'pr', entity_id:pr.id, old_value:{status:'approved'}, new_value:{status:'rfq_issued', rfq_id:res.id}, meta:{suppliers:suppliers.length}}); }catch(_){}
   toast('success','تحوّل إلى طلب تسعير', `أُنشئ طلب تسعير ودُعي ${suppliers.length} مورد`);
   __prLoaded=false;
@@ -12629,7 +12773,7 @@ async function buildPRReport(opts){
   const bcls=(s)=>({approved:'ok',rejected:'danger',in_review:'warn',returned:'info',rfq_issued:'info',converted_to_po:'ok',draft:'neutral',cancelled:'danger'})[s]||'neutral';
   const lbl=(s)=>(PR_STATUS_META[s]||{}).label||s||'—';
   const rows=list.map(p=>{
-    // مرحلة **المتابعة** (لا مرحلة اعتماد — أُلغيت السلسلة الإلكترونية).
+    // مرحلة موحّدة تجمع الاعتماد الإلكتروني ثم متابعة تنفيذ المشتريات.
     const stageTxt = prProcStageText(p);
     return `<tr>
       <td dir="ltr" style="text-align:start">${escapeHtml(p.id)}</td>
@@ -12719,44 +12863,293 @@ async function renderPRPortal(){
   }
   host.innerHTML = `<div class="empty">⏳ يحمّل طلبات الشراء...</div>`;
   await prLoadAll();
-  // ⚠️ لا وجهة اعتماد: قرار المالك «متابعة لا وورك فلو» — الطلب يصل المشتريات
-  // مباشرةً، والاعتماد يقع على الورق ودليله المرفق الموقَّع.
   let view = STATE.prView || 'list';
-  if(view==='inbox' || view==='depts') view = 'list';
-  // ⚠️ تبويبان لا يخصّان الموظّف الميدانيّ: «الوارد للمشتريات» شاشة مقفلة عليه
-  // أصلاً (prIncomingHTML)، و«بانتظار اعتمادي» لا تمتلئ له أبداً — عرضهما بعدّاد
-  // ضجيجٌ يوهمه بعملٍ ينتظره. يظهران لمن يعنيانه فقط، وسلوك القائمين لم يتغيّر.
-  const isProc = prIsProcurement();
-  const incomingN = isProc ? prIncoming().length : 0;
-  const incomingLabel = `📦 الوارد للمشتريات${incomingN?` <span class="pr-tab-count">${incomingN}</span>`:''}`;
-  const tplN = (STATE.prTemplates||[]).length;
-  const tabs = `
-    <div class="pr-tabs">
-      ${prTab('create','➕ طلب جديد', view==='create')}
-      ${prTab('templates', `⭐ القوالب${tplN?` <span class="pr-tab-count">${tplN}</span>`:''}`, view==='templates')}
-      ${prTab('list','📋 الطلبات', view==='list')}
-      ${isProc ? prTab('incoming', incomingLabel, view==='incoming') : ''}
-      <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto" onclick="__prLoaded=false;renderPRPortal()">↻ تحديث</button>
-    </div>`;
-  let body='';
-  if(view==='create')      body = prBuilderHTML();
-  else if(view==='templates') body = prTemplatesHTML();
-  else if(view==='track')  body = prTrackingHTML(STATE.prTrackId);
-
-  else if(view==='incoming') body = prIncomingHTML();
-
-  else                     body = prListHTML();
-  host.innerHTML = tabs + body;
+  const canCreatePR = hasPermission('can_create_pr');
+  if(!canCreatePR && (view==='create' || view==='templates')) view='list';
+  if(view==='inbox') STATE.prWorkspaceMode='approvals';
+  if(view==='incoming') STATE.prWorkspaceMode='links';
+  if(view==='depts') STATE.prWorkspaceMode='settings';
+  const mode=STATE.prWorkspaceMode||'requests';
+  const requests=prWorkspaceQueueData(mode);
+  let selected=(STATE.purchaseRequests||[]).find(p=>p.id===STATE.prTrackId);
+  if(!selected || (!requests.some(p=>p.id===selected.id) && !['create','templates'].includes(view))){
+    selected=requests[0]||null;
+    STATE.prTrackId=selected?.id||null;
+  }
+  host.innerHTML=prWorkspaceHTML({view,mode,requests,selected,canCreatePR});
   if(view==='create'){
     if(!__prDraftItems.length) prAddDraftItem();
     if(__prTplPrefill){ prApplyTemplateFields(__prTplPrefill); __prTplPrefill=null; }
     prRenderItems(); prRecalcTotal(); prRenderDocChip();
   }
 }
+
+function prWorkspaceRole(){
+  const labels={requester:'مقدّم طلب',maintenance_manager:'مدير الصيانة والتشغيل',procurement_officer:'أخصائي المشتريات',procurement_manager:'مدير المشتريات',module_admin:'مدير مساحة الطلبات'};
+  if(STATE.currentUser?.role==='admin') return 'مدير النظام';
+  return labels[STATE.currentUser?.prProfileKey||STATE.currentUser?.pr_profile_key]||'مستخدم طلبات الشراء';
+}
+function prWorkspaceVisible(){
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  const all=STATE.purchaseRequests||[];
+  return (prCanSeeAll()?all:all.filter(p=>String(p.requester||'').toLowerCase()===me))
+    .slice().sort((a,b)=>String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||'')));
+}
+function prWorkspaceNeedsAction(pr){
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  if(prPendingApproval(pr)) return true;
+  if(['draft','returned'].includes(pr.status) && String(pr.requester||'').toLowerCase()===me) return true;
+  return prIsProcurement() && (pr.workflow_state==='pricing'||pr.status==='approved') && (pr.proc_status||'received')==='received';
+}
+function prWorkspaceIsBlocked(pr){
+  return ['returned','rejected'].includes(pr.status)||prAgeDays(pr)>7&&['in_review','submitted'].includes(pr.status);
+}
+function prWorkspaceQueueData(mode){
+  let list=prWorkspaceVisible();
+  if(mode==='approvals') list=list.filter(pr=>!!prPendingApproval(pr));
+  else if(mode==='links') list=list.filter(pr=>(pr.po_links||[]).length||pr.po_number||prIsLive(pr));
+  else if(mode==='discussion') list=list.filter(pr=>(pr.messages||[]).length);
+  const filter=STATE.prWorkspaceFilter||'all';
+  if(filter==='mine'){
+    const me=String(STATE.currentUser?.username||'').toLowerCase();
+    list=list.filter(pr=>String(pr.requester||'').toLowerCase()===me);
+  }else if(filter==='action') list=list.filter(prWorkspaceNeedsAction);
+  else if(filter==='blocked') list=list.filter(prWorkspaceIsBlocked);
+  const q=String(STATE.prWorkspaceSearch||'').trim().toLowerCase();
+  if(q) list=list.filter(pr=>[pr.id,pr.title,pr.project,pr.requester_name,pr.requester].some(x=>String(x||'').toLowerCase().includes(q)));
+  return list;
+}
+function prWorkspaceStage(pr){
+  let state=['draft','returned','rejected','cancelled'].includes(pr.status)?pr.status:(pr.workflow_state||pr.status);
+  if(state==='in_review'&&Number(pr.current_seq)===2) state='procurement_review';
+  else if(state==='in_review') state='maintenance_review';
+  const map={draft:['مسودة','neutral',0],submitted:['تم رفع الطلب','info',1],in_review:['قيد الاعتماد','warn',1],maintenance_review:['اعتماد الاحتياج','warn',1],procurement_review:['إذن بدء التسعير','warn',2],pricing:['التسعير والمقارنة','info',3],approved:['جاهز للتسعير','ok',3],rfq_issued:['طلب تسعير صادر','info',3],partially_ordered:['تغطية جزئية','warn',4],ordered:['صدر أمر الشراء','ok',5],converted_to_po:['صدر أمر الشراء','ok',5],returned:['يحتاج استكمالاً','warn',1],rejected:['مرفوض','danger',1],cancelled:['ملغى','danger',0]};
+  return map[state]||[(PR_STATUS_META[pr.status]||{}).label||state||'—','neutral',0];
+}
+function prWorkspaceNext(pr){
+  const state=pr.workflow_state||pr.status;
+  if(pr.status==='draft') return ['مقدّم الطلب','استكمال بيانات المسودة وإرسالها لمسار الاعتماد'];
+  if(pr.status==='returned') return ['مقدّم الطلب','معالجة ملاحظات الإعادة ثم إرسال نسخة محدثة'];
+  if(state==='maintenance_review'||(pr.status==='in_review'&&Number(pr.current_seq)===1)) return ['مدير الصيانة والتشغيل','مراجعة الاحتياج والبنود واعتمادها'];
+  if(state==='procurement_review'||(pr.status==='in_review'&&Number(pr.current_seq)===2)) return ['مدير المشتريات','السماح ببدء التسعير وإسناد المتابعة'];
+  if(state==='pricing'||pr.status==='approved') return ['فريق المشتريات','بدء التسعير وجمع العروض وربط النتائج بالطلب'];
+  if(state==='partially_ordered') return ['فريق المشتريات والصيانة','استكمال تغطية البنود ومتابعة الأوامر المرتبطة'];
+  if(state==='ordered'||pr.status==='converted_to_po') return ['فريق المشتريات والصيانة','متابعة التوريد والاستلام حتى إغلاق الاحتياج'];
+  return ['مالك الطلب الحالي','متابعة الإجراء المسجل في مسار الطلب'];
+}
+function prWorkspaceNavButton(mode,key,icon,label,count){
+  return `<button class="pr-work-navbtn${mode===key?' active':''}" onclick="prSetWorkspaceMode('${key}')"><span class="ico">${icon}</span><span>${label}</span>${count?`<span class="pr-work-navcount">${count}</span>`:''}</button>`;
+}
+function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
+  const all=prWorkspaceVisible(), approvals=prApprovalInbox().length;
+  const linked=all.filter(p=>(p.po_links||[]).length||p.po_number).length;
+  const discussed=all.filter(p=>(p.messages||[]).length).length;
+  const headings={requests:'الطلبات',approvals:'موافقاتي',links:'الارتباطات',discussion:'المناقشات',reports:'المحاضر',settings:'إعدادات الطلبات'};
+  const filter=STATE.prWorkspaceFilter||'all';
+  const queue=requests.length?requests.map(pr=>{
+    const stage=prWorkspaceStage(pr), next=prWorkspaceNext(pr);
+    return `<button class="pr-work-request${selected?.id===pr.id&&!['create','templates'].includes(view)?' active':''}" data-prq-search="${escapeAttr([pr.id,pr.title,pr.project,pr.requester_name,pr.requester].join(' ').toLowerCase())}" onclick="prSelectWorkspaceRequest('${escapeAttr(pr.id)}')">
+      <span class="pr-work-request-top"><span class="pr-work-request-id">${escapeHtml(pr.id)}</span>${prStatusBadge(pr.status)}</span>
+      <span class="pr-work-request-title">${escapeHtml(pr.title||'طلب شراء')}</span>
+      <span class="pr-work-request-meta"><span><i class="pr-work-dot ${stage[1]}"></i>${escapeHtml(stage[0])}</span><span>${escapeHtml(next[0])}</span></span>
+    </button>`;
+  }).join(''):`<div class="pr-work-empty">لا توجد طلبات ضمن قائمة العمل الحالية.</div>`;
+  return `<section class="pr-workspace" aria-label="مساحة عمل طلبات الشراء">
+    <header class="pr-work-top">
+      <div class="pr-work-brand"><span class="pr-work-brandmark">ض</span><div><strong>مجموعة الذيابي · طلبات الشراء</strong><small>AL-DEYABI PROCUREMENT WORKSPACE</small></div></div>
+      <label class="pr-work-search"><span>⌕</span><input value="${escapeAttr(STATE.prWorkspaceSearch||'')}" oninput="prWorkspaceSearch(this.value)" placeholder="ابحث برقم الطلب أو المشروع أو مقدّم الطلب"></label>
+      <div class="pr-work-top-actions"><div class="pr-work-role"><b>${escapeHtml(prWorkspaceRole())}</b><small>${escapeHtml(STATE.currentUser?.displayName||STATE.currentUser?.username||'')}</small></div>${canCreatePR?`<button class="pr-work-iconbtn" title="طلب جديد" onclick="prGoView('create')">＋</button>`:''}<button class="pr-work-iconbtn" title="تحديث" onclick="__prLoaded=false;renderPRPortal()">↻</button></div>
+    </header>
+    <div class="pr-work-grid">
+      <nav class="pr-work-rail" aria-label="تنقل مساحة الطلبات">
+        ${prWorkspaceNavButton(mode,'requests','▤','الطلبات',all.length)}
+        ${prWorkspaceNavButton(mode,'approvals','✓','موافقاتي',approvals)}
+        ${prWorkspaceNavButton(mode,'links','▣','الارتباطات',linked)}
+        ${prWorkspaceNavButton(mode,'discussion','◌','المناقشات',discussed)}
+        ${prWorkspaceNavButton(mode,'reports','⌁','المحاضر',0)}
+        ${hasPermission('can_manage_users')?prWorkspaceNavButton(mode,'settings','⚙','الإعدادات',0):''}
+      </nav>
+      <aside class="pr-work-queue" aria-label="قائمة عمل الطلبات">
+        <div class="pr-work-queuehead"><div class="pr-work-kicker">مساحة العمل</div><div class="pr-work-queue-title"><h2>${headings[mode]||'الطلبات'}</h2><span class="pr-work-total">${requests.length}</span></div>
+          <div class="pr-work-filterrow"><input value="${escapeAttr(STATE.prWorkspaceSearch||'')}" oninput="prWorkspaceSearch(this.value)" placeholder="بحث سريع"><button title="تحديث" onclick="__prLoaded=false;renderPRPortal()">☷</button></div>
+          <div class="pr-work-quick"><button class="pr-work-chip${filter==='all'?' active':''}" onclick="prSetWorkspaceFilter('all')">الكل</button><button class="pr-work-chip${filter==='mine'?' active':''}" onclick="prSetWorkspaceFilter('mine')">طلباتي</button><button class="pr-work-chip${filter==='action'?' active':''}" onclick="prSetWorkspaceFilter('action')">تحتاج إجراء</button><button class="pr-work-chip${filter==='blocked'?' active':''}" onclick="prSetWorkspaceFilter('blocked')">متعثرة</button></div>
+        </div><div class="pr-work-list">${queue}</div>
+      </aside>
+      <main class="pr-work-detail">${prWorkspaceDetailHTML(selected,view,mode)}</main>
+    </div>
+  </section>`;
+}
+function prWorkspaceSearch(value){
+  STATE.prWorkspaceSearch=value||'';
+  const q=String(value||'').trim().toLowerCase();
+  document.querySelectorAll('.pr-work-request[data-prq-search]').forEach(el=>{el.hidden=!!q&&!String(el.dataset.prqSearch||'').includes(q);});
+  document.querySelectorAll('.pr-work-search input,.pr-work-filterrow input').forEach(el=>{if(el!==document.activeElement)el.value=value||'';});
+}
+function prSetWorkspaceMode(mode){
+  STATE.prWorkspaceMode=mode; STATE.prView='list';
+  if(mode==='reports') STATE.prDetailTab='report';
+  else if(mode==='approvals') STATE.prDetailTab='approvals';
+  else if(mode==='links') STATE.prDetailTab='links';
+  else if(mode==='discussion') STATE.prDetailTab='discussion';
+  renderPRPortal();
+}
+function prSetWorkspaceFilter(filter){STATE.prWorkspaceFilter=filter;STATE.prView='list';renderPRPortal();}
+function prSelectWorkspaceRequest(id){STATE.prTrackId=id;STATE.prView='track';renderPRPortal();}
+function prSetDetailTab(tab){STATE.prDetailTab=tab;renderPRPortal();}
+
+function prWorkspaceStepsHTML(pr){
+  const at=prWorkspaceStage(pr)[2];
+  const steps=['رفع الطلب','اعتماد الاحتياج','السماح بالتسعير','التسعير والمقارنة','تغطية البنود','التوريد والاستلام'];
+  return `<ol class="pr-work-steps">${steps.map((label,i)=>`<li class="${i<at?'done':i===at?'current':''}">${i<at?'✓ ':i===at?'● ':''}${label}<span>${i<at?'مكتمل':i===at?'المرحلة الحالية':'لاحقاً'}</span></li>`).join('')}</ol>`;
+}
+function prWorkspaceDecisionHTML(pr){
+  const mine=prPendingApproval(pr); if(!mine) return '';
+  const approveLabel=mine.stage_key==='procurement_pricing'?'الموافقة على بدء التسعير':'اعتماد الاحتياج وإرساله للمشتريات';
+  return `<div class="pr-work-surface" style="border-color:#d7c49d;background:#fffaf0"><h3>${escapeHtml(mine.stage_label||'قرار الاعتماد')}</h3><div class="pr-work-sub">يُسجّل القرار على النسخة الحالية مع هوية المعتمد ووقت التنفيذ.</div><textarea id="pr-work-decision-note" class="input" style="width:100%;min-height:74px;margin-top:12px;resize:vertical" placeholder="ملاحظة القرار — إلزامية عند الإعادة أو الرفض"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary" onclick="prActInline('${escapeAttr(pr.id)}','approve')">✓ ${approveLabel}</button><button class="btn btn-ghost" onclick="prActInline('${escapeAttr(pr.id)}','return')">↩ إعادة للاستكمال</button><button class="btn btn-ghost" style="color:var(--danger)" onclick="prActInline('${escapeAttr(pr.id)}','reject')">رفض الطلب</button></div></div>`;
+}
+function prWorkspaceAttachmentsHTML(pr){
+  const docs=pr.attachments||[];
+  if(!docs.length&&!pr.doc_key) return `<div class="pr-work-sub">لا توجد مرفقات داعمة. الاعتماد الإلكتروني محفوظ في سجل الطلب.</div>`;
+  const list=docs.length?docs:[{file_name:pr.doc_name,object_key:pr.doc_key,kind:'supporting'}];
+  return list.map((doc,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;${i<list.length-1?'border-bottom:1px solid #eee8dd':''}"><span style="font-size:12px">📎 ${escapeHtml(doc.file_name||'مرفق الطلب')}<small class="pr-work-itemnote">${escapeHtml(doc.kind||'مرفق داعم')}</small></span><button class="btn btn-ghost btn-sm" onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(doc.object_key||pr.doc_key)}','${escapeAttr(doc.file_name||pr.doc_name||'مرفق الطلب')}')">فتح داخل النظام</button></div>`).join('');
+}
+function prWorkspaceOverviewHTML(pr){
+  const next=prWorkspaceNext(pr);
+  const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:#d7c49d;background:#fffaf0"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p><button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button></div>`:'';
+  return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
+}
+function prWorkspaceItemsHTML(pr){
+  const links=pr.po_links||[], showMoney=canViewAmounts();
+  const rows=(pr.items||[]).map((it,i)=>{
+    const allocations=links.flatMap(l=>(l.allocations||[]).filter(a=>String(a.pr_item_id)===String(it.id)).map(a=>({qty:Number(a.allocated_qty)||0,po:l.po_number})));
+    const allocated=allocations.reduce((s,a)=>s+a.qty,0), requested=Number(it.requested_qty)||0, remaining=Math.max(0,requested-allocated);
+    const poNums=[...new Set(allocations.map(a=>a.po))];
+    return `<tr><td class="num">${i+1}</td><td><b>${escapeHtml(it.description||'—')}</b>${it.notes?`<span class="pr-work-itemnote">${escapeHtml(it.notes)}</span>`:''}${poNums.length?`<span class="pr-work-itemnote" dir="ltr">${poNums.map(escapeHtml).join(' · ')}</span>`:''}</td><td class="num">${escapeHtml(it.unit||'—')}</td><td class="num">${requested}</td><td class="num">${allocated}</td><td class="num"><b style="color:${remaining?'var(--prw-red)':'var(--prw-green)'}">${remaining}</b></td>${showMoney?`<td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td>`:''}</tr>`;
+  }).join('');
+  return `<div class="pr-work-surface"><h3>البنود والتغطية بأوامر الشراء</h3><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="8" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>'}</tbody></table></div></div>`;
+}
+function prWorkspaceApprovalsHTML(pr){
+  const decisionLabel={approved:'تم الاعتماد',pending:'بانتظار القرار',returned:'أعيد للاستكمال',rejected:'مرفوض'};
+  const approvals=(pr.approvals||[]).map(a=>`<div class="pr-work-event"><b>${escapeHtml(a.stage_label||a.stage_key||'قرار')}</b><small>${escapeHtml(decisionLabel[a.decision]||a.decision||'—')} · ${escapeHtml(a.approver||'غير مسند')}${a.acted_at?' · '+escapeHtml(String(a.acted_at).slice(0,16).replace('T',' ')):''}</small>${a.comment?`<small>${escapeHtml(a.comment)}</small>`:''}</div>`).join('');
+  const audit=(pr.audit||[]).slice().reverse().map(a=>`<div class="pr-work-event"><b>${escapeHtml(prAuditLabel(a.event))}</b><small>${escapeHtml(a.actor_name||a.actor||'النظام')} · ${escapeHtml(String(a.created_at||a.at||'').slice(0,16).replace('T',' '))}</small>${a.note?`<small>${escapeHtml(a.note)}</small>`:''}</div>`).join('');
+  return `${prWorkspaceDecisionHTML(pr)}<div class="pr-work-surface"><h3>سلسلة الموافقات</h3><div class="pr-work-audit">${approvals||'<div class="pr-work-empty">لم يُنشأ مسار اعتماد لهذا الطلب بعد.</div>'}</div></div><div class="pr-work-surface"><h3>سجل القرارات والتغييرات</h3><div class="pr-work-audit">${audit||'<div class="pr-work-empty">لا أحداث إضافية مسجّلة.</div>'}</div></div>`;
+}
+function prAuditLabel(event){
+  return ({created:'إنشاء الطلب',submitted:'إرسال الطلب',approved:'اعتماد الطلب',returned:'إعادة للاستكمال',rejected:'رفض الطلب',message:'إضافة مناقشة',proc_started:'بدء معالجة المشتريات',quotes_collected:'اكتمال جمع العروض',po_linked:'ربط أمر شراء',po_unlinked:'فك ربط أمر شراء',rfq_attached:'ربط طلب تسعير'})[event]||String(event||'حدث على الطلب').replaceAll('_',' ');
+}
+function prWorkspaceDiscussionHTML(pr){
+  const html=prThreadHTML(pr);
+  return html||`<div class="pr-work-surface"><h3>المناقشة المشتركة</h3><div class="pr-work-empty">لا توجد مناقشات على هذا الطلب.</div></div>`;
+}
+function prWorkspaceLinksHTML(pr){
+  const links=pr.po_links||[];
+  const cards=links.map(l=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #eee8dd"><div><b dir="ltr">${escapeHtml(l.po_number)}</b><small class="pr-work-itemnote">${(l.allocations||[]).length} توزيع على البنود${l.note?' · '+escapeHtml(l.note):''}</small></div><button class="btn btn-ghost btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح الأمر</button></div>`).join('');
+  const isReady=['pricing','partially_ordered','ordered'].includes(pr.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(pr.status);
+  const procurement=isReady&&prIsProcurement();
+  const process=procurement?`<div class="pr-work-surface"><h3>معالجة المشتريات ${procStatusBadge(pr)}</h3>${pr.proc_started_by?`<div class="pr-work-sub">بدأ العمل: <b>${escapeHtml(pr.proc_started_by)}</b> · ${escapeHtml(String(pr.proc_started_at||'').slice(0,10))}</div>`:''}${pr.quotes_collected_by?`<div class="pr-work-sub">تم جمع العروض: <b>${escapeHtml(pr.quotes_collected_by)}</b> · ${escapeHtml(String(pr.quotes_collected_at||'').slice(0,10))}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-ghost" onclick="prPrint('${escapeAttr(pr.id)}')">طباعة الطلب</button>${(pr.proc_status||'received')==='received'?`<button class="btn btn-primary" onclick="prStart('${escapeAttr(pr.id)}')">بدأت العمل عليه</button>`:''}${pr.proc_status==='in_progress'?`<button class="btn btn-accent" onclick="prQuotesDone('${escapeAttr(pr.id)}')">تم جمع العروض</button>`:''}${!pr.rfq_id&&hasPermission('can_manage_rfq')?`<button class="btn btn-ghost" onclick="prConvertManual('${escapeAttr(pr.id)}')">إنشاء طلب تسعير</button>`:''}${pr.rfq_id?`<button class="btn btn-ghost" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح طلب التسعير ${escapeHtml(pr.rfq_id)}</button>`:''}</div></div>`:'';
+  return `${process}<div class="pr-work-surface"><h3>أوامر الشراء المرتبطة (${links.length})</h3>${cards||'<div class="pr-work-empty">لم يُربط أمر شراء بهذا الطلب بعد.</div>'}${procurement?prPoLinkPanel(pr):''}</div>`;
+}
+function prWorkspaceReportHTML(pr){
+  const stage=prWorkspaceStage(pr), items=pr.items||[];
+  const rows=items.map((it,i)=>`<tr><td class="num">${i+1}</td><td>${escapeHtml(it.description||'—')}${it.notes?`<span class="pr-work-itemnote">${escapeHtml(it.notes)}</span>`:''}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${escapeHtml(it.unit||'—')}</td><td>${escapeHtml(it.notes||stage[0])}</td></tr>`).join('');
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary" onclick="prPrint('${escapeAttr(pr.id)}')">⇩ طباعة محضر الطلب</button></div><article class="pr-work-report"><header class="pr-work-reporthead"><div><h3>مجموعة الذيابي</h3><small>إدارة المشتريات</small></div><span class="pr-work-brandmark">ض</span></header><div style="text-align:center;margin-bottom:20px"><h3 style="font-size:20px">محضر طلب شراء</h3><small>${escapeHtml(pr.id)} · الإصدار ${escapeHtml(String(pr.revision||1))}</small></div><div class="pr-work-report-grid"><div><small>الجهة</small><b>${escapeHtml(pr.department||pr.department_id||'—')}</b></div><div><small>الموقع</small><b>${escapeHtml(pr.project||'—')}</b></div><div><small>تاريخ الإنشاء</small><b>${escapeHtml(String(pr.created_at||'').slice(0,10)||'—')}</b></div><div><small>الحالة</small><b>${escapeHtml(stage[0])}</b></div></div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الوصف</th><th>الكمية</th><th>الوحدة</th><th>الملاحظات</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="pr-work-empty">لا بنود</td></tr>'}</tbody></table></div><p style="margin:22px 0;padding:12px;border-inline-end:3px solid var(--prw-gold);background:#faf7f0;color:#6d655d;font-size:10.5px">يوثّق هذا المحضر بيانات الطلب والقرارات المسجلة إلكترونياً. أي تعديل جوهري ينشئ إصداراً جديداً مع الإبقاء على كامل سجل الموافقات والمناقشات.</p><div class="pr-work-signatures"><div>مقدّم الطلب</div><div>مدير الصيانة والتشغيل</div><div>مدير المشتريات</div></div></article>`;
+}
+function prWorkspaceDetailHTML(pr,view,mode){
+  if(view==='create') return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">طلبات الشراء ‹ طلب جديد</div><div class="pr-work-titlebar"><div><h2>إنشاء طلب شراء</h2><div class="pr-work-sub">يُحفظ الرقم خادمياً ويبدأ الاعتماد بعد الإرسال.</div></div><button class="btn btn-ghost" onclick="prGoView('list')">العودة لمساحة العمل</button></div></div><div class="pr-work-editor">${prBuilderHTML()}</div>`;
+  if(view==='templates') return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">طلبات الشراء ‹ القوالب</div><div class="pr-work-titlebar"><div><h2>قوالب الطلبات المتكررة</h2><div class="pr-work-sub">ابدأ طلباً مضبوطاً دون إعادة إدخال البنود المعتادة.</div></div><button class="btn btn-ghost" onclick="prGoView('list')">العودة لمساحة العمل</button></div></div><div class="pr-work-editor">${prTemplatesHTML()}</div>`;
+  if(mode==='settings') return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">طلبات الشراء ‹ الإعدادات</div><div class="pr-work-titlebar"><div><h2>إعدادات الطلبات</h2><div class="pr-work-sub">الأقسام ومديرو الاعتماد وسجل المشاريع المعتمد.</div></div></div></div><div class="pr-work-editor">${prDeptsHTML()}</div>`;
+  if(!pr) return `<div class="pr-work-empty" style="padding-top:100px"><h3>لا توجد طلبات في هذه القائمة</h3><p>غيّر المرشح أو أنشئ طلباً جديداً.</p></div>`;
+  const stage=prWorkspaceStage(pr), next=prWorkspaceNext(pr), tab=STATE.prDetailTab||'overview';
+  const approvals=pr.approvals||[], approved=approvals.filter(a=>a.decision==='approved').length;
+  const tabDefs=[['overview','نظرة عامة',''],['items','البنود',(pr.items||[]).length],['discussion','المناقشات',(pr.messages||[]).length],['approvals','الموافقات',approvals.length?`${approved}/${approvals.length}`:''],['links','الارتباطات',(pr.po_links||[]).length],['report','محضر الطلب','']];
+  const body={overview:prWorkspaceOverviewHTML,items:prWorkspaceItemsHTML,discussion:prWorkspaceDiscussionHTML,approvals:prWorkspaceApprovalsHTML,links:prWorkspaceLinksHTML,report:prWorkspaceReportHTML}[tab]||prWorkspaceOverviewHTML;
+  return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">المشتريات ‹ طلبات الشراء ‹ <span dir="ltr">${escapeHtml(pr.id)}</span></div><div class="pr-work-titlebar"><div><h2>${escapeHtml(pr.title||'طلب شراء')}<span class="pr-work-version">الإصدار ${escapeHtml(String(pr.revision||1))}</span></h2><div class="pr-work-sub">${escapeHtml(pr.department||pr.department_id||'—')} · ${escapeHtml(pr.project||'—')} · ${escapeHtml(pr.requester_name||pr.requester||'—')}</div></div><div class="pr-work-headbuttons"><button class="btn btn-ghost" onclick="prSetDetailTab('report')">⇩ التقرير</button>${hasPermission('can_create_pr')?`<button class="btn btn-ghost" onclick="prGoView('templates')">القوالب</button>`:''}<button class="btn btn-primary" onclick="prSetDetailTab('${prPendingApproval(pr)?'approvals':stage[2]>=3?'links':'overview'}')">متابعة الطلب</button></div></div></div><div class="pr-work-summary"><div class="pr-work-stat"><small>رقم الطلب</small><b dir="ltr">${escapeHtml(pr.id)}</b></div><div class="pr-work-stat"><small>الحالة الحالية</small><b>${escapeHtml(stage[0])}</b></div><div class="pr-work-stat"><small>المالك الحالي</small><b>${escapeHtml(next[0])}</b></div><div class="pr-work-stat"><small>العمر التشغيلي</small><b>${escapeHtml(prSinceText(pr.submitted_at||pr.created_at)||'—')}</b></div><div class="pr-work-stat"><small>القيمة التقديرية</small><b class="money">${fmtPrice(pr.est_total)}${canViewAmounts()?' ر.س':''}</b></div></div><nav class="pr-work-tabs" aria-label="تفاصيل الطلب">${tabDefs.map(([key,label,count])=>`<button class="pr-work-tab${tab===key?' active':''}" onclick="prSetDetailTab('${key}')">${label}${count!==''?`<em>${count}</em>`:''}</button>`).join('')}</nav><section class="pr-work-canvas">${body(pr)}</section>`;
+}
+async function prActInline(prId,action){
+  const note=(document.getElementById('pr-work-decision-note')?.value||'').trim();
+  if(action!=='approve'&&note.length<3){toast('warn','الملاحظة مطلوبة','اكتب سبباً واضحاً للقرار');return;}
+  return prAct(prId,action,note);
+}
+function prWorkspaceHeaderHTML(){
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  const all=STATE.purchaseRequests||[];
+  const visible=prCanSeeAll()?all:all.filter(p=>String(p.requester||'').toLowerCase()===me);
+  const pending=prApprovalInbox().length;
+  const pricing=visible.filter(p=>['pricing','partially_ordered','ordered'].includes(p.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(p.status)).length;
+  const linked=visible.filter(p=>(p.po_links||[]).some(x=>x.active!==false)||p.po_number).length;
+  const profileLabels={requester:'مقدّم طلب',maintenance_manager:'مدير الصيانة والتشغيل',procurement_officer:'موظف مشتريات',procurement_manager:'مدير المشتريات',module_admin:'مدير موديل الطلبات'};
+  const role=STATE.currentUser?.role==='admin'?'مدير النظام':(profileLabels[STATE.currentUser?.prProfileKey]||profileLabels[STATE.currentUser?.pr_profile_key]||'مستخدم الموديل');
+  return `<section class="pr-command" aria-label="ملخص دورة طلبات الشراء">
+    <div class="pr-command-top">
+      <div><div class="pr-command-kicker">PURCHASE REQUEST CONTROL</div><div class="pr-command-title">مركز دورة طلب الشراء</div><div class="pr-command-sub">سجل واحد يجمع الطلب والقرار والتسعير وأوامر الشراء المرتبطة.</div></div>
+      <div class="pr-command-role">${escapeHtml(role)}</div>
+    </div>
+    <div class="pr-command-metrics">
+      <div class="pr-command-metric"><div class="pr-command-value">${visible.length}</div><div class="pr-command-label">الطلبات الظاهرة لك</div></div>
+      <div class="pr-command-metric"><div class="pr-command-value">${pending}</div><div class="pr-command-label">بانتظار قرارك</div></div>
+      <div class="pr-command-metric"><div class="pr-command-value">${pricing}</div><div class="pr-command-label">في التسعير والمعالجة</div></div>
+      <div class="pr-command-metric"><div class="pr-command-value">${linked}</div><div class="pr-command-label">مرتبطة بأوامر شراء</div></div>
+    </div>
+  </section>`;
+}
 function prTab(key,label,active){
   return `<button class="pr-tab${active?' active':''}" onclick="prGoView('${key}')">${label}</button>`;
 }
-function prGoView(view, id){ STATE.prView=view; STATE.prTrackId=id||null; if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; } renderPRPortal(); }
+/* ⚠️ بوّابة الوجهة = بوّابة الفعل: من لا يملك `can_create_pr` لا يفتح النموذج
+   أصلاً (تبويباه مخفيّان)، فلا يملأ صفحةً ثمّ يُرفَض عند الحفظ. */
+function prGoView(view, id){
+  if((view==='create' || view==='templates') && !hasPermission('can_create_pr')){
+    if(!requirePermission('can_create_pr', 'رفع طلبات الشراء')) { view='list'; id=null; }
+  }
+  STATE.prView=view; STATE.prTrackId=id||null;
+  if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; }
+  renderPRPortal();
+}
+
+function prPendingApproval(pr){
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  return (pr.approvals||[]).find(a=>a.decision==='pending' && Number(a.seq)===Number(pr.current_seq)
+    && String(a.approver||'').toLowerCase()===me);
+}
+function prApprovalInbox(){ return (STATE.purchaseRequests||[]).filter(pr=>!!prPendingApproval(pr)); }
+function prApprovalInboxHTML(){
+  const list=prApprovalInbox();
+  if(!list.length) return `<div class="empty"><div class="empty-icon">✓</div><div class="empty-title">لا توجد قرارات معلّقة</div></div>`;
+  return `<div class="pr-card"><div class="pr-section-title">قرارات تنتظر اعتمادك (${list.length})</div>
+    <table class="data-table pr-table"><thead><tr><th>رقم الطلب</th><th>الطلب</th><th>الإدارة</th><th>مرحلة القرار</th><th>تاريخ الإرسال</th></tr></thead><tbody>${list.map(pr=>{
+      const a=prPendingApproval(pr); return `<tr onclick="prGoView('track','${escapeAttr(pr.id)}')" style="cursor:pointer"><td dir="ltr">${escapeHtml(pr.id)}</td><td>${escapeHtml(pr.title)}</td><td>${escapeHtml(pr.department||'—')}</td><td>${escapeHtml(a?.stage_label||'اعتماد')}</td><td>${escapeHtml(String(pr.submitted_at||pr.created_at||'').slice(0,10))}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+async function prAct(prId, action, suppliedNote){
+  const label=action==='approve'?'اعتماد':action==='return'?'إعادة للتعديل':'رفض';
+  const note=suppliedNote===undefined
+    ? window.prompt(`${label} الطلب — اكتب الملاحظة${action==='approve'?' (اختياري)':' (إلزامي)'}`,'')
+    : String(suppliedNote||'');
+  if(note===null) return;
+  if(action!=='approve' && note.trim().length<3){ toast('warn','الملاحظة مطلوبة','اكتب سبباً واضحاً للقرار'); return; }
+  try{
+    const {data,error}=await CLOUD.client.rpc('pr_decide',{p_pr_id:prId,p_action:action,p_comment:note.trim()||null});
+    if(error) throw error;
+    const event=action==='return'?'returned':action==='reject'?'rejected':
+      (data?.workflow_state==='pricing'?'approved':'pending');
+    prNotifyPR(prId, event, note);
+    toast('success',`تم ${label} الطلب`,data?.workflow_state==='pricing'?'أصبح الطلب جاهزاً للتسعير':'سُجّل القرار في مسار الطلب');
+    __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ reportError('prAct',e,{pr:prId,action},{title:'تعذّر تسجيل القرار',body:e.message||''}); }
+}
+
+function prApprovalTimelineHTML(pr){
+  const approvals=pr.approvals||[];
+  if(!approvals.length) return '';
+  const rows=approvals.map(a=>{
+    const pending=a.decision==='pending'; const active=pending && Number(a.seq)===Number(pr.current_seq);
+    const icon=a.decision==='approved'?'✓':a.decision==='rejected'?'×':a.decision==='returned'?'↩':active?'●':'○';
+    const cls=a.decision==='approved'?'done':active?'active':a.decision==='pending'?'wait':'done';
+    return `<div class="pr-step ${cls}"><div class="pr-step-dot">${icon}</div><div class="pr-step-body"><div class="pr-step-label">${escapeHtml(a.stage_label||a.stage_key||'اعتماد')}</div><div class="pr-step-sub">${escapeHtml(a.approver||'غير مسند')}${a.acted_at?' · '+escapeHtml(String(a.acted_at).slice(0,16).replace('T',' ')):''}${a.comment?' · '+escapeHtml(a.comment):''}</div></div></div>`;
+  }).join('');
+  const mine=prPendingApproval(pr);
+  return `<div class="pr-card" style="margin-top:12px"><div class="pr-section-title">مسار الاعتماد والقرارات</div><div class="pr-stepper">${rows}</div>${mine?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-primary" onclick="prAct('${escapeAttr(pr.id)}','approve')">✓ اعتماد</button><button class="btn btn-ghost" onclick="prAct('${escapeAttr(pr.id)}','return')">↩ إعادة للتعديل</button><button class="btn btn-ghost" style="color:var(--danger)" onclick="prAct('${escapeAttr(pr.id)}','reject')">رفض</button></div>`:''}</div>`;
+}
 
 function prListHTML(){
   const me = STATE.currentUser?.username;
@@ -12766,7 +13159,7 @@ function prListHTML(){
     return `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">لا توجد طلبات</div><div class="empty-text">اضغط «طلب جديد» لإنشاء أول طلب شراء.</div></div>`;
   }
   const rows = list.map(p=>{
-    // مرحلة **المتابعة** (لا اعتماد): أين وصل الطلب فعلاً.
+    // المرحلة الحالية تشمل قرار الاعتماد ثم التسعير والتنفيذ.
     // والمسودّة تُفتح للإكمال مباشرةً — كانت صفّاً ميّتاً لا يصير طلباً أبداً.
     const stageTxt = p.status==='draft'
       ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();prEditDraft('${escapeAttr(p.id)}')">✏️ إكمال المسودّة وإرسالها</button>`
@@ -12796,7 +13189,8 @@ function prIsProcurement(){ return prPermStrict('can_manage_rfq') || STATE.curre
 // الوارد = كل طلب حيّ لم يصدر له أمر شراء بعد ولم يُقفل — هذه هي المتابعة.
 function prIncoming(){
   return (STATE.purchaseRequests||[])
-    .filter(p=>prIsLive(p) && !['po_issued','closed','completed'].includes(p.proc_status||''));
+    .filter(p=>['pricing','partially_ordered','ordered'].includes(p.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(p.status))
+    .filter(p=>!['closed','completed'].includes(p.proc_status||''));
 }
 /* مصدر واحد لنصّ مرحلة المتابعة — تستعمله الشارة والمطبوعة معاً. */
 const PROC_STAGE_LABEL = { received:['وارد جديد','warn'], in_progress:['قيد التنفيذ','info'],
@@ -12853,18 +13247,9 @@ function prFnMissing(e){
 async function prProcStage(id, stage){
   if(!prCloudReady()){ toast('error','غير متصل','معالجة الطلبات تتطلّب اتصالاً بالسحابة'); return; }
   const META = PR_STAGE_META[stage] || { ev:stage, t:'تم', b:'' };
-  const me = STATE.currentUser?.username||null; const now = new Date().toISOString();
   try{
     const {error} = await CLOUD.client.rpc('pr_proc_stage', {p_pr_id:id, p_stage:stage});
-    if(error){
-      if(!prFnMissing(error)) throw error;
-      const patch = stage==='in_progress'
-        ? { proc_status:'in_progress', proc_started_by:me, proc_started_at:now }
-        : { proc_status:'quotes_collected', quotes_collected_by:me, quotes_collected_at:now };
-      const {error:e2} = await CLOUD.client.from('proc_purchase_requests')
-        .update(Object.assign(patch, {updated_by:me, updated_at:now})).eq('id',id);
-      if(e2) throw e2;
-    }
+    if(error) throw error;
     prNotifyPR(id, META.ev);
     toast('success', META.t, META.b);
     __prLoaded=false; await prLoadAll(); renderPRPortal();
@@ -13044,6 +13429,7 @@ function prApplyTemplateFields(t){
 }
 
 async function prSaveTemplate(){
+  if(!requirePermission('can_create_pr', 'حفظ قالب طلب')) return;
   if(!prCloudReady()){ toast('error','غير متصل','حفظ القوالب يتطلّب اتصالاً بالسحابة'); return; }
   const nameEl = document.getElementById('pr-tpl-name');
   const name = ((nameEl && nameEl.value)||'').trim();
@@ -13162,14 +13548,14 @@ function prBuilderHTML(){
       <button class="btn btn-ghost btn-sm" onclick="prAddItemRow()" style="margin-top:8px">➕ إضافة بند</button>
       <div id="pr-words" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
 
-      <div class="pr-section-title" style="margin-top:18px">الطلب الموقَّع من المدير <span style="color:var(--danger)">*</span></div>
+      <div class="pr-section-title" style="margin-top:18px">مرفق داعم <span style="font-size:11px;color:var(--muted)">(اختياري)</span></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12.5px">
         <input type="file" id="pr-doc-input" accept="application/pdf,image/jpeg,image/png"
                onchange="prPickDoc(this)" style="max-width:100%">
         <span id="pr-doc-chip"></span>
       </div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.7">
-        ارفع صورة أو PDF لنموذج الطلب بعد توقيع مديرك عليه — هو سند الطلب لدى المشتريات،
+        أرفق صورة أو PDF للمواصفات أو المخطط أو أي مستند يساعد على التسعير؛
         ويبقى محفوظاً في النظام مع الطلب فلا يُطلَب منك مرّة أخرى.
       </div>
 
@@ -13259,20 +13645,12 @@ async function prSubmitNew(asDraft){
   if(!title){ toast('error','بيانات ناقصة','أدخل نوع/فئة المواد'); return; }
   const items=__prDraftItems.filter(it=>(it.description||'').trim() && num0(it.requested_qty)>0);
   if(!items.length){ toast('error','بيانات ناقصة','أضف بنداً واحداً على الأقل بكمية مطلوبة'); return; }
-  /* ⚠️ الادّعاء بلا دليل أسوأ من غيابه (نفس درس شهادة المحتوى المحلي):
-     الإرسال مشروط بوصول المرفق فعلاً، لا بنيّة رفعه. المسودّة تُحفظ بدونه.
-     `__prEditId` = تعديل مسودّة قائمة: سندها المرفوع سابقاً يُغني عن إرفاق جديد. */
   const editing = !!__prEditId;
-  const existingDoc = editing && (STATE.purchaseRequests||[]).find(p=>p.id===__prEditId)?.doc_key;
-  if(!asDraft && !__prDraftDoc && !existingDoc){
-    toast('error','السند مطلوب','أرفق الطلب موقَّعاً من مديرك قبل الإرسال');
-    document.getElementById('pr-doc-input')?.focus(); return;
-  }
   const total=items.reduce((s,it)=>s+num0(it.requested_qty)*num0(it.unit_price),0);
   const deptId=document.getElementById('pr-dept')?.value||'';
   const dept=(STATE.departments||[]).find(d=>d.id===deptId);
   const pr={
-    id: editing ? __prEditId : await prNextNumber(), request_no:null, title,
+    id: editing ? __prEditId : null, request_no:null, title,
     department_id: deptId||null, department: dept?dept.name_ar:null,
     sector: document.getElementById('pr-sector')?.value||null,
     project: document.getElementById('pr-project')?.value||null,
@@ -13284,36 +13662,22 @@ async function prSubmitNew(asDraft){
     priority: document.getElementById('pr-priority')?.value||'متوسط',
     justification: document.getElementById('pr-just')?.value||null,
     est_total: total, total_in_words: total>0?tafqitSAR(total):null,
-    // ⚠️ `submitted` لا `in_review`: لا سلسلة اعتماد إلكترونية — الطلب يصل
-    // المشتريات مباشرةً، والاعتماد وقع على الورق ودليله المرفق الموقَّع.
-    // ⚠️ يُحفَظ **مسودّةً دائماً** أوّلاً؛ التحويل إلى `submitted` بعد وصول السند.
     currency:'SAR', status:'draft', current_seq: 0,
     created_by: STATE.currentUser?.username||null, created_at: new Date().toISOString()
   };
   if(editing) delete pr.created_at;   // لا يُعاد كتابة تاريخ الإنشاء عند التعديل
   try{
     toast('info','جارٍ الحفظ', asDraft?'حفظ المسودة...':'إرسال الطلب...');
-    /* ⚠️ ترتيب مقصود — كان عيباً حقيقيّاً: الحفظ كان يقع بحالة `submitted`
-       **قبل** رفع المرفق، فأيّ فشل رفع (شبكة · حارس الملفات · R2) يترك الطلب
-       «مُرسَلاً بلا دليله» بينما التوست يقول «تعذّر الحفظ» ولا يُرسَل إشعار.
-       الآن: مسودّة → مرفق → تحويل للإرسال → إشعار. فشلُ الرفع يترك **مسودّة**
-       قابلة لإعادة المحاولة، ولا يُدَّعى إرسالٌ بلا سند. */
-    await prSaveCloud(pr, items, editing ? 'update' : 'insert');
+    const saved=await prSaveCloud(pr, items, editing ? 'update' : 'insert', !asDraft);
+    pr.id=saved.id;
     if(__prDraftDoc){ await prUploadDoc(pr.id, __prDraftDoc); }
-    if(!asDraft){
-      const {error:sErr} = await CLOUD.client.from('proc_purchase_requests')
-        .update({status:'submitted', updated_at:new Date().toISOString(),
-                 updated_by:STATE.currentUser?.username||null}).eq('id', pr.id);
-      if(sErr) throw sErr;
-      pr.status = 'submitted';
-    }
-    try{ pushAuditToCloud && pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action: asDraft?'create':'submit', entity_type:'pr', entity_id:pr.id, old_value:null, new_value:{status:pr.status,total}, meta:{has_doc:!!(__prDraftDoc||existingDoc), edited:editing}}); }catch(e){}
+    pr.status=asDraft?'draft':'in_review'; pr.workflow_state=saved.workflow_state;
     // الإشعار: البوابة الداخلية لم تكن ترسل شيئاً إطلاقاً، فطلبٌ يُرفَع لا
     // يعلم به معتمِده حتى يفتح النظام صدفةً. نستعمل نفس نقطة `requests.html`
     // بلا كود بريد جديد. fire-and-forget: فشل البريد لا يُسقِط طلباً حُفِظ.
-    if(!asDraft) prNotifyPR(pr.id, 'submitted');
-    toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب للمشتريات',
-      asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'يمكنك متابعته من هنا حتى يصدر أمر الشراء.');
+    if(!asDraft) prNotifyPR(pr.id, 'pending');
+    toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب لمدير الصيانة',
+      asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'بدأ مسار الاعتماد الإلكتروني ويمكنك متابعة كل قرار من هنا.');
     __prLoaded=false; __prDraftItems=[]; __prDraftDoc=null; __prEditId=null;
     prGoView('track', pr.id);
     prLoadAll().then(renderPRPortal);
@@ -13368,33 +13732,18 @@ function prSinceText(ts){
 }
 function prJourneyHTML(pr){
   const st = pr.status;
-  /* ⚠️ مراحل **متابعة** لا اعتماد (قرار المالك: «متابعة وليس وورك فلو»).
-     الاعتماد يقع على الورق خارج النظام ودليله المرفق الموقَّع؛ وجمع العروض
-     والمقارنة خارج النظام كذلك — فالمرحلة تقول ما يجري لا من يعتمد. */
-  const live = prIsLive(pr);                       // أُرسل فعلاً (لا مسودّة/ملغى)
-  const ps   = live ? (pr.proc_status || 'received') : null;
-  const rank = { received:0, in_progress:1, quotes_collected:2, po_issued:3, closed:4 };
-  const at   = live ? (rank[ps] ?? 0) : -1;
+  const live = prIsLive(pr);
+  const state=pr.workflow_state||st;
+  const rank={draft:0,maintenance_review:1,procurement_review:2,pricing:3,partially_ordered:4,ordered:5};
+  const at=rank[state]??(st==='approved'?3:0);
   const steps = [
-    { k:'submitted', label:'أُرسل الطلب للمشتريات',
-      done: st !== 'draft',
-      meta: pr.created_at ? `${String(pr.created_at).slice(0,10)} · ${prSinceText(pr.created_at)}` : '' },
-    { k:'received', label:'وصل المشتريات',
-      done: at >= 1, active: at === 0,
-      meta: at === 0 ? 'بانتظار بدء العمل عليه' : '' },
-    { k:'work', label:'جارٍ العمل عليه',
-      done: at >= 2, active: at === 1,
-      meta: pr.proc_started_by
-        ? `${escapeHtml(pr.proc_started_by)} · ${String(pr.proc_started_at||'').slice(0,10)} · ${prSinceText(pr.proc_started_at)}`
-        : '' },
-    { k:'quotes', label:'اكتمل جمع العروض والمقارنة',
-      done: at >= 3, active: at === 2,
-      meta: pr.quotes_collected_by
-        ? `${escapeHtml(pr.quotes_collected_by)} · ${String(pr.quotes_collected_at||'').slice(0,10)}`
-        : '' },
+    {label:'إنشاء وإرسال الطلب',done:at>=1,active:at===0,meta:pr.submitted_at?`${String(pr.submitted_at).slice(0,10)} · ${prSinceText(pr.submitted_at)}`:''},
+    {label:'اعتماد الحاجة — مدير الصيانة',done:at>=2,active:at===1,meta:pr.maintenance_approved_by?`${escapeHtml(pr.maintenance_approved_by)} · ${String(pr.maintenance_approved_at||'').slice(0,10)}`:'بانتظار القرار'},
+    {label:'إذن بدء التسعير — مدير المشتريات',done:at>=3,active:at===2,meta:pr.pricing_authorized_by?`${escapeHtml(pr.pricing_authorized_by)} · ${String(pr.pricing_authorized_at||'').slice(0,10)}`:'بانتظار القرار'},
+    {label:'التسعير والمقارنة',done:at>=4,active:at===3,meta:pr.rfq_id?`طلب التسعير ${escapeHtml(pr.rfq_id)}`:'جاهز لبدء التسعير'},
     { k:'po', label:'صدر أمر الشراء',
-      done: at >= 3, active: at === 3,
-      meta: pr.po_number ? `أمر رقم ${escapeHtml(pr.po_number)}` : '' },
+      done: at >= 5, active: at === 4,
+      meta: (pr.po_links||[]).length ? `${pr.po_links.length} أمر شراء مرتبط` : (pr.po_number?`أمر رقم ${escapeHtml(pr.po_number)}`:'') },
   ];
   const rows = steps.map(x=>{
     const cls = x.done ? 'done' : (x.active ? 'active' : 'wait');
@@ -13406,21 +13755,21 @@ function prJourneyHTML(pr){
         ${x.meta?`<div class="pr-step-sub">${x.meta}</div>`:''}
       </div></div>`;
   }).join('');
-  // «كم له يوم منذ أن بدأ العمل به» — بارزة لأنها أكثر ما يُسأل عنه
-  const ageSrc = pr.proc_started_at || pr.created_at;   // بدء العمل إن وُجد، وإلا الإرسال
+  const ageSrc = pr.submitted_at || pr.created_at;
   const age = prDaysSince(ageSrc);
   const ageLine = (age !== null)
     ? `<div style="font-size:12.5px;color:var(--muted);margin-top:10px">⏱ ${
-         pr.proc_started_at ? 'منذ بدء العمل عليه' : 'منذ إرسال الطلب'}: <b>${escapeHtml(poDays(age))}</b></div>`
+         'منذ إرسال الطلب'}: <b>${escapeHtml(poDays(age))}</b></div>`
     : '';
   // ⚠️ «صدر أمر الشراء رقم …» هو خلاصة المتابعة كلّها: بارز وقابل للنقر يفتح
   // درج الأمر (والمبالغ فيه محكومة بـfmtPrice كما في كل مكان).
-  const poLine = pr.po_number ? `
+  const firstPo=(pr.po_links||[])[0]?.po_number||pr.po_number;
+  const poLine = firstPo ? `
     <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:#eef7ee;
                 border:1px solid #cfe3cf;font-size:13px">
       ✅ صدر لهذا الطلب <b>أمر الشراء رقم
       <a style="cursor:pointer;color:var(--accent-2)"
-         onclick="prOpenLinkedPO('${escapeAttr(pr.po_number)}')">${escapeHtml(pr.po_number)}</a></b>
+         onclick="prOpenLinkedPO('${escapeAttr(firstPo)}')">${escapeHtml(firstPo)}</a></b>
     </div>` : '';
   return `<div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">أين وصل طلبك</div>
@@ -13430,7 +13779,7 @@ function prJourneyHTML(pr){
 
 /* الطلب «حيّ» = أُرسل ويُتابَع. مصدر واحد كي لا تتفرّق دلالة الحالة. */
 function prIsLive(pr){
-  return pr && (pr.status === 'submitted' || pr.status === 'approved');
+  return pr && !['draft','rejected','cancelled'].includes(pr.status);
 }
 /* فتح أمر الشراء المرتبط من داخل شاشة الطلب — نفس درج الأوامر لا شاشة ثانية. */
 function prOpenLinkedPO(num){
@@ -13458,7 +13807,9 @@ function prThreadHTML(pr){
   const kind = isProc && !isOwner ? 'question' : 'answer';
   const ph   = kind==='question' ? 'اكتب استفساراً لمُقدّم الطلب…' : 'اكتب ردّك لفريق المشتريات…';
   const btn  = kind==='question' ? '؟ إرسال استفسار' : '↪ إرسال الردّ';
-  const canPost = isProc || isOwner;
+  // بوّابة الصندوق = بوّابة الفعل (`prPostMessage`): من سُحب منه التعليق يقرأ
+  // المحادثة ولا يرى مربّع الكتابة — لا يكتب ثمّ يُرفَض.
+  const canPost = (isProc || isOwner) && hasPermission('can_comment');
   return `<div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">المحادثة والاستفسارات${msgs.length?` (${msgs.length})`:''}</div>
       ${items || '<div style="font-size:12.5px;color:var(--muted)">لا استفسارات على هذا الطلب.</div>'}
@@ -13470,6 +13821,7 @@ function prThreadHTML(pr){
 }
 
 async function prPostMessage(prId, kind){
+  if(!requirePermission('can_comment', 'الردّ داخل النظام')) return;
   const el = document.getElementById('pr-msg-input');
   const txt = (el && el.value || '').trim();
   if(!txt){ toast('warn','فارغة','اكتب نصّ الرسالة أولاً'); return; }
@@ -13491,23 +13843,26 @@ async function prPostMessage(prId, kind){
    رقم كذا. وخلاص متابعة.» — فالربط اختيارٌ من قائمة الأوامر القائمة لا كتابة
    حرّة: رقمٌ ملفَّق أو بكتابة مختلفة يكسر الربط بصمت (درس توحيد المشاريع). */
 function prPoLinkPanel(pr){
+  const links=pr.po_links||[];
+  const linked=links.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)"><span>أمر <b dir="ltr">${escapeHtml(l.po_number)}</b> · ${(l.allocations||[]).length} توزيع</span><span><button class="btn btn-ghost btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prUnlinkPO('${escapeAttr(pr.id)}','${escapeAttr(l.po_number)}')">فك الربط</button></span></div>`).join('');
   const opts = (STATE.purchaseOrders||[])
     .slice().sort((a,b)=>poNumCompare(b,a)).slice(0, 400)
-    .map(po=>`<option value="${escapeAttr(po.po_number)}"${po.po_number===pr.po_number?' selected':''}>${escapeHtml(po.po_number)}${po.supplier?' — '+escapeHtml(po.supplier):''}</option>`).join('');
+    .map(po=>`<option value="${escapeAttr(po.po_number)}">${escapeHtml(po.po_number)}${po.supplier?' — '+escapeHtml(po.supplier):''}</option>`).join('');
+  const allocRows=(pr.items||[]).map(it=>{
+    const used=links.reduce((s,l)=>s+(l.allocations||[]).filter(a=>a.pr_item_id===it.id).reduce((x,a)=>x+Number(a.allocated_qty||0),0),0);
+    const remaining=Math.max(0,Number(it.requested_qty||0)-used);
+    return `<label style="display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;font-size:12.5px"><span>${escapeHtml(it.description)} <small style="color:var(--muted)">المتبقي ${remaining}</small></span><input class="input" type="number" min="0" max="${remaining}" step="0.01" value="${remaining}" data-pralloc="${it.id}"></label>`;
+  }).join('');
   return `<div style="margin-top:14px;border-top:1px solid var(--line,#e6e2d8);padding-top:12px">
-    <div style="font-weight:600;font-size:13px;margin-bottom:8px">أمر الشراء الصادر عن هذا الطلب</div>
-    ${pr.po_number ? `
-      <div style="font-size:13px;margin-bottom:8px">
-        مرتبط حالياً بالأمر <b dir="ltr">${escapeHtml(pr.po_number)}</b>
-        <button class="btn btn-ghost btn-sm" style="margin-inline-start:8px" onclick="prOpenLinkedPO('${escapeAttr(pr.po_number)}')">فتح الأمر</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prUnlinkPO('${escapeAttr(pr.id)}')">فكّ الربط</button>
-      </div>` : ''}
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px">أوامر الشراء والتوزيع على البنود</div>
+    ${linked||'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">لا توجد أوامر مرتبطة بعد.</div>'}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <select class="select" id="pr-po-pick" style="min-width:240px;flex:1">
         <option value="">— اختر رقم أمر الشراء —</option>${opts}
       </select>
-      <button class="btn btn-primary btn-sm" onclick="prLinkPO('${escapeAttr(pr.id)}')">🔗 ${pr.po_number?'تغيير الربط':'اربط الطلب بالأمر'}</button>
+      <button class="btn btn-primary btn-sm" onclick="prLinkPO('${escapeAttr(pr.id)}')">🔗 ربط وتوزيع</button>
     </div>
+    <div style="display:grid;gap:6px;margin-top:10px">${allocRows}</div>
     <div style="font-size:11.5px;color:var(--muted);margin-top:6px">
       بمجرّد الربط يرى مُقدّم الطلب «صدر أمر الشراء رقم …» في شاشة متابعته، ويصله إشعار بريد.
     </div>
@@ -13518,18 +13873,22 @@ async function prLinkPO(prId){
   const sel = document.getElementById('pr-po-pick');
   const num = (sel && sel.value || '').trim();
   if(!num){ toast('warn','اختر أمراً','حدّد رقم أمر الشراء من القائمة'); return; }
+  const allocations=[...document.querySelectorAll('[data-pralloc]')].map(el=>({item_id:Number(el.dataset.pralloc),qty:Number(el.value||0)})).filter(a=>a.qty>0);
+  if(!allocations.length){ toast('warn','حدّد الكميات','أدخل كمية لبند واحد على الأقل'); return; }
   try{
-    const { error } = await CLOUD.client.rpc('pr_link_po', { p_pr_id: prId, p_po_number: num });
+    const { error } = await CLOUD.client.rpc('pr_link_purchase_order', { p_pr_id: prId, p_po_number: num, p_allocations:allocations, p_note:null });
     if(error) throw error;
     prNotifyPR(prId, 'po_issued', num);
     toast('success','تمّ الربط', `الطلب ${prId} ← أمر الشراء ${num}. وصل إشعار لمُقدّم الطلب.`);
     __prLoaded=false; await prLoadAll(); renderPRPortal();
   }catch(e){ reportError('prLinkPO', e, {pr:prId, po:num}, {title:'تعذّر الربط', body:e.message||''}); }
 }
-async function prUnlinkPO(prId){
-  if(!confirm('فكّ ربط أمر الشراء عن هذا الطلب؟ (يُسجَّل في التدقيق)')) return;
+async function prUnlinkPO(prId, poNumber){
+  const reason=window.prompt('سبب فك ربط أمر الشراء (يُسجّل في التدقيق):','');
+  if(reason===null) return;
+  if(reason.trim().length<3){ toast('warn','السبب مطلوب','اكتب سبباً واضحاً'); return; }
   try{
-    const { error } = await CLOUD.client.rpc('pr_unlink_po', { p_pr_id: prId });
+    const { error } = await CLOUD.client.rpc('pr_unlink_purchase_order', { p_pr_id: prId, p_po_number:poNumber, p_reason:reason.trim() });
     if(error) throw error;
     toast('success','فُكّ الربط','');
     __prLoaded=false; await prLoadAll(); renderPRPortal();
@@ -13539,15 +13898,15 @@ async function prUnlinkPO(prId){
 function prTrackingHTML(id){
   const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id);
   if(!pr){ return `<div class="empty"><div class="empty-title">الطلب غير موجود</div><button class="btn btn-ghost btn-sm" onclick="prGoView('list')">رجوع</button></div>`; }
-  // ⚠️ أُزيل «مُدرَّج سلسلة الاعتماد» هنا: كان يُحسب ولا يُستعمَل بعد تصحيح
-  // النموذج (المسار الظاهر هو `prJourneyHTML` — مراحل متابعة لا اعتماد).
+  // شاشة التتبّع القديمة محفوظة للتوافق؛ مساحة العمل الجديدة تعرض المسار
+  // والاعتمادات والسجل في تبويبات مترابطة حول الطلب نفسه.
   const itemsRows=(pr.items||[]).map((it,i)=>`<tr><td class="center">${i+1}</td><td>${escapeHtml(it.description)}</td><td class="center">${escapeHtml(it.unit||'—')}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td></tr>`).join('');
   // المسودّة تُكمَل من شاشتها نفسها — لا يبحث صاحبها عن مدخل آخر.
   const actionPanel = (pr.status==='draft')
     ? `<div class="pr-card" style="margin-top:12px;border-color:var(--accent-2);background:#f7fbff">
          <div class="pr-section-title">مسودّة لم تُرسَل بعد</div>
          <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
-           لن تراها المشتريات حتى ترسلها${pr.doc_key?'':'، والإرسال يتطلّب إرفاق الطلب موقَّعاً من مديرك'}.</div>
+           لن تدخل مسار الاعتماد حتى ترسلها. يمكنك إضافة المرفقات الداعمة الآن أو لاحقاً.</div>
          <button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">✏️ إكمال المسودّة وإرسالها</button>
        </div>`
     : '';
@@ -13569,8 +13928,9 @@ function prTrackingHTML(id){
     </div>
     ${actionPanel}
     ${prJourneyHTML(pr)}
+    ${prApprovalTimelineHTML(pr)}
     ${prThreadHTML(pr)}
-    ${(prIsLive(pr) && prIsProcurement()) ? `
+    ${(['pricing','partially_ordered','ordered'].includes(pr.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(pr.status)) && prIsProcurement() ? `
     <div class="pr-card" style="margin-top:12px;border-color:var(--accent-2)">
       <div class="pr-section-title">معالجة المشتريات ${procStatusBadge(pr)}</div>
       ${pr.proc_started_by ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">▶ بدأ العمل: <b>${escapeHtml(pr.proc_started_by)}</b> · ${(pr.proc_started_at||'').toString().slice(0,10)}</div>`:''}
@@ -13589,13 +13949,13 @@ function prTrackingHTML(id){
         <button class="btn btn-ghost btn-sm" style="margin-inline-start:10px" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح للمقارنة والترسية ←</button></div>
     </div>` : ''}
     <div class="pr-card" style="margin-top:12px">
-      <div class="pr-section-title">سند الطلب (موقَّع من المدير)</div>
+      <div class="pr-section-title">المرفقات الداعمة</div>
       ${pr.doc_key
         ? `<div style="font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-             <span>📎 ${escapeHtml(pr.doc_name||'الطلب الموقَّع')}</span>
+             <span>📎 ${escapeHtml(pr.doc_name||'مرفق الطلب')}</span>
              <button class="btn btn-ghost btn-sm" onclick="prViewDoc('${escapeAttr(pr.id)}')">فتح داخل النظام</button>
            </div>`
-        : `<div style="font-size:12.5px;color:var(--danger)">⚠️ لا سند مرفق بهذا الطلب.</div>`}
+        : `<div style="font-size:12.5px;color:var(--muted)">لا توجد مرفقات؛ الاعتماد الإلكتروني مسجّل في المسار أعلاه.</div>`}
     </div>
     <div class="pr-card" style="margin-top:12px">
       <div class="pr-section-title">البنود (${(pr.items||[]).length})</div>
@@ -14335,7 +14695,7 @@ function reportsCatalog(){
     //    لا يرى إلا ما وُسِم بها صراحةً — فتقريرٌ جديد يُضاف بلا العلامة
     //    يُحجَب عنه تلقائياً بدل أن يتسرّب. (وتُعاد الفحوص في `reportRun`
     //    لأن الفهرس يُستدعى من onclick، فإخفاء البطاقة وحده ليس بوّابة.)
-    { group:'المشتريات', perm:null, icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
+    { group:'المشتريات', perm:'can_print_followup', icon:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>',
       title:'متابعة أوامر الشراء — بلا مبالغ', desc:'ورقة متابعة ميدانية لموظفي الصيانة: الأوامر والبنود المنتظَرة وحالة التسليم — بلا أي أسعار أو إجماليات.',
       noMoney:true,
       fields:[
@@ -14719,20 +15079,19 @@ async function renderUsersList(){
   });
 }
 
-/* ══════════ رابط دعوة موظفي القطاع ══════════
-   قرار المالك: رابط **واحد للقطاع** يُنشَر · بريد الشركة حصراً · والحساب
-   **ينتظر التفعيل**. الرابط لا يمنح صلاحية: القطاع من الرمز الموقَّع، والدور
-   والصلاحيات مفروضة خادميّاً، والحساب موقوف — فمسرَّبه لا يفتح النظام.
-   ⚠️ ولذلك الإبطال متاح هنا: نقرة تُسقِط كل الروابط الصادرة. */
+/* ══════════ دعوة شخصية لموظفي الصيانة والتشغيل والمشتريات ══════════ */
 async function staffInviteOpen(){
   if(!requirePermission('can_manage_users','رابط دعوة الموظفين')) return;
   /* ⚠️ الخادم يشترط `role==='admin'` (`callerProfile`) — فبلا هذا الفحص يرى
      حاملُ المفتاح غير الأدمن الزرَّ ويُرفَض بعد النقر. توحيد الشرطين. */
-  if(STATE.currentUser?.role !== 'admin'){
+  if(STATE.currentUser?.role !== 'admin' && STATE.currentUser?.prProfileKey!=='module_admin'){
     toast('error','للمدير فقط','رابط دعوة الموظفين يُصدره مدير النظام'); return;
   }
-  const sectors = (PO_ENUMS?.sector||[]);
-  const opts = sectors.map(x=>`<option value="${escapeAttr(x)}">${escapeHtml(x)}</option>`).join('');
+  let departments=STATE.departments||[];
+  if(!departments.length){ try{ const r=await CLOUD.client.from('proc_departments').select('*').eq('active',true).order('name_ar'); departments=r.data||[]; }catch(_){} }
+  const opts = departments.map(x=>`<option value="${escapeAttr(x.id)}">${escapeHtml(x.name_ar||x.id)}</option>`).join('');
+  const profileOpts=[['requester','موظف طلبات'],['maintenance_manager','مدير الصيانة والتشغيل'],['procurement_officer','موظف مشتريات'],['procurement_manager','مدير المشتريات'],['module_admin','مدير الموديل']]
+    .map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
   const el = document.createElement('div');
   el.className='modal-overlay active'; el.id='modal-staff-invite'; el.dataset.ephemeral='1';
   el.innerHTML = `<div class="modal" style="max-width:560px">
@@ -14740,7 +15099,7 @@ async function staffInviteOpen(){
       <button class="modal-close" onclick="closeModal('modal-staff-invite')">✕</button></div>
     <div class="modal-body">
       <div style="font-size:12.5px;color:var(--muted);line-height:1.8;margin-bottom:14px">
-        أدخل اسم الموظّف وبريده وحدّد قطاعه — و<b>يصله بريد دعوة</b> يضبط منه كلمة مروره
+        أدخل اسم الموظّف وبريده وحدّد إدارته ودوره — و<b>يصله بريد دعوة شخصي</b> يضبط منه كلمة مروره
         ويدخل مباشرةً. <b>يُشترط بريد الشركة</b>، وهو شرط وصول الإشعارات إليه.
       </div>
       <div class="rep-field"><label>اسم الموظّف *</label>
@@ -14748,13 +15107,14 @@ async function staffInviteOpen(){
       <div class="rep-field" style="margin-top:10px"><label>بريد الشركة *</label>
         <input class="input" id="si-email" type="email" dir="ltr" maxlength="120"
                placeholder="name@aldeyabi.com"></div>
-      <div class="rep-field" style="margin-top:10px"><label>القطاع *</label>
-        <select class="select" id="si-sector">${opts}</select></div>
+      <div class="rep-field" style="margin-top:10px"><label>الإدارة *</label>
+        <select class="select" id="si-department">${opts}</select></div>
+      <div class="rep-field" style="margin-top:10px"><label>ملف صلاحيات موديل الطلبات *</label>
+        <select class="select" id="si-profile">${profileOpts}</select></div>
       <div class="rep-field" style="margin-top:10px"><label>المسمّى الوظيفيّ</label>
         <input class="input" id="si-job" maxlength="60" placeholder="فنّي صيانة / مدير الصيانة والتشغيل…"></div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.7">
-        صلاحياته الافتراضية: <b>تسجيل استلام البضاعة</b> بلا عرض المبالغ — توسّعها من
-        «المستخدمون» متى شئت.
+        الصلاحيات تُطبّق خادمياً حسب الملف المختار، ويمكن تعديل الاستثناءات لاحقاً من إدارة المستخدمين.
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="staffInviteSend()">إرسال الدعوة</button>
@@ -14769,18 +15129,19 @@ async function staffInviteSend(){
   const out = document.getElementById('si-out');
   const name   = (document.getElementById('si-name')?.value || '').trim();
   const email  = (document.getElementById('si-email')?.value || '').trim().toLowerCase();
-  const sector = document.getElementById('si-sector')?.value || '';
+  const departmentId = document.getElementById('si-department')?.value || '';
+  const profileKey = document.getElementById('si-profile')?.value || 'requester';
   const job    = (document.getElementById('si-job')?.value || '').trim();
   // تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع.
   if(name.length < 3){ out.innerHTML = '<div style="color:var(--danger)">اكتب اسم الموظّف كاملاً.</div>'; return; }
   if(!/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(email)){
     out.innerHTML = '<div style="color:var(--danger)">يجب استخدام بريد الشركة (@aldeyabi.com).</div>'; return; }
-  if(!sector){ out.innerHTML = '<div style="color:var(--danger)">حدّد القطاع.</div>'; return; }
+  if(!departmentId){ out.innerHTML = '<div style="color:var(--danger)">حدّد الإدارة.</div>'; return; }
   out.textContent = 'جارٍ الإرسال…';
   try{
     const r = await fetch('/api/staff-invite', { method:'POST',
       headers: Object.assign({'Content-Type':'application/json'}, await prAuthHeader()),
-      body: JSON.stringify({ action:'invite', display_name:name, email, sector, job_title:job }) });
+      body: JSON.stringify({ action:'invite', display_name:name, email, department_id:departmentId, profile_key:profileKey, job_title:job }) });
     const j = await r.json();
     if(!r.ok || !j.ok) throw new Error(j.error||'تعذّر الإرسال');
     /* ⚠️ الرابط يُعرَض حتى عند نجاح الإرسال: بريدٌ يقع في المهملات يترك
@@ -14826,7 +15187,12 @@ async function openUserForm(mode, username){
   const passInput = document.getElementById('uf-password');
   const passHint = document.getElementById('uf-pass-hint');
   const roleSel = document.getElementById('uf-role');
+  const prProfileSel=document.getElementById('uf-pr-profile');
+  const prDepartmentSel=document.getElementById('uf-pr-department');
   const activeChk = document.getElementById('uf-active');
+  let departments=STATE.departments||[];
+  if(!departments.length){ try{ const r=await CLOUD.client.from('proc_departments').select('*').eq('active',true).order('name_ar'); departments=r.data||[]; }catch(_){} }
+  if(prDepartmentSel) prDepartmentSel.innerHTML='<option value="">— بلا إدارة محددة —</option>'+departments.map(d=>`<option value="${escapeAttr(d.id)}">${escapeHtml(d.name_ar||d.id)}</option>`).join('');
 
   if(mode === 'add'){
     eyebrow.textContent = 'إضافة مستخدم';
@@ -14837,6 +15203,8 @@ async function openUserForm(mode, username){
     passInput.value = '';
     passHint.textContent = '(مطلوبة للحساب الجديد)';
     roleSel.value = 'user';
+    if(prProfileSel) prProfileSel.value='requester';
+    if(prDepartmentSel) prDepartmentSel.value='';
     activeChk.checked = true;
     setUserFormPermissions(DEFAULT_PERMISSIONS.user, 'user');
     setUserFormScope([]);
@@ -14852,6 +15220,8 @@ async function openUserForm(mode, username){
     passInput.value = '';
     passHint.textContent = '(اتركها فارغة للإبقاء على الحالية)';
     roleSel.value = u.role;
+    if(prProfileSel) prProfileSel.value=u.prProfileKey||'requester';
+    if(prDepartmentSel) prDepartmentSel.value=u.departmentId||'';
     activeChk.checked = u.active !== false;
     // دمج صلاحيات المستخدم فوق افتراضات دوره، حتى لا تظهر الصلاحيات المُضافة
     // حديثاً (غير المحفوظة) كغير مُحدّدة فتُسحب عند الحفظ بالخطأ.
@@ -14868,16 +15238,45 @@ function renderUserFormPermissions(){
   if(!grid || grid.dataset.built === '1') return;
   const cats = [];
   PERMISSION_DEFS.forEach(d => { if(!cats.includes(d.cat)) cats.push(d.cat); });
-  grid.innerHTML = cats.map(cat => `
+  // صفّ القوالب أوّلاً: المدير الذي يُنشئ موظّف صيانة يضغط قالباً واحداً بدل
+  // مراجعة 26 مربّعاً أكثرها لا يخصّه. القالب يضبط الكلّ ويبقى قابلاً للتعديل.
+  const presets = `
+    <div style="margin:-2px 0 12px;padding:10px;background:var(--surface);border:1px dashed var(--border);border-radius:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:8px">قوالب جاهزة — اضغط ثمّ عدّل ما تشاء</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${ROLE_PRESETS.map(p =>
+          `<button type="button" class="btn btn-ghost btn-sm" data-uf-preset="${escapeAttr(p.key)}"
+                   data-tooltip="${escapeAttr(p.hint)}">${escapeHtml(p.label)}</button>`
+        ).join('')}
+      </div>
+      <div id="uf-preset-hint" style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.6"></div>
+    </div>`;
+  grid.innerHTML = presets + cats.map(cat => `
     <div style="margin-bottom:10px">
       <div style="font-size:11px;font-weight:700;color:var(--accent-2);margin-bottom:6px">${escapeHtml(cat)}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
         ${PERMISSION_DEFS.filter(d => d.cat === cat).map(d =>
-          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}</label>`
+          `<label style="display:flex;align-items:center;gap:8px;cursor:pointer"${d.field?' title="قدرة ميدانية — تخصّ موظفي الصيانة والتشغيل"':''}><input type="checkbox" data-perm="${d.key}"> ${escapeHtml(d.label)}${d.field?' <span style="font-size:10px;color:var(--accent-2)">◈</span>':''}</label>`
         ).join('')}
       </div>
     </div>`).join('');
+  grid.querySelectorAll('[data-uf-preset]').forEach(b =>
+    b.addEventListener('click', () => applyUserFormPreset(b.dataset.ufPreset)));
   grid.dataset.built = '1';
+}
+
+/* يطبّق قالب دور على مربّعات النموذج. ⚠️ يضبط **كل** المفاتيح لا مفاتيح القالب
+   وحدها: مفاتيح المكتب تُصفَّر عمداً لأن موظّف الميدان لا يملكها على الخادم،
+   فتركُها مُحدَّدة يوهم المدير بقدرة غير قائمة. ولا يحفظ شيئاً — الحفظ بزرّه. */
+function applyUserFormPreset(key){
+  const p = ROLE_PRESETS.find(x => x.key === key);
+  if(!p) return;
+  const on = new Set(p.on);
+  document.querySelectorAll('#uf-perms-grid [data-perm]').forEach(cb => {
+    cb.checked = on.has(cb.dataset.perm);
+  });
+  const hint = document.getElementById('uf-preset-hint');
+  if(hint) hint.textContent = `طُبِّق «${p.label}»: ${p.hint} — راجع المربّعات ثمّ احفظ.`;
 }
 
 // القيمة **الفعّالة** لمفتاح صلاحية — نفس دلالة hasPermission بالضبط:
@@ -14944,6 +15343,8 @@ async function saveUserForm(){
   const displayName = document.getElementById('uf-display').value.trim();
   const password = document.getElementById('uf-password').value;
   const role = document.getElementById('uf-role').value;
+  const prProfileKey=document.getElementById('uf-pr-profile').value;
+  const departmentId=document.getElementById('uf-pr-department').value||null;
   const active = document.getElementById('uf-active').checked;
   const permissions = readUserFormPermissions();
   const scopeSectors = readUserFormScope();
@@ -14953,9 +15354,9 @@ async function saveUserForm(){
   try{
     let res;
     if(__userFormMode === 'add'){
-      res = await createUser({username, displayName, password, role, active, permissions, scopeSectors});
+      res = await createUser({username, displayName, password, role, active, permissions, scopeSectors, prProfileKey, departmentId});
     } else {
-      const updates = {displayName, role, active, permissions, scopeSectors};
+      const updates = {displayName, role, active, permissions, scopeSectors, prProfileKey, departmentId};
       if(password) updates.password = password;
       res = await updateUser(__userFormTarget, updates);
     }
@@ -18079,13 +18480,14 @@ function poCommentsHtml(po){
   const n = escapeAttr(po.po_number);
   return `<div class="po-drawer-sec"><h4>ملاحظات المتابعة${list.length?` (${list.length})`:''}</h4>
     ${items || '<div style="font-size:12.5px;color:var(--muted)">لا ملاحظات بعد.</div>'}
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+    ${hasPermission('can_comment') ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <input id="po-comment-input" class="input" style="flex:1;min-width:180px"
              placeholder="اكتب ملاحظة متابعة…" maxlength="2000">
       <button class="btn btn-ghost btn-sm" onclick="poAddComment('${n}')">إضافة</button>
-    </div></div>`;
+    </div>` : ''}</div>`;
 }
 async function poAddComment(num){
+  if(!requirePermission('can_comment', 'إضافة ملاحظة متابعة')) return;
   const el = document.getElementById('po-comment-input');
   const txt = (el && el.value || '').trim();
   if(!txt){ toast('warn','فارغة','اكتب نصّ الملاحظة أولاً'); return; }
@@ -19654,6 +20056,8 @@ function init(){
   });
   const btnFollow = document.getElementById('po-followup-btn');
   if(btnFollow) btnFollow.addEventListener('click', ()=>{
+    // بوّابة الزرّ = بوّابة البطاقة في مركز التقارير (perm:'can_print_followup').
+    if(!requirePermission('can_print_followup', 'طباعة تقرير المتابعة')) return;
     // بلا مرشّحات: أوامره كلّها (RLS تحصرها في قطاعه أصلاً)
     try{ buildPOFollowupReport({}); }catch(e){ reportError('poFollowupBtn', e); }
   });
@@ -19850,12 +20254,11 @@ async function submitPurchaseRequest(data){
   const amount = parseFloat(data.amount) || 0;
   if(!data.title || amount <= 0){ toast('error','بيانات ناقصة','أدخل الوصف والمبلغ'); return {ok:false}; }
   const level = amount > WF.threshold ? 2 : 1;
-  const id = 'pr_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-  const payload = { id, title:data.title, supplier:data.supplier||null, amount, currency:'SAR',
-    details:data.details||{}, requested_by:STATE.currentUser.username, requested_by_name:STATE.currentUser.displayName||STATE.currentUser.username,
-    status:'pending', required_level:level };
-  const {error} = await CLOUD.client.from('proc_purchase_requests').insert(payload);
+  const {data:created,error} = await CLOUD.client.rpc('pr_submit_award_request',{
+    p_title:data.title,p_supplier:data.supplier||null,p_amount:amount,p_details:data.details||{},p_required_level:level
+  });
   if(error){ toast('error','فشل الإرسال', error.message); return {ok:false}; }
+  const id=created.id;
   const approvers = await wfApprovers(level);
   for(const a of approvers){ if(a.username !== STATE.currentUser.username) await wfNotify(a.username,'approval','طلب اعتماد جديد', `${data.title} — ${fmtPrice(amount)} ر.س (${wfLevelName(level)})`, 'approvals'); }
   try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:'add', entity_type:'purchase_request', entity_id:id, old_value:null, new_value:{title:data.title, amount, level}, meta:{}}); }catch(e){}
@@ -19868,7 +20271,7 @@ async function decidePurchaseRequest(id, approve, note){
   const {data:req} = await CLOUD.client.from('proc_purchase_requests').select('*').eq('id', id).maybeSingle();
   if(!req || req.status !== 'pending'){ toast('warn','غير متاح','الطلب غير موجود أو سبق البتّ فيه'); return {ok:false}; }
   if(!wfCanApprove(req)){ toast('error','صلاحية مرفوضة','لا تملك اعتماد هذا المستوى'); return {ok:false}; }
-  const {error} = await CLOUD.client.from('proc_purchase_requests').update({status: approve?'approved':'rejected', decided_by:STATE.currentUser.username, decided_at:new Date().toISOString(), decision_note:note||null}).eq('id', id).eq('status','pending');
+  const {error} = await CLOUD.client.rpc('pr_decide_award_request',{p_pr_id:id,p_approve:!!approve,p_note:note||null});
   if(error){ toast('error','فشل', error.message); return {ok:false}; }
   await wfNotify(req.requested_by, 'decision', approve?'تم اعتماد طلبك ✓':'رُفض طلبك ✗', `${req.title} — ${fmtPrice(req.amount)} ر.س${note?(' · '+note):''}`, 'approvals');
   try{ pushAuditToCloud({username:STATE.currentUser.username, display_name:STATE.currentUser.displayName, user_role:STATE.currentUser.role, action:approve?'approve':'reject', entity_type:'purchase_request', entity_id:id, old_value:{status:'pending'}, new_value:{status:approve?'approved':'rejected'}, meta:{note:note||''}}); }catch(e){}
@@ -20740,12 +21143,38 @@ function startApp(){
      أكثر قيمها مبالغُ محجوبة عنه («قيمة المشتريات —»)، فيمرّ على الجوال بسبع
      بطاقات مؤشّرات قبل أن يبلغ أوّل أمر شراء. قائمة أوامره هي عمله. */
   if(isScopedUser()){ STATE.poView = 'list'; try{ navigate(SCOPED_HOME); }catch(e){} }
+  try{ openDeepLink(); }catch(e){ reportError('openDeepLink', e); }
   try{ setupPOEvents(); }catch(e){ console.warn('PO events init failed', e); }
   try{ a11yWire(); }catch(e){}   // أسماء مقروءة للحقول والنوافذ عند الإقلاع
   try{ mobileTableWrap(); }catch(e){}
   try{ mobileViewportCheck(); }catch(e){}   // بلاغ «النظام صغير جداً»: يقيس ويُخبر
   startCloudAutoReconnect();
   try{ initWorkflows(); }catch(e){ console.warn('workflows init failed', e); }
+}
+
+/* ── الرابط العميق من البريد: `?pr=<id>` و`?po=<رقم>` ──
+   بلاغ المالك (2026-09-13): بريد الطلب كان يفتح صفحة أخرى («بوابة الطلبات» =
+   `requests.html` القديمة) **ولا يفتح الطلب مباشرةً** بل قائمةً يبحث فيها.
+   النظام لم يكن يقرأ أي معامل رابط إطلاقاً (صفر `location.search`).
+   ⚠️ يُنادى **بعد** `init()` وتسجيل الدخول: البيانات تصل لاحقاً، فـ`prGoView`
+   تعرض «يحمّل…» ثمّ الطلب. والمعامل يُنظَّف من الشريط بـ`replaceState` فلا
+   يُعاد فتح الطلب مع كل إعادة تحميل، ولا يُخزَّن في تاريخ المتصفّح.
+   ⚠️ ولا يُمنَح به أي وصول: الرابط يفتح شاشةً فقط، وRLS هي التي تقرّر ما يُرى —
+   طلبٌ خارج نطاق المستلِم يعرض «الطلب غير موجود» لا محتواه. */
+function openDeepLink(){
+  let q; try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  const pr = (q.get('pr')||'').trim();
+  const po = (q.get('po')||'').trim();
+  if(!pr && !po) return;
+  try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
+  if(pr){
+    navigate('pr');
+    // الشاشة تُرسَم لاتزامنياً (prLoadAll)، فالانتقال للمتابعة بعد أوّل رسم.
+    setTimeout(()=>{ try{ prGoView('track', pr); }catch(e){ reportError('deepLinkPR', e); } }, 120);
+  } else {
+    navigate('purchase-orders');
+    setTimeout(()=>{ try{ openPODrawer(po); }catch(e){ reportError('deepLinkPO', e); } }, 200);
+  }
 }
 
 async function bootstrap(){

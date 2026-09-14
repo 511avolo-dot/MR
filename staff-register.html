@@ -59,14 +59,16 @@
     <form id="form" class="hidden" autocomplete="on">
       <div class="line info">
         هذه دعوة <b>شخصية لك</b>. اختر كلمة مرورك فقط وتدخل النظام مباشرةً —
-        تتابع أوامر الشراء التي تخصّ قطاعك، وتُسجّل الاستلام، وترفع طلباتك،
-        <b>وتصلك الإشعارات على بريدك</b>.
+        تدخل إلى مساحة طلبات الشراء وفق الإدارة وملف الصلاحيات اللذين حددهما
+        مدير النظام، <b>وتصلك الإشعارات على بريدك</b>.
       </div>
 
       <!-- بيانات الدعوة: تُعرَض ولا تُحرَّر — مصدرها الرمز الموقَّع لا هذه الصفحة. -->
       <div class="who" id="who">
         <div class="who-row"><span>الاسم</span><b id="w-name">—</b></div>
         <div class="who-row"><span>بريد الدخول</span><b id="w-email" dir="ltr">—</b></div>
+        <div class="who-row"><span>الإدارة</span><b id="w-department">—</b></div>
+        <div class="who-row"><span>ملف الصلاحيات</span><b id="w-profile">—</b></div>
         <div class="who-row" id="w-job-row"><span>المسمّى الوظيفيّ</span><b id="w-job">—</b></div>
       </div>
 
@@ -109,12 +111,14 @@
       }
       domain = res.j.domain || domain;
       var chip = document.getElementById('sector-chip');
-      chip.textContent = 'قطاع: ' + res.j.sector;
+      chip.textContent = res.j.department_id ? 'حساب موظف المكتب' : ('قطاع: ' + res.j.sector);
       chip.classList.remove('hidden');
       /* ⚠️ `textContent` لا innerHTML: هذه قيم تصل من الشبكة، وحقنها ترميزاً
          يفتح XSS على صفحة عامّة. */
       document.getElementById('w-name').textContent  = res.j.display_name || '—';
       document.getElementById('w-email').textContent = res.j.email || '—';
+      document.getElementById('w-department').textContent = res.j.department_id || '—';
+      document.getElementById('w-profile').textContent = res.j.profile_key || 'requester';
       if(res.j.job_title){ document.getElementById('w-job').textContent = res.j.job_title; }
       else { document.getElementById('w-job-row').classList.add('hidden'); }
       gate.classList.add('hidden');
@@ -127,8 +131,8 @@
     var pass  = document.getElementById('f-pass').value;
     var pass2 = document.getElementById('f-pass2').value;
     /* تحقّق محلّي يوفّر رحلة فاشلة — والخادم هو المرجع دائماً.
-       ⚠️ الاسم والبريد والقطاع **لا تُرسَل من هنا**: الخادم يقرؤها من الرمز
-       الموقَّع، فلا يستطيع حاملُ الرابط انتحال بريد غيره ولا تغيير قطاعه. */
+       ⚠️ الاسم والبريد والإدارة وملف الصلاحيات **لا تُرسَل من هنا**: الخادم
+       يقرؤها من الرمز الموقَّع، فلا يستطيع حامل الرابط تغيير صلاحياته. */
     if(pass.length < 8){ say(out,'er','كلمة المرور 8 أحرف على الأقل.'); return; }
     if(pass !== pass2){ say(out,'er','كلمتا المرور غير متطابقتين.'); return; }
 
