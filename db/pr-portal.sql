@@ -499,7 +499,8 @@ BEGIN
     IF TG_OP='INSERT'
        OR OLD.status IS DISTINCT FROM 'in_review'
        OR NEW.current_seq IS DISTINCT FROM OLD.current_seq THEN
-      NEW.stage_due_at := now() + make_interval(hours => v_h);
+      -- ⚠️ لا تُعِدها إلى make_interval(hours => v_h): معاملها integer وv_h numeric ⇒ 42883
+      NEW.stage_due_at := now() + (coalesce(v_h,24) * interval '1 hour');
     END IF;
   ELSE
     NEW.stage_due_at := NULL;
@@ -523,7 +524,7 @@ BEGIN
   FOR v_pr IN
     SELECT * FROM proc_purchase_requests
      WHERE status='in_review' AND stage_due_at IS NOT NULL AND stage_due_at < now()
-       AND (last_escalation_at IS NULL OR last_escalation_at < now() - make_interval(hours => v_sla))
+       AND (last_escalation_at IS NULL OR last_escalation_at < now() - (coalesce(v_sla,24) * interval '1 hour'))
   LOOP
     SELECT * INTO v_stage FROM proc_pr_approvals
       WHERE pr_id=v_pr.id AND decision='pending' ORDER BY seq ASC LIMIT 1;
