@@ -202,6 +202,32 @@ ALTER TABLE proc_pr_messages ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
 ALTER TABLE proc_pr_messages ADD COLUMN IF NOT EXISTS resolved_by text;
 ALTER TABLE proc_pr_messages ADD COLUMN IF NOT EXISTS mentions text[] NOT NULL DEFAULT '{}'::text[];
 
+-- The oldest System 2 schema called the audit fields `action` and `at`, while
+-- pr-portal uses `event` and `created_at`. Keep existing history and expose the
+-- richer workspace shape on either upgrade path.
+ALTER TABLE proc_pr_audit ADD COLUMN IF NOT EXISTS event text;
+ALTER TABLE proc_pr_audit ADD COLUMN IF NOT EXISTS channel text;
+ALTER TABLE proc_pr_audit ADD COLUMN IF NOT EXISTS detail jsonb;
+ALTER TABLE proc_pr_audit ADD COLUMN IF NOT EXISTS created_at timestamptz;
+DO $compat$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='proc_pr_audit' AND column_name='action'
+  ) THEN
+    EXECUTE 'UPDATE proc_pr_audit SET event=coalesce(event,action) WHERE event IS NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='proc_pr_audit' AND column_name='at'
+  ) THEN
+    EXECUTE 'UPDATE proc_pr_audit SET created_at=coalesce(created_at,at) WHERE created_at IS NULL';
+  END IF;
+END
+$compat$;
+UPDATE proc_pr_audit SET created_at=now() WHERE created_at IS NULL;
+ALTER TABLE proc_pr_audit ALTER COLUMN created_at SET DEFAULT now();
+
 CREATE OR REPLACE FUNCTION pr_can_view_request(p_pr_id text)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
