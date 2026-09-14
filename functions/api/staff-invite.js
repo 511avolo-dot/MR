@@ -341,10 +341,9 @@ export async function onRequestPost({ request, env }) {
         role: 'user', permissions: {}, active: true,
         department_id: departmentId || null, pr_department_ids: departmentId ? [departmentId] : [],
         pr_profile_key: profileKey, pr_permission_overrides: {},
-        // v3 invitations are for office Maintenance/Operations users. Department
-        // scope belongs to the request workspace; field scope is retained only
-        // for legacy v2 invitations issued before the module redesign.
-        scope_sectors: Number(p.v) >= 3 ? [] : (sector ? [sector] : []), requested_role: profileKey,
+        // موظف الصيانة المكتبي يبقى منضبطاً بنطاق قطاعه على مستوى البيانات.
+        // «مكتبي» وصفٌ تشغيلي، ولا يعني حساباً مفتوحاً على كل النظام.
+        scope_sectors: sector ? [sector] : [], requested_role: profileKey,
         created_by: 'staff_invite',
         notes: `انضمّ عبر دعوة شخصية${p.by ? ` من ${p.by}` : ''} — إدارة «${p.dn || departmentId || '—'}»`,
       }),

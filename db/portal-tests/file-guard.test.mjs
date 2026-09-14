@@ -911,8 +911,8 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
         row.email === 'saleh@aldeyabi.com' && auth.email === 'saleh@aldeyabi.com');
       siT('والاسم والمسمّى من الرمز',
         row.display_name === 'صالح الصيانة' && row.job_title === 'فنّي صيانة');
-      siT('والدعوة المكتبية لا تنشئ نطاقاً ميدانياً ولا تقبل نطاق العميل',
-        JSON.stringify(row.scope_sectors) === JSON.stringify([]));
+      siT('والدعوة المكتبية تُقيّد البيانات بقطاع الرمز ولا تقبل نطاق العميل',
+        JSON.stringify(row.scope_sectors) === JSON.stringify(['الصيانة والتشغيل']));
       siT('والدور مفروض user مهما أرسل العميل', row.role === 'user');
       siT('وملف الصلاحيات والإدارة من الرمز بلا صلاحيات خام من العميل',
         row.pr_profile_key === 'requester' && row.department_id === 'DEP-MAINT'

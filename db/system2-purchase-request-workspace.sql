@@ -157,6 +157,42 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $fn$
   END;
 $fn$;
 
+-- Authorization columns join the write guard in the same transaction that
+-- creates them. This is intentionally installed after the one-time backfill:
+-- migrations run without an end-user JWT, while no intermediate state becomes
+-- visible before COMMIT. Once installed, the broad users UPDATE policy can
+-- continue serving harmless profile activity without exposing an escalation path.
+CREATE OR REPLACE FUNCTION proc_users_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  IF pr_is_service() THEN RETURN COALESCE(NEW, OLD); END IF;
+
+  IF TG_OP = 'UPDATE'
+     AND NEW.permissions             IS NOT DISTINCT FROM OLD.permissions
+     AND NEW.role                    IS NOT DISTINCT FROM OLD.role
+     AND NEW.active                  IS NOT DISTINCT FROM OLD.active
+     AND NEW.is_away                 IS NOT DISTINCT FROM OLD.is_away
+     AND NEW.delegate_to             IS NOT DISTINCT FROM OLD.delegate_to
+     AND NEW.username                IS NOT DISTINCT FROM OLD.username
+     AND NEW.email                   IS NOT DISTINCT FROM OLD.email
+     AND NEW.password_hash           IS NOT DISTINCT FROM OLD.password_hash
+     AND NEW.scope_sectors           IS NOT DISTINCT FROM OLD.scope_sectors
+     AND NEW.department_id           IS NOT DISTINCT FROM OLD.department_id
+     AND NEW.manager_user            IS NOT DISTINCT FROM OLD.manager_user
+     AND NEW.requested_role          IS NOT DISTINCT FROM OLD.requested_role
+     AND NEW.pr_profile_key          IS NOT DISTINCT FROM OLD.pr_profile_key
+     AND NEW.pr_permission_overrides IS NOT DISTINCT FROM OLD.pr_permission_overrides
+     AND NEW.pr_department_ids       IS NOT DISTINCT FROM OLD.pr_department_ids
+  THEN RETURN NEW; END IF;
+
+  IF pr_has_perm('can_manage_users') THEN RETURN COALESCE(NEW, OLD); END IF;
+  RAISE EXCEPTION 'تعديل المستخدمين أو صلاحياتهم يتطلّب صلاحية «إدارة المستخدمين»';
+END $fn$;
+
+DROP TRIGGER IF EXISTS trg_proc_users_guard ON proc_users;
+CREATE TRIGGER trg_proc_users_guard BEFORE INSERT OR UPDATE OR DELETE ON proc_users
+  FOR EACH ROW EXECUTE FUNCTION proc_users_guard();
+
 -- ───────────────────────── Request state model ─────────────────────────────
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS workflow_state text NOT NULL DEFAULT 'draft';
 ALTER TABLE proc_purchase_requests ADD COLUMN IF NOT EXISTS current_owner text;

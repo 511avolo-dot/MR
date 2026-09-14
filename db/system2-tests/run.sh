@@ -20,7 +20,8 @@ for f in db/system2-tests/00_stub.sql db/system2-staff-scope.sql db/system2-test
          db/system2-notifications-hardening.sql db/system2-tests/16_notifications.sql \
          db/system2-scoped-table-lockdown.sql db/system2-tests/17_scoped_lockdown.sql \
          db/system2-field-permissions.sql db/system2-tests/18_field_permissions.sql \
-         db/system2-purchase-request-workspace.sql db/system2-tests/19_purchase_request_workspace.sql; do
+         db/system2-purchase-request-workspace.sql db/system2-tests/19_purchase_request_workspace.sql \
+         db/system2-tests/17_scoped_lockdown.sql; do
   printf '  %-42s' "$(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/s2t.err \
     && echo "ok" \
@@ -42,4 +43,4 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
 
 psql -q -d postgres -c "DROP DATABASE IF EXISTS $DB;" >/dev/null
 echo "✓ النطاق (SC1–SC16) · دورة الطلب (FL1–FL16) · المتابعة (TR1–TR10) · الدعوة (IV1–IV3)"
-echo "  الترقيم (NM1–NM6) · أقلّ امتياز (LP1–LP5) · الإشعارات (NT1–NT9) · الإقفال (LK1–LK9) · مساحة العمل (WS1–WS40) — خروج 0"
+echo "  الترقيم (NM1–NM6) · أقلّ امتياز (LP1–LP5) · الإشعارات (NT1–NT9) · الإقفال (LK1–LK9) · مساحة العمل (WS1–WS43) — خروج 0"

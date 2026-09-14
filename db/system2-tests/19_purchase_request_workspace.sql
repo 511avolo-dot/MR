@@ -50,6 +50,41 @@ UPDATE proc_users SET pr_profile_key='maintenance_manager' WHERE username='maint
 UPDATE proc_users SET pr_profile_key='procurement_manager' WHERE username='procmgr';
 UPDATE proc_users SET pr_profile_key='procurement_officer' WHERE username='buyer1';
 
+-- WS41–WS43: an ordinary user cannot self-assign any workspace authority or
+-- widen their department scope through the otherwise broad users UPDATE path.
+DO $workspace_user_guard$
+DECLARE blocked boolean := false; n integer := 0;
+BEGIN
+  PERFORM set_config('request.jwt.claims','{"email":"requester1@aldeyabi.com","role":"authenticated"}',true);
+  PERFORM set_config('role','authenticated',true);
+  BEGIN
+    UPDATE proc_users
+       SET pr_profile_key='module_admin',
+           pr_permission_overrides='{"pr_view_financials":true,"pr_manage_users":true,"pr_view_all":true}'::jsonb,
+           pr_department_ids=ARRAY['DEP-FINANCE'],
+           department_id='DEP-FINANCE'
+     WHERE username='requester1';
+  EXCEPTION WHEN OTHERS THEN blocked := true;
+  END;
+  PERFORM set_config('role','postgres',true);
+  IF NOT blocked THEN RAISE EXCEPTION 'WS41 self-escalation through workspace columns was accepted'; END IF;
+  IF EXISTS(SELECT 1 FROM proc_users WHERE username='requester1'
+            AND (pr_profile_key<>'requester' OR pr_permission_overrides<>'{}'::jsonb
+                 OR cardinality(pr_department_ids)>0 OR department_id<>'DEP-MAINT')) THEN
+    RAISE EXCEPTION 'WS42 rejected self-escalation changed the stored profile';
+  END IF;
+
+  -- Harmless profile activity is still writable, preserving the original guard contract.
+  PERFORM set_config('request.jwt.claims','{"email":"requester1@aldeyabi.com","role":"authenticated"}',true);
+  PERFORM set_config('role','authenticated',true);
+  UPDATE proc_users SET last_login=now() WHERE username='requester1';
+  GET DIAGNOSTICS n = ROW_COUNT;
+  PERFORM set_config('role','postgres',true);
+  IF n<>1 THEN RAISE EXCEPTION 'WS43 harmless last_login update was blocked'; END IF;
+  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+END
+$workspace_user_guard$;
+
 INSERT INTO proc_departments(id,name_ar,sector,manager_user,active)
 VALUES('DEP-MAINT','إدارة الصيانة والتشغيل','الصيانة والتشغيل','maintmgr',true)
 ON CONFLICT(id) DO UPDATE SET manager_user='maintmgr',active=true;

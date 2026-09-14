@@ -47,8 +47,9 @@ test('legacy permission helpers map into module profiles', /WHEN 'can_create_pr'
 test('award and RFQ compatibility mutations are server guarded', /CREATE OR REPLACE FUNCTION pr_attach_rfq/.test(sql) && /CREATE OR REPLACE FUNCTION pr_submit_award_request/.test(sql) && /CREATE OR REPLACE FUNCTION pr_decide_award_request/.test(sql));
 test('helper RPCs are not anonymous', /REVOKE ALL ON FUNCTION pr_effective_permissions\(text\)[\s\S]*FROM PUBLIC, anon/.test(sql));
 
-test('v3 office invitations do not create a field scope', /Number\(p\.v\) >= 3 \? \[\]/.test(invite));
+test('office invitations retain signed sector data scope', /scope_sectors: sector \? \[sector\] : \[\]/.test(invite));
 test('invite profile is server allowlisted', /INVITE_PROFILES\.has\(profileKey\)/.test(invite));
+test('workspace authorization columns are protected by the users guard', ['pr_profile_key','pr_permission_overrides','pr_department_ids'].every(x=>new RegExp(`NEW\\.${x}\\s+IS NOT DISTINCT FROM OLD\\.${x}`).test(sql)));
 test('admin API allowlists module permissions and profiles', /MODULE_PERMISSIONS/.test(usersApi) && /MODULE_PROFILES/.test(usersApi));
 test('document endpoint compensates a failed registration', /await registerAttachment/.test(docsApi) && /await bucket\.delete\(key\)/.test(docsApi));
 

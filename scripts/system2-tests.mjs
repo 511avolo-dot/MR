@@ -2823,6 +2823,8 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && /pr_profile_key: profileKey, pr_permission_overrides: \{\}/.test(SINV)
     && /department_id: departmentId \|\| null/.test(SINV)
     && /INVITE_PROFILES\.has\(String\(p\.pk\)\)/.test(SINV));
+  T('Staff invitation keeps the signed sector as its data scope',
+    /scope_sectors: sector \? \[sector\] : \[\]/.test(SINV));
   /* ⚠️ الحارس الأهمّ بعد التحوّل: الرمز صار **الاعتماد**، فلو قرأ الخادم
      البريد أو القطاع من جسم الطلب لاستطاع حاملُ الرابط انتحال بريد غيره أو
      منح نفسه قطاعاً آخر. المسار العامّ لا يقرأ من `body` إلا كلمة المرور والجوال. */
@@ -3113,6 +3115,9 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('SQL: الربط متعدد إلى متعدد ويمنع تكرار الرابط نفسه فقط',
     /CREATE UNIQUE INDEX IF NOT EXISTS uq_proc_pr_po_active[\s\S]*?ON proc_pr_po_links\(pr_id, po_number\) WHERE active/.test(WORKSPACE)
     && !/UNIQUE\s*\(pr_id\)/.test(WORKSPACE));
+  T('SQL: workspace authorization columns are covered by the users guard',
+    ['pr_profile_key','pr_permission_overrides','pr_department_ids'].every((column) =>
+      new RegExp(`NEW\\.${column}\\s+IS NOT DISTINCT FROM OLD\\.${column}`).test(WORKSPACE)));
 
   T('سلسلة الاعتماد مفعّلة في الواجهة عبر مسار واحد',
     /function prApprovalTimelineHTML/.test(CODE) && /async function prAct/.test(CODE));
