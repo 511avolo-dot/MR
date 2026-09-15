@@ -114,17 +114,26 @@ const LOGIN = `(cfg) => {
   };
   STATE.currentUser = cfg.user;
   try { sessionStorage.setItem('proc_session', JSON.stringify(cfg.user)); } catch(e) {}
-  hideLoginScreen();
-  startApp();
-  // السحابة مُقلَّدة: prCloudReady تصير true بلا أي طلب شبكة
+  /* ⚠️ لا backtick في هذه الكتلة: النصّ داخل قالب نصّيّ يُنهيه أيّ واحد.
+     العميل المُقلَّد وأعلام السحابة تُضبط قبل startApp، وإلّا جدول الإقلاع
+     دورةَ ترطيب تُنهيها بعد البذر فتكتب مصفوفات فارغة (الكعب يُرجع فارغاً
+     لكل استعلام) ⇒ تُمحى البيانات ويسقط كل فحص بلا سبب ظاهر.
+     ظهر ذلك في CI وحده (عدّاء أبطأ) بينما يمرّ محليّاً — سباقٌ لا انحدار. */
   CLOUD.enabled = true; CLOUD.dataLoaded = true; CLOUD.client = stubClient;
   window.__prLoaded = true;
   try { __prLoaded = true; } catch(e) {}
-  STATE.purchaseOrders = JSON.parse(JSON.stringify(window.__SEED_POS))
-    .map(p => { try { recomputePOderived(p); } catch(e) {} return p; });
-  STATE.purchaseRequests = JSON.parse(JSON.stringify(window.__SEED_PRS));
-  STATE.prTemplates = JSON.parse(JSON.stringify(window.__SEED_TPL));
-  STATE.prRules = []; STATE.departments = [];
+  window.__seedState = () => {
+    STATE.purchaseOrders = JSON.parse(JSON.stringify(window.__SEED_POS))
+      .map(p => { try { recomputePOderived(p); } catch(e) {} return p; });
+    STATE.purchaseRequests = JSON.parse(JSON.stringify(window.__SEED_PRS));
+    STATE.prTemplates = JSON.parse(JSON.stringify(window.__SEED_TPL));
+    STATE.prRules = []; STATE.departments = [];
+  };
+  window.__seedState();
+  hideLoginScreen();
+  startApp();
+  // إعادة البذر بعد الإقلاع: startApp قد يكون صفّر الحالة أو أطلق ترطيباً.
+  window.__seedState();
   /* ⚠️ بلا هذا يبقى قناع الترطيب (body.data-loading) مُطبَّقاً فتُعرَض كل
      الأرقام خلف هيكل نابض ويعلو الشريط «جارٍ تحميل أحدث البيانات…» — لقطةٌ
      تبدو سليمة تقنيّاً وهي في الحقيقة شاشة نصف مرسومة.
@@ -157,7 +166,23 @@ const OFFICE_USER = {
    أو رقم يسبق ر.س مباشرةً. (أوّل صياغة سقطت على العنوان — صُحِّحت بالقياس.) */
 const MONEY_RX = /\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\d[\d.,]*\s*ر\.س/;
 
-const login = (page, cfg) => page.evaluate(`(${LOGIN})(${JSON.stringify(cfg)})`);
+/* ⚠️ لا يكفي استدعاء LOGIN: أي دورة ترطيب مُعلَّقة قد تحطّ **بعده** فتمسح
+   الحالة (الكعب يُرجع مصفوفات فارغة). لذا ننتظر استقرار الحلقة، ثمّ نتحقّق
+   أنّ البذرة ما تزال قائمة ونُعيدها ونرسم عند الحاجة — فالنتيجة حتميّة على
+   العدّاء البطيء كما على السريع. */
+async function login(page, cfg) {
+  await page.evaluate(`(${LOGIN})(${JSON.stringify(cfg)})`);
+  await page.waitForTimeout(150);
+  await page.waitForFunction(() => {
+    if (!window.__seedState) return false;
+    if (!STATE.purchaseOrders?.length || !STATE.purchaseRequests?.length) {
+      window.__seedState();
+      try { hydSettle('ready'); applyUserRoleToUI(); applyScopedNav(); rtRerender(); } catch (e) {}
+      return false;            // أعِد الفحص بعد البذر حتى يستقرّ
+    }
+    return true;
+  }, { timeout: 15000 });
+}
 
 /* ⚠️ حارس اللقطة: طبقةٌ نُسِي إغلاقها تغطّي نصف الصورة، وقناع الترطيب يُعمّي
    كل رقم — واللقطة تبدو ناجحة في السجلّ. `expect` تُسمّي ما يُفترض أن يكون
