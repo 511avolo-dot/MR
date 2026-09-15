@@ -3496,6 +3496,17 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /المشروع \/ الجهة<\/small><b class="proj"[\s\S]{0,80}poProjectText\(pr\)/.test(CODE));
   T('  والبطاقة تُظهره قبل الاختصار على الشاشات الضيّقة (الترتيب الثاني)',
     /repeat\(6,minmax\(0,1fr\)\)/.test(HTML));
+
+  // ── تنبيه المعتمِد: فجوة كشفها سؤال المالك «هل وصل إيميل للسبكي؟» ──
+  // بريد «بانتظار اعتمادك» يُرسَل مرّة واحدة عند الرفع؛ فتغيّر المعتمِد بعدها
+  // (تحويل/تغيير مدير قسم/تفويض) يترك الجديد بلا علم ولا وسيلة لإعادة الإرسال.
+  T('زرّ تنبيه المعتمِد موجود وبوّابته المشتريات وطلبٌ له مرحلة معلّقة',
+    /prIsProcurement\(\)&&pr\.status==='in_review'&&prPendingOwnerName\(pr\)\?`<button[^`]*prRemindApprover/.test(CODE));
+  T('  ويستدعي نقطة الإشعار بحدث pending (الخادم يقرأ المعتمِد الحالي لا العميل)',
+    /async function prRemindApprover[\s\S]{0,1400}kind:'pr', pr_id:prId, event:'pending'/.test(CODE));
+  T('  وينتظر النتيجة ويُبلّغها (لا fire-and-forget كـprNotifyPR)',
+    /async function prRemindApprover[\s\S]{0,1400}await r\.json\(\)[\s\S]{0,600}toast\('error'/.test(CODE)
+    && /async function prRemindApprover[\s\S]{0,1400}j\.skipped/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
