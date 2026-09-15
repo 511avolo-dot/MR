@@ -1550,7 +1550,7 @@ body.print-preview-active .print-document{display:block}
 .data-table tbody tr:hover{background:rgba(196,162,101,0.05)}
 .data-table .num{text-align:end;font-variant-numeric:tabular-nums}
 .data-table .center{text-align:center}
-.pr-items-table .pr-cell{width:100%;padding:5px 7px;font-size:12.5px}
+.pr-items-table .pr-cell{width:100%;padding:5px 7px;font-size:12.5px}.pr-del-label{display:none}
 .pr-items-table input.num{text-align:end}
 .pr-line-total{font-weight:600;color:var(--ink)}
 .pr-info-row{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:12px;font-size:12.5px;color:var(--muted)}
@@ -1647,8 +1647,8 @@ body.print-preview-active .print-document{display:block}
 .pr-work-report{max-width:900px;margin:auto;background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:6px;box-shadow:var(--prw-sh2);padding:30px}.pr-work-reporthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--prw-ink);padding-bottom:14px;margin-bottom:22px}.pr-work-reporthead h3{font-size:17px;margin:0}.pr-work-reporthead small{color:var(--prw-muted)}.pr-work-report-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--prw-line);border-radius:8px;overflow:hidden;margin-bottom:18px}.pr-work-report-grid div{padding:9px 11px;border-inline-start:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-inline-start:0}.pr-work-report-grid small{display:block;color:var(--prw-muted);font-size:8.5px}.pr-work-report-grid b{font-size:10.5px}.pr-work-signatures{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:22px;margin-top:34px}.pr-work-signatures div{border-top:1px solid #aeb7c4;padding-top:7px;text-align:center;font-size:9.5px;color:var(--prw-muted)}
 .pr-work-editor{padding:22px 28px;background:var(--prw-canvas);min-height:calc(100vh - 276px);overflow:auto}.pr-work-editor>.pr-card{background:#fff}
 @media(max-width:1180px){.pr-work-grid{grid-template-columns:68px 270px minmax(0,1fr)}.pr-work-summary{grid-template-columns:repeat(3,1fr)}.pr-work-stat:nth-child(n+4){display:none}.pr-work-search{max-width:420px}}
-@media(max-width:900px){.pr-workspace{margin:-16px -14px -84px;min-height:100vh}.pr-work-top{height:auto;min-height:64px;padding:10px 12px}.pr-work-brand{min-width:0}.pr-work-brand div:last-child{display:none}.pr-work-search{max-width:none}.pr-work-top-actions .btn{padding-inline:10px}.pr-work-grid{grid-template-columns:1fr;display:block}.pr-work-rail{position:sticky;top:62px;z-index:5;flex-direction:row;padding:5px 8px;overflow-x:auto;border-inline-start:0;border-bottom:1px solid rgba(255,255,255,.08)}.pr-work-navbtn{min-width:62px;min-height:50px}.pr-work-navbtn.active::after{inset:auto 10px -5px;right:10px;height:2px;width:auto}.pr-work-queue{border-inline-start:0;border-bottom:1px solid var(--prw-line)}.pr-work-queuehead{padding:13px 14px 10px}.pr-work-queue-title{margin-bottom:8px}.pr-work-queue-title h2{font-size:19px}.pr-work-list{display:flex;gap:8px;max-height:none;overflow-x:auto;padding:8px}.pr-work-request{flex:0 0 245px;margin:0}.pr-work-detailhead{padding:15px 16px}.pr-work-titlebar h2{font-size:20px}.pr-work-titlebar{display:block}.pr-work-headbuttons{margin-top:12px}.pr-work-summary{grid-template-columns:repeat(2,1fr)}.pr-work-stat:nth-child(n+3){display:none}.pr-work-tabs{padding:0 16px;gap:16px}.pr-work-canvas,.pr-work-editor{padding:14px;max-height:none}.pr-work-meta{grid-template-columns:1fr}.pr-work-next{align-items:flex-start}.prw-node{width:164px}.pr-work-report{padding:18px}.pr-work-report-grid{grid-template-columns:repeat(2,1fr)}.pr-work-report-grid div:nth-child(3){border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:nth-child(4){border-top:1px solid var(--prw-line)}}
-@media(max-width:520px){.pr-work-top-actions{display:none}.pr-work-titlebar h2{font-size:18px}.pr-work-headbuttons .btn{flex:1}.pr-work-queue-title h2{font-size:18px}.pr-work-summary{grid-template-columns:1fr 1fr}.pr-work-tabs{gap:13px}.pr-work-surface{padding:14px}.pr-work-report-grid{grid-template-columns:1fr}.pr-work-report-grid div{border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-top:0}.pr-work-signatures{gap:10px}}
+@media(max-width:900px){.pr-workspace{margin:-16px -14px -84px;min-height:100vh;overflow:visible}.pr-work-top{height:auto;min-height:64px;padding:10px 12px}.pr-work-brand{min-width:0}.pr-work-brand div:last-child{display:none}.pr-work-search{max-width:none}.pr-work-top-actions .btn{padding-inline:10px}.pr-work-grid{grid-template-columns:1fr;display:block}.pr-work-rail{position:sticky;top:64px;z-index:12;flex-direction:row;padding:5px 8px;overflow-x:auto;border-inline-start:0;border-bottom:1px solid rgba(255,255,255,.08)}.pr-work-navbtn{min-width:62px;min-height:50px}.pr-work-navbtn.active::after{inset:auto 10px -5px;right:10px;height:2px;width:auto}.pr-work-queue{border-inline-start:0;border-bottom:1px solid var(--prw-line)}.pr-work-queuehead{padding:13px 14px 10px}.pr-work-queue-title{margin-bottom:8px}.pr-work-queue-title h2{font-size:19px}.pr-work-list{display:block;max-height:40vh;overflow-y:auto;overflow-x:hidden;padding:8px}.pr-work-request{margin:0 0 8px;border:1px solid var(--prw-line);background:var(--prw-paper)}.pr-work-request-title{white-space:normal}.pr-work-detailhead{padding:15px 16px}.pr-work-titlebar h2{font-size:20px}.pr-work-titlebar{display:block}.pr-work-headbuttons{margin-top:12px}.pr-work-summary{grid-template-columns:repeat(2,1fr)}.pr-work-stat:nth-child(n+3){display:none}.pr-work-tabs{padding:0 16px;gap:16px}.pr-work-canvas,.pr-work-editor{padding:14px;padding-bottom:calc(98px + env(safe-area-inset-bottom));max-height:none}.pr-work-meta{grid-template-columns:1fr}.pr-work-next{align-items:flex-start}.prw-node{width:164px}.pr-work-report{padding:18px}.pr-work-report-grid{grid-template-columns:repeat(2,1fr)}.pr-work-report-grid div:nth-child(3){border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:nth-child(4){border-top:1px solid var(--prw-line)}.pr-items-table{display:block}.pr-items-table thead{display:none}.pr-items-table tbody,.pr-items-table tfoot{display:block}.pr-items-table tr{display:block;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;margin-bottom:10px}.pr-items-table td{display:grid;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:10px;border:0;padding:5px 0;width:auto;text-align:start}.pr-items-table td::before{content:attr(data-label);font-size:12px;color:var(--muted);font-weight:600}.pr-items-table td[data-label='م']{display:flex;gap:5px;justify-content:flex-start;font-weight:700;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line);padding-bottom:7px;margin-bottom:3px}.pr-items-table td[data-label='م']::before{content:'البند رقم'}.pr-items-table td.pr-cell-del{grid-template-columns:1fr;padding-top:8px}.pr-items-table td.pr-cell-del::before{content:none}.pr-items-table .pr-del-item{width:100%;justify-content:center;gap:4px}.pr-del-label{display:inline}.pr-items-table .pr-cell{font-size:16px}.pr-items-table tfoot tr{background:var(--prw-surface-2,#f7f9fc);display:flex;justify-content:space-between;align-items:center}.pr-items-table tfoot td{display:block;padding:0}.pr-items-table tfoot td::before{content:none}.pr-items-table tfoot td:empty{display:none}}
+@media(max-width:520px){.pr-work-top-actions{display:none}.pr-work-titlebar h2{font-size:18px}.pr-work-headbuttons{gap:8px}.pr-work-headbuttons .btn{flex:0 1 auto;white-space:nowrap}.pr-work-queue-title h2{font-size:18px}.pr-work-summary{grid-template-columns:1fr 1fr}.pr-work-tabs{gap:13px}.pr-work-surface{padding:14px}.pr-work-report-grid{grid-template-columns:1fr}.pr-work-report-grid div{border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-top:0}.pr-work-signatures{gap:10px}}
 
 /* Naming methodology */
 .method-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:20px}
@@ -2900,7 +2900,14 @@ html{overflow-x:clip}
   }
   .mobile-toggle{width:44px;height:44px;border-radius:12px}   /* هدف لمس مطابق للإرشادات */
   .topbar .search{flex:1;min-width:0;max-width:none}
-  .topbar .search input{font-size:16px}  /* ⚠️ دون 16px يُقرِّب iOS الشاشة تلقائياً عند التركيز */
+  /* ⚠️ دون 16px يُقرِّب iOS الشاشة تلقائياً عند التركيز، فتقفز ويجب على
+     المستخدم تصغيرها يدويّاً بعد كل حقل. كان هذا مضبوطاً لحقل البحث **وحده**؛
+     والقياس على الجوال (393px) أظهر **118 من 119** حقلاً في النظام دون 16px —
+     وهو السبب الأوّل لكون النظام «سيئاً على الهاتف». القاعدة الآن شاملة.
+     ⚠️ 16px هو حدّ سفاري المثبَّت، لا اختيار جماليّ: 15.9px تُقرِّب أيضاً.
+     وتبقى أحجام النصّ غير القابل للتحرير كما هي — هذه للحقول فقط. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+  select, textarea { font-size:16px !important }
   .topbar-actions{gap:6px;flex:0 0 auto}
   /* الشريط العلويّ على الهاتف = بحث + وصولان اثنان + قائمة. البقيّة كلّها
      متاحة داخل الدرج/الإعدادات، فحشرها هنا يُنتج صفّاً مزدحماً غير قابل للنقر.
@@ -14020,15 +14027,15 @@ function prRenderItems(){
   const body=document.getElementById('pr-items-body'); if(!body) return;
   body.innerHTML = __prDraftItems.map((it,i)=>`
     <tr data-row="${i}">
-      <td class="center">${i+1}</td>
-      <td><input class="input pr-cell" data-f="description" list="pr-item-names" value="${escapeAttr(it.description||'')}" placeholder="الصنف"></td>
-      <td><input class="input pr-cell" data-f="unit" value="${escapeAttr(it.unit||'')}" placeholder="حبة"></td>
-      <td><input class="input pr-cell num" data-f="contract_qty" value="${escapeAttr(it.contract_qty||'')}"></td>
-      <td><input class="input pr-cell num" data-f="stock_balance" value="${escapeAttr(it.stock_balance||'')}"></td>
-      <td><input class="input pr-cell num" data-f="requested_qty" value="${escapeAttr(it.requested_qty||'')}" oninput="prRecalcTotal()"></td>
-      ${canViewAmounts()?`<td><input class="input pr-cell num" data-f="unit_price" value="${escapeAttr(it.unit_price||'')}" oninput="prRecalcTotal()"></td>
-      <td class="num pr-line-total">${fmtPrice(num0(it.requested_qty)*num0(it.unit_price))}</td>`:''}
-      <td class="center"><button class="btn btn-ghost btn-sm" title="حذف" onclick="prRemoveDraftItem(${i})">✕</button></td>
+      <td class="center" data-label="م">${i+1}</td>
+      <td data-label="إسم الصنف"><input class="input pr-cell" data-f="description" list="pr-item-names" value="${escapeAttr(it.description||'')}" placeholder="الصنف"></td>
+      <td data-label="الوحدة"><input class="input pr-cell" data-f="unit" value="${escapeAttr(it.unit||'')}" placeholder="حبة"></td>
+      <td data-label="كمية العقد"><input class="input pr-cell num" data-f="contract_qty" value="${escapeAttr(it.contract_qty||'')}"></td>
+      <td data-label="رصيد مستودعي"><input class="input pr-cell num" data-f="stock_balance" value="${escapeAttr(it.stock_balance||'')}"></td>
+      <td data-label="الكمية المطلوبة"><input class="input pr-cell num" data-f="requested_qty" value="${escapeAttr(it.requested_qty||'')}" oninput="prRecalcTotal()"></td>
+      ${canViewAmounts()?`<td data-label="سعر الوحدة"><input class="input pr-cell num" data-f="unit_price" value="${escapeAttr(it.unit_price||'')}" oninput="prRecalcTotal()"></td>
+      <td class="num pr-line-total" data-label="الإجمالي">${fmtPrice(num0(it.requested_qty)*num0(it.unit_price))}</td>`:''}
+      <td class="center pr-cell-del"><button class="btn btn-ghost btn-sm pr-del-item" title="حذف" onclick="prRemoveDraftItem(${i})">✕<span class="pr-del-label"> حذف البند</span></button></td>
     </tr>`).join('');
 }
 function prCollectItems(){
