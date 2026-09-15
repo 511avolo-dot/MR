@@ -35,7 +35,6 @@ on:
       - 'scripts/e2e/purchase-request-admin.test.mjs'
       - 'scripts/e2e/purchase-workspace-visual.test.mjs'
       - 'scripts/e2e/field-permissions.mjs'
-      - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -70,7 +69,6 @@ on:
       - 'scripts/e2e/purchase-request-admin.test.mjs'
       - 'scripts/e2e/purchase-workspace-visual.test.mjs'
       - 'scripts/e2e/field-permissions.mjs'
-      - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -154,11 +152,12 @@ jobs:
             exit 1
           fi
           node scripts/e2e/field-permissions.mjs
-          # ⚠️ لقطات وفحوص شاشات موظّف الميدان. كانت خارج CI فتعفّنت بصمت:
-          # اكتُشِفت خمسة فحوص ساقطة (2026-09-15) سببها تغييرات سابقة لم يرصدها
-          # أحد — ثلاثة لأنّها تسبق مفاتيح الميدان، واثنان لإعادة بناء شاشة
-          # الطلبات. إبقاؤها هنا يمنع تكرار ذلك.
-          node scripts/e2e/scoped-staff-screens.mjs
+          # ⚠️ `scoped-staff-screens.mjs` **ليس هنا عمداً.** حاولتُ ضمّه (2026-09-15)
+          # بعد إصلاح خمسة فحوص ساقطة فيه، فسقط في العدّاء وحده (43/43 محليّاً
+          # مقابل 31/43 ثمّ 25/43 هنا) بنمط «الهوية والبيانات غائبتان» — سباق
+          # إقلاع لم أُثبِت علاجه. وسكربتٌ متقلّب في CI أسوأ من غيابه: يُعلّم
+          # الفريق تجاهل الأحمر. يبقى أداة QA محليّة (بعد رفع خادم المعاينة)
+          # حتى يصير حتميّاً، وعندها يُضاف هنا.
 
   # حزمة نطاق موظفي الصيانة (RLS). ⚠️ بلا هذه الوظيفة تبقى **الحدود الأمنية
   # نفسها** بلا تغطية آلية: تعديلٌ يُسقِط `NOT proc_is_scoped()` من سياسة
