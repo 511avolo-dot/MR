@@ -1580,33 +1580,74 @@ body.print-preview-active .print-document{display:block}
 
 /* Purchase request command workspace — scoped to this module only. */
 #page-pr>.page-header{display:none}
-#page-pr{--prw-ink:#231f20;--prw-paper:#fffdf9;--prw-canvas:#f5f2eb;--prw-line:#ded8cb;--prw-gold:#c4a265;--prw-gold-dark:#8b6b38;--prw-green:#28745a;--prw-red:#a63d40;--prw-blue:#315f86}
+/* ⚠️ لوحة مساحة الطلبات مقتبَسة من بوابة الطلبات (purchase-portal.html) بقرار
+   المالك: خلفية باردة هادئة + نظام ظلال متدرّج + أزواج دلاليّة (لون/خلفية/حدّ)
+   لكل حالة. كان السابق كريميّاً مسطّحاً بلا ظلال، وثلاثة أشرطة داكنة متراكبة
+   تُشتّت البصر. الذهبيّ يبقى لوناً للعلامة لا لوناً للسطح. */
+#page-pr{--prw-navy:#16243d;--prw-navy-2:#0f1a2e;--prw-ink:#1b2333;--prw-muted:#5d6b80;--prw-faint:#93a0b3;
+  --prw-paper:#ffffff;--prw-canvas:#f2f4f8;--prw-surface-2:#f7f9fc;--prw-line:#e2e7ef;--prw-line-2:#ecf0f6;
+  --prw-gold:#c2a063;--prw-gold-dark:#a37f43;--prw-gold-3:#876734;--prw-gold-soft:#eaddc1;
+  --prw-green:#2e7d5b;--prw-green-bg:#e9f3ee;--prw-green-line:#c2e0d0;
+  --prw-red:#b4453f;--prw-red-bg:#f8ecea;--prw-red-line:#edcac6;
+  --prw-warn:#a9802f;--prw-warn-bg:#f7efdc;--prw-warn-line:#e8d6ac;
+  --prw-blue:#3a5a96;--prw-blue-bg:#eaf0f8;--prw-blue-line:#ccd9ef;
+  --prw-sh1:0 1px 2px rgba(20,28,46,.05),0 1px 3px rgba(20,28,46,.05);
+  --prw-sh2:0 6px 18px -8px rgba(20,28,46,.16),0 2px 6px -4px rgba(20,28,46,.08);
+  --prw-ease:cubic-bezier(.32,.72,.32,1)}
 .pr-workspace{min-height:calc(100vh - 132px);margin:-32px -36px -60px;background:var(--prw-canvas);border-top:1px solid var(--prw-line);overflow:hidden}
-.pr-work-top{height:72px;padding:0 22px;display:flex;align-items:center;gap:16px;background:var(--prw-ink);color:#f7f2e8;border-bottom:1px solid rgba(255,255,255,.08)}
+.pr-work-top{height:72px;padding:0 22px;display:flex;align-items:center;gap:16px;background:linear-gradient(110deg,var(--prw-navy-2),var(--prw-navy) 52%,#1d2f4d);color:#f6efe0;border-bottom:1px solid rgba(194,160,99,.22);box-shadow:0 10px 30px -18px rgba(0,0,0,.55)}
 .pr-work-brand{display:flex;align-items:center;gap:11px;min-width:230px}
-.pr-work-brandmark{width:38px;height:38px;border:1px solid rgba(196,162,101,.5);border-radius:11px;display:grid;place-items:center;color:#ead49e;font-family:'Fraunces',serif;font-size:18px;font-weight:700;background:linear-gradient(145deg,#322b27,#1d1918)}
-.pr-work-brand strong{display:block;font-size:13px}.pr-work-brand small{display:block;color:#9f968c;font-size:9px;letter-spacing:.14em}
-.pr-work-search{position:relative;flex:1;max-width:650px;margin:auto}.pr-work-search input{width:100%;height:40px;border:1px solid #514a47;border-radius:10px;background:#302b2a;color:#f8f3ea;padding:0 42px 0 14px;font-family:inherit;outline:none}.pr-work-search input:focus{border-color:var(--prw-gold);box-shadow:0 0 0 3px rgba(196,162,101,.12)}.pr-work-search span{position:absolute;inset-inline-start:15px;top:9px;color:#b9afa4}
-.pr-work-top-actions{display:flex;align-items:center;gap:8px}.pr-work-role{padding:7px 11px;border-inline-start:1px solid #4b4441;min-width:150px}.pr-work-role b{display:block;font-size:11.5px;color:#f4ead8}.pr-work-role small{display:block;font-size:9.5px;color:#aa9f95}
-.pr-work-iconbtn{width:38px;height:38px;border:1px solid #514a47;border-radius:9px;background:#302b2a;color:#eadfcf;display:grid;place-items:center;cursor:pointer;font-family:inherit}.pr-work-iconbtn:hover{border-color:var(--prw-gold);color:#f0d39b}
+.pr-work-brandmark{width:38px;height:38px;object-fit:contain;padding:5px;border:1px solid rgba(196,162,101,.5);border-radius:11px;display:grid;place-items:center;color:#ead49e;font-family:'Fraunces',serif;font-size:18px;font-weight:700;background:linear-gradient(145deg,#322b27,#1d1918)}
+.pr-work-brand strong{display:block;font-size:13px}.pr-work-brand small{display:block;color:#9fb0c8;font-size:9px;letter-spacing:.14em}
+.pr-work-search{position:relative;flex:1;max-width:650px;margin:auto}.pr-work-search input{width:100%;height:40px;border:1px solid rgba(255,255,255,.14);border-radius:11px;background:rgba(255,255,255,.07);color:#f8f3ea;padding:0 42px 0 14px;font-family:inherit;outline:none;transition:.2s var(--prw-ease)}.pr-work-search input::placeholder{color:#9fb0c8}.pr-work-search input:focus{border-color:var(--prw-gold);background:rgba(255,255,255,.1);box-shadow:0 0 0 3px rgba(194,160,99,.16)}.pr-work-search span{position:absolute;inset-inline-start:15px;top:9px;color:#9fb0c8}
+.pr-work-top-actions{display:flex;align-items:center;gap:8px}.pr-work-role{padding:7px 11px;border-inline-start:1px solid rgba(255,255,255,.14);min-width:150px}.pr-work-role b{display:block;font-size:11.5px;color:#f4ead8}.pr-work-role small{display:block;font-size:9.5px;color:#9fb0c8}
+.pr-work-iconbtn{width:38px;height:38px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(255,255,255,.07);color:#eadfcf;display:grid;place-items:center;cursor:pointer;font-family:inherit}.pr-work-iconbtn:hover{border-color:var(--prw-gold);color:#f0d39b}
 .pr-work-grid{display:grid;grid-template-columns:76px 316px minmax(0,1fr);min-height:calc(100vh - 204px);direction:rtl}
-.pr-work-rail{background:#312d2d;color:#aaa09a;border-inline-start:1px solid #453f3d;display:flex;flex-direction:column;padding:12px 7px;gap:5px}
-.pr-work-navbtn{min-height:62px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;position:relative}.pr-work-navbtn .ico{font-size:18px;line-height:1}.pr-work-navbtn:hover{background:rgba(255,255,255,.05);color:#f4ead8}.pr-work-navbtn.active{background:#242121;color:#e8cf9c}.pr-work-navbtn.active::after{content:'';position:absolute;inset-inline-end:-7px;top:13px;bottom:13px;width:2px;background:var(--prw-gold)}.pr-work-navcount{position:absolute;top:6px;inset-inline-start:9px;min-width:16px;height:16px;border-radius:8px;background:var(--prw-gold);color:#241f1c;font-size:9px;display:grid;place-items:center;font-weight:700}
-.pr-work-queue{background:#fbf9f4;border-inline-start:1px solid var(--prw-line);min-width:0;display:flex;flex-direction:column}.pr-work-queuehead{padding:20px 18px 14px;border-bottom:1px solid var(--prw-line)}.pr-work-kicker{font-size:10px;font-weight:700;color:var(--prw-gold-dark);letter-spacing:.08em}.pr-work-queue-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 13px}.pr-work-queue-title h2{font-family:'Fraunces',serif;font-size:23px;margin:0;color:var(--prw-ink)}.pr-work-total{min-width:28px;height:24px;padding:0 7px;border-radius:8px;background:var(--prw-ink);color:#fff;display:grid;place-items:center;font:600 11px 'IBM Plex Mono',monospace}
-.pr-work-filterrow{display:flex;gap:7px}.pr-work-filterrow input{min-width:0;flex:1;height:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;padding:0 11px;font-family:inherit}.pr-work-filterrow button{width:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;cursor:pointer}.pr-work-quick{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px}.pr-work-chip{border:1px solid var(--prw-line);border-radius:16px;background:#f7f4ee;color:#6e665e;padding:5px 9px;font:inherit;font-size:10.5px;cursor:pointer}.pr-work-chip.active{background:var(--prw-ink);border-color:var(--prw-ink);color:#fff}
-.pr-work-list{padding:10px;overflow:auto;max-height:calc(100vh - 356px)}.pr-work-request{width:100%;padding:13px 12px;margin-bottom:8px;border:1px solid transparent;border-radius:10px;background:transparent;text-align:start;font-family:inherit;cursor:pointer;color:var(--prw-ink);display:block}.pr-work-request:hover{background:#fff;border-color:#e9e2d6}.pr-work-request.active{background:#fff;border-color:#d5c7aa;box-shadow:0 3px 12px rgba(46,39,34,.07)}.pr-work-request-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.pr-work-request-id{font:600 10.5px 'IBM Plex Mono',monospace;direction:ltr;color:#6e665e}.pr-work-request-title{font-size:12.5px;font-weight:700;margin:5px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-request-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:#81786f;font-size:10px}.pr-work-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-inline-end:4px;background:var(--prw-blue)}.pr-work-dot.ok{background:var(--prw-green)}.pr-work-dot.warn{background:var(--prw-gold-dark)}.pr-work-dot.danger{background:var(--prw-red)}
-.pr-work-detail{direction:rtl;min-width:0;background:#fffdf9}.pr-work-detailhead{padding:18px 28px 14px;background:#fff;border-bottom:1px solid var(--prw-line)}.pr-work-breadcrumb{font-size:10px;color:#81776d;margin-bottom:8px}.pr-work-titlebar{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.pr-work-titlebar h2{font-family:'Fraunces',serif;font-size:25px;line-height:1.3;margin:0 0 5px;color:var(--prw-ink)}.pr-work-sub{font-size:11px;color:#7d746a}.pr-work-version{display:inline-flex;padding:3px 8px;margin-inline-start:8px;border:1px solid var(--prw-line);border-radius:6px;background:#f7f4ee;font-size:9px;color:#756d64;vertical-align:middle}.pr-work-archived{display:inline-flex;align-items:center;gap:5px;padding:0 10px;min-height:38px;border:1px solid var(--prw-line);border-radius:8px;background:#f3f0ea;color:#7a7168;font-size:11px}.pr-work-headbuttons{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.pr-work-headbuttons .btn{min-height:38px}
-.pr-work-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:#312d2d;color:#f6efe5;border-bottom:1px solid #45403e}.pr-work-stat{padding:12px 18px;border-inline-start:1px solid #4b4542;min-width:0}.pr-work-stat:first-child{border-inline-start:0}.pr-work-stat small{display:block;font-size:9px;color:#aca29a;margin-bottom:3px}.pr-work-stat b{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-stat .money{font-family:'IBM Plex Mono',monospace;color:#f0d79f}
-.pr-work-tabs{display:flex;align-items:center;gap:22px;padding:0 28px;background:#fff;border-bottom:1px solid var(--prw-line);overflow-x:auto}.pr-work-tab{min-height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:#756c63;font:inherit;font-size:11.5px;white-space:nowrap;cursor:pointer}.pr-work-tab:hover{color:var(--prw-ink)}.pr-work-tab.active{color:var(--prw-ink);border-color:var(--prw-gold-dark);font-weight:700}.pr-work-tab em{font-style:normal;margin-inline-start:4px;padding:1px 6px;border-radius:8px;background:#efebe3;color:#777067;font-size:9px}
-.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:#fff;border:1px solid var(--prw-line);border-radius:10px;padding:18px;margin-bottom:12px}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid #eee9df}.pr-work-meta dt{font-size:10px;color:#80786f}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
-.pr-work-next{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;margin-bottom:12px;border:1px solid #d9ccb2;border-inline-start:4px solid var(--prw-gold-dark);border-radius:9px;background:#fffaf0}.pr-work-next small{display:block;color:#8a744f;font-size:9.5px}.pr-work-next b{display:block;color:#3b332c;font-size:12.5px;margin-top:2px}.pr-work-next .owner{font-size:10px;color:#766c62;white-space:nowrap}
-.pr-work-steps{display:flex;padding:0;margin:0 0 14px;list-style:none;background:#fff;border:1px solid var(--prw-line);border-radius:9px;overflow:hidden}.pr-work-steps li{flex:1;min-width:105px;padding:10px 12px;border-inline-start:1px solid var(--prw-line);color:#938a80;font-size:10px}.pr-work-steps li:first-child{border-inline-start:0}.pr-work-steps li.done{color:var(--prw-green);background:#f6fbf8}.pr-work-steps li.current{color:#6f5327;background:#fff8e8;font-weight:700}.pr-work-steps span{display:block;font-size:9px;opacity:.75}
-.pr-work-tablewrap{overflow:auto}.pr-work-table{width:100%;min-width:620px;border-collapse:collapse;font-size:11.5px}.pr-work-table th{padding:9px 10px;background:#f4f1ea;color:#756d64;text-align:start;font-size:10px;font-weight:600}.pr-work-table td{padding:11px 10px;border-bottom:1px solid #ebe5da;vertical-align:top}.pr-work-table tbody tr{animation:none}.pr-work-table tbody tr:last-child td{border-bottom:0}.pr-work-table .num{text-align:center;font-variant-numeric:tabular-nums}.pr-work-itemnote{display:block;color:#8b8178;font-size:9.5px;margin-top:2px}
-.pr-work-empty{padding:34px 15px;text-align:center;color:#8a8178;font-size:12px}.pr-work-audit{position:relative;padding:2px 0}.pr-work-event{position:relative;padding:0 22px 17px 0;border-inline-start:1px solid #d8d0c3;margin-inline-start:5px}.pr-work-event::before{content:'';position:absolute;inset-inline-start:-5px;top:4px;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid var(--prw-gold-dark)}.pr-work-event b{display:block;font-size:12px}.pr-work-event small{display:block;color:#827970;font-size:10px;margin-top:2px}
-.pr-work-report{max-width:900px;margin:auto;background:#fff;border:1px solid #d8d1c4;box-shadow:0 8px 24px rgba(45,39,34,.08);padding:30px}.pr-work-reporthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--prw-ink);padding-bottom:14px;margin-bottom:22px}.pr-work-reporthead h3{font-size:17px;margin:0}.pr-work-reporthead small{color:#877d72}.pr-work-report-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--prw-line);border-radius:8px;overflow:hidden;margin-bottom:18px}.pr-work-report-grid div{padding:9px 11px;border-inline-start:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-inline-start:0}.pr-work-report-grid small{display:block;color:#827a71;font-size:8.5px}.pr-work-report-grid b{font-size:10.5px}.pr-work-signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:34px}.pr-work-signatures div{border-top:1px solid #a9a096;padding-top:6px;text-align:center;font-size:9.5px;color:#675f57}
+.pr-work-rail{background:var(--prw-navy);color:#9fb0c8;border-inline-start:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;padding:12px 7px;gap:5px}
+.pr-work-navbtn{min-height:62px;border:0;border-radius:11px;background:transparent;color:inherit;font:inherit;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;position:relative;transition:.18s var(--prw-ease)}.pr-work-navbtn .ico{font-size:18px;line-height:1}.pr-work-navbtn:hover{background:rgba(255,255,255,.06);color:#f4ead8}.pr-work-navbtn.active{background:rgba(194,160,99,.15);color:#f0d9a8}.pr-work-navbtn.active::after{content:'';position:absolute;inset-inline-end:-7px;top:13px;bottom:13px;width:2.5px;border-radius:2px;background:var(--prw-gold)}.pr-work-navcount{position:absolute;top:6px;inset-inline-start:9px;min-width:16px;height:16px;border-radius:8px;background:var(--prw-gold);color:#241f1c;font-size:9px;display:grid;place-items:center;font-weight:700}
+.pr-work-queue{background:var(--prw-surface-2);border-inline-start:1px solid var(--prw-line);min-width:0;display:flex;flex-direction:column}.pr-work-queuehead{padding:20px 18px 14px;border-bottom:1px solid var(--prw-line)}.pr-work-kicker{font-size:10px;font-weight:700;color:var(--prw-gold-dark);letter-spacing:.08em}.pr-work-queue-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 13px}.pr-work-queue-title h2{font-family:'Fraunces',serif;font-size:23px;margin:0;color:var(--prw-ink)}.pr-work-total{min-width:28px;height:24px;padding:0 7px;border-radius:8px;background:var(--prw-ink);color:#fff;display:grid;place-items:center;font:600 11px 'IBM Plex Mono',monospace}
+.pr-work-filterrow{display:flex;gap:7px}.pr-work-filterrow input{min-width:0;flex:1;height:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;padding:0 11px;font-family:inherit}.pr-work-filterrow button{width:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;cursor:pointer}.pr-work-quick{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px}.pr-work-chip{border:1px solid var(--prw-line);border-radius:16px;background:var(--prw-surface-2);color:var(--prw-muted);padding:5px 9px;font:inherit;font-size:10.5px;cursor:pointer}.pr-work-chip.active{background:var(--prw-ink);border-color:var(--prw-ink);color:#fff}
+.pr-work-list{padding:10px;overflow:auto;max-height:calc(100vh - 356px)}.pr-work-request{width:100%;padding:13px 12px;margin-bottom:8px;border:1px solid transparent;border-radius:10px;background:transparent;text-align:start;font-family:inherit;cursor:pointer;color:var(--prw-ink);display:block}.pr-work-request{transition:.18s var(--prw-ease)}.pr-work-request:hover{background:var(--prw-paper);border-color:var(--prw-line);box-shadow:var(--prw-sh1)}.pr-work-request.active{background:var(--prw-paper);border-color:var(--prw-gold);box-shadow:var(--prw-sh2),0 0 0 3px rgba(194,160,99,.13)}.pr-work-request-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.pr-work-request-id{font:600 10.5px 'IBM Plex Mono',monospace;direction:ltr;color:var(--prw-muted)}.pr-work-request-title{font-size:12.5px;font-weight:700;margin:5px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-request-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--prw-faint);font-size:10px}.pr-work-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-inline-end:4px;background:var(--prw-blue)}.pr-work-dot.ok{background:var(--prw-green)}.pr-work-dot.warn{background:var(--prw-gold-dark)}.pr-work-dot.danger{background:var(--prw-red)}
+.pr-work-detail{direction:rtl;min-width:0;background:var(--prw-canvas)}.pr-work-detailhead{padding:18px 28px 14px;background:var(--prw-paper);border-bottom:1px solid var(--prw-line)}.pr-work-breadcrumb{font-size:10px;color:var(--prw-faint);margin-bottom:8px}.pr-work-titlebar{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.pr-work-titlebar h2{font-family:'Fraunces',serif;font-size:25px;line-height:1.3;margin:0 0 5px;color:var(--prw-ink)}.pr-work-sub{font-size:11px;color:var(--prw-muted)}.pr-work-version{display:inline-flex;padding:3px 8px;margin-inline-start:8px;border:1px solid var(--prw-line);border-radius:6px;background:var(--prw-surface-2);font-size:9px;color:var(--prw-muted);vertical-align:middle}.pr-work-archived{display:inline-flex;align-items:center;gap:5px;padding:0 10px;min-height:38px;border:1px solid var(--prw-line);border-radius:8px;background:var(--prw-surface-2);color:var(--prw-muted);font-size:11px}.pr-work-headbuttons{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.pr-work-headbuttons .btn{min-height:38px}
+/* ⚠️ كان هذا الشريط داكناً (#312d2d) فيصنع «ساندويتش» ثالثاً من الأسود تحت
+   شريط علويّ داكن وشريط جانبيّ داكن — وهو أوضح سبب لتشتّت الشاشة في بلاغ
+   المالك. صار سطحاً فاتحاً: القيمة هي البارزة، والتسمية هادئة فوقها. */
+.pr-work-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--prw-paper);border-bottom:1px solid var(--prw-line)}.pr-work-stat{padding:13px 18px;border-inline-start:1px solid var(--prw-line-2);min-width:0}.pr-work-stat:first-child{border-inline-start:0}.pr-work-stat small{display:block;font-size:9.5px;color:var(--prw-faint);margin-bottom:4px;letter-spacing:.02em}.pr-work-stat b{display:block;font-size:12.5px;font-weight:600;color:var(--prw-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-stat .money{font-family:'IBM Plex Mono',monospace;color:var(--prw-gold-3);font-weight:700}.pr-work-stat .id{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+.pr-work-tabs{display:flex;align-items:center;gap:22px;padding:0 28px;background:#fff;border-bottom:1px solid var(--prw-line);overflow-x:auto}.pr-work-tab{min-height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--prw-muted);font:inherit;font-size:11.5px;white-space:nowrap;cursor:pointer}.pr-work-tab:hover{color:var(--prw-ink)}.pr-work-tab.active{color:var(--prw-ink);border-color:var(--prw-gold-dark);font-weight:700}.pr-work-tab em{font-style:normal;margin-inline-start:4px;padding:1px 6px;border-radius:8px;background:var(--prw-line-2);color:var(--prw-faint);font-size:9px}
+.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:var(--prw-sh1)}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid var(--prw-line-2)}.pr-work-meta dt{font-size:10px;color:var(--prw-faint)}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
+.pr-work-next{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;margin-bottom:12px;border:1px solid var(--prw-gold-soft);border-inline-start:4px solid var(--prw-gold);border-radius:12px;background:linear-gradient(180deg,#fffdf7,#fbf4e5);box-shadow:var(--prw-sh1)}.pr-work-next small{display:block;color:var(--prw-gold-3);font-size:9.5px;font-weight:600;letter-spacing:.03em}.pr-work-next b{display:block;color:var(--prw-ink);font-size:13px;margin-top:3px}.pr-work-next .owner{font-size:10.5px;color:var(--prw-muted);white-space:nowrap}
+/* ══ مسار سير العمل — بطاقات بحالات ومسؤولين وتواريخ فعليّة ══
+   ⚠️ كان الأصل قائمة `<li>` مسطّحة بخطّ 9–10px بلا مسؤول ولا تاريخ ولا رابط
+   بصريّ بين المراحل، فلا يُقرأ منها «أين الطلب الآن ومن يُمسِك به». الشكل
+   الجديد مقتبَس من `.fl-node` في بوابة الطلبات (قرار المالك): شارة مرقّمة
+   بحالة لونيّة + اسم المقرِّر الفعليّ + تاريخ قراره + موصّلات بين البطاقات. */
+.prw-flow{display:flex;gap:0;overflow-x:auto;padding:16px 2px 14px;margin-bottom:14px;align-items:stretch}
+.prw-node{flex-shrink:0;width:188px;background:var(--prw-paper);border:1.5px solid var(--prw-line);border-radius:14px;padding:13px;box-shadow:var(--prw-sh1);position:relative;transition:.25s var(--prw-ease)}
+.prw-node.done{border-color:var(--prw-green-line);background:linear-gradient(180deg,#fff,var(--prw-green-bg))}
+.prw-node.current{border-color:var(--prw-gold);box-shadow:0 14px 30px -12px rgba(163,127,67,.42),0 0 0 3px rgba(194,160,99,.14);transform:translateY(-2px)}
+.prw-node.stop{border-color:var(--prw-red-line);background:linear-gradient(180deg,#fff,var(--prw-red-bg))}
+.prw-node.back{border-color:var(--prw-blue-line);background:linear-gradient(180deg,#fff,var(--prw-blue-bg))}
+.prw-node.todo{opacity:.72}
+.prw-badge{position:absolute;top:-13px;inset-inline-start:14px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--prw-paper);border:1.5px solid var(--prw-line);color:var(--prw-faint);box-shadow:var(--prw-sh1);z-index:2}
+.prw-node.done .prw-badge{background:linear-gradient(155deg,#36916b,var(--prw-green));color:#fff;border-color:transparent}
+.prw-node.current .prw-badge{background:linear-gradient(155deg,var(--prw-gold),var(--prw-gold-dark));color:var(--prw-navy);border-color:transparent;animation:prwPulse 2.1s var(--prw-ease) infinite}
+.prw-node.stop .prw-badge{background:linear-gradient(155deg,#c4544e,var(--prw-red));color:#fff;border-color:transparent}
+.prw-node.back .prw-badge{background:linear-gradient(155deg,#456fb0,var(--prw-blue));color:#fff;border-color:transparent}
+.prw-stage{font-size:12.5px;font-weight:700;margin:7px 0;color:var(--prw-ink);line-height:1.45}
+.prw-who{font-size:11px;color:var(--prw-muted);line-height:1.5}
+.prw-meta{margin-top:9px;padding-top:9px;border-top:1px dashed var(--prw-line);font-size:10.5px;color:var(--prw-faint);min-height:24px;display:flex;align-items:center;gap:5px}
+.prw-node.done .prw-meta{color:var(--prw-green);font-weight:600}
+.prw-node.current .prw-meta{color:var(--prw-gold-3);font-weight:700}
+.prw-conn{flex-shrink:0;align-self:center;width:26px;height:3px;background:var(--prw-line);border-radius:2px}
+.prw-conn.done{background:var(--prw-green-line)}
+@keyframes prwPulse{0%,100%{box-shadow:0 0 0 0 rgba(194,160,99,.45)}50%{box-shadow:0 0 0 7px rgba(194,160,99,0)}}
+@media(prefers-reduced-motion:reduce){.prw-node.current .prw-badge{animation:none}.prw-node{transition:none}}
+.pr-work-tablewrap{overflow:auto}.pr-work-table{width:100%;min-width:620px;border-collapse:collapse;font-size:11.5px}.pr-work-table th{padding:10px;background:var(--prw-surface-2);color:var(--prw-muted);text-align:start;font-size:10.5px;font-weight:600;border-bottom:1px solid var(--prw-line)}.pr-work-table td{padding:11px 10px;border-bottom:1px solid var(--prw-line-2);vertical-align:top}.pr-work-table tfoot td{background:var(--prw-surface-2);border-top:1.5px solid var(--prw-line);border-bottom:0}.pr-work-table tbody tr{animation:none}.pr-work-table tbody tr:last-child td{border-bottom:0}.pr-work-table .num{text-align:center;font-variant-numeric:tabular-nums}.pr-work-itemnote{display:block;color:var(--prw-faint);font-size:9.5px;margin-top:2px}
+.pr-work-empty{padding:34px 15px;text-align:center;color:var(--prw-faint);font-size:12px}.pr-work-audit{position:relative;padding:2px 0}.pr-work-event{position:relative;padding:0 22px 17px 0;border-inline-start:1px solid var(--prw-line);margin-inline-start:5px}.pr-work-event::before{content:'';position:absolute;inset-inline-start:-5px;top:4px;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid var(--prw-gold-dark)}.pr-work-event b{display:block;font-size:12px}.pr-work-event small{display:block;color:var(--prw-faint);font-size:10px;margin-top:2px}
+.pr-work-report{max-width:900px;margin:auto;background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:6px;box-shadow:var(--prw-sh2);padding:30px}.pr-work-reporthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--prw-ink);padding-bottom:14px;margin-bottom:22px}.pr-work-reporthead h3{font-size:17px;margin:0}.pr-work-reporthead small{color:var(--prw-muted)}.pr-work-report-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--prw-line);border-radius:8px;overflow:hidden;margin-bottom:18px}.pr-work-report-grid div{padding:9px 11px;border-inline-start:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-inline-start:0}.pr-work-report-grid small{display:block;color:var(--prw-muted);font-size:8.5px}.pr-work-report-grid b{font-size:10.5px}.pr-work-signatures{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:22px;margin-top:34px}.pr-work-signatures div{border-top:1px solid #aeb7c4;padding-top:7px;text-align:center;font-size:9.5px;color:var(--prw-muted)}
 .pr-work-editor{padding:22px 28px;background:var(--prw-canvas);min-height:calc(100vh - 276px);overflow:auto}.pr-work-editor>.pr-card{background:#fff}
 @media(max-width:1180px){.pr-work-grid{grid-template-columns:68px 270px minmax(0,1fr)}.pr-work-summary{grid-template-columns:repeat(3,1fr)}.pr-work-stat:nth-child(n+4){display:none}.pr-work-search{max-width:420px}}
-@media(max-width:900px){.pr-workspace{margin:-16px -14px -84px;min-height:100vh}.pr-work-top{height:auto;min-height:64px;padding:10px 12px}.pr-work-brand{min-width:0}.pr-work-brand div:last-child{display:none}.pr-work-search{max-width:none}.pr-work-top-actions .btn{padding-inline:10px}.pr-work-grid{grid-template-columns:1fr;display:block}.pr-work-rail{position:sticky;top:62px;z-index:5;flex-direction:row;padding:5px 8px;overflow-x:auto;border-inline-start:0;border-bottom:1px solid #453f3d}.pr-work-navbtn{min-width:62px;min-height:50px}.pr-work-navbtn.active::after{inset:auto 10px -5px;right:10px;height:2px;width:auto}.pr-work-queue{border-inline-start:0;border-bottom:1px solid var(--prw-line)}.pr-work-queuehead{padding:13px 14px 10px}.pr-work-queue-title{margin-bottom:8px}.pr-work-queue-title h2{font-size:19px}.pr-work-list{display:flex;gap:8px;max-height:none;overflow-x:auto;padding:8px}.pr-work-request{flex:0 0 245px;margin:0}.pr-work-detailhead{padding:15px 16px}.pr-work-titlebar h2{font-size:20px}.pr-work-titlebar{display:block}.pr-work-headbuttons{margin-top:12px}.pr-work-summary{grid-template-columns:repeat(2,1fr)}.pr-work-stat:nth-child(n+3){display:none}.pr-work-tabs{padding:0 16px;gap:16px}.pr-work-canvas,.pr-work-editor{padding:14px;max-height:none}.pr-work-meta{grid-template-columns:1fr}.pr-work-next{align-items:flex-start}.pr-work-steps{overflow-x:auto}.pr-work-steps li{flex:0 0 118px}.pr-work-report{padding:18px}.pr-work-report-grid{grid-template-columns:repeat(2,1fr)}.pr-work-report-grid div:nth-child(3){border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:nth-child(4){border-top:1px solid var(--prw-line)}}
+@media(max-width:900px){.pr-workspace{margin:-16px -14px -84px;min-height:100vh}.pr-work-top{height:auto;min-height:64px;padding:10px 12px}.pr-work-brand{min-width:0}.pr-work-brand div:last-child{display:none}.pr-work-search{max-width:none}.pr-work-top-actions .btn{padding-inline:10px}.pr-work-grid{grid-template-columns:1fr;display:block}.pr-work-rail{position:sticky;top:62px;z-index:5;flex-direction:row;padding:5px 8px;overflow-x:auto;border-inline-start:0;border-bottom:1px solid rgba(255,255,255,.08)}.pr-work-navbtn{min-width:62px;min-height:50px}.pr-work-navbtn.active::after{inset:auto 10px -5px;right:10px;height:2px;width:auto}.pr-work-queue{border-inline-start:0;border-bottom:1px solid var(--prw-line)}.pr-work-queuehead{padding:13px 14px 10px}.pr-work-queue-title{margin-bottom:8px}.pr-work-queue-title h2{font-size:19px}.pr-work-list{display:flex;gap:8px;max-height:none;overflow-x:auto;padding:8px}.pr-work-request{flex:0 0 245px;margin:0}.pr-work-detailhead{padding:15px 16px}.pr-work-titlebar h2{font-size:20px}.pr-work-titlebar{display:block}.pr-work-headbuttons{margin-top:12px}.pr-work-summary{grid-template-columns:repeat(2,1fr)}.pr-work-stat:nth-child(n+3){display:none}.pr-work-tabs{padding:0 16px;gap:16px}.pr-work-canvas,.pr-work-editor{padding:14px;max-height:none}.pr-work-meta{grid-template-columns:1fr}.pr-work-next{align-items:flex-start}.prw-node{width:164px}.pr-work-report{padding:18px}.pr-work-report-grid{grid-template-columns:repeat(2,1fr)}.pr-work-report-grid div:nth-child(3){border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:nth-child(4){border-top:1px solid var(--prw-line)}}
 @media(max-width:520px){.pr-work-top-actions{display:none}.pr-work-titlebar h2{font-size:18px}.pr-work-headbuttons .btn{flex:1}.pr-work-queue-title h2{font-size:18px}.pr-work-summary{grid-template-columns:1fr 1fr}.pr-work-tabs{gap:13px}.pr-work-surface{padding:14px}.pr-work-report-grid{grid-template-columns:1fr}.pr-work-report-grid div{border-inline-start:0;border-top:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-top:0}.pr-work-signatures{gap:10px}}
 
 /* Naming methodology */
@@ -12900,6 +12941,17 @@ function prWorkspaceVisible(){
    استلام كل أوامر الطلب، أو pr_set_archived يدويّاً للمشتريات). الواجهة تقرأ
    ولا تكتب — الكتابة المباشرة على الطلبات مسحوبة من `authenticated` أصلاً. */
 function prIsArchived(pr){ return !!(pr && pr.archived_at); }
+/* ⚠️ مصدر واحد لأوامر الشراء المرتبطة. `proc_pr_po_links` هو الجدول المعتمَد،
+   لكن عمود `proc_purchase_requests.po_number` سبقه وما زال يُكتب
+   (`po_number=coalesce(po_number,v_po)` في pr_link_purchase_order). فطلبٌ
+   يحمل رقم أمر بلا صفّ روابط — وهو شكل الصفوف السابقة للموديل — كان يُعرَض
+   «لم يُربط أمر شراء بعد» وهو مرتبط فعلاً. لا تقرأ `po_links` مباشرةً في عرض
+   جديد؛ استعمل هذه. */
+function prPoLinksOf(pr){
+  const links=(pr&&pr.po_links)||[];
+  if(links.length||!pr||!pr.po_number) return links;
+  return [{po_number:pr.po_number,allocations:[],note:'',_legacy:true}];
+}
 function prArchiveCount(){ return prWorkspaceVisible().filter(prIsArchived).length; }
 function prWorkspaceNeedsAction(pr){
   const me=String(STATE.currentUser?.username||'').toLowerCase();
@@ -13042,25 +13094,58 @@ async function prToggleArchive(id,archived){
 function prSelectWorkspaceRequest(id){STATE.prTrackId=id;STATE.prView='track';renderPRPortal();}
 function prSetDetailTab(tab){STATE.prDetailTab=tab;renderPRPortal();}
 
+/* ⚠️ المراحل تُقرأ من سلسلة الاعتماد الفعليّة (`pr.approvals` مرتّبة بالتسلسل)
+   لا من مسمّيات ثابتة: مرحلةٌ تعرض اسم مقرِّر لم يقرّر شيئاً تُضلّل القارئ.
+   المرحلتان 1 و2 تُطابَقان بالترتيب لا بمفتاح نصّيّ، فلا تنكسر لو تغيّرت مفاتيح
+   المراحل في القالب. */
 function prWorkspaceStepsHTML(pr){
-  const at=prWorkspaceStage(pr)[2];
-  const steps=['رفع الطلب','اعتماد الاحتياج','السماح بالتسعير','التسعير والمقارنة','تغطية البنود','التوريد والاستلام'];
-  return `<ol class="pr-work-steps">${steps.map((label,i)=>`<li class="${i<at?'done':i===at?'current':''}">${i<at?'✓ ':i===at?'● ':''}${label}<span>${i<at?'مكتمل':i===at?'المرحلة الحالية':'لاحقاً'}</span></li>`).join('')}</ol>`;
+  const at=prWorkspaceStage(pr)[2], ap=pr.approvals||[];
+  const d=v=>v?String(v).slice(0,10):'';
+  const steps=[
+    {label:'رفع الطلب',who:pr.requester_name||pr.requester||'مقدّم الطلب',at:d(pr.submitted_at||pr.created_at)},
+    {label:'اعتماد الاحتياج',who:'مدير الصيانة والتشغيل',ap:ap[0]},
+    {label:'السماح بالتسعير',who:'مدير المشتريات',ap:ap[1]},
+    {label:'التسعير والمقارنة',who:'فريق المشتريات',at:d(pr.proc_started_at),actor:pr.proc_started_by},
+    {label:'تغطية البنود',who:'فريق المشتريات',at:prPoLinksOf(pr).length?`${prPoLinksOf(pr).length} أمر مرتبط`:''},
+    {label:'التوريد والاستلام',who:'المستودع والصيانة',at:d(pr.closed_at)}
+  ];
+  const halted=pr.status==='rejected'?'stop':pr.status==='cancelled'?'stop':pr.status==='returned'?'back':'';
+  const nodes=steps.map((s,i)=>{
+    let cls=i<at?'done':i===at?'current':'todo';
+    if(halted&&i===at) cls=halted;
+    const a=s.ap;
+    /* القرار الفعليّ يغلب الموضع: مرحلةٌ رُفضت أو أُعيدت تُعرَض بحالتها. */
+    if(a&&a.decision==='rejected') cls='stop';
+    else if(a&&a.decision==='returned') cls='back';
+    else if(a&&a.decision==='approved') cls='done';
+    const actor=a?(a.approver_name||a.approver||''):(s.actor||'');
+    const when=a?d(a.acted_at):(s.at||'');
+    const badge=cls==='done'?'✓':cls==='stop'?'✕':cls==='back'?'↩':String(i+1);
+    const metaTxt=cls==='done'?(when||'مكتمل')
+      :cls==='current'?(halted==='back'?'بانتظار التعديل':halted==='stop'?'متوقّف':'المرحلة الحالية')
+      :cls==='stop'?'مرفوض':cls==='back'?'أُعيد للاستكمال':(when||'لاحقاً');
+    return `<div class="prw-node ${cls}"><span class="prw-badge">${badge}</span>
+      <div class="prw-stage">${escapeHtml(s.label)}</div>
+      <div class="prw-who">${escapeHtml(actor||s.who)}</div>
+      <div class="prw-meta">${escapeHtml(metaTxt)}</div></div>`;
+  });
+  const flow=nodes.map((n,i)=>i?`<span class="prw-conn${i<=at?' done':''}"></span>${n}`:n).join('');
+  return `<div class="prw-flow" role="list" aria-label="مسار الطلب">${flow}</div>`;
 }
 function prWorkspaceDecisionHTML(pr){
   const mine=prPendingApproval(pr); if(!mine) return '';
   const approveLabel=mine.stage_key==='procurement_pricing'?'الموافقة على بدء التسعير':'اعتماد الاحتياج وإرساله للمشتريات';
-  return `<div class="pr-work-surface" style="border-color:#d7c49d;background:#fffaf0"><h3>${escapeHtml(mine.stage_label||'قرار الاعتماد')}</h3><div class="pr-work-sub">يُسجّل القرار على النسخة الحالية مع هوية المعتمد ووقت التنفيذ.</div><textarea id="pr-work-decision-note" class="input" style="width:100%;min-height:74px;margin-top:12px;resize:vertical" placeholder="ملاحظة القرار — إلزامية عند الإعادة أو الرفض"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary" onclick="prActInline('${escapeAttr(pr.id)}','approve')">✓ ${approveLabel}</button><button class="btn btn-ghost" onclick="prActInline('${escapeAttr(pr.id)}','return')">↩ إعادة للاستكمال</button><button class="btn btn-ghost" style="color:var(--danger)" onclick="prActInline('${escapeAttr(pr.id)}','reject')">رفض الطلب</button></div></div>`;
+  return `<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>${escapeHtml(mine.stage_label||'قرار الاعتماد')}</h3><div class="pr-work-sub">يُسجّل القرار على النسخة الحالية مع هوية المعتمد ووقت التنفيذ.</div><textarea id="pr-work-decision-note" class="input" style="width:100%;min-height:74px;margin-top:12px;resize:vertical" placeholder="ملاحظة القرار — إلزامية عند الإعادة أو الرفض"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary" onclick="prActInline('${escapeAttr(pr.id)}','approve')">✓ ${approveLabel}</button><button class="btn btn-ghost" onclick="prActInline('${escapeAttr(pr.id)}','return')">↩ إعادة للاستكمال</button><button class="btn btn-ghost" style="color:var(--danger)" onclick="prActInline('${escapeAttr(pr.id)}','reject')">رفض الطلب</button></div></div>`;
 }
 function prWorkspaceAttachmentsHTML(pr){
   const docs=pr.attachments||[];
   if(!docs.length&&!pr.doc_key) return `<div class="pr-work-sub">لا توجد مرفقات داعمة. الاعتماد الإلكتروني محفوظ في سجل الطلب.</div>`;
   const list=docs.length?docs:[{file_name:pr.doc_name,object_key:pr.doc_key,kind:'supporting'}];
-  return list.map((doc,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;${i<list.length-1?'border-bottom:1px solid #eee8dd':''}"><span style="font-size:12px">📎 ${escapeHtml(doc.file_name||'مرفق الطلب')}<small class="pr-work-itemnote">${escapeHtml(doc.kind||'مرفق داعم')}</small></span><button class="btn btn-ghost btn-sm" onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(doc.object_key||pr.doc_key)}','${escapeAttr(doc.file_name||pr.doc_name||'مرفق الطلب')}')">فتح داخل النظام</button></div>`).join('');
+  return list.map((doc,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;${i<list.length-1?'border-bottom:1px solid var(--prw-line-2)':''}"><span style="font-size:12px">📎 ${escapeHtml(doc.file_name||'مرفق الطلب')}<small class="pr-work-itemnote">${escapeHtml(doc.kind||'مرفق داعم')}</small></span><button class="btn btn-ghost btn-sm" onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(doc.object_key||pr.doc_key)}','${escapeAttr(doc.file_name||pr.doc_name||'مرفق الطلب')}')">فتح داخل النظام</button></div>`).join('');
 }
 function prWorkspaceOverviewHTML(pr){
   const next=prWorkspaceNext(pr);
-  const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:#d7c49d;background:#fffaf0"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p><button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button></div>`:'';
+  const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p><button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button></div>`:'';
   return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
 }
 function prWorkspaceItemsHTML(pr){
@@ -13071,7 +13156,10 @@ function prWorkspaceItemsHTML(pr){
     const poNums=[...new Set(allocations.map(a=>a.po))];
     return `<tr><td class="num">${i+1}</td><td><b>${escapeHtml(it.description||'—')}</b>${it.notes?`<span class="pr-work-itemnote">${escapeHtml(it.notes)}</span>`:''}${poNums.length?`<span class="pr-work-itemnote" dir="ltr">${poNums.map(escapeHtml).join(' · ')}</span>`:''}</td><td class="num">${escapeHtml(it.unit||'—')}</td><td class="num">${requested}</td><td class="num">${allocated}</td><td class="num"><b style="color:${remaining?'var(--prw-red)':'var(--prw-green)'}">${remaining}</b></td>${showMoney?`<td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td>`:''}</tr>`;
   }).join('');
-  return `<div class="pr-work-surface"><h3>البنود والتغطية بأوامر الشراء</h3><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||'<tr><td colspan="8" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>'}</tbody></table></div></div>`;
+  /* ⚠️ عدد الأعمدة يتبع صلاحية المبالغ: كان ثابتاً 8 فيمتدّ صفّ «لا بنود»
+     عمودين زائدين لموظّف الميدان (الجدول عنده 6 أعمدة). */
+  const cols=showMoney?8:6;
+  return `<div class="pr-work-surface"><h3>البنود والتغطية بأوامر الشراء</h3><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>`}</tbody></table></div></div>`;
 }
 function prWorkspaceApprovalsHTML(pr){
   const decisionLabel={approved:'تم الاعتماد',pending:'بانتظار القرار',returned:'أعيد للاستكمال',rejected:'مرفوض'};
@@ -13087,17 +13175,27 @@ function prWorkspaceDiscussionHTML(pr){
   return html||`<div class="pr-work-surface"><h3>المناقشة المشتركة</h3><div class="pr-work-empty">لا توجد مناقشات على هذا الطلب.</div></div>`;
 }
 function prWorkspaceLinksHTML(pr){
-  const links=pr.po_links||[];
-  const cards=links.map(l=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #eee8dd"><div><b dir="ltr">${escapeHtml(l.po_number)}</b><small class="pr-work-itemnote">${(l.allocations||[]).length} توزيع على البنود${l.note?' · '+escapeHtml(l.note):''}</small></div><button class="btn btn-ghost btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح الأمر</button></div>`).join('');
+  const links=prPoLinksOf(pr);
+  const cards=links.map(l=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--prw-line-2)"><div><b dir="ltr">${escapeHtml(l.po_number)}</b><small class="pr-work-itemnote">${l._legacy?'مرتبط برقم الأمر (قبل جدول الروابط)':`${(l.allocations||[]).length} توزيع على البنود`}${l.note?' · '+escapeHtml(l.note):''}</small></div><button class="btn btn-ghost btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح الأمر</button></div>`).join('');
   const isReady=['pricing','partially_ordered','ordered'].includes(pr.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(pr.status);
   const procurement=isReady&&prIsProcurement();
   const process=procurement?`<div class="pr-work-surface"><h3>معالجة المشتريات ${procStatusBadge(pr)}</h3>${pr.proc_started_by?`<div class="pr-work-sub">بدأ العمل: <b>${escapeHtml(pr.proc_started_by)}</b> · ${escapeHtml(String(pr.proc_started_at||'').slice(0,10))}</div>`:''}${pr.quotes_collected_by?`<div class="pr-work-sub">تم جمع العروض: <b>${escapeHtml(pr.quotes_collected_by)}</b> · ${escapeHtml(String(pr.quotes_collected_at||'').slice(0,10))}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-ghost" onclick="prPrint('${escapeAttr(pr.id)}')">طباعة الطلب</button>${(pr.proc_status||'received')==='received'?`<button class="btn btn-primary" onclick="prStart('${escapeAttr(pr.id)}')">بدأت العمل عليه</button>`:''}${pr.proc_status==='in_progress'?`<button class="btn btn-accent" onclick="prQuotesDone('${escapeAttr(pr.id)}')">تم جمع العروض</button>`:''}${!pr.rfq_id&&hasPermission('can_manage_rfq')?`<button class="btn btn-ghost" onclick="prConvertManual('${escapeAttr(pr.id)}')">إنشاء طلب تسعير</button>`:''}${pr.rfq_id?`<button class="btn btn-ghost" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح طلب التسعير ${escapeHtml(pr.rfq_id)}</button>`:''}</div></div>`:'';
   return `${process}<div class="pr-work-surface"><h3>أوامر الشراء المرتبطة (${links.length})</h3>${cards||'<div class="pr-work-empty">لم يُربط أمر شراء بهذا الطلب بعد.</div>'}${procurement?prPoLinkPanel(pr):''}</div>`;
 }
+/* ⚠️ معاينة المحضر على الشاشة تطابق المطبوعة: نفس الحقائق ونفس التواقيع
+   الفعليّة. وعلامة العلامة التجارية صورة (MARK_B64) لا الحرف «ض» — كان
+   الأصل يطبع حرفاً مكان الشعار. وعمود «الملاحظات» كان يُحشى بحالة الطلب
+   عند غياب ملاحظة البند، فيقرأ المستخدم بياناتٍ ليست بيانات البند. */
 function prWorkspaceReportHTML(pr){
-  const stage=prWorkspaceStage(pr), items=pr.items||[];
-  const rows=items.map((it,i)=>`<tr><td class="num">${i+1}</td><td>${escapeHtml(it.description||'—')}${it.notes?`<span class="pr-work-itemnote">${escapeHtml(it.notes)}</span>`:''}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${escapeHtml(it.unit||'—')}</td><td>${escapeHtml(it.notes||stage[0])}</td></tr>`).join('');
-  return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary" onclick="prPrint('${escapeAttr(pr.id)}')">⇩ طباعة محضر الطلب</button></div><article class="pr-work-report"><header class="pr-work-reporthead"><div><h3>مجموعة الذيابي</h3><small>إدارة المشتريات</small></div><span class="pr-work-brandmark">ض</span></header><div style="text-align:center;margin-bottom:20px"><h3 style="font-size:20px">محضر طلب شراء</h3><small>${escapeHtml(pr.id)} · الإصدار ${escapeHtml(String(pr.revision||1))}</small></div><div class="pr-work-report-grid"><div><small>الجهة</small><b>${escapeHtml(pr.department||pr.department_id||'—')}</b></div><div><small>الموقع</small><b>${escapeHtml(pr.project||'—')}</b></div><div><small>تاريخ الإنشاء</small><b>${escapeHtml(String(pr.created_at||'').slice(0,10)||'—')}</b></div><div><small>الحالة</small><b>${escapeHtml(stage[0])}</b></div></div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الوصف</th><th>الكمية</th><th>الوحدة</th><th>الملاحظات</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="pr-work-empty">لا بنود</td></tr>'}</tbody></table></div><p style="margin:22px 0;padding:12px;border-inline-end:3px solid var(--prw-gold);background:#faf7f0;color:#6d655d;font-size:10.5px">يوثّق هذا المحضر بيانات الطلب والقرارات المسجلة إلكترونياً. أي تعديل جوهري ينشئ إصداراً جديداً مع الإبقاء على كامل سجل الموافقات والمناقشات.</p><div class="pr-work-signatures"><div>مقدّم الطلب</div><div>مدير الصيانة والتشغيل</div><div>مدير المشتريات</div></div></article>`;
+  const stage=prWorkspaceStage(pr), items=pr.items||[], money=canViewAmounts();
+  const totQty=items.reduce((s,it)=>s+(Number(it.requested_qty)||0),0);
+  const rows=items.map((it,i)=>`<tr><td class="num">${i+1}</td><td>${escapeHtml(it.description||'—')}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${escapeHtml(it.unit||'—')}</td><td>${escapeHtml(it.notes||'—')}</td></tr>`).join('');
+  const signs=prSignatories(pr).map(s=>`<div><b style="display:block;color:var(--prw-ink);font-size:10.5px">${escapeHtml(s.role)}</b>${s.name?`<span style="display:block;margin-top:3px">${escapeHtml(s.name)}</span>`:''}${s.at?`<span style="display:block;color:var(--prw-green);font-size:9px;margin-top:2px">اعتُمد إلكترونياً ${escapeHtml(s.at)}</span>`:''}</div>`).join('');
+  const chain=(pr.approvals||[]).map(a=>{
+    const t={approved:['ok','اعتماد'],pending:['warn','بانتظار القرار'],returned:['info','أُعيد'],rejected:['danger','رفض'],cancelled:['neutral','أُلغي']}[a.decision]||['neutral',a.decision||'—'];
+    return `<tr><td>${escapeHtml(a.stage_label||a.stage_key||'—')}</td><td>${escapeHtml(a.approver_name||a.approver||'—')}</td><td>${escapeHtml(t[1])}</td><td class="num">${escapeHtml(a.acted_at?String(a.acted_at).slice(0,10):'—')}</td><td>${escapeHtml(a.comment||'—')}</td></tr>`;
+  }).join('');
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary" onclick="prPrint('${escapeAttr(pr.id)}')">⇩ طباعة محضر الطلب</button></div><article class="pr-work-report"><header class="pr-work-reporthead"><div><h3>مجموعة الذيابي</h3><small>إدارة المشتريات</small></div><img class="pr-work-brandmark" src="${MARK_B64}" alt=""></header><div style="text-align:center;margin-bottom:20px"><h3 style="font-size:20px">محضر طلب شراء</h3><small dir="ltr">${escapeHtml(pr.id)}</small><small> · الإصدار ${escapeHtml(String(pr.revision||1))}</small></div><div class="pr-work-report-grid"><div><small>الجهة</small><b>${escapeHtml(pr.department||pr.department_id||'—')}</b></div><div><small>الموقع</small><b>${escapeHtml(pr.project||'—')}</b></div><div><small>تاريخ الإنشاء</small><b>${escapeHtml(String(pr.created_at||'').slice(0,10)||'—')}</b></div><div><small>الحالة</small><b>${escapeHtml(stage[0])}</b></div></div>${pr.justification?`<p style="font-size:11px;line-height:1.8;margin:0 0 16px;color:#4a5262"><b style="color:var(--prw-ink)">مبرّر الاحتياج: </b>${escapeHtml(pr.justification)}</p>`:''}<div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الوصف</th><th>الكمية</th><th>الوحدة</th><th>ملاحظات البند</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="pr-work-empty">لا بنود</td></tr>'}</tbody>${items.length?`<tfoot><tr><td colspan="2" style="font-weight:700">الإجمالي</td><td class="num" style="font-weight:700">${totQty}</td><td colspan="2"></td></tr></tfoot>`:''}</table></div>${money&&Number(pr.est_total)?`<div style="text-align:end;margin-top:10px;font-size:11.5px"><b>القيمة التقديرية: </b><span style="font-family:'IBM Plex Mono',monospace;color:var(--prw-gold-3);font-weight:700">${fmtPrice(pr.est_total)} ر.س</span></div>`:''}<h4 style="font-family:'Fraunces',serif;font-size:14px;margin:22px 0 10px;color:var(--prw-ink)">سلسلة القرارات المسجّلة</h4><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>المرحلة</th><th>المقرِّر</th><th>القرار</th><th>التاريخ</th><th>الملاحظة</th></tr></thead><tbody>${chain||'<tr><td colspan="5" class="pr-work-empty">لم يُنشأ مسار اعتماد بعد.</td></tr>'}</tbody></table></div><p style="margin:22px 0;padding:12px;border-inline-end:3px solid var(--prw-gold);background:var(--prw-surface-2);color:#5d6b80;font-size:10.5px;line-height:1.8">يوثّق هذا المحضر بيانات الطلب والقرارات المسجّلة إلكترونياً بهويّة كل مقرِّر ووقت قراره. أي تعديل جوهري ينشئ إصداراً جديداً ويعيد مسار الاعتماد، مع الإبقاء على كامل السجل السابق.</p><div class="pr-work-signatures">${signs}</div></article>`;
 }
 function prWorkspaceDetailHTML(pr,view,mode){
   if(view==='create') return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">طلبات الشراء ‹ طلب جديد</div><div class="pr-work-titlebar"><div><h2>إنشاء طلب شراء</h2><div class="pr-work-sub">يُحفظ الرقم خادمياً ويبدأ الاعتماد بعد الإرسال.</div></div><button class="btn btn-ghost" onclick="prGoView('list')">العودة لمساحة العمل</button></div></div><div class="pr-work-editor">${prBuilderHTML()}</div>`;
@@ -13106,7 +13204,7 @@ function prWorkspaceDetailHTML(pr,view,mode){
   if(!pr) return `<div class="pr-work-empty" style="padding-top:100px"><h3>لا توجد طلبات في هذه القائمة</h3><p>غيّر المرشح أو أنشئ طلباً جديداً.</p></div>`;
   const stage=prWorkspaceStage(pr), next=prWorkspaceNext(pr), tab=STATE.prDetailTab||'overview';
   const approvals=pr.approvals||[], approved=approvals.filter(a=>a.decision==='approved').length;
-  const tabDefs=[['overview','نظرة عامة',''],['items','البنود',(pr.items||[]).length],['discussion','المناقشات',(pr.messages||[]).length],['approvals','الموافقات',approvals.length?`${approved}/${approvals.length}`:''],['links','الارتباطات',(pr.po_links||[]).length],['report','محضر الطلب','']];
+  const tabDefs=[['overview','نظرة عامة',''],['items','البنود',(pr.items||[]).length],['discussion','المناقشات',(pr.messages||[]).length],['approvals','الموافقات',approvals.length?`${approved}/${approvals.length}`:''],['links','الارتباطات',prPoLinksOf(pr).length],['report','محضر الطلب','']];
   const body={overview:prWorkspaceOverviewHTML,items:prWorkspaceItemsHTML,discussion:prWorkspaceDiscussionHTML,approvals:prWorkspaceApprovalsHTML,links:prWorkspaceLinksHTML,report:prWorkspaceReportHTML}[tab]||prWorkspaceOverviewHTML;
   return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">المشتريات ‹ طلبات الشراء ‹ <span dir="ltr">${escapeHtml(pr.id)}</span></div><div class="pr-work-titlebar"><div><h2>${escapeHtml(pr.title||'طلب شراء')}<span class="pr-work-version">الإصدار ${escapeHtml(String(pr.revision||1))}</span></h2><div class="pr-work-sub">${escapeHtml(pr.department||pr.department_id||'—')} · ${escapeHtml(pr.project||'—')} · ${escapeHtml(pr.requester_name||pr.requester||'—')}</div></div><div class="pr-work-headbuttons">${prIsArchived(pr)?`<span class="pr-work-archived" title="أُرشِف في ${escapeAttr(String(pr.archived_at||'—').slice(0,10))}">🗄 مؤرشف</span>`:''}<button class="btn btn-ghost" onclick="prSetDetailTab('report')">التقرير</button>${hasPermission('can_create_pr')?`<button class="btn btn-ghost" onclick="prGoView('templates')">القوالب</button>`:''}${prCanCancel(pr)?`<button class="btn btn-ghost" style="color:var(--danger)" onclick="prCancelRequest('${escapeAttr(pr.id)}')">إلغاء الطلب</button>`:''}${(prPermStrict('can_manage_rfq')||STATE.currentUser?.role==='admin')&&['closed','cancelled','rejected'].includes(pr.status)?`<button class="btn btn-ghost" onclick="prToggleArchive('${escapeAttr(pr.id)}',${prIsArchived(pr)?'false':'true'})">${prIsArchived(pr)?'إعادة من الأرشيف':'أرشفة'}</button>`:''}<button class="btn btn-primary" onclick="prSetDetailTab('${prPendingApproval(pr)?'approvals':stage[2]>=3?'links':'overview'}')">متابعة الطلب</button></div></div></div><div class="pr-work-summary"><div class="pr-work-stat"><small>رقم الطلب</small><b dir="ltr">${escapeHtml(pr.id)}</b></div><div class="pr-work-stat"><small>الحالة الحالية</small><b>${escapeHtml(stage[0])}</b></div><div class="pr-work-stat"><small>المالك الحالي</small><b>${escapeHtml(next[0])}</b></div><div class="pr-work-stat"><small>العمر التشغيلي</small><b>${escapeHtml(prSinceText(pr.submitted_at||pr.created_at)||'—')}</b></div><div class="pr-work-stat"><small>القيمة التقديرية</small><b class="money">${fmtPrice(pr.est_total)}${canViewAmounts()?' ر.س':''}</b></div></div><nav class="pr-work-tabs" aria-label="تفاصيل الطلب">${tabDefs.map(([key,label,count])=>`<button class="pr-work-tab${tab===key?' active':''}" onclick="prSetDetailTab('${key}')">${label}${count!==''?`<em>${count}</em>`:''}</button>`).join('')}</nav><section class="pr-work-canvas">${body(pr)}</section>`;
 }
@@ -13314,19 +13412,133 @@ async function prNotifyPR(prId, event, comment){
     fetch('/api/notify',{method:'POST', headers, body:JSON.stringify(body)}).catch(()=>{});
   }catch(e){ /* الإشعار لا يُسقِط عمليةً نجحت */ }
 }
+/* ══════════ محضر طلب الشراء — مستند رسميّ بمعجم .print-* الموحّد ══════════
+   ⚠️ قاعدة المشروع رقم 3: تُبنى المطبوعة بأصناف `.print-*` القائمة وتُمرَّر
+   لـ`printDocOpen` — لا جداول `border="1"` ولا أنماط سطريّة مخترَعة (كان
+   الإصدار السابق يخالفها، وهو سبب رداءة العرض التي أبلغ عنها المالك).
+   ⚠️ والمبالغ تمرّ بـ`canViewAmounts()` كبقيّة النظام: موظّف الميدان يطبع
+   المحضر بلا أي قيمة مالية. */
+function prSignatories(pr){
+  /* التواقيع من **المعتمِدين الفعليّين** لا من مسمّيات ثابتة: محضرٌ يزعم خانة
+     توقيع لدور لم يقرّر شيئاً وثيقةٌ مضلِّلة. */
+  const seen=new Set(), out=[];
+  const push=(role,name,at,decision)=>{
+    const key=role+'|'+(name||''); if(seen.has(key)) return; seen.add(key);
+    out.push({role,name:name||'',at:at?String(at).slice(0,10):'',decision:decision||''});
+  };
+  push('مقدّم الطلب', pr.requester_name||pr.requester, pr.submitted_at||pr.created_at, pr.status==='draft'?'':'قدّم الطلب');
+  (pr.approvals||[]).filter(a=>a.decision==='approved').forEach(a=>
+    push(a.stage_label||a.stage_key||'اعتماد', a.approver_name||a.approver, a.acted_at, 'اعتمد'));
+  if(out.length<3) push('مدير المشتريات','','','');
+  return out.slice(0,4);
+}
 async function prPrint(id){
   const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id); if(!pr){ toast('error','غير موجود',''); return; }
-  const items=(pr.items||[]).map((it,i)=>`<tr><td style="text-align:center">${i+1}</td><td>${escapeHtml(it.description||'')}</td><td style="text-align:center">${escapeHtml(it.unit||'—')}</td><td style="text-align:center">${escapeHtml(String(it.requested_qty??'—'))}</td><td style="text-align:center">${escapeHtml(String(it.stock_balance??'—'))}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#888">لا بنود</td></tr>';
-  const info=[['نوع/فئة المواد',pr.title],['الإدارة',pr.department||pr.department_id],['القطاع',pr.sector],['المشروع/الموقع',pr.project],['الطالب',pr.requester_name||pr.requester],['الجوال',pr.requester_mobile],['تاريخ الطلب',(pr.request_date||pr.created_at||'').toString().slice(0,10)],['التوريد المطلوب',pr.needed_by]]
-    .map(([k,v])=>`<tr><td style="font-weight:600;background:#faf8f3;width:35%">${k}</td><td>${escapeHtml(v||'—')}</td></tr>`).join('');
+  const money=canViewAmounts(), stage=prWorkspaceStage(pr), items=pr.items||[];
+  const hasStock=items.some(it=>it.stock_balance!=null&&it.stock_balance!=='');
+  const cols=4+(hasStock?1:0)+(money?2:0);
+  const totQty=items.reduce((s,it)=>s+(Number(it.requested_qty)||0),0);
+  const totVal=items.reduce((s,it)=>s+(Number(it.line_total)||(Number(it.unit_price)||0)*(Number(it.requested_qty)||0)),0);
+
+  const rows=items.map((it,i)=>`<tr>
+      <td class="center">${i+1}</td>
+      <td>${escapeHtml(it.description||'—')}${it.notes?`<div style="color:#7a7168;font-size:9px;margin-top:2px">${escapeHtml(it.notes)}</div>`:''}</td>
+      <td class="center">${escapeHtml(it.unit||'—')}</td>
+      <td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td>
+      ${hasStock?`<td class="num">${escapeHtml(String(it.stock_balance??'—'))}</td>`:''}
+      ${money?`<td class="num price">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num price">${it.unit_price!=null?fmtPrice((Number(it.unit_price)||0)*(Number(it.requested_qty)||0)):'—'}</td>`:''}
+    </tr>`).join('')||`<tr><td colspan="${cols}" class="center" style="padding:18px;color:#888">لا توجد بنود مسجّلة على هذا الطلب</td></tr>`;
+
+  /* سلسلة القرارات هي جوهر «المحضر» — بدونها الورقة طلبٌ لا محضر. */
+  const chain=(pr.approvals||[]).map(a=>{
+    const d={approved:['ok','اعتماد'],pending:['warn','بانتظار القرار'],returned:['info','أُعيد للاستكمال'],rejected:['danger','رفض'],cancelled:['neutral','أُلغي']}[a.decision]||['neutral',a.decision||'—'];
+    return `<tr>
+      <td>${escapeHtml(a.stage_label||a.stage_key||'—')}</td>
+      <td>${escapeHtml(a.approver_name||a.approver||'—')}</td>
+      <td class="center"><span class="print-badge ${d[0]}">${escapeHtml(d[1])}</span></td>
+      <td class="center">${escapeHtml(a.acted_at?String(a.acted_at).slice(0,10):'—')}</td>
+      <td>${escapeHtml(a.comment||'—')}</td>
+    </tr>`;
+  }).join('');
+
   const body=`
-    <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:12px" border="1">${info}</table>
-    <div style="font-weight:700;margin:12px 0 6px;color:#0B1B36">البنود المطلوبة</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px" border="1">
-      <thead><tr style="background:#0B1B36;color:#fff"><th>م</th><th>الصنف</th><th>الوحدة</th><th>المطلوبة</th><th>رصيد مستودعي</th></tr></thead>
-      <tbody>${items}</tbody>
-    </table>`;
-  await printDocOpen({ compactHeader:true, docNumber:pr.id, eyebrow:'مجموعة الذيابي · المشتريات', title:'طلب شراء مواد', subtitle:pr.title||'' , signature:true }, body);
+    <div class="print-parties">
+      <div class="print-party">
+        <div class="print-party-label">مقدّم الطلب</div>
+        <div class="print-party-name">${escapeHtml(pr.requester_name||pr.requester||'—')}</div>
+        <div class="print-party-meta"><strong>الإدارة:</strong> ${escapeHtml(pr.department||pr.department_id||'—')}</div>
+        ${pr.requester_mobile?`<div class="print-party-meta"><strong>الجوال:</strong> <span dir="ltr">${escapeHtml(pr.requester_mobile)}</span></div>`:''}
+        <div class="print-party-meta"><strong>تاريخ الطلب:</strong> ${escapeHtml(String(pr.request_date||pr.created_at||'—').slice(0,10))}</div>
+      </div>
+      <div class="print-party buyer">
+        <div class="print-party-label">سياق الاحتياج</div>
+        <div class="print-party-proj"><span class="lbl">جهة / موقع التنفيذ</span>${escapeHtml(pr.project||'غير محدّدة')}</div>
+        ${pr.sector?`<div class="print-party-meta"><strong>القطاع:</strong> ${escapeHtml(pr.sector)}</div>`:''}
+        <div class="print-party-meta"><strong>التوريد المطلوب:</strong> ${escapeHtml(pr.needed_by||'—')}</div>
+        <div class="print-party-meta"><strong>الأولوية:</strong> ${escapeHtml(pr.priority||'—')}</div>
+        <div class="print-party-meta"><strong>الحالة:</strong> <span class="print-badge ${stage[1]==='neutral'?'neutral':stage[1]}">${escapeHtml(stage[0])}</span></div>
+      </div>
+    </div>
+
+    ${pr.justification?`<div class="print-note-box" style="margin-top:14px"><span class="nb-title">مبرّر الاحتياج</span>${escapeHtml(pr.justification)}</div>`:''}
+
+    <div class="print-section">
+      <div class="print-section-title">البنود المطلوبة</div>
+      <table class="print-table">
+        <thead><tr>
+          <th class="center" style="width:32px">#</th>
+          <th>الصنف</th>
+          <th class="center" style="width:56px">الوحدة</th>
+          <th class="num" style="width:62px">المطلوبة</th>
+          ${hasStock?'<th class="num" style="width:72px">رصيد مستودعي</th>':''}
+          ${money?'<th class="num" style="width:80px">سعر الوحدة</th><th class="num" style="width:92px">الإجمالي</th>':''}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        ${items.length?`<tfoot><tr>
+          <td colspan="${hasStock?4:3}">الإجمالي</td>
+          <td class="num">${totQty}</td>
+          ${hasStock?'<td></td>':''}
+          ${money?`<td></td><td class="num">${totVal>0?fmtPrice(totVal)+' ر.س':'—'}</td>`:''}
+        </tr></tfoot>`:''}
+      </table>
+    </div>
+
+    ${money&&totVal>0?`<div class="print-total-words"><strong>القيمة التقديرية كتابةً:</strong> ${escapeHtml(tafqitSAR(totVal))}</div>`:''}
+
+    <div class="print-section" style="margin-top:14px">
+      <div class="print-section-title">سلسلة القرارات المسجّلة</div>
+      ${chain?`<table class="print-table">
+        <thead><tr><th>المرحلة</th><th style="width:22%">المقرِّر</th><th class="center" style="width:78px">القرار</th><th class="center" style="width:74px">التاريخ</th><th style="width:26%">الملاحظة</th></tr></thead>
+        <tbody>${chain}</tbody>
+      </table>`:'<div style="padding:12px;color:#888;font-size:10.5px">لم يُنشأ مسار اعتماد لهذا الطلب بعد.</div>'}
+    </div>
+
+    ${prPoLinksOf(pr).length?`<div class="print-section" style="margin-top:14px">
+      <div class="print-section-title">أوامر الشراء المرتبطة</div>
+      <table class="print-table">
+        <thead><tr><th style="width:34%">رقم الأمر</th><th class="center" style="width:80px">عدد البنود</th><th>ملاحظة الربط</th></tr></thead>
+        <tbody>${prPoLinksOf(pr).map(l=>`<tr><td dir="ltr" style="text-align:start">${escapeHtml(l.po_number)}</td><td class="center">${(l.allocations||[]).length}</td><td>${escapeHtml(l.note||'—')}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>`:''}
+
+    <div class="print-note-box" style="margin-top:14px">
+      <span class="nb-title">حجّية المحضر</span>
+      يوثّق هذا المحضر بيانات الطلب والقرارات المسجّلة إلكترونياً داخل النظام بهويّة كل مقرِّر ووقت قراره.
+      أي تعديل جوهريّ على المحتوى ينشئ إصداراً جديداً ويُعيد مسار الاعتماد كاملاً، مع بقاء السجل السابق دون حذف.
+    </div>
+
+    <div class="print-signatures">
+      ${prSignatories(pr).map(s=>`<div class="print-sign"><span class="who">${escapeHtml(s.role)}${s.name?` — ${escapeHtml(s.name)}`:''}</span><div class="line">${s.at?escapeHtml(`اعتُمد إلكترونياً ${s.at}`):'الاسم والتوقيع'}</div></div>`).join('')}
+    </div>`;
+
+  await printDocOpen({
+    eyebrow:'مجموعة الذيابي · إدارة المشتريات',
+    title:'محضر طلب شراء',
+    subtitle:`${pr.title||'طلب شراء'} · الإصدار ${pr.revision||1}`,
+    docNumber:pr.id,
+    date:String(pr.request_date||pr.created_at||'').slice(0,10)||undefined,
+    signature:false
+  }, body);
 }
 
 /* ---------- P3: قراءة النموذج بالذكاء (OCR/AI) ---------- */

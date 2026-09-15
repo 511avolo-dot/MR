@@ -121,6 +121,33 @@ try {
   assert.match(await page.locator('.pr-work-report').innerText(),/محضر طلب شراء/);
   assert.match(await page.locator('.pr-work-report').innerText(),/فلتر تكييف مركزي/);
   await page.screenshot({path:path.join(outDir,'purchase-workspace-report.png'),fullPage:true});
+
+  // ── المطبوعة الفعليّة: محضر طلب الشراء (بلاغ المالك 2026-09-15) ──
+  // ⚠️ القاعدة 3: المطبوعة تُبنى بمعجم `.print-*` وتُمرَّر لـ`printDocOpen`.
+  //    كان الإصدار السابق جداول `border="1"` بأنماط سطريّة — وهو سبب رداءة
+  //    العرض. الحارس أدناه يمنع الانحدار إليها ويُثبِت أنّ المحضر يحمل
+  //    **سلسلة القرارات وتواقيع المعتمِدين الفعليّين** لا مسمّيات ثابتة.
+  await page.evaluate(()=>prPrint('PR-DG2026-0148'));
+  await page.waitForSelector('#pp-content .print-table');
+  const doc = page.locator('#pp-content');
+  const docHtml = await doc.innerHTML();
+  const docText = await doc.innerText();
+  assert.equal((docHtml.match(/border="1"/g)||[]).length,0,'المطبوعة عادت لجداول border="1" الخام');
+  assert.ok(!/style="width:100%;border-collapse/.test(docHtml),'المطبوعة تحمل أنماط جدول سطريّة مخترَعة');
+  assert.ok(await doc.locator('.print-parties').count()>0,'المطبوعة بلا كتلة الأطراف');
+  assert.ok(await doc.locator('.print-signatures .print-sign').count()>=3,'المطبوعة بلا تواقيع');
+  assert.match(docText,/سلسلة القرارات المسجّلة/,'المحضر بلا سلسلة قرارات — فهو طلب لا محضر');
+  assert.match(docText,/خالد العتيبي/,'المحضر لا يذكر مقدّم الطلب الفعليّ');
+  // ⚠️ التأكيد مُنطَّق بكتلة التواقيع عمداً: الاسم يرد في جدول القرارات أيضاً،
+  //    فمطابقته على نصّ المستند كلّه تمرّ حتى لو عادت التواقيع مسمّياتٍ ثابتة
+  //    (تأكيد فراغيّ — أُمسِك بالبيت-بروف).
+  const signText = await doc.locator('.print-signatures').innerText();
+  assert.match(signText,/خالد العتيبي/,'كتلة التواقيع لا تحمل مقدّم الطلب الفعليّ');
+  assert.match(signText,/maint\.manager/,'كتلة التواقيع لا تحمل المعتمِد الفعليّ — عادت مسمّيات ثابتة');
+  assert.match(signText,/اعتُمد إلكترونياً/,'كتلة التواقيع بلا تاريخ اعتماد فعليّ');
+  assert.match(docText,/فلتر تكييف مركزي/,'المحضر بلا بنود');
+  await page.screenshot({path:path.join(outDir,'purchase-request-printed-record.png'),fullPage:true});
+  await page.evaluate(()=>{ try{ closePrintPreview(); }catch(e){ document.getElementById('modal-print-preview')?.classList.remove('active'); } });
   await page.locator('.pr-work-tab',{hasText:'الموافقات'}).click();
   assert.match(await page.locator('.pr-work-canvas').innerText(),/مدير المشتريات/);
   await page.locator('.pr-work-request',{hasText:'PR-DG2026-0147'}).click();
