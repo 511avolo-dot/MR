@@ -3385,6 +3385,119 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     C.prCanCancel({ requester:'other', status:'in_review', workflow_state:'in_review' }) === false);
 }
 
+/* ═══════ ٣٧) بلاغات المالك 2026-09-15 — الهويّة والتاريخ والمشروع والمورّد ═══════
+   ستّ ملاحظات، كلٌّ منها كان عيباً مقيساً لا انطباعاً:
+   ① مُنتقي «مدير القسم» يعرض «بلا» دائماً لأن `__prUsers` لا تُملأ أبداً — وهو
+      سبب بقاء اعتماد الحاجة على مدير الأقسام الأوّل بلا سبيل لتحويله.
+   ② سلسلة الاعتماد تعرض اسم المستخدم لأن `proc_pr_approvals` بلا `approver_name`.
+   ③ إعادة الإرسال بعد الإرجاع كانت تمحو صفّ الإعادة نفسه (تاريخ القرار).
+   ④ مطبوعة المورّد: بنود وكميات بلا سعر وحدة ولا رصيد مستودعيّ.
+   ⑤ تاريخ التوريد لا يقبل الماضي — واجهةً وخادماً.
+   ⑥ اتجاه RTL: مسار سير العمل حاوية تمرير، وحقول التاريخ تحتاج dir صريحاً. */
+{
+  G('٣٧) بلاغات المالك 2026-09-15 (الهويّة · التاريخ · المشروع · مطبوعة المورّد)');
+  const MIG = fs.readFileSync(path.join(ROOT, 'db/system2-approval-identity-and-history.sql'), 'utf8');
+
+  // ── ① قائمة المستخدمين تُملأ فعلاً (لا إعلانٌ بلا إسناد) ──
+  T('① `__prUsers` تُملأ من proc_users لا تبقى مصفوفة فارغة',
+    /__prUsers\s*=\s*error\s*\?\s*\[\]\s*:/.test(CODE)
+    && /from\('proc_users'\)[\s\S]{0,120}display_name/.test(CODE));
+  T('  ومُنتقي مدير القسم يقرأ منها',
+    /userOpts[\s\S]{0,200}__prUsers/.test(CODE));
+
+  // ── ② الاسم المعروض يُخزَّن خادميّاً (لا يُحلّ في المتصفّح) ──
+  // ⚠️ الحلّ في المتصفّح مستحيل لمقدّم الطلب: `users_select` تحجب عنه صفوف غيره.
+  T('② الهجرة تُضيف approver_name وتردم القائم',
+    /ADD COLUMN IF NOT EXISTS approver_name/.test(MIG)
+    && /UPDATE proc_pr_approvals a[\s\S]{0,200}SET approver_name/.test(MIG));
+  T('  والاسم يُثبَّت مع القرار في pr_decide و pr_transition_email',
+    (MIG.match(/approver_name=coalesce\(nullif\(btrim\(v_name\)/g)||[]).length >= 2);
+  T('  ويُملأ عند إسناد المرحلة من pr_display_name',
+    /approver_name[\s\S]{0,400}pr_display_name\(v_manager\)/.test(MIG)
+    && /pr_display_name\(v_proc_manager\)/.test(MIG));
+  T('  والمسؤول الحالي يُسمّى بشخصه لا بدوره',
+    /function prPendingOwnerName/.test(CODE)
+    && /const state=pr\.workflow_state\|\|pr\.status,\s*who=prPendingOwnerName\(pr\)/.test(CODE));
+
+  // ── ③ تاريخ الإعادة يبقى بعد إعادة الإرسال ──
+  T('③ إعادة الإرسال تحذف المعلّق وحده لا كل السلسلة',
+    /DELETE FROM proc_pr_approvals WHERE pr_id=v_id AND decision='pending'/.test(MIG)
+    && !/DELETE FROM proc_pr_approvals WHERE pr_id=v_id;/.test(MIG));
+  T('  والمفتاح الفريد صار واعياً بالإصدار (وإلّا امتنع بقاء التاريخ)',
+    /CREATE UNIQUE INDEX IF NOT EXISTS uq_proc_pr_approval_stage\s*\n?\s*ON proc_pr_approvals \(pr_id, revision, seq\)/.test(MIG));
+  T('  واستعلام المرحلة الثانية مقيَّد بالمعلّق (وإلّا أعاد أكثر من صفّ)',
+    (MIG.match(/WHERE pr_id=[\w.]+ AND seq=2 AND decision='pending'/g)||[]).length >= 2);
+  T('  والواجهة تفصل السجل الكامل عن الإصدار الجاري',
+    /approvals_current\s*=\s*p\.approvals\.filter/.test(CODE)
+    && /ap=pr\.approvals_current\|\|pr\.approvals\|\|\[\]/.test(CODE));
+
+  // ── ④ مطبوعة المورّد: حارس مصدر + حارس مُخرَج ──
+  const supSrc = (CODE.match(/function prSupplierRows[\s\S]*?\n}/)||[''])[0]
+               + (CODE.match(/async function prPrintSupplier[\s\S]*?\n}/)||[''])[0];
+  T('④ متن مطبوعة المورّد خالٍ من أي منسّق نقديّ أو رصيد مخزنيّ',
+    supSrc.length > 400
+    && !/fmtPrice|tafqitSAR|unit_price|line_total|est_total|stock_balance|contract_qty|ر\.س/.test(supSrc));
+  T('  وزرّها بوّابته المشتريات (لا يراه موظّف الميدان)',
+    /prIsProcurement\(\)\?`<button[^`]*prPrintSupplier/.test(CODE));
+  {
+    // حارس مُخرَج: يُولَّد المستند من بنود تحمل أسعاراً وأرصدة مميّزة ويُتحقَّق
+    // أنّ أيّاً منها لا يظهر. (الحارس النصّيّ وحده يمرّ عليه تسريبٌ غير مباشر.)
+    // ⚠️ `printDocOpen` المُستبدَلة تضبط المستند **قبل** أوّل `await`، فالنتيجة
+    // متاحة تزامنيّاً فور النداء بلا انتظار الوعد.
+    const sup = (() => {
+      const src = [
+        `const STATE={purchaseRequests:[]};`,
+        `let __doc=null;`,
+        `function escapeHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}`,
+        `function escapeAttr(s){return escapeHtml(s).replace(/"/g,'&quot;');}`,
+        `function toast(){}`,
+        `async function printDocOpen(o,b){ __doc={opts:o,body:b}; }`,
+        grab('prSupplierRows'), grab('prPrintSupplier'),
+      ].join('\n\n');
+      return new Function(src + `; return { run:(pr)=>{ STATE.purchaseRequests=[pr]; prPrintSupplier(pr.id); return __doc; } };`)();
+    })();
+    const pr = { id:'PR-X-1', title:'صيانة', project:'برج الشمال', department:'الصيانة',
+      request_date:'2026-09-15', needed_by:'2026-10-01', est_total:987654,
+      items:[{description:'صابون سائل', unit:'كرتون', requested_qty:7, unit_price:1234.5,
+              line_total:8641.5, stock_balance:4242, contract_qty:999, notes:'تركيز عالٍ'}] };
+    const txt = (sup.run(pr)||{}).body || '';
+    T('  ومُخرَجه الفعليّ بلا سعر ولا إجمالي ولا رصيد (حارس مُخرَج)',
+      txt.includes('صابون سائل') && txt.includes('كرتون')
+      && !txt.includes('1234') && !txt.includes('8641') && !txt.includes('987654')
+      && !txt.includes('4242') && !txt.includes('999')
+      && !txt.includes('ر.س') && !/class="[^"]*price/.test(txt));
+    T('  ويحمل ما يحتاجه المورّد فعلاً: الكمية والوحدة والموقع والموعد',
+      txt.includes('7') && txt.includes('برج الشمال') && txt.includes('2026-10-01')
+      && txt.includes('البنود والكميات المطلوبة'));
+  }
+
+  // ── ⑤ تاريخ التوريد لا يقبل الماضي ──
+  T('⑤ الخادم يرفض تاريخ توريد ماضٍ عند الإرسال',
+    /needed_by''\)::date < current_date/.test(MIG.replace(/\s+/g,' '))
+    || /nullif\(p_request->>'needed_by',''\)::date\s*<\s*current_date/.test(MIG));
+  T('  والواجهة تمنعه قبل الإرسال وتضبط min على اليوم',
+    /_needed < new Date\(\)\.toISOString\(\)\.slice\(0,10\)/.test(CODE)
+    && /nd\.min=new Date\(\)\.toISOString\(\)\.slice\(0,10\)/.test(CODE));
+
+  // ── ⑥ الاتجاه: حاوية سير العمل + حقول التاريخ ──
+  T('⑥ مسار سير العمل مشمول بضبط بداية التمرير في RTL',
+    /querySelectorAll\('[^']*\.prw-flow'\)\.forEach\(scrollInlineStart\)/.test(CODE));
+  T('  ومرساة الضبط تعمل على الحاويات غير الجدولية',
+    /querySelector\('th,td'\)\s*\|\|\s*el\.firstElementChild/.test(CODE));
+  T('  وحقول التاريخ تحمل dir صريحاً (نصّ المتصفّح كان ينعكس)',
+    /input\[type="date"\][\s\S]{0,220}setAttribute\('dir','ltr'\)/.test(CODE));
+  T('  ومساحة الطلبات تُعيد الربط بعد رسمها اللاتزامنيّ',
+    /a11yWire\(host\); mobileTableWrap\(host\)/.test(CODE));
+
+  // ── المشروع ظاهر في الشاشة وفي البطاقة الجانبية ──
+  T('اسم المشروع في البطاقة الجانبية عبر poProjectText',
+    /pr-work-request-proj[\s\S]{0,120}poProjectText\(pr\)/.test(CODE));
+  T('  وفي شريط ملخّص شاشة الطلب',
+    /المشروع \/ الجهة<\/small><b class="proj"[\s\S]{0,80}poProjectText\(pr\)/.test(CODE));
+  T('  والبطاقة تُظهره قبل الاختصار على الشاشات الضيّقة (الترتيب الثاني)',
+    /repeat\(6,minmax\(0,1fr\)\)/.test(HTML));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

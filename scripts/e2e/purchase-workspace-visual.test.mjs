@@ -42,9 +42,14 @@ const fixtures = {
     {id:101,pr_id:'PR-DG2026-0148',seq:1,description:'فلتر تكييف مركزي',unit:'حبة',requested_qty:12},{id:102,pr_id:'PR-DG2026-0148',seq:2,description:'سير ضاغط',unit:'حبة',requested_qty:6},
     {id:103,pr_id:'PR-DG2026-0147',seq:1,description:'قاطع كهربائي 63 أمبير',unit:'حبة',requested_qty:10}
   ],
+  /* ⚠️ الإصدار 1 محفوظ عمداً: بعد إصلاح 2026-09-15 لم تعُد إعادة الإرسال تمحو
+     صفّ الإعادة، فالسلسلة تحمل تاريخ الدورة السابقة إلى جانب الدورة الجارية.
+     و`approver_name` مخزَّن على الصفّ — هو ما يجعل سير العمل والمحضر يعرضان
+     اسم الشخص لا اسم المستخدم (بلاغ المالك). */
   proc_pr_approvals:[
-    {id:1,pr_id:'PR-DG2026-0148',seq:1,stage_key:'maintenance_need',stage_label:'اعتماد الحاجة — مدير الصيانة والتشغيل',approver:'maint.manager',decision:'approved',acted_at:'2026-09-11T09:10:00Z',comment:'الحاجة معتمدة'},
-    {id:2,pr_id:'PR-DG2026-0148',seq:2,stage_key:'procurement_pricing',stage_label:'إذن بدء التسعير — مدير المشتريات',approver:'qa.admin',decision:'pending'}
+    {id:9,pr_id:'PR-DG2026-0148',revision:1,seq:1,stage_key:'maintenance_need',stage_label:'اعتماد الحاجة — مدير الصيانة والتشغيل',approver:'maint.manager',approver_name:'م. فهد القحطاني',decision:'returned',acted_at:'2026-09-10T12:00:00Z',comment:'الكميات تحتاج مراجعة'},
+    {id:1,pr_id:'PR-DG2026-0148',revision:2,seq:1,stage_key:'maintenance_need',stage_label:'اعتماد الحاجة — مدير الصيانة والتشغيل',approver:'maint.manager',approver_name:'م. فهد القحطاني',decision:'approved',acted_at:'2026-09-11T09:10:00Z',comment:'الحاجة معتمدة'},
+    {id:2,pr_id:'PR-DG2026-0148',revision:2,seq:2,stage_key:'procurement_pricing',stage_label:'إذن بدء التسعير — مدير المشتريات',approver:'qa.admin',approver_name:'مدير المشتريات',decision:'pending'}
   ],
   proc_pr_messages:[{id:1,pr_id:'PR-DG2026-0148',author:'maint.manager',author_name:'مدير الصيانة',body:'يرجى التأكد من توافق السير مع الوحدة رقم 4.',created_at:'2026-09-11T09:12:00Z'}],
   proc_pr_attachments:[{id:11,pr_id:'PR-DG2026-0148',object_key:'docs/pr/PR-DG2026-0148/spec.png',file_name:'المخطط الفني.png',kind:'technical',content_type:'image/png',size_bytes:64211,uploaded_by:'ops.employee',created_at:'2026-09-11T09:20:00Z',deleted_at:null}],
@@ -112,10 +117,41 @@ try {
   assert.equal(await page.locator('.pr-work-grid').count(),1);
   assert.equal(await page.locator('.pr-work-rail').count(),1);
   assert.equal(await page.locator('.pr-work-request').count(),2);
-  assert.equal(await page.locator('.pr-work-stat').count(),5);
+  assert.equal(await page.locator('.pr-work-stat').count(),6);// +المشروع/الجهة
+
+  // ── اسم المشروع في البطاقة الجانبية (بلاغ المالك 2026-09-15) ──
+  const cardProj = await page.locator('.pr-work-request-proj').first().innerText();
+  assert.match(cardProj,/مشروع المقر الرئيسي/,'البطاقة الجانبية بلا اسم المشروع');
+
   await page.locator('.pr-work-request',{hasText:'PR-DG2026-0148'}).click();
   assert.match(await page.locator('#pr-root').innerText(),/إذن بدء التسعير/);
   assert.match(await page.locator('#pr-root').innerText(),/المخطط الفني/);
+
+  // ── الأسماء: سير العمل يعرض اسم الشخص لا اسم المستخدم ──
+  const flowText = await page.locator('.prw-flow').innerText();
+  assert.match(flowText,/م\. فهد القحطاني/,'سير العمل يعرض اسم المستخدم بدل الاسم');
+  assert.ok(!/maint\.manager/.test(flowText),'اسم المستخدم ما زال يتسرّب لسير العمل');
+  // و«المسؤول الحالي» يُسمّى بشخصه
+  assert.match(await page.locator('.pr-work-next').innerText(),/مدير المشتريات/,'المسؤول الحالي بلا اسم');
+  // ولا يعرض المسار قرار دورة منتهية: الإصدار الجاري وحده (returned من إصدار 1 مستبعَد)
+  assert.ok(!/أُعيد للاستكمال/.test(flowText),'مسار الإصدار الجاري يعرض قرار دورة سابقة');
+  // وشريط الملخّص يحمل المشروع
+  assert.match(await page.locator('.pr-work-summary').innerText(),/مشروع المقر الرئيسي/,'شريط الملخّص بلا المشروع');
+
+  // ── الاتجاه: مسار سير العمل يبدأ من اليمين فعلاً (لا من نهايته) ──
+  // ⚠️ اصطلاح `scrollLeft` في حاوية RTL يختلف بين المحرّكات؛ القياس هنا على
+  //    **موضع أوّل عقدة** لا على قيمة scrollLeft، فيصحّ على أي محرّك.
+  const flowStart = await page.evaluate(()=>{
+    const el=document.querySelector('.prw-flow'); if(!el) return null;
+    const first=el.firstElementChild; if(!first) return null;
+    return { dir:getComputedStyle(el).direction,
+             gap:Math.round(first.getBoundingClientRect().right - el.getBoundingClientRect().right),
+             scrollable: el.scrollWidth > el.clientWidth + 1 };
+  });
+  assert.ok(flowStart,'مسار سير العمل غير موجود');
+  assert.equal(flowStart.dir,'rtl','مسار سير العمل ليس RTL');
+  assert.ok(Math.abs(flowStart.gap)<=3,`أوّل مرحلة ليست عند الحافة اليمنى (فرق ${flowStart.gap}px)`);
+
   await page.screenshot({path:path.join(outDir,'purchase-workspace-overview.png'),fullPage:true});
   await page.locator('.pr-work-tab',{hasText:'محضر الطلب'}).click();
   assert.match(await page.locator('.pr-work-report').innerText(),/محضر طلب شراء/);
@@ -143,10 +179,33 @@ try {
   //    (تأكيد فراغيّ — أُمسِك بالبيت-بروف).
   const signText = await doc.locator('.print-signatures').innerText();
   assert.match(signText,/خالد العتيبي/,'كتلة التواقيع لا تحمل مقدّم الطلب الفعليّ');
-  assert.match(signText,/maint\.manager/,'كتلة التواقيع لا تحمل المعتمِد الفعليّ — عادت مسمّيات ثابتة');
+  assert.match(signText,/م\. فهد القحطاني/,'كتلة التواقيع لا تحمل المعتمِد الفعليّ — عادت مسمّيات ثابتة');
+  assert.ok(!/maint\.manager/.test(signText),'التواقيع تعرض اسم المستخدم بدل الاسم');
   assert.match(signText,/اعتُمد إلكترونياً/,'كتلة التواقيع بلا تاريخ اعتماد فعليّ');
   assert.match(docText,/فلتر تكييف مركزي/,'المحضر بلا بنود');
+  // ⚠️ جوهر بلاغ «تُحفظ كامل المعلومات عند الإرجاع وعند عودته»: المحضر يحمل
+  //    **السجل الكامل** — قرار الإعادة من الإصدار السابق باقٍ بعد إعادة الإرسال.
+  assert.match(docText,/أُعيد للاستكمال/,'المحضر فقد قرار الإعادة بعد إعادة الإرسال');
+  assert.match(docText,/الكميات تحتاج مراجعة/,'المحضر فقد سبب الإعادة');
   await page.screenshot({path:path.join(outDir,'purchase-request-printed-record.png'),fullPage:true});
+
+  // ── نسخة المورّد: بنود وكميات بلا أي مبلغ أو رصيد (بلاغ المالك 2026-09-15) ──
+  await page.evaluate(()=>{ try{ closePrintPreview(); }catch(e){} });
+  await page.evaluate(()=>prPrintSupplier('PR-DG2026-0148'));
+  await page.waitForSelector('#pp-content .print-table');
+  const supDoc = page.locator('#pp-content');
+  const supText = await supDoc.innerText();
+  const supHtml = await supDoc.innerHTML();
+  assert.match(supText,/طلب توريد/,'مستند المورّد بلا عنوان');
+  assert.match(supText,/فلتر تكييف مركزي/,'مستند المورّد بلا البنود');
+  assert.match(supText,/البنود والكميات المطلوبة/,'مستند المورّد بلا جدول الكميات');
+  assert.match(supText,/تعليمات للمورّد/,'مستند المورّد بلا تعليمات');
+  assert.ok(!/ر\.س/.test(supText),'تسرّبت وحدة العملة إلى مستند المورّد');
+  assert.ok(!/سعر الوحدة|الإجمالي\s*$/m.test(supText),'تسرّب عمود سعر إلى مستند المورّد');
+  assert.ok(!/رصيد مستودعي/.test(supText),'تسرّب الرصيد المستودعيّ إلى مستند المورّد');
+  assert.ok(!/class="[^"]*price/.test(supHtml),'خليّة سعر في مستند المورّد');
+  assert.ok(!/سلسلة القرارات/.test(supText),'سلسلة الاعتماد الداخلية ظهرت للمورّد');
+  await page.screenshot({path:path.join(outDir,'purchase-request-supplier-copy.png'),fullPage:true});
   await page.evaluate(()=>{ try{ closePrintPreview(); }catch(e){ document.getElementById('modal-print-preview')?.classList.remove('active'); } });
   await page.locator('.pr-work-tab',{hasText:'الموافقات'}).click();
   assert.match(await page.locator('.pr-work-canvas').innerText(),/مدير المشتريات/);
@@ -185,6 +244,26 @@ try {
   await page.locator('.pr-work-request',{hasText:'PR-DG2026-0148'}).click();
   const liveHead = await page.locator('.pr-work-headbuttons').innerText();
   assert.match(liveHead,/إلغاء الطلب/,'الطلب الحيّ يحمل زرّ الإلغاء للمشتريات');
+  assert.match(liveHead,/نسخة المورّد/,'زرّ نسخة المورّد غائب عن المشتريات');
+
+  // ── حقول التاريخ: نصّ المتصفّح كان ينعكس في RTL («ةنس/رهش/موي») ──
+  // ويجب ألّا يقبل الحقل تاريخاً سابقاً لليوم (`min`).
+  await page.evaluate(async ()=>{ prGoView('create'); await renderPRPortal(); });
+  await page.waitForSelector('#pr-needed');
+  const dateState = await page.evaluate(()=>{
+    const els=[...document.querySelectorAll('#page-pr input[type="date"]')];
+    const today=new Date().toISOString().slice(0,10);
+    return { count:els.length,
+             allLtr:els.every(e=>e.getAttribute('dir')==='ltr'),
+             computedLtr:els.every(e=>getComputedStyle(e).direction==='ltr'),
+             neededMin:document.getElementById('pr-needed')?.min||'',
+             today };
+  });
+  assert.ok(dateState.count>=3,`حقول التاريخ غير موجودة (${dateState.count})`);
+  assert.ok(dateState.allLtr,'حقل تاريخ بلا dir="ltr" — نصّ المتصفّح ينعكس');
+  assert.ok(dateState.computedLtr,'اتجاه حقل التاريخ المحسوب ليس ltr');
+  assert.equal(dateState.neededMin,dateState.today,'تاريخ التوريد يقبل الماضي (لا min)');
+  await page.screenshot({path:path.join(outDir,'purchase-request-date-fields.png'),fullPage:false});
   console.log('✓ دورة الطلب حتى نهايتها: أرشفة تُخلي الطابور · وضع أرشيف · شارة مؤرشف · بوّابة إلغاء');
 
   await page.setViewportSize({width:390,height:844});
