@@ -134,10 +134,17 @@ const LOGIN = `(cfg) => {
   navigate(cfg.page || (isScopedUser() ? SCOPED_HOME : 'dashboard'));
 }`;
 
+/* ⚠️ مفاتيح الميدان تُمنَح **صراحةً** — هذه هي حزمة قالب «👷 موظّف ميدانيّ»
+   نفسها في `ROLE_PRESETS`. الصفّ السابق كان يمنح `can_receive_po` وحده،
+   وهو يسبق إضافة مفاتيح الميدان (2026-09-14)؛ و`hasPermission` صارمة
+   للمُنطَّق (الغياب = منع)، فكانت أزرار التقرير والتعليق تُخفى بحقّ
+   ويُقرأ ذلك خطأً على أنّه عيب في النظام. */
 const SCOPED_USER = {
   username: 'saleh', displayName: 'صالح الميداني', role: 'user',
   scopeSectors: ['الصيانة والتشغيل'],
-  permissions: { can_receive_po: true, can_view_amounts: false }
+  permissions: { can_receive_po: true, can_view_amounts: false,
+                 can_create_pr: true, can_upload_docs: true,
+                 can_comment: true, can_print_followup: true }
 };
 const OFFICE_USER = {
   username: 'mostafa', displayName: 'مصطفى — المكتب', role: 'user',
@@ -325,14 +332,18 @@ async function session(viewport, tag) {
   await page.waitForTimeout(500);
   await shoot(page, '05-desktop-pr-new');
   const prNew = await page.evaluate(() => ({
-    tabs: [...document.querySelectorAll('.pr-tab')].map(b => b.textContent.trim()),
+    rail: [...document.querySelectorAll('.pr-work-navbtn')].map(b => b.textContent.trim()),
     priceCol: !!document.querySelector('#pr-items-body [data-f=unit_price]'),
     docField: !!document.getElementById('pr-doc-input') ||
       /سند|موقّع|موقع/.test(document.getElementById('pr-root').innerText),
     text: document.getElementById('pr-root').innerText
   }));
-  ok('تبويبات الطلبات ثلاثة (لا «الوارد للمشتريات»)',
-    prNew.tabs.length === 3 && !prNew.tabs.some(t => t.includes('الوارد')), prNew.tabs.join(' | '));
+  /* ⚠️ حُدِّث لمساحة العمل (PR #103): التنقّل صار شريطاً جانبيّاً
+     (`.pr-work-navbtn`) بدل `.pr-tab`. والمقصد كما هو: لا سطح خاصّ
+     بالمشتريات يظهر لموظّف الميدان. */
+  ok('تنقّل الطلبات بلا سطح «الوارد للمشتريات»',
+    prNew.rail.length > 0 && !prNew.rail.some(t => t.includes('الوارد')),
+    prNew.rail.join(' | ') || 'لا شريط');
   ok('نموذج الطلب بلا عمود سعر', prNew.priceCol === false, String(prNew.priceCol));
   ok('نموذج الطلب يطلب السند الموقَّع', prNew.docField === true, String(prNew.docField));
   ok('نموذج الطلب بلا مبالغ', !MONEY_RX.test(prNew.text), (prNew.text.match(MONEY_RX) || ['—'])[0]);
@@ -349,10 +360,17 @@ async function session(viewport, tag) {
   ok('شاشة المتابعة تُظهر المسار', /أين وصل طلبك|المرحلة|قيد التنفيذ/.test(track), 'ok');
   ok('شاشة المتابعة بلا مبالغ', !MONEY_RX.test(track), (track.match(MONEY_RX) || ['—'])[0]);
 
-  await page.evaluate(() => prGoView('track', 'PR-DG2026-0001'));
-  await page.waitForTimeout(300);
+  /* ⚠️ في مساحة العمل يُفتح الطلب من الطابور ثمّ تبويب «الارتباطات».
+     والطلب هنا يحمل `po_number` بلا صفّ في `proc_pr_po_links` (شكل الصفوف
+     السابقة للموديل) — فالتأكيد يحرس أيضاً سقوط `prPoLinksOf` إليه، وإلّا
+     ظهر طلبٌ مرتبط فعلاً بأنّه «لم يُربط أمر شراء بعد». */
+  await page.evaluate(async () => {
+    prGoView('list'); prSelectWorkspaceRequest('PR-DG2026-0001');
+    prSetDetailTab('links'); await renderPRPortal();
+  });
+  await page.waitForTimeout(400);
   const poLink = await page.evaluate(() => document.getElementById('pr-root').innerText);
-  ok('الطلب المُنفَّذ يقول «صدر أمر الشراء»',
+  ok('الطلب المُنفَّذ يعرض رقم أمر الشراء',
     poLink.includes('P.O-DG26-3209'), poLink.includes('P.O-DG26-3209') ? 'ok' : 'مفقود');
   await shoot(page, '09-desktop-pr-track-po');
 
