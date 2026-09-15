@@ -37,6 +37,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_proc_pr_approval_stage
 CREATE INDEX IF NOT EXISTS idx_prappr_pr_rev ON proc_pr_approvals (pr_id, revision);
 
 -- ───────────────────────── 2) ردم الصفوف القائمة ──────────────────────────
+-- ⚠️ `pr_guard_approval` يمنع أي كتابة مباشرة على صفّ حمل قراراً (وهو يعمل بحقّ:
+-- القرارات تُتخذ عبر السلسلة وحدها). الردم يمرّ بالطريق المشروع نفسه — علم
+-- الانتقال **محصور بالمعاملة** (`is_local=true`) فيُصفَّر تلقائياً عند انتهائها.
+SELECT set_config('app.pr_transition','1',true);
 -- الاسم المعروض للمعتمِد المسنَد؛ الصفوف التي لا يطابق اسمها مستخدماً تبقى NULL
 -- فتسقط الواجهة إلى اسم المستخدم كما كانت (لا اختراع أسماء).
 UPDATE proc_pr_approvals a
