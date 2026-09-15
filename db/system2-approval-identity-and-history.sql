@@ -52,10 +52,19 @@ UPDATE proc_pr_approvals a
    AND nullif(btrim(u.display_name),'') IS NOT NULL;
 
 -- صفوف الطلبات القائمة كلّها من الإصدار الحالي لطلبها.
+-- ⚠️ الردم يُصيب الصفوف **غير المختومة فقط** (revision=1 الافتراضيّة) ولا يمسّ
+-- صفّاً يتصادم مع صفٍّ قائم في الإصدار الهدف. بدون الشرطين، إعادة تشغيل الهجرة
+-- على طلبٍ مرّ بدورة إعادة (صفّ «أُعيد» في إصدار 1 + معلّق في إصدار 2) كانت
+-- تحاول طيّ الاثنين على الإصدار 2 ⇒ خرق المفتاح الفريد ⇒ هجرة غير idempotent.
 UPDATE proc_pr_approvals a
    SET revision = coalesce(r.revision,1)
   FROM proc_purchase_requests r
- WHERE r.id = a.pr_id AND a.revision <> coalesce(r.revision,1);
+ WHERE r.id = a.pr_id
+   AND a.revision = 1
+   AND coalesce(r.revision,1) <> 1
+   AND NOT EXISTS (SELECT 1 FROM proc_pr_approvals b
+                    WHERE b.pr_id = a.pr_id AND b.seq = a.seq
+                      AND b.revision = coalesce(r.revision,1));
 
 -- اسم مقدّم الطلب على الطلبات الأقدم من الموديل (PR-DG2026-0001 مثلاً).
 UPDATE proc_purchase_requests r

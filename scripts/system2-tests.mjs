@@ -3299,6 +3299,16 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ولا مساس ببوابة نظام 3 المعزولة',
     !/purchase-portal/.test(SH) && !/portal_/.test(SH));
 
+  /* ── ختم رمز الاعتماد البريديّ بالإصدار: رسالة المستلِم ──────────────────
+     السلوك نفسه مُختبَر سلوكيّاً (SQL في `22_email_token_revision.sql`
+     وجافاسكربت في `file-guard.test.mjs`). الباقي هنا أثرٌ لا يُقاس هناك:
+     `pr_transition_email` يُرجِع `stale_revision`، وبلا ترجمة له في `ERR_AR`
+     يقرأ المعتمِد «تعذّر إتمام الطلب» — فيظنّه عطلاً ويُعيد المحاولة، بدل أن
+     يعرف أنّ الطلب عُدِّل وأنّ عليه مراجعة النسخة الجديدة. */
+  const PRACT = fs.readFileSync(path.join(ROOT, 'functions/api/pr-action.js'), 'utf8');
+  T('رفض الرمز القديم يُشرَح للمعتمِد لا يُقرأ عطلاً',
+    /stale_revision:\s*'[^']*عُدِّل الطلب[^']*'/.test(PRACT));
+
   T('والنظام يقرأ المعامل عند الإقلاع (لم يكن يقرأ شيئاً)',
     /function openDeepLink\(\)/.test(CODE)
     && /new URLSearchParams\(location\.search\)/.test(CODE)
