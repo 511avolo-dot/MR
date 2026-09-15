@@ -190,8 +190,26 @@ export async function resolveStageApprovers(env, base, pr, stage) {
   return [];
 }
 
+/**
+ * إصدار الطلب وقت سكّ الرمز.
+ * ⚠️ الرمز يُختَم به لأن بريد القرار يصف محتوىً بعينه: لو أُعيد الطلب وعُدِّل
+ * ثمّ أُعيد إرساله، وجب أن يموت الرمز القديم — وإلّا اعتمد المعتمِد كميةً لم
+ * يرها. الختم يُفحَص في القاعدة (`pr_transition_email`) فلا يعتمد على إعادة
+ * الإرسال ولا على العميل.
+ */
+async function prRevision(env, base, prId) {
+  try {
+    const r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(prId)}&select=revision`,
+      { headers: svcHeaders(env) });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    const v = Array.isArray(rows) && rows[0] ? rows[0].revision : null;
+    return Number.isInteger(v) ? v : null;
+  } catch (_) { return null; }
+}
+
 // ── إنشاء رمز اعتماد لمرة واحدة (يُبطل الرموز السابقة غير المستخدَمة لنفس الطلب/المرحلة/المعتمِد) ──
-export async function createToken(env, base, prId, seq, approver) {
+export async function createToken(env, base, prId, seq, approver, revision) {
   const token = genToken();
   const expires = new Date(Date.now() + tokenTtlMs(env)).toISOString();
   // أبطل أي رموز سابقة غير مستخدَمة لنفس (الطلب/المرحلة/المعتمِد) كي لا يعمل رمز قديم.
@@ -199,10 +217,19 @@ export async function createToken(env, base, prId, seq, approver) {
     await fetch(`${base}/rest/v1/proc_email_tokens?pr_id=eq.${encodeURIComponent(prId)}&seq=eq.${seq}&approver=eq.${encodeURIComponent(approver)}&used=eq.false`,
       { method: 'PATCH', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify({ used: true, used_at: new Date().toISOString() }) });
   } catch (_) {}
-  const r = await fetch(`${base}/rest/v1/proc_email_tokens`, {
-    method: 'POST', headers: { ...svcHeaders(env), Prefer: 'return=minimal' },
-    body: JSON.stringify({ token, pr_id: prId, seq, approver, expires_at: expires }),
+  const row = { token, pr_id: prId, seq, approver, expires_at: expires };
+  if (Number.isInteger(revision)) row.revision = revision;
+  const post = (body) => fetch(`${base}/rest/v1/proc_email_tokens`, {
+    method: 'POST', headers: { ...svcHeaders(env), Prefer: 'return=minimal' }, body: JSON.stringify(body),
   });
+  let r = await post(row);
+  // ⚠️ تسامح مقصود: قاعدة لم تُطبَّق عليها هجرة الختم بعدُ ترفض العمود بـ400.
+  // بريد الاعتماد أهمّ من الختم في تلك النافذة — أعِد المحاولة بلا الختم بدل
+  // أن يبقى الطلب عالقاً بلا بريد قرار (نفس نمط `local_content_expiry`).
+  if (!r.ok && 'revision' in row) {
+    const { revision: _drop, ...bare } = row;
+    r = await post(bare);
+  }
   if (!r.ok) return null;
   return token;
 }
@@ -342,13 +369,16 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   // فصل المهام: لا تُرسل رمز اعتماد لمُقدّم الطلب نفسه.
   approvers = [...new Set(approvers.filter((u) => u && u !== pr.requester))];
   if (!approvers.length) return { skipped: true, reason: 'no_approver' };
+  // إصدار الطلب يُقرأ مرّة واحدة لكل الرموز (لا مرّة لكل معتمِد). و`pr` قد يأتي
+  // من `loadPR` أو من حمولة الـRPC، وكلاهما قد لا يحمله ⇒ يُستكمَل من القاعدة.
+  const revision = Number.isInteger(pr.revision) ? pr.revision : await prRevision(env, base, pr.id);
   let sent = 0, failed = 0, lastDetail = '';
   for (const uname of approvers) {
     const email = await userEmail(env, base, uname);
     if (!/@aldeyabi\.com$/i.test(email)) continue;
     let html;
     if (origin) {
-      const token = await createToken(env, base, pr.id, stage.seq, uname);
+      const token = await createToken(env, base, pr.id, stage.seq, uname, revision);
       if (!token) { failed++; continue; }
       const actionBase = `${origin}/api/pr-action?token=${encodeURIComponent(token)}`;
       html = buildActionEmail(pr, origin, actionBase, stage.stage_label);

@@ -276,7 +276,18 @@ try {
   assert.ok(overflow<=1,`mobile horizontal overflow: ${overflow}px`);
   assert.equal(await page.locator('.pr-work-navbtn').count(),7);// +الأرشيف
   assert.equal(await page.locator('.pr-work-summary').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2);
-  assert.ok((await page.locator('.pr-work-list').boundingBox()).height<180,'mobile queue should remain compact');
+  /* ⚠️ العتبة السابقة (<180px) كانت تُرمّز **تصميماً مُلغى**: شريطاً أفقيّاً
+     يُظهر بطاقةً واحدة من ستّ على 393px (مقيس 2026-09-16). الطابور صار قائمةً
+     رأسيّة مسقوفة بـ40vh. النيّة نفسها — ألّا يبتلع الطابور الشاشة — لكن
+     تُقاس بما تعنيه فعلاً: نسبة من الارتفاع + بقاء رأس التفاصيل داخل الشاشة. */
+  const queueFit = await page.evaluate(()=>{
+    const q=document.querySelector('.pr-work-list'), d=document.querySelector('.pr-work-detailhead');
+    return { ratio:q.getBoundingClientRect().height/window.innerHeight,
+             detailTop:d?Math.round(d.getBoundingClientRect().top):null, vh:window.innerHeight };
+  });
+  assert.ok(queueFit.ratio<=0.45,`mobile queue eats the screen: ${(queueFit.ratio*100).toFixed(0)}% of viewport`);
+  assert.ok(queueFit.detailTop!==null && queueFit.detailTop<queueFit.vh,
+    `request detail starts below the first screen: ${queueFit.detailTop}px of ${queueFit.vh}px`);
   await page.screenshot({path:path.join(outDir,'purchase-workspace-mobile.png'),fullPage:true});
   console.log('✓ integrated desktop workspace, queue and request cockpit');
   console.log('✓ approval, document and purchase-order relations');
