@@ -34,7 +34,9 @@ const fixtures = {
   proc_purchase_orders:[{po_number:'PO-2026-0142',project:'مشروع المقر الرئيسي',supplier:'شركة الإمداد المتقدم',status:'صادر',total:18450,created_at:now}],
   proc_purchase_requests:[
     {id:'PR-DG2026-0148',title:'قطع غيار وحدات التكييف',department_id:'DEP-MAINT',department:'إدارة الصيانة والتشغيل',project:'مشروع المقر الرئيسي',requester:'ops.employee',requester_name:'خالد العتيبي',requester_mobile:'0501234567',priority:'عالي',needed_by:'2026-09-20',status:'in_review',workflow_state:'procurement_review',current_seq:2,revision:2,created_at:'2026-09-10T08:00:00Z',updated_at:now},
-    {id:'PR-DG2026-0147',title:'مواد صيانة كهربائية',department_id:'DEP-MAINT',department:'إدارة الصيانة والتشغيل',project:'مشروع المقر الرئيسي',requester:'ops.employee',requester_name:'سالم الحربي',priority:'متوسط',status:'approved',workflow_state:'partially_ordered',revision:1,created_at:'2026-09-08T08:00:00Z',updated_at:now}
+    {id:'PR-DG2026-0147',title:'مواد صيانة كهربائية',department_id:'DEP-MAINT',department:'إدارة الصيانة والتشغيل',project:'مشروع المقر الرئيسي',requester:'ops.employee',requester_name:'سالم الحربي',priority:'متوسط',status:'approved',workflow_state:'partially_ordered',revision:1,created_at:'2026-09-08T08:00:00Z',updated_at:now},
+    // مؤرشَف: أُقفِل باستلام كامل لأمر شرائه — يخرج من الطابور ويظهر في وضع «الأرشيف»
+    {id:'PR-DG2026-0140',title:'أدوات سباكة',department_id:'DEP-MAINT',department:'إدارة الصيانة والتشغيل',project:'مشروع المقر الرئيسي',requester:'ops.employee',requester_name:'ماجد الشمري',priority:'عادي',status:'closed',workflow_state:'closed',proc_status:'closed',revision:1,closed_at:'2026-09-13T08:00:00Z',archived_at:'2026-09-13T08:00:00Z',created_at:'2026-09-01T08:00:00Z',updated_at:'2026-09-13T08:00:00Z'}
   ],
   proc_pr_items:[
     {id:101,pr_id:'PR-DG2026-0148',seq:1,description:'فلتر تكييف مركزي',unit:'حبة',requested_qty:12},{id:102,pr_id:'PR-DG2026-0148',seq:2,description:'سير ضاغط',unit:'حبة',requested_qty:6},
@@ -127,6 +129,37 @@ try {
   assert.match(await page.locator('#pr-root').innerText(),/PO-2026-0142/);
   await page.screenshot({path:path.join(outDir,'purchase-workspace-desktop.png'),fullPage:true});
 
+  // ── دورة الطلب حتى نهايتها: الأرشفة والإلغاء (طلب المالك 2026-09-14) ──
+  // الطابور الافتراضيّ لا يحمل المؤرشَف (طلبان حيّان فقط رغم وجود ثالث مُقفَل).
+  await page.evaluate(async ()=>{ STATE.prWorkspaceFilter='all'; STATE.prWorkspaceSearch=''; prGoView('list'); await renderPRPortal(); });
+  await page.waitForSelector('.pr-workspace');
+  assert.equal(await page.locator('.pr-work-request').count(),2,'الطابور الافتراضيّ يجب أن يُخلى من المؤرشَف');
+  // زرّ «الأرشيف» موجود في التنقّل وبعدّاد حيّ = 1
+  const archiveBtn = page.locator('.pr-work-navbtn',{hasText:'الأرشيف'});
+  assert.equal(await archiveBtn.count(),1,'زرّ الأرشيف يجب أن يظهر في التنقّل');
+  assert.match(await archiveBtn.innerText(),/1/,'عدّاد الأرشيف يجب أن يكون 1');
+  await archiveBtn.click();
+  await page.waitForFunction(()=>document.querySelectorAll('.pr-work-request').length===1);
+  const arRows = await page.locator('.pr-work-request').allInnerTexts();
+  assert.equal(arRows.length,1,'وضع الأرشيف يعرض المؤرشَف وحده');
+  assert.match(arRows.join('\n'),/PR-DG2026-0140/,'وضع الأرشيف يعرض الطلب المُقفَل');
+  assert.ok(!arRows.join('\n').includes('PR-DG2026-0148'),'ووضع الأرشيف لا يعرض الطلبات الحيّة');
+  await page.screenshot({path:path.join(outDir,'purchase-workspace-archive.png'),fullPage:true});
+  // تفاصيل المؤرشَف: شارة «مؤرشف» ظاهرة، ولا زرّ إلغاء (مُقفَل لا يُلغى)
+  await page.locator('.pr-work-request',{hasText:'PR-DG2026-0140'}).click();
+  const head = await page.locator('.pr-work-headbuttons').innerText();
+  assert.match(await page.locator('.pr-work-detailhead').innerText(),/مؤرشف/,'شارة «مؤرشف» في رأس التفاصيل');
+  assert.ok(!/إلغاء الطلب/.test(head),'طلب مُقفَل مؤرشَف لا يحمل زرّ إلغاء');
+  assert.match(head,/إعادة من الأرشيف/,'وله زرّ إعادة من الأرشيف (مشتريات + حالة نهائية)');
+  await page.screenshot({path:path.join(outDir,'purchase-workspace-archived-detail.png'),fullPage:true});
+  // تفاصيل طلب حيّ: زرّ الإلغاء ظاهر (المشتريات يُلغي قبل الإقفال)
+  await page.evaluate(async ()=>{ STATE.prWorkspaceMode='requests'; STATE.prWorkspaceFilter='all'; prGoView('list'); await renderPRPortal(); });
+  await page.waitForFunction(()=>[...document.querySelectorAll('.pr-work-request')].some(el=>el.textContent.includes('PR-DG2026-0148')));
+  await page.locator('.pr-work-request',{hasText:'PR-DG2026-0148'}).click();
+  const liveHead = await page.locator('.pr-work-headbuttons').innerText();
+  assert.match(liveHead,/إلغاء الطلب/,'الطلب الحيّ يحمل زرّ الإلغاء للمشتريات');
+  console.log('✓ دورة الطلب حتى نهايتها: أرشفة تُخلي الطابور · وضع أرشيف · شارة مؤرشف · بوّابة إلغاء');
+
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>{ navDrawer(false); prGoView('list'); });
   await page.waitForSelector('.pr-workspace');
@@ -135,7 +168,7 @@ try {
   assert.ok(!drawer.className.includes('open') && drawer.visibility==='hidden',`mobile drawer stayed open: ${JSON.stringify(drawer)}`);
   const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   assert.ok(overflow<=1,`mobile horizontal overflow: ${overflow}px`);
-  assert.equal(await page.locator('.pr-work-navbtn').count(),6);
+  assert.equal(await page.locator('.pr-work-navbtn').count(),7);// +الأرشيف
   assert.equal(await page.locator('.pr-work-summary').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2);
   assert.ok((await page.locator('.pr-work-list').boundingBox()).height<180,'mobile queue should remain compact');
   await page.screenshot({path:path.join(outDir,'purchase-workspace-mobile.png'),fullPage:true});

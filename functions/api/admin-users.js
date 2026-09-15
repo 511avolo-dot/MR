@@ -45,9 +45,19 @@ const MODULE_PERMISSIONS = new Set([
   'pr_print', 'pr_approve_maintenance', 'pr_authorize_pricing', 'pr_manage_pricing',
   'pr_link_purchase_orders', 'pr_view_financials', 'pr_manage_workflows', 'pr_manage_users',
 ]);
+// ⚠️ يجب أن تُطابِق **كل** مفاتيح `can_*` في `PERMISSION_DEFS` بـ`index.html`.
+// `cleanPermissionObject` يرفض الكائن كلّه (⇒ 400) إن حمل مفتاحاً واحداً غير مسموح،
+// فأي مفتاح ناقص هنا يُفشِل **كل** حفظ للمستخدم بصمت (لا حفظ صلاحية ولا وظيفة ولا
+// قسم ولا نطاق). كانت القائمة 7 مفاتيح والواجهة ترسل 27 ⇒ كل تعديل مستخدم يفشل
+// بـ400 (بلاغ المالك 2026-09-14). حارس في `system2-tests.mjs` يمنع الانحراف عن الواجهة.
 const LEGACY_PERMISSIONS = new Set([
-  'can_verify_stock', 'can_approve_l1', 'can_approve_l2', 'can_manage_rfq',
-  'can_manage_users', 'can_view_amounts', 'can_receive_po',
+  'can_create_po', 'can_edit_po', 'can_approve_po', 'can_delete_po', 'can_receive_po',
+  'can_verify_stock', 'can_enter_prices', 'can_view_amounts',
+  'can_approve_l1', 'can_approve_l2', 'can_manage_rfq',
+  'can_manage_items', 'can_manage_suppliers', 'can_review_registrations', 'can_delete',
+  'can_import', 'can_export', 'can_view_audit', 'can_use_ai',
+  'can_manage_ai_settings', 'can_manage_cloud', 'can_manage_company', 'can_manage_users',
+  'can_create_pr', 'can_upload_docs', 'can_comment', 'can_print_followup',
 ]);
 function cleanPermissionObject(value, allowed = MODULE_PERMISSIONS) {
   if (value == null) return {};

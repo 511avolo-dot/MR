@@ -53,9 +53,12 @@ await asUser(FIELD_ALL, ['الصيانة والتشغيل']);
 await page.evaluate(() => { navigate('pr'); prGoView('list'); });
 await page.waitForTimeout(400);
 
+// زرّ «طلب جديد» صار زرّاً حقيقيّاً واضحاً (بدل أيقونة رمزيّة) ضمن تحسين
+// الواجهة — يُكتشَف بفعله (prGoView('create')) لا بصنف أيقونة قديم.
 const createAccess = () => page.evaluate(() => ({
-  newButton: [...document.querySelectorAll('.pr-work-iconbtn')]
-    .some((button) => button.getAttribute('title') === 'طلب جديد'),
+  newButton: [...document.querySelectorAll('.pr-work-top-actions button, .pr-work-headbuttons button')]
+    .some((button) => /prGoView\('create'\)/.test(button.getAttribute('onclick') || '')
+                   && /طلب جديد/.test(button.textContent || '')),
   view: STATE.prView,
 }));
 let access = await createAccess();
