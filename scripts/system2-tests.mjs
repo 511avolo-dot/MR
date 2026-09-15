@@ -75,6 +75,21 @@ T('لا بوّابة تستعمل مفتاحاً غير معرَّف في الك
 T('لا مفتاح مكرّر في كتالوج الصلاحيات', permCat.length === permSet.size,
   permCat.filter((k, i) => permCat.indexOf(k) !== i).join('، '));
 
+// بلاغ المالك (2026-09-14): إدارة المستخدمين لا تحفظ أي تعديل — لا صلاحية ولا
+// وظيفة ولا نطاق. الجذر: `admin-users.js` (setProfile) يمرّر الصلاحيات عبر
+// `cleanPermissionObject` الذي يرفض **الكائن كاملاً** لو حوى مفتاحاً واحداً غير
+// مسموح، ونموذج التعديل يرسل شبكة `PERMISSION_DEFS` كاملةً. فأي مفتاح `can_*`
+// في الواجهة غائب عن قائمة الخادم ⇒ كل حفظ يُرفَض 400 بصمت. الحارس يُلزم التطابق.
+{
+  const adminUsers = fs.readFileSync(path.join(ROOT, 'functions/api/admin-users.js'), 'utf8');
+  const legacyBlock = adminUsers.slice(adminUsers.indexOf('const LEGACY_PERMISSIONS'),
+    adminUsers.indexOf('])', adminUsers.indexOf('const LEGACY_PERMISSIONS')));
+  const allowed = new Set([...legacyBlock.matchAll(/'(can_[a-z0-9_]+)'/g)].map(m => m[1]));
+  const notAllowed = [...permSet].filter(k => !allowed.has(k));
+  T('كل مفتاح صلاحية في الواجهة تقبله خدمة إدارة المستخدمين (setProfile)',
+    notAllowed.length === 0, 'غائب عن admin-users.js: ' + notAllowed.join('، '));
+}
+
 // ممرّ الوصولية يجب أن يبقى مربوطاً: الشاشات تُرسَم بـinnerHTML فتفقد السمات،
 // فإزالة أيّ من نقاط الربط تُعيد الحقول والنوافذ بلا اسم مقروء بصمت.
 T('ممرّ الوصولية مربوط بالإقلاع والتنقّل وفتح النوافذ',
