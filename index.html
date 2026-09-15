@@ -13255,7 +13255,7 @@ function prWorkspaceDetailHTML(pr,view,mode){
   const approvals=pr.approvals||[], approved=approvals.filter(a=>a.decision==='approved').length;
   const tabDefs=[['overview','نظرة عامة',''],['items','البنود',(pr.items||[]).length],['discussion','المناقشات',(pr.messages||[]).length],['approvals','الموافقات',approvals.length?`${approved}/${approvals.length}`:''],['links','الارتباطات',prPoLinksOf(pr).length],['report','محضر الطلب','']];
   const body={overview:prWorkspaceOverviewHTML,items:prWorkspaceItemsHTML,discussion:prWorkspaceDiscussionHTML,approvals:prWorkspaceApprovalsHTML,links:prWorkspaceLinksHTML,report:prWorkspaceReportHTML}[tab]||prWorkspaceOverviewHTML;
-  return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">المشتريات ‹ طلبات الشراء ‹ <span dir="ltr">${escapeHtml(pr.id)}</span></div><div class="pr-work-titlebar"><div><h2>${escapeHtml(pr.title||'طلب شراء')}<span class="pr-work-version">الإصدار ${escapeHtml(String(pr.revision||1))}</span></h2><div class="pr-work-sub">${escapeHtml(pr.department||pr.department_id||'—')} · ${escapeHtml(pr.project||'—')} · ${escapeHtml(pr.requester_name||pr.requester||'—')}</div></div><div class="pr-work-headbuttons">${prIsArchived(pr)?`<span class="pr-work-archived" title="أُرشِف في ${escapeAttr(String(pr.archived_at||'—').slice(0,10))}">🗄 مؤرشف</span>`:''}<button class="btn btn-ghost" onclick="prSetDetailTab('report')">التقرير</button>${prIsProcurement()?`<button class="btn btn-ghost" onclick="prPrintSupplier('${escapeAttr(pr.id)}')" title="ملف PDF يُرسَل للمورّد — بنود وكميات بلا أسعار ولا أرصدة">نسخة المورّد</button>`:''}${hasPermission('can_create_pr')?`<button class="btn btn-ghost" onclick="prGoView('templates')">القوالب</button>`:''}${prCanCancel(pr)?`<button class="btn btn-ghost" style="color:var(--danger)" onclick="prCancelRequest('${escapeAttr(pr.id)}')">إلغاء الطلب</button>`:''}${(prPermStrict('can_manage_rfq')||STATE.currentUser?.role==='admin')&&['closed','cancelled','rejected'].includes(pr.status)?`<button class="btn btn-ghost" onclick="prToggleArchive('${escapeAttr(pr.id)}',${prIsArchived(pr)?'false':'true'})">${prIsArchived(pr)?'إعادة من الأرشيف':'أرشفة'}</button>`:''}<button class="btn btn-primary" onclick="prSetDetailTab('${prPendingApproval(pr)?'approvals':stage[2]>=3?'links':'overview'}')">متابعة الطلب</button></div></div></div><div class="pr-work-summary"><div class="pr-work-stat"><small>رقم الطلب</small><b dir="ltr">${escapeHtml(pr.id)}</b></div><div class="pr-work-stat"><small>المشروع / الجهة</small><b class="proj" title="${escapeAttr(poProjectText(pr))}">${escapeHtml(poProjectText(pr))}</b></div><div class="pr-work-stat"><small>الحالة الحالية</small><b>${escapeHtml(stage[0])}</b></div><div class="pr-work-stat"><small>المالك الحالي</small><b>${escapeHtml(next[0])}</b></div><div class="pr-work-stat"><small>العمر التشغيلي</small><b>${escapeHtml(prSinceText(pr.submitted_at||pr.created_at)||'—')}</b></div><div class="pr-work-stat"><small>القيمة التقديرية</small><b class="money">${fmtPrice(pr.est_total)}${canViewAmounts()?' ر.س':''}</b></div></div><nav class="pr-work-tabs" aria-label="تفاصيل الطلب">${tabDefs.map(([key,label,count])=>`<button class="pr-work-tab${tab===key?' active':''}" onclick="prSetDetailTab('${key}')">${label}${count!==''?`<em>${count}</em>`:''}</button>`).join('')}</nav><section class="pr-work-canvas">${body(pr)}</section>`;
+  return `<div class="pr-work-detailhead"><div class="pr-work-breadcrumb">المشتريات ‹ طلبات الشراء ‹ <span dir="ltr">${escapeHtml(pr.id)}</span></div><div class="pr-work-titlebar"><div><h2>${escapeHtml(pr.title||'طلب شراء')}<span class="pr-work-version">الإصدار ${escapeHtml(String(pr.revision||1))}</span></h2><div class="pr-work-sub">${escapeHtml(pr.department||pr.department_id||'—')} · ${escapeHtml(pr.project||'—')} · ${escapeHtml(pr.requester_name||pr.requester||'—')}</div></div><div class="pr-work-headbuttons">${prIsArchived(pr)?`<span class="pr-work-archived" title="أُرشِف في ${escapeAttr(String(pr.archived_at||'—').slice(0,10))}">🗄 مؤرشف</span>`:''}<button class="btn btn-ghost" onclick="prSetDetailTab('report')">التقرير</button>${prIsProcurement()?`<button class="btn btn-ghost" onclick="prPrintSupplier('${escapeAttr(pr.id)}')" title="ملف PDF يُرسَل للمورّد — بنود وكميات بلا أسعار ولا أرصدة">نسخة المورّد</button>`:''}${prIsProcurement()&&pr.status==='in_review'&&prPendingOwnerName(pr)?`<button class="btn btn-ghost" onclick="prRemindApprover('${escapeAttr(pr.id)}')" title="إعادة إرسال بريد «بانتظار اعتمادك» للمعتمِد الحالي — يلزم بعد تغيير المعتمِد أو التفويض">✉ تنبيه المعتمِد</button>`:''}${hasPermission('can_create_pr')?`<button class="btn btn-ghost" onclick="prGoView('templates')">القوالب</button>`:''}${prCanCancel(pr)?`<button class="btn btn-ghost" style="color:var(--danger)" onclick="prCancelRequest('${escapeAttr(pr.id)}')">إلغاء الطلب</button>`:''}${(prPermStrict('can_manage_rfq')||STATE.currentUser?.role==='admin')&&['closed','cancelled','rejected'].includes(pr.status)?`<button class="btn btn-ghost" onclick="prToggleArchive('${escapeAttr(pr.id)}',${prIsArchived(pr)?'false':'true'})">${prIsArchived(pr)?'إعادة من الأرشيف':'أرشفة'}</button>`:''}<button class="btn btn-primary" onclick="prSetDetailTab('${prPendingApproval(pr)?'approvals':stage[2]>=3?'links':'overview'}')">متابعة الطلب</button></div></div></div><div class="pr-work-summary"><div class="pr-work-stat"><small>رقم الطلب</small><b dir="ltr">${escapeHtml(pr.id)}</b></div><div class="pr-work-stat"><small>المشروع / الجهة</small><b class="proj" title="${escapeAttr(poProjectText(pr))}">${escapeHtml(poProjectText(pr))}</b></div><div class="pr-work-stat"><small>الحالة الحالية</small><b>${escapeHtml(stage[0])}</b></div><div class="pr-work-stat"><small>المالك الحالي</small><b>${escapeHtml(next[0])}</b></div><div class="pr-work-stat"><small>العمر التشغيلي</small><b>${escapeHtml(prSinceText(pr.submitted_at||pr.created_at)||'—')}</b></div><div class="pr-work-stat"><small>القيمة التقديرية</small><b class="money">${fmtPrice(pr.est_total)}${canViewAmounts()?' ر.س':''}</b></div></div><nav class="pr-work-tabs" aria-label="تفاصيل الطلب">${tabDefs.map(([key,label,count])=>`<button class="pr-work-tab${tab===key?' active':''}" onclick="prSetDetailTab('${key}')">${label}${count!==''?`<em>${count}</em>`:''}</button>`).join('')}</nav><section class="pr-work-canvas">${body(pr)}</section>`;
 }
 async function prActInline(prId,action){
   const note=(document.getElementById('pr-work-decision-note')?.value||'').trim();
@@ -13453,6 +13453,36 @@ async function prStart(id){ return prProcStage(id,'in_progress'); }
 async function prQuotesDone(id){ return prProcStage(id,'quotes_collected'); }
 /* إشعار بريد لحدث على الطلب. الاتجاه (طالب ↔ مشتريات) يُحسَب على الخادم من
    نوع الحدث — لا يُمرَّر من العميل فلا يُوجَّه بريدٌ بانتحال. */
+/* ══════════ تنبيه المعتمِد الحالي بالبريد (إرسال متعمَّد) ══════════
+   ⚠️ الفجوة التي سدّها هذا الزرّ (بلاغ المالك 2026-09-15): بريد «بانتظار
+   اعتمادك» يُرسَل **مرّة واحدة عند رفع الطلب** للمعتمِد المُسنَد حينها. فإن
+   تغيّر المعتمِد بعدها — تحويل، أو تغيير مدير القسم، أو تفويض — بقي المعتمِد
+   الجديد **بلا علم** والطلب واقفاً بلا سبب ظاهر. ولم يكن في النظام أي وسيلة
+   لإعادة الإرسال.
+   الخادم (`notifyPending`) يقرأ المرحلة المعلّقة **الحالية** ويصكّ رمز قرار
+   جديداً لمعتمِدها، فالزرّ لا يحتاج أن يعرف من هو.
+   ⚠️ وخلافاً لـ`prNotifyPR` (fire-and-forget)، هذا إرسال متعمَّد: يُنتظَر
+   وتُبلَّغ نتيجته صراحةً — تنبيهٌ يُظنّ أنّه وصل وهو لم يصل أسوأ من غيابه. */
+async function prRemindApprover(prId){
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===prId); if(!pr) return;
+  const who=prPendingOwnerName(pr)||'المعتمِد الحالي';
+  if(!confirm(`إرسال تنبيه بالبريد إلى «${who}» لاعتماد الطلب ${prId}؟`)) return;
+  try{
+    const headers=Object.assign({'Content-Type':'application/json'}, await prAuthHeader());
+    const r=await fetch('/api/notify',{method:'POST',headers,
+      body:JSON.stringify({kind:'pr', pr_id:prId, event:'pending'})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.detail||j.error||`HTTP ${r.status}`);
+    if(j.skipped){
+      toast('warn','لم يُرسَل', j.reason==='no_approver'
+        ? 'لا معتمِد مخوَّل لهذه المرحلة — راجع مدير القسم في الإعدادات'
+        : 'لا توجد مرحلة معلّقة على هذا الطلب');
+      return;
+    }
+    toast('success','أُرسل التنبيه', `وصل إلى ${who} بريدٌ فيه أزرار القرار.`);
+    logAudit('pr_remind','pr',prId,{to:who});
+  }catch(e){ toast('error','تعذّر الإرسال', e.message||'راجع إعدادات البريد'); }
+}
 async function prNotifyPR(prId, event, comment){
   try{
     const headers = Object.assign({'Content-Type':'application/json'}, await prAuthHeader());
