@@ -1703,6 +1703,28 @@ await (async () => {
       at > 0 && inMedia, at < 0 ? 'القاعدة الشاملة غائبة' : `القاعدة خارج كتلة الجوال (${mq.trim()})`);
   }
 
+  /* ── هويّة المستخدم: `ilike` للقراءة و`eq.` للكتابة (2026-09-16) ─────────
+     ⚠️ القاعدة المكتوبة سابقاً «أي مطابقة على username تكون ilike لا eq» **مفرطة
+     في العموم**، وتطبيقها حرفيّاً على الكتابة **عيب جسيم**: الإنتاج يحمل صفَّين
+     يختلفان بحالة الأحرف فقط (`Abdullah` أدمن نشط · `abdullah` مستخدم موقوف)،
+     فـ`PATCH proc_users?username=ilike.abdullah` يعدّل **الصفّين معاً**.
+     التمييز الصحيح: قراءةُ حلّ الهويّة تتسامح مع الحالة، والكتابة تستهدف صفّاً
+     بعينه فتبقى `eq.` — وهذا ما عليه الكود اليوم، ويُثبَّت هنا كي لا «يُصلَح». */
+  {
+    const files = ['functions/api/admin-users.js','functions/api/staff-invite.js','functions/api/_pr-shared.js'];
+    const bad = [];
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(ROOT,f),'utf8');
+      for (const m of src.matchAll(/restWrite\(\s*'(PATCH|DELETE)'[^`']*[`']([^`']*username=(eq|ilike)\.)/g)) {
+        if (m[3] !== 'eq') bad.push(`${f}: ${m[1]} بـ${m[3]} — يطال أكثر من صفّ`);
+      }
+    }
+    T('كتابات المستخدمين تستهدف صفّاً بعينه بـeq. (لا ilike تطال المتشابهين)', bad.length===0, bad.join(' | '));
+    const inv = fs.readFileSync(path.join(ROOT,'functions/api/staff-invite.js'),'utf8');
+    T('حلّ هويّة المستدعي يتسامح مع حالة الأحرف ويختار الأدمن النشط صراحةً',
+      /username=ilike\./.test(inv) && /role\s*===?\s*'admin'/.test(inv));
+  }
+
   /* ── مساحة طلبات الشراء على الجوال (2026-09-16) ────────────────────────
      ثلاث خصائص قِيست في متصفّح حقيقيّ ثمّ ثُبِّتت هنا لأنّ كسرها صامت بصريّاً. */
 
