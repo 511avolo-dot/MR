@@ -259,6 +259,7 @@ const NEEDED_FNS = [
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
   'prDocFetchBlob', 'prAuthHeader', 'prDocvList', 'prIsFinal', 'prCanRemoveAttachment', 'prFmtBytes',
   'prDocKindLabel', 'docvSourceBlob', 'docvBlobUrl',
+  'prQueueGroup', 'prQueueSeq', 'prQueueSort', 'prAuditLabel', 'prPersonName', 'prAuditGroups',
   // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
   'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
@@ -293,7 +294,7 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL',
   // مرفقات طلب الشراء — فضاء مفاتيح مستقلّ بنقطة خادمية أخرى
   'PRDOC_PREFIX', 'PR_DOC_TYPES', 'PR_DOC_MAX', 'PR_DOC_LIMIT', 'PR_FINAL_STATUSES',
-  'PR_DOC_KIND_LABEL', 'DOCV'];
+  'PR_DOC_KIND_LABEL', 'DOCV', 'PR_QUEUE_GROUPS', 'PR_AUDIT_LABEL'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -3519,10 +3520,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prWorkspaceIsBlocked(){ return false; }`,
       grab('prPermStrict'), grabConst('PR_TEAM_KEYS'), grab('prCanSeeAll'),
       grab('prWorkspaceVisible'), grab('prIsArchived'), grab('prArchiveCount'),
+      grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
       grab('prWorkspaceQueueData'), grab('prCanCancel'),
     ].join('\n\n');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
+      prQueueGroup, prQueueSeq, prQueueSort,
       set:(u,scoped,perms)=>{ STATE.currentUser=u; __scoped=!!scoped; __perms=perms||{}; } };`)();
   })();
 
@@ -3542,6 +3545,16 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ووضع «الأرشيف» يعرض المؤرشَف وحده (الأحدث أولاً)',
     C.prWorkspaceQueueData('archive').map(p=>p.id).join(',') === 'PR-3,PR-2');
   T('وعدّاد الأرشيف يَعُدّ المؤرشَف من المرئيّ',  C.prArchiveCount() === 2);
+  /* ⚠️ حارس النداء نفسه: `prWorkspaceQueueData` كانت تُرجع ترتيب الجلب كما هو
+     (بلاغ «تشتيت في ترتيبهم»). هنا نُثبت أنّ **مخرَج الطابور** مرتَّب بالإلحاح. */
+  C.STATE.purchaseRequests = [
+    { id:'PR-DG2026-0003', requester:'field', status:'approved',  workflow_state:'pricing' },
+    { id:'PR-DG2026-0012', requester:'field', status:'in_review', workflow_state:'maintenance_review' },
+    { id:'PR-DG2026-0002', requester:'field', status:'returned',  workflow_state:'returned' },
+    { id:'PR-DG2026-0011', requester:'field', status:'in_review', workflow_state:'maintenance_review' },
+  ];
+  T('ومخرَج الطابور نفسه مرتَّب بالإلحاح لا بترتيب الجلب',
+    C.prWorkspaceQueueData('all').map(p => p.id.slice(-4)).join(',') === '0002,0012,0011,0003');
 
   // ── الإلغاء: بوّابة الواجهة = حارس الخادم (CL1–CL5, CL10) ──
   // المشتريات/الأدمن: يلغي أي حالة قبل الإقفال؛ المُقفَل والملغى مستثنيان.
@@ -3819,6 +3832,160 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /UPDATE proc_pr_attachments SET deleted_at = now\(\)/.test(UNLOCK)
     && !/DELETE FROM proc_pr_attachments/.test(UNLOCK)
     && /'attachment_removed'/.test(UNLOCK));
+}
+
+
+/* ═══ ٣٩) وضوح مساحة الطلبات: الترتيب · سجلّ القرارات · مُنتقي المشروع ═══
+   بلاغ المالك (2026-09-16، ثلاث لقطات): «تشتيت في ترتيب الطلبات وطريقة عرضهم»
+   · «المراحل بعد اعتمادي تخصّ مصطفى ومحمود — لماذا مسجّلة لدى عبدالله؟» ·
+   «سجلّ القرارات جميعه عبدالله والقرارات بالإنجليزي وغير متّزنة». */
+{
+  G('٣٩) وضوح مساحة الطلبات (ترتيب · سجلّ · مشروع)');
+
+  // ── ① الترتيب: بالإلحاح لا بالأبجدية، وداخل المجموعة بالرقم عدديّاً ──
+  const Q = (() => {
+    const src = [
+      `let __act=new Set();`,
+      `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
+      grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
+    ].join('\n\n');
+    return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
+      act:(ids)=>{ __act=new Set(ids||[]); } };`)();
+  })();
+
+  const mk = (n, o) => Object.assign({ id:'PR-DG2026-' + String(n).padStart(4,'0') }, o);
+  const mixed = [
+    mk(3,  { status:'approved',  workflow_state:'pricing' }),
+    mk(12, { status:'in_review', workflow_state:'maintenance_review' }),
+    mk(11, { status:'in_review', workflow_state:'maintenance_review' }),
+    mk(10, { status:'approved',  workflow_state:'pricing' }),
+    mk(9,  { status:'approved',  workflow_state:'pricing' }),
+    mk(6,  { status:'cancelled', workflow_state:'cancelled' }),
+    mk(2,  { status:'returned',  workflow_state:'returned' }),
+  ];
+  Q.act([]);
+  let ids = Q.prQueueSort(mixed).map(p => p.id.slice(-4));
+  T('الطابور يُرتَّب بالإلحاح: متعثّر ← قيد الاعتماد ← جارٍ ← منتهٍ',
+    ids.join(',') === '0002,0012,0011,0010,0009,0003,0006');
+  T('  وداخل كل مجموعة الأحدث أوّلاً برقم الطلب **عدديّاً** لا نصّيّاً',
+    (() => {
+      /* ⚠️ الترقيم المبطَّن يتطابق فيه الفرزان، فلا يميّز العيبَ. نستعمل أرقاماً
+         بلا تبطين متساوٍ — وهو ما يخطئ فيه `localeCompare` (يضع 9 قبل 10). */
+      const a = { id:'PR-9',  status:'in_review' }, b = { id:'PR-10', status:'in_review' };
+      const out = Q.prQueueSort([a, b]).map(x => x.id);
+      return out.join(',') === 'PR-10,PR-9';
+    })());
+  Q.act(['PR-DG2026-0003']);
+  T('  وما يحتاج إجراءك يتصدّر القائمة مهما كانت حالته',
+    Q.prQueueSort(mixed)[0].id.endsWith('0003'));
+  T('  والتصنيف يغطّي كل حالة (لا طلب بلا مجموعة)',
+    mixed.every(p => Q.PR_QUEUE_GROUPS.some(g => g.key === Q.prQueueGroup(p))));
+  T('  ورقم الطلب يُقرأ عدديّاً من آخر مجموعة أرقام',
+    Q.prQueueSeq({id:'PR-DG2026-0012'}) === 12 && Q.prQueueSeq({id:'x'}) === 0);
+  T('  والقائمة تفصل المجموعات بعنوان وعدّاد (لا كتلة واحدة مختلطة)',
+    /head=`<div class="pr-work-group" role="separator">/.test(CODE)
+    && /PR_QUEUE_GROUPS\.find\(x=>x\.key===g\)/.test(CODE)
+    && /\.pr-work-group\{position:sticky/.test(HTML));
+
+  // ── ② سجلّ القرارات ──
+  const A = (() => {
+    const src = [
+      grabConst('PR_AUDIT_LABEL'), grab('prAuditLabel'),
+      grab('prPersonName'), grab('prAuditGroups'),
+    ].join('\n\n');
+    return new Function(src + `; return { PR_AUDIT_LABEL, prAuditLabel, prPersonName, prAuditGroups };`)();
+  })();
+
+  // المفاتيح الحقيقية المقيسة على الإنتاج: كلّها كانت تسقط للبديل الإنجليزيّ
+  const REAL = ['stage_approved','submitted','attachment_added','cancelled','proc_in_progress',
+                'approved','stage_cancelled','created','proc_quotes_collected','proc_rfq_issued',
+                'returned','rfq_issued','rfq_linked','stage_returned','attachment_removed',
+                'proc_reset_to_received'];
+  T('كل حدث تدقيق حقيقيّ له تسمية عربية (لا مفتاح إنجليزيّ يتسرّب)',
+    REAL.every(k => A.PR_AUDIT_LABEL[k] && !/[A-Za-z_]/.test(A.PR_AUDIT_LABEL[k])));
+  T('  والحدث المجهول لا يُعرَض خاماً بالإنجليزية',
+    A.prAuditLabel('some_future_event') === 'تحديث على الطلب'
+    && !/[A-Za-z]/.test(A.prAuditLabel('some_future_event')));
+
+  const prAudit = {
+    requester:'mostafa.kishk', requester_name:'مصطفى كشك',
+    approvals:[{approver:'m.elsobky', approver_name:'م.محمد السبكي', decision:'approved'},
+               {approver:'Abdullah',  approver_name:'عبدالله الذيابي', decision:'approved'}],
+    messages:[],
+    audit:[
+      {event:'submitted',        actor:'mostafa.kishk', created_at:'2026-09-16T09:28:05Z'},
+      {event:'attachment_added', actor:'mostafa.kishk', created_at:'2026-09-16T09:28:08Z', detail:{file_name:'عميل.pdf'}},
+      {event:'stage_approved',   actor:'m.elsobky',     created_at:'2026-09-16T11:09:33Z', detail:{stage_label:'اعتماد الحاجة'}},
+      {event:'stage_approved',   actor:'Abdullah',      created_at:'2026-09-16T12:16:41Z', detail:{stage_label:'إذن بدء التسعير'}},
+      {event:'approved',         actor:'Abdullah',      created_at:'2026-09-16T12:16:41Z'},
+      {event:'proc_in_progress', actor:'Abdullah',      created_at:'2026-09-16T12:16:41Z'},
+    ],
+  };
+  const groups = A.prAuditGroups(prAudit);
+  T('الأحداث المتزامنة لفاعل واحد تُدمَج في مدخل واحد (ثلاثة صفوف ⇒ سطر)',
+    groups.length === 4 && groups[0].events.length === 3);
+  T('  والأحدث أوّلاً', groups[0].when.startsWith('2026-09-16T12:16')
+    && groups[groups.length-1].when.startsWith('2026-09-16T09:28'));
+  T('  والاسم الكامل لا اسم الدخول', groups[0].name === 'عبدالله الذيابي'
+    && groups.some(g => g.name === 'م.محمد السبكي') && groups.some(g => g.name === 'مصطفى كشك'));
+  T('  ولا يُدمَج فاعلان في اللحظة نفسها',
+    (() => { const g = A.prAuditGroups({ audit:[
+        {event:'approved', actor:'a', created_at:'2026-09-16T12:00:00Z'},
+        {event:'approved', actor:'b', created_at:'2026-09-16T12:00:00Z'}] });
+      return g.length === 2; })());
+  T('prPersonName يحلّ الاسم من بيانات الطلب (لا من جدول المستخدمين المحجوب)',
+    A.prPersonName(prAudit,'m.elsobky') === 'م.محمد السبكي'
+    && A.prPersonName(prAudit,'mostafa.kishk') === 'مصطفى كشك'
+    && A.prPersonName(prAudit,'ghost') === 'ghost' && A.prPersonName(prAudit,'') === '');
+  T('  وسطر الحدث يفصل الوقت في عمود مستقلّ بـdir صريح (اتّزان RTL)',
+    /class="pr-work-eventrow"/.test(CODE) && /<time dir="ltr">/.test(CODE)
+    && /\.pr-work-eventrow\{[^}]*justify-content:space-between/.test(HTML));
+
+  // ── ③ مُنتقي المشروع ──
+  T('حقل المشروع في نموذج الطلب مُنتقٍ من السجلّ لا نصّ حرّ',
+    /<select class="input" id="pr-project"/.test(HTML)
+    && !/<input class="input" id="pr-project"/.test(HTML)
+    && /id="pr-project-new"/.test(HTML));
+  T('  ويعيد استعمال محرّك سجلّ المشاريع نفسه (لا نسخة ثانية من المنطق)',
+    /function prFillProjectSelect[\s\S]{0,700}prjNames\(\)/.test(CODE)
+    && /function prReadProjectField[\s\S]{0,900}prjResolve\(nm\)/.test(CODE)
+    && /function prReadProjectField[\s\S]{0,900}prjAddAlias/.test(CODE));
+  T('  وحفظ الطلب والقالب يقرآن الاسم المعتمد لا قيمة الحقل الخام',
+    (CODE.match(/project: prReadProjectField\(\)\|\|null/g) || []).length === 2
+    && !/project: document\.getElementById\('pr-project'\)\?\.value/.test(CODE));
+  T('  والقيمة غير المعتمدة تبقى خياراً مؤقّتاً فلا يفقدها التعديل',
+    /function prFillProjectSelect[\s\S]{0,700}\(غير معتمد\)/.test(CODE));
+  T('  ويُملأ المُنتقي قبل التعبئة المسبقة (وإلّا لم تلتصق القيمة)',
+    (() => { const i = CODE.indexOf("if(view==='create')");
+             const b = CODE.slice(i, i + 700);
+             return b.indexOf("prFillProjectSelect('')") > 0
+                 && b.indexOf("prFillProjectSelect('')") < b.indexOf('prApplyTemplateFields'); })());
+
+  // ── ④ الخادم: الإذن بالتسعير لا يدّعي بدء العمل ──
+  const CLAR = fs.readFileSync(path.join(ROOT, 'db/system2-request-workspace-clarity.sql'), 'utf8');
+  const WS2  = fs.readFileSync(path.join(ROOT, 'db/system2-purchase-request-workspace.sql'), 'utf8');
+  /* ⚠️ التعليقات تُجرَّد قبل الفحص: كتلة التراجع تذكر السطر القديم بنصّه،
+     فحارسٌ يقرأ الملفّ كاملاً يُخفِق على تعليقٍ لا على كود. */
+  const bare = t => t.replace(/--[^\n]*\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, ' ');
+  T('SQL: الإذن بالتسعير يُسلّم الطلب بحالة received ولا يختم بدء العمل',
+    /proc_status=CASE WHEN coalesce\(nullif\(proc_status,''\),'received'\)='received'/.test(CLAR)
+    && !/proc_started_by=v_me/.test(bare(CLAR)));
+  T('  والمُنصِّب نفسه صُحِّح فلا يعود العيب مع تنصيب نظيف',
+    !/proc_started_by=v_me/.test(bare(WS2)));
+  T('  وبدء العمل يبقى في pr_proc_stage وحدها',
+    /proc_started_by\s*=\s*CASE WHEN p_stage='in_progress'/.test(
+      fs.readFileSync(path.join(ROOT, 'db/system2-request-flow.sql'), 'utf8')));
+  T('SQL: اسم الفاعل يُخزَّن مع صفّ التدقيق بمُشغِّل لا بتعديل كل كاتب',
+    /ALTER TABLE proc_pr_audit ADD COLUMN IF NOT EXISTS actor_name/.test(CLAR)
+    && /CREATE TRIGGER trg_proc_pr_audit_actor_name/.test(CLAR)
+    && /BEFORE INSERT ON proc_pr_audit/.test(CLAR));
+  T('SQL: المداواة قاطعة (نفس الشخص ونفس الطابع الزمنيّ) ولا تمسّ ما تجاوز المرحلة',
+    /lower\(proc_started_by\) = lower\(coalesce\(pricing_authorized_by,''\)\)/.test(CLAR)
+    && /proc_started_at = pricing_authorized_at/.test(CLAR)
+    && /proc_status = 'in_progress'/.test(CLAR));
+  T('  وتُعلِن نفسها في السجلّ بدل حذف صفّ قديم',
+    /INSERT INTO proc_pr_audit\([^)]*\)\s*VALUES\(r\.id,'proc_reset_to_received'/.test(CLAR)
+    && !/DELETE FROM proc_pr_audit/.test(CLAR));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
