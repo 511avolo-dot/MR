@@ -12581,68 +12581,100 @@ const PR_STATUS_META = {
 let __prLoaded = false;
 let __prDraftItems = [];   // بنود مسودة الإنشاء الحالية
 let __prTplPrefill = null; // قالب بانتظار تعبئة حقول النموذج بعد رسمه
-let __prDraftDoc   = null; // مرفق داعم اختياري؛ الاعتماد يتم إلكترونياً في النظام
+/* ⚠️ **مصفوفة لا ملفّاً واحداً** (بلاغ المالك 2026-09-16: «لا يمكن إلا رفع مرفق
+   واحد فقط وهذا غير صحيح»). طلبُ شراءٍ واقعيّ يحمل مواصفةً ومخطّطاً وصورة موقع
+   وعرض سعر — وكان النموذج يقبل واحداً، والثاني يمحو الأوّل بلا إنذار. */
+let __prDraftDocs  = []; // مرفقات داعمة اختيارية؛ الاعتماد يتم إلكترونياً في النظام
 let __prEditId     = null; // مسودّة قائمة قيد التعديل (تُحدَّث بمعرّفها لا تُنشأ من جديد)
 
 /* ══════════ المرفقات الداعمة ══════════ */
 const PR_DOC_TYPES = ['application/pdf','image/jpeg','image/png'];
 const PR_DOC_MAX   = 10 * 1024 * 1024;
 
+const PR_DOC_LIMIT = 10;   // سقف مرفقات المسودّة الواحدة — حارس خطأ لا سياسة
+/* ⚠️ **يُضيف ولا يستبدل.** اختيارٌ ثانٍ من المُنتقي كان يمحو الأوّل بصمت، وهو
+   سلوكٌ يُفقِد المستخدم ملفاً ظنّ أنه أرفقه. والتكرار يُكشف بالاسم+الحجم. */
 function prPickDoc(input){
-  const f = input && input.files && input.files[0];
-  if(!f){ __prDraftDoc = null; prRenderDocChip(); return; }
-  if(!PR_DOC_TYPES.includes(f.type)){
-    toast('error','صيغة غير مقبولة','يُقبل PDF أو صورة (JPG/PNG) فقط'); input.value=''; return;
-  }
-  if(f.size > PR_DOC_MAX){
-    toast('error','الملف كبير','الحدّ الأقصى 10 ميجابايت'); input.value=''; return;
-  }
-  __prDraftDoc = f; prRenderDocChip();
+  const picked = Array.from((input && input.files) || []);
+  if(input) input.value = '';           // كي يقبل إعادة اختيار الملفّ نفسه
+  if(!picked.length){ prRenderDocChip(); return; }
+  const bad = [];
+  picked.forEach(f=>{
+    if(!PR_DOC_TYPES.includes(f.type)){ bad.push(`${f.name}: صيغة غير مقبولة`); return; }
+    if(f.size > PR_DOC_MAX){ bad.push(`${f.name}: يتجاوز 10 ميجابايت`); return; }
+    if(__prDraftDocs.some(d=>d.name===f.name && d.size===f.size)) return;   // مكرّر
+    if(__prDraftDocs.length >= PR_DOC_LIMIT){ bad.push(`${f.name}: تجاوز سقف ${PR_DOC_LIMIT} مرفقات`); return; }
+    __prDraftDocs.push(f);
+  });
+  if(bad.length) toast('error','لم تُقبل بعض الملفات', bad.join(' · '));
+  prRenderDocChip();
 }
+function prRemoveDraftDoc(i){ __prDraftDocs.splice(i,1); prRenderDocChip(); }
 function prRenderDocChip(){
   const el = document.getElementById('pr-doc-chip'); if(!el) return;
-  el.innerHTML = __prDraftDoc
-    ? `<span style="color:var(--ok,#166534)">✓ ${escapeHtml(__prDraftDoc.name)}</span>
-       <button class="btn btn-ghost btn-sm" onclick="__prDraftDoc=null;const i=document.getElementById('pr-doc-input');if(i)i.value='';prRenderDocChip()">إزالة</button>`
-    : '<span style="color:var(--muted)">لم يُرفق بعد</span>';
+  if(!__prDraftDocs.length){ el.innerHTML = '<span style="color:var(--muted)">لم يُرفق بعد</span>'; return; }
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;width:100%">`
+    + __prDraftDocs.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="color:var(--ok,#166534)">✓ ${escapeHtml(f.name)}</span>
+        <small style="color:var(--muted)">${prFmtBytes(f.size)}</small>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="prRemoveDraftDoc(${i})">إزالة</button>
+      </div>`).join('')
+    + `<small style="color:var(--muted)">${__prDraftDocs.length} من ${PR_DOC_LIMIT} مرفقات</small></div>`;
 }
-/* الرفع يمرّ بنقطة خادمية تسجل المرفق في سجل R2 غير القابل للتعديل. */
-async function prUploadDoc(prId, file){
+function prFmtBytes(n){
+  const b = Number(n)||0;
+  if(b < 1024) return b + ' بايت';
+  if(b < 1048576) return (b/1024).toFixed(0) + ' ك.ب';
+  return (b/1048576).toFixed(1) + ' م.ب';
+}
+/* الرفع يمرّ بنقطة خادمية تسجل المرفق في سجل R2 غير القابل للتعديل.
+   ⚠️ `kind` من قائمة الخادم (`KINDS` في `functions/api/pr-doc.js`) — كان يُرسَل
+   `supporting` وهي **ليست** فيها فتُقصَر صامتةً إلى `support`؛ تسميةٌ لا يقرؤها
+   أحد أهون من تسمية تبدو صحيحة وتُستبدَل خلف الظهر. */
+async function prUploadDoc(prId, file, kind){
   if(!hasPermission('can_upload_docs')) throw new Error('لا تملك صلاحية رفع المستندات — راجع مدير النظام');
   const headers = Object.assign({'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)}, await prAuthHeader());
-  const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}&kind=supporting`,
+  const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}&kind=${encodeURIComponent(kind||'support')}`,
     { method:'POST', headers, body: await file.arrayBuffer() });
   const out = await r.json().catch(()=>({}));
   if(!r.ok || !out.ok) throw new Error(out.error || 'تعذّر رفع المرفق');
   return out.attachment?.object_key || out.key;
 }
-/* عرض المرفق داخل النظام (لا تبويب خارجيّ ولا رابط تخزين مكشوف). */
-async function prViewDoc(prId){
-  const pr = (STATE.purchaseRequests||[]).find(p=>p.id===prId);
-  if(!pr || !pr.doc_key){ toast('warn','لا مرفق',''); return; }
-  try{
-    const headers = await prAuthHeader();
-    const r = await fetch(`/api/pr-doc?key=${encodeURIComponent(pr.doc_key)}`, { headers });
-    if(!r.ok) throw new Error('تعذّر فتح المرفق');
-    const blob = await r.blob();
-    /* إعادة استعمال عارض المستندات القائم بلا تعديل منطقه: نحقن الـblob في
-       ذاكرته تحت مفتاح المسار، فلا يستدعي `regDocFetch` إطلاقاً (السطر
-       `DOCV.blobs.get(path) || await regDocFetch(path)`). */
-    DOCV.blobs.set(pr.doc_key, blob);
-    docvOpen([{ path: pr.doc_key, label: pr.doc_name || 'مرفق الطلب' }],
-             0, `مرفق الطلب ${prId}`);
-  }catch(e){ reportError('prViewDoc', e, {pr:prId}, {title:'تعذّر فتح المرفق', body:e.message||''}); }
+/* يرفع مجموعة ويُرجع {done, failed[]} — **لا يُسقِط الباقي بفشل واحد.** */
+async function prUploadDocs(prId, files, kind){
+  const failed = []; let done = 0;
+  for(const f of (files||[])){
+    try{ await prUploadDoc(prId, f, kind); done++; }
+    catch(e){ failed.push(`${f.name}: ${e.message||'تعذّر الرفع'}`); }
+  }
+  return { done, failed };
 }
-async function prViewAttachment(prId,key,name){
-  if(!key){ return prViewDoc(prId); }
+/* كل مرفقات الطلب بشكل قائمة العارض (تبويب لكلٍّ) — مصدر واحد للعرض. */
+function prDocvList(pr){
+  const docs=(pr && pr.attachments)||[];
+  if(docs.length) return docs.map(d=>({path:d.object_key, label:d.file_name||'مرفق الطلب'}))
+                             .filter(d=>d.path);
+  return (pr && pr.doc_key) ? [{path:pr.doc_key, label:pr.doc_name||'مرفق الطلب'}] : [];
+}
+/* عرض المرفقات داخل النظام (لا تبويب خارجيّ ولا رابط تخزين مكشوف).
+   ⚠️ يُفتَح العارض على **كل** مرفقات الطلب لا على المنقور وحده: بعد أن صار
+   الطلب يحمل عدّة مرفقات، فتحُ واحدٍ في كل مرّة يُخفي البقيّة. والبقيّة تُجلَب
+   كسولاً عند تبديل التبويب عبر `regDocFetch` (يوجّه `docs/pr/` لنقطتها). */
+async function prViewAttachment(prId, key, name){
+  const pr=(STATE.purchaseRequests||[]).find(p=>p.id===prId);
+  const list=prDocvList(pr);
+  const idx=Math.max(0, list.findIndex(d=>d.path===key));
+  const target=key || (list[0]&&list[0].path);
+  if(!target){ toast('warn','لا مرفق',''); return; }
   try{
-    const headers=await prAuthHeader();
-    const r=await fetch(`/api/pr-doc?key=${encodeURIComponent(key)}`,{headers});
-    if(!r.ok) throw new Error('تعذّر فتح المرفق');
-    const blob=await r.blob(); DOCV.blobs.set(key,blob);
-    docvOpen([{path:key,label:name||'مرفق الطلب'}],0,`مرفقات الطلب ${prId}`);
+    /* جلبٌ مسبق للمنقور: يتحقّق من الصلاحية **قبل** فتح عارضٍ فارغ، ويملأ
+       ذاكرة العارض فلا يُطلَب الملفّ مرّتين. */
+    const blob = await prDocFetchBlob(target);
+    DOCV.blobs.set(target, blob);
+    docvOpen(list.length?list:[{path:target,label:name||'مرفق الطلب'}], idx, `مرفقات الطلب ${prId}`);
   }catch(e){ reportError('prViewAttachment',e,{pr:prId},{title:'تعذّر فتح المرفق',body:e.message||''}); }
 }
+function prViewDoc(prId){ return prViewAttachment(prId, null, null); }
 
 function prStatusBadge(s){
   const m = PR_STATUS_META[s] || {label:s||'—', cls:'neutral'};
@@ -13193,11 +13225,86 @@ function prWorkspaceDecisionHTML(pr){
   const approveLabel=mine.stage_key==='procurement_pricing'?'الموافقة على بدء التسعير':'اعتماد الاحتياج وإرساله للمشتريات';
   return `<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>${escapeHtml(mine.stage_label||'قرار الاعتماد')}</h3><div class="pr-work-sub">يُسجّل القرار على النسخة الحالية مع هوية المعتمد ووقت التنفيذ.</div><textarea id="pr-work-decision-note" class="input" style="width:100%;min-height:74px;margin-top:12px;resize:vertical" placeholder="ملاحظة القرار — إلزامية عند الإعادة أو الرفض"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-primary" onclick="prActInline('${escapeAttr(pr.id)}','approve')">✓ ${approveLabel}</button><button class="btn btn-ghost" onclick="prActInline('${escapeAttr(pr.id)}','return')">↩ إعادة للاستكمال</button><button class="btn btn-ghost" style="color:var(--danger)" onclick="prActInline('${escapeAttr(pr.id)}','reject')">رفض الطلب</button></div></div>`;
 }
+/* حالات نهائية: سجلّ الطلب صار أثراً تاريخيّاً فلا يُضاف إليه ولا يُنقَص منه.
+   (مطابق لحارس `pr_remove_attachment` و`pr_register_attachment` خادميّاً.) */
+const PR_FINAL_STATUSES = ['closed','cancelled','rejected'];
+/* مفاتيح `kind` خادمية إنجليزية (`KINDS` في `functions/api/pr-doc.js`) — كانت
+   تُعرَض خاماً في واجهة عربية. */
+const PR_DOC_KIND_LABEL = {
+  source_form:'نموذج الطلب', quote:'عرض سعر', support:'مرفق داعم',
+  technical:'مواصفة فنية', comparison:'مقارنة عروض', other:'مرفق',
+};
+function prDocKindLabel(k){ return PR_DOC_KIND_LABEL[k] || 'مرفق داعم'; }
+function prIsFinal(pr){ return PR_FINAL_STATUSES.includes(pr && pr.status); }
+/* بوّابة الزرّ = بوّابة الفعل حرفيّاً: `can_upload_docs` هي ما يفحصه
+   `prUploadDoc`، و`pr_upload_attachments` نظيرها الخادميّ. */
+function prCanAddAttachment(pr){ return !prIsFinal(pr) && hasPermission('can_upload_docs'); }
+/* إزالة مرفق **غيرك** ليست رفعاً: رافعُه، أو المشتريات/الأدمن. */
+function prCanRemoveAttachment(pr, doc){
+  if(prIsFinal(pr) || !doc || !doc.id) return false;
+  const me = (STATE.currentUser?.username||'').toLowerCase();
+  return (String(doc.uploaded_by||'').toLowerCase() === me) || prIsProcurement();
+}
 function prWorkspaceAttachmentsHTML(pr){
   const docs=pr.attachments||[];
-  if(!docs.length&&!pr.doc_key) return `<div class="pr-work-sub">لا توجد مرفقات داعمة. الاعتماد الإلكتروني محفوظ في سجل الطلب.</div>`;
-  const list=docs.length?docs:[{file_name:pr.doc_name,object_key:pr.doc_key,kind:'supporting'}];
-  return list.map((doc,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;${i<list.length-1?'border-bottom:1px solid var(--prw-line-2)':''}"><span style="font-size:12px">📎 ${escapeHtml(doc.file_name||'مرفق الطلب')}<small class="pr-work-itemnote">${escapeHtml(doc.kind||'مرفق داعم')}</small></span><button class="btn btn-ghost btn-sm" onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(doc.object_key||pr.doc_key)}','${escapeAttr(doc.file_name||pr.doc_name||'مرفق الطلب')}')">فتح داخل النظام</button></div>`).join('');
+  /* المرفق الوحيد القديم (`doc_key` قبل جدول المرفقات) يبقى معروضاً بلا زرّ
+     إزالة — لا صفّ له في الجدول فلا شيء يُزال. */
+  const list=docs.length?docs:(pr.doc_key?[{file_name:pr.doc_name,object_key:pr.doc_key,kind:'support'}]:[]);
+  /* «مرفق مناقشة» يُشتقّ من كونه **مُشاراً إليه في رسالة** لا من تخمين نوعه. */
+  const inMsg = new Set();
+  (pr.messages||[]).forEach(m=>(m.attachment_ids||[]).forEach(id=>inMsg.add(id)));
+  const rows = list.length
+    ? list.map((doc,i)=>{
+        const key=doc.object_key||pr.doc_key, name=doc.file_name||pr.doc_name||'مرفق الطلب';
+        const kindTxt = inMsg.has(doc.id) ? 'مرفق مناقشة' : prDocKindLabel(doc.kind);
+        const who=doc.uploaded_by?`<small class="pr-work-itemnote">رفعه ${escapeHtml(doc.uploaded_by)}</small>`:'';
+        const del=prCanRemoveAttachment(pr,doc)
+          ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="prRemoveAttachment(${Number(doc.id)},'${escapeAttr(pr.id)}')">إزالة</button>` : '';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 0;${i<list.length-1?'border-bottom:1px solid var(--prw-line-2)':''}">
+          <span style="font-size:12px">📎 ${escapeHtml(name)}<small class="pr-work-itemnote">${escapeHtml(kindTxt)}</small>${who}</span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(key)}','${escapeAttr(name)}')">فتح داخل النظام</button>${del}
+          </span></div>`;
+      }).join('')
+    : `<div class="pr-work-sub">لا توجد مرفقات داعمة. الاعتماد الإلكتروني محفوظ في سجل الطلب.</div>`;
+  /* ⚠️ لم يكن في النظام **أي** مسار لإرفاق ملفّ بعد إنشاء الطلب: فالمشتريات
+     لا تستطيع إرفاق عرض سعر، ومن نسي مواصفةً لا سبيل له إلا طلب جديد. */
+  const add = prCanAddAttachment(pr) ? `
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--prw-line-2);font-size:12.5px">
+      <label for="pr-add-doc-${escapeAttr(pr.id)}" style="display:block;margin-bottom:6px;color:var(--muted)">إضافة مرفقات (PDF أو صورة — يمكن اختيار عدّة ملفات)</label>
+      <input type="file" id="pr-add-doc-${escapeAttr(pr.id)}" accept="application/pdf,image/jpeg,image/png" multiple
+             onchange="prAddAttachments('${escapeAttr(pr.id)}',this)" style="max-width:100%">
+    </div>` : '';
+  return rows + add;
+}
+/* رفع فوريّ على طلب قائم — لا مسودّة ولا حفظ وسيط. */
+async function prAddAttachments(prId, input){
+  const files = Array.from((input && input.files) || []);
+  if(input) input.value='';
+  if(!files.length) return;
+  const bad=[], ok=[];
+  files.forEach(f=>{
+    if(!PR_DOC_TYPES.includes(f.type)) bad.push(`${f.name}: صيغة غير مقبولة`);
+    else if(f.size > PR_DOC_MAX) bad.push(`${f.name}: يتجاوز 10 ميجابايت`);
+    else ok.push(f);
+  });
+  if(bad.length) toast('error','لم تُقبل بعض الملفات', bad.join(' · '));
+  if(!ok.length) return;
+  toast('info','جارٍ الرفع', `${ok.length} مرفق...`);
+  const up = await prUploadDocs(prId, ok);
+  if(up.done) toast('success','أُضيفت المرفقات', `${up.done} مرفق على الطلب ${prId}`);
+  if(up.failed.length) toast('error','تعذّر رفع بعض المرفقات', up.failed.join(' · '));
+  __prLoaded=false; await prLoadAll(); renderPRPortal();
+}
+async function prRemoveAttachment(id, prId){
+  if(!confirm('إزالة هذا المرفق من الطلب؟ يبقى محفوظاً في سجل التدقيق.')) return;
+  try{
+    const {data,error} = await CLOUD.client.rpc('pr_remove_attachment',{p_id:id});
+    if(error) throw new Error(error.message||'تعذّر إزالة المرفق');
+    if(data && data.ok!==true) throw new Error('تعذّر إزالة المرفق');
+    toast('success','أُزيل المرفق','');
+    __prLoaded=false; await prLoadAll(); renderPRPortal();
+  }catch(e){ reportError('prRemoveAttachment', e, {id,pr:prId}, {title:'تعذّر إزالة المرفق', body:e.message||''}); }
 }
 function prWorkspaceOverviewHTML(pr){
   const next=prWorkspaceNext(pr);
@@ -13301,7 +13408,7 @@ function prGoView(view, id){
     if(!requirePermission('can_create_pr', 'رفع طلبات الشراء')) { view='list'; id=null; }
   }
   STATE.prView=view; STATE.prTrackId=id||null;
-  if(view==='create'){ __prDraftItems=[]; __prDraftDoc=null; __prEditId=null; }
+  if(view==='create'){ __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null; }
   renderPRPortal();
 }
 
@@ -13989,9 +14096,9 @@ function prBuilderHTML(){
       <button class="btn btn-ghost btn-sm" onclick="prAddItemRow()" style="margin-top:8px">➕ إضافة بند</button>
       <div id="pr-words" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
 
-      <div class="pr-section-title" style="margin-top:18px">مرفق داعم <span style="font-size:11px;color:var(--muted)">(اختياري)</span></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12.5px">
-        <input type="file" id="pr-doc-input" accept="application/pdf,image/jpeg,image/png"
+      <div class="pr-section-title" style="margin-top:18px">المرفقات الداعمة <span style="font-size:11px;color:var(--muted)">(اختيارية — يمكن اختيار عدّة ملفات)</span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;font-size:12.5px">
+        <input type="file" id="pr-doc-input" accept="application/pdf,image/jpeg,image/png" multiple
                onchange="prPickDoc(this)" style="max-width:100%">
         <span id="pr-doc-chip"></span>
       </div>
@@ -14119,15 +14226,25 @@ async function prSubmitNew(asDraft){
     toast('info','جارٍ الحفظ', asDraft?'حفظ المسودة...':'إرسال الطلب...');
     const saved=await prSaveCloud(pr, items, editing ? 'update' : 'insert', !asDraft);
     pr.id=saved.id;
-    if(__prDraftDoc){ await prUploadDoc(pr.id, __prDraftDoc); }
+    /* ⚠️ **فشل المرفق ليس فشل الحفظ.** كان الرفع داخل نفس الـtry، فأيّ إخفاق
+       فيه يقفز للـcatch فيقول «تعذّر الحفظ» — والطلب **محفوظ ومُرسَل فعلاً**،
+       والإشعار لا يُرسَل. فيُنشئ المستخدم طلباً بديلاً ظنّاً أنّ الأوّل ضاع
+       (أنتج ذلك على الإنتاج طلبَين متتاليَين خلال ثماني ثوانٍ). الآن الرفع
+       خارج مسار فشل الحفظ، والطلب يُبلَّغ عنه بما حدث له بالضبط. */
+    const up = await prUploadDocs(pr.id, __prDraftDocs);
     pr.status=asDraft?'draft':'in_review'; pr.workflow_state=saved.workflow_state;
     // الإشعار: البوابة الداخلية لم تكن ترسل شيئاً إطلاقاً، فطلبٌ يُرفَع لا
     // يعلم به معتمِده حتى يفتح النظام صدفةً. نستعمل نفس نقطة `requests.html`
     // بلا كود بريد جديد. fire-and-forget: فشل البريد لا يُسقِط طلباً حُفِظ.
     if(!asDraft) prNotifyPR(pr.id, 'pending');
-    toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب لمدير الصيانة',
-      asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'بدأ مسار الاعتماد الإلكتروني ويمكنك متابعة كل قرار من هنا.');
-    __prLoaded=false; __prDraftItems=[]; __prDraftDoc=null; __prEditId=null;
+    if(up.failed.length){
+      toast('warn', (asDraft?'حُفظت المسودة':'أُرسل الطلب') + ' — وتعذّر رفع بعض المرفقات',
+        `الطلب ${pr.id} محفوظ${asDraft?'':' وبدأ مسار اعتماده'}. لم تُرفع: ${up.failed.join(' · ')}. أعد إرفاقها من شاشة متابعة الطلب.`);
+    }else{
+      toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب لمدير الصيانة',
+        asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'بدأ مسار الاعتماد الإلكتروني ويمكنك متابعة كل قرار من هنا.');
+    }
+    __prLoaded=false; __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null;
     prGoView('track', pr.id);
     prLoadAll().then(renderPRPortal);
   }catch(e){ toast('error','تعذّر الحفظ', e.message||'خطأ غير متوقع'); }
@@ -14145,7 +14262,7 @@ function prEditDraft(id){
   if(pr.requester && me && pr.requester!==me && !prIsProcurement()){
     toast('error','غير مصرّح','المسودّة يُكملها صاحبها'); return; }
   __prEditId = id;
-  __prDraftDoc = null;
+  __prDraftDocs = [];
   __prDraftItems = (pr.items||[]).map(it=>({
     item_code:it.item_code||'', description:it.description||'', unit:it.unit||'',
     contract_qty:it.contract_qty??'', stock_balance:it.stock_balance??'',
@@ -14246,10 +14363,18 @@ function prThreadHTML(pr){
   const isProc = prIsProcurement();
   const isOwner = pr.requester === me;
   if(!isProc && !isOwner && !msgs.length) return '';
+  const byId = {}; (pr.attachments||[]).forEach(a=>{ byId[a.id] = a; });
   const items = msgs.map(m=>{
     const q = m.kind === 'question';
+    /* مرفقات الرسالة: رقائق تفتح العارض نفسه. المرفق المُزال لاحقاً لا يُترَك
+       رقاقةً ميتة — يسقط من الخريطة فلا يُعرَض. */
+    const chips = (m.attachment_ids||[]).map(id=>byId[id]).filter(Boolean).map(a=>
+      `<button class="btn btn-ghost btn-sm" style="margin-top:6px;margin-inline-end:6px"
+        onclick="prViewAttachment('${escapeAttr(pr.id)}','${escapeAttr(a.object_key)}','${escapeAttr(a.file_name||'مرفق')}')"
+        >📎 ${escapeHtml(a.file_name||'مرفق')}</button>`).join('');
     return `<div class="po-timeline-item" style="border-inline-start:3px solid ${q?'var(--warn,#d97706)':'var(--accent-2)'};padding-inline-start:10px">
       <div class="po-tl-main">${q?'؟ ':'↪ '}${escapeHtml(m.body||'')}</div>
+      ${chips}
       <div class="po-tl-meta">${escapeHtml(m.author_name||m.author||'')} · <span dir="ltr">${escapeHtml(String(m.created_at||'').slice(0,16).replace('T',' '))}</span></div>
     </div>`;
   }).join('');
@@ -14265,26 +14390,64 @@ function prThreadHTML(pr){
       ${canPost?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <input id="pr-msg-input" class="input" style="flex:1;min-width:200px" maxlength="4000" placeholder="${ph}">
         <button class="btn btn-ghost btn-sm" onclick="prPostMessage('${escapeAttr(pr.id)}','${kind}')">${btn}</button>
-      </div>`:''}
+      </div>
+      ${prCanAddAttachment(pr)?`<div style="margin-top:8px;font-size:12px">
+        <label for="pr-msg-doc" style="color:var(--muted);display:block;margin-bottom:4px">إرفاق مع الرسالة (اختياري — PDF أو صورة، عدّة ملفات)</label>
+        <input type="file" id="pr-msg-doc" accept="application/pdf,image/jpeg,image/png" multiple style="max-width:100%">
+      </div>`:''}`:''}
     </div>`;
 }
 
+/* ⚠️ قناة الاستفهام كانت **نصّاً فقط** (طلب المالك 2026-09-16): سؤالٌ عن مواصفة
+   أو صورة عطل يُجاب خارج النظام فتضيع المعلومة — وهي العلّة التي بُنيت القناة
+   لعلاجها. الترتيب: يُرفع المرفق أوّلاً فيصير له معرّف، ثمّ تُنشأ الرسالة
+   مشيرةً إليه؛ فلا رسالة تَعِد بمرفق لم يصل. */
 async function prPostMessage(prId, kind){
   if(!requirePermission('can_comment', 'الردّ داخل النظام')) return;
   const el = document.getElementById('pr-msg-input');
+  const fileEl = document.getElementById('pr-msg-doc');
+  const files = Array.from((fileEl && fileEl.files) || []);
   const txt = (el && el.value || '').trim();
-  if(!txt){ toast('warn','فارغة','اكتب نصّ الرسالة أولاً'); return; }
+  if(!txt && !files.length){ toast('warn','فارغة','اكتب نصّ الرسالة أو أرفق ملفاً'); return; }
   if(!prCloudReady()){ toast('error','غير متصل','المحادثة تتطلّب اتصالاً بالسحابة'); return; }
   try{
-    const {error} = await CLOUD.client.rpc('pr_post_message', {p_pr_id:prId, p_body:txt, p_kind:kind});
+    let ids = [];
+    if(files.length){
+      const bad=[];
+      const ok=files.filter(f=>{
+        if(!PR_DOC_TYPES.includes(f.type)){ bad.push(`${f.name}: صيغة غير مقبولة`); return false; }
+        if(f.size > PR_DOC_MAX){ bad.push(`${f.name}: يتجاوز 10 ميجابايت`); return false; }
+        return true;
+      });
+      if(bad.length) toast('error','لم تُقبل بعض الملفات', bad.join(' · '));
+      if(!ok.length && !txt) return;
+      for(const f of ok){
+        /* فشل مرفق لا يُسقِط الرسالة صامتاً — يُبلَّغ ويُستكمل الباقي. */
+        try{ const id = await prUploadMsgDoc(prId, f); if(id) ids.push(id); }
+        catch(e){ toast('error','تعذّر رفع مرفق', `${f.name}: ${e.message||''}`); }
+      }
+    }
+    const {error} = await CLOUD.client.rpc('pr_post_message',
+      {p_pr_id:prId, p_body:txt, p_kind:kind, p_attachment_ids: ids.length?ids:null});
     if(error) throw error;
-    if(el) el.value='';
+    if(el) el.value=''; if(fileEl) fileEl.value='';
     prNotifyPR(prId, kind, txt); // بريد للطرف الآخر — الاتجاه يُحسَب على الخادم
     __prLoaded=false; await prLoadAll(); renderPRPortal();
-    toast('success', kind==='question'?'أُرسل الاستفسار':'أُرسل ردّك','وصل إشعار بريد للطرف الآخر.');
+    toast('success', kind==='question'?'أُرسل الاستفسار':'أُرسل ردّك',
+      (ids.length?`مع ${ids.length} مرفق. `:'')+'وصل إشعار بريد للطرف الآخر.');
   }catch(e){
     reportError('prPostMessage', e, {pr:prId}, {title:'تعذّر الإرسال', body:e.message||''});
   }
+}
+/* يرفع مرفق رسالة ويُرجع **معرّف الصفّ** (لا المفتاح) — الرسالة تشير بالمعرّف. */
+async function prUploadMsgDoc(prId, file){
+  if(!hasPermission('can_upload_docs')) throw new Error('لا تملك صلاحية رفع المستندات');
+  const headers = Object.assign({'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)}, await prAuthHeader());
+  const r = await fetch(`/api/pr-doc?pr_id=${encodeURIComponent(prId)}&kind=other`,
+    { method:'POST', headers, body: await file.arrayBuffer() });
+  const out = await r.json().catch(()=>({}));
+  if(!r.ok || !out.ok) throw new Error(out.error || 'تعذّر رفع المرفق');
+  return out.attachment?.id || null;
 }
 
 /* ══════════ ربط الطلب بأمر الشراء — جوهر المتابعة ══════════
@@ -27842,6 +28005,7 @@ function docvOpen(list, index, title, reg){
   if (el){ el.style.display = 'flex'; syncScrollLock(); a11yWire(el); }
   document.getElementById('docv-zip').style.display = reg ? '' : 'none';
   // سكّ روابط كل وثائق الطلب دفعةً واحدة (لا ينتظره العرض — يسبق تبديل التبويبات)
+  // (`regDocSignBatch` يُصفّي مسارات `DG-` وحدها، فمفاتيح `docs/pr/` تسقط منه.)
   regDocSignBatch(list.map(d => d.path));
   docvShow(Math.max(0, Math.min(index|0, list.length - 1)));
   document.addEventListener('keydown', docvKeys);
@@ -27930,8 +28094,8 @@ function regDocSignedGet(path){
 }
 /* يسكّ روابط عدّة مسارات بنداء واحد (يتجاهل الفشل بهدوء — المسار المفرد يغطّيه) */
 async function regDocSignBatch(paths){
-  // ⚠️ مسارات وثائق التسجيل وحدها (DG-…): مرفق طلب الشراء يُخدَم من نقطته
-  // الخادمية ويُحقَن blobاً جاهزاً، فسكّ رابط تخزين له بلا معنى ويفشل.
+  // ⚠️ مسارات وثائق التسجيل وحدها (DG-…): مرفق طلب الشراء (`docs/pr/…`) يُخدَم
+  // من نقطته الخادمية `/api/pr-doc`، فسكّ رابط تخزين له بلا معنى ويفشل.
   const want = (paths||[]).filter(p => p && /^(?:supplier-docs\/)?DG-/.test(p) && !regDocSignedGet(p));
   if (!want.length || !(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
   try{
@@ -27977,8 +28141,28 @@ async function regDocFromLegacy(path){
   if (!resp.ok){ REGDOC_SIGNED.delete(path); return null; }
   return await resp.blob();
 }
+/* مرفقات طلب الشراء الداخليّ — نقطة أخرى تماماً (`/api/pr-doc`) بحارس رؤيةٍ
+   على الطلب لا على المورّد. **الفضاءان منفصلان بالبناء لا بالاصطلاح:**
+   `pr_register_attachment` تفرض `^docs/pr/<pr>/<name>$`، و`safeKey` في
+   `reg-doc.js` لا تقبل إلا `DG-XXXX/<doc>/<name>` — فبادئة المفتاح هي هويّة
+   مخزنه، ولا تقاطع بينهما. */
+const PRDOC_PREFIX = 'docs/pr/';
+async function prDocFetchBlob(key){
+  const headers = await prAuthHeader();
+  const r = await fetch('/api/pr-doc?key=' + encodeURIComponent(key), { headers });
+  if (r.ok) return await r.blob();
+  let msg = '';
+  try{ msg = ((await r.json()) || {}).error || ''; }catch(e){}
+  throw new Error(msg || ('تعذّر جلب المرفق (HTTP ' + r.status + ')'));
+}
 /* يجرّب المخزنَين — الترتيب تحسين، و**كلاهما يُجرَّب دائماً** قبل الإخفاق. */
 async function regDocFetch(path){
+  /* ⚠️ التوجيه بالبادئة **قبل** أي شيء: مفتاح مرفق طلب لا يوجد في مخزن وثائق
+     الموردين إطلاقاً، وإرساله إلى `/api/reg-doc` يرتدّ **400** من `safeKey`
+     (بلاغ المالك بلقطة 2026-09-16: «تعذّر جلب الملف (HTTP 400)»). ولا يصحّ
+     الاكتفاء بحقن الـblob مسبقاً: ذاكرة `DOCV.blobs` مسقوفة بثلاثة، فطلبٌ
+     بأربعة مرفقات يُخلي أقدمها ثمّ يعود ليطلبه من المخزن الخطأ. */
+  if (String(path||'').startsWith(PRDOC_PREFIX)) return await prDocFetchBlob(path);
   if (!(window.CLOUD && CLOUD.enabled && CLOUD.client)) throw new Error('يتطلب اتصالاً سحابياً');
   const tryR2 = !REGDOC_R2_MISS.has(path);
   const legacyFirst = REGDOC_LEGACY_HINT.has(regDocRegId(path));
@@ -27990,10 +28174,27 @@ async function regDocFetch(path){
   if (!blob) throw new Error('تعذّر العثور على الملف في مخزن النظام');
   return blob;
 }
+/* ⚠️ **مصدر واحد لبايتات الوثيقة.** `DOCV.blobs` ليست ذاكرة تسريع فحسب — هي
+   أيضاً مَحقِن: مسارٌ جلب ملفّه بنفسه يضع الـblob هنا قبل `docvOpen`. وكان
+   `docvBlobUrl` يتجاهلها ويذهب رأساً إلى `regDocFetch`، و`docvShow` ينادي
+   `docvBlobUrl` **قبل** تفرّع النوع (الرابط يلزم الصورة ولا يلزم الـPDF) —
+   فكان المحقون يُتجاهَل دائماً ويُطلَب الملفّ من المخزن الخطأ. */
+async function docvSourceBlob(path){
+  const hit = DOCV.blobs.get(path);
+  if (hit) return hit;
+  const blob = await regDocFetch(path);
+  DOCV.blobs.set(path, blob);
+  while (DOCV.blobs.size > 3){                 // سقف ذاكرة كسقف الروابط
+    const oldest = [...DOCV.blobs.keys()].find(k => k !== (DOCV.list[DOCV.i]||{}).path);
+    if (!oldest) break;
+    DOCV.blobs.delete(oldest);
+  }
+  return blob;
+}
 /* يجلب الملف مرّة واحدة ويحتفظ بـblob URL في الجلسة (تبديل التبويبات فوريّ) */
 async function docvBlobUrl(path){
   if (DOCV.urls.has(path)) return DOCV.urls.get(path);
-  const blob = await regDocFetch(path);
+  const blob = await docvSourceBlob(path);
   // نوع صريح كي يعرضه المتصفّح بدل تنزيله (بعض الملفات تُخزَّن بلا نوع)
   const kind = docvKind(path);
   const typed = blob.type ? blob : new Blob([blob], {type: kind === 'pdf' ? 'application/pdf' : 'application/octet-stream'});
@@ -28076,16 +28277,9 @@ async function docvPdfLib(){
 function docvDestroyPdf(){
   if (DOCV._pdf){ try{ DOCV._pdf.destroy(); }catch(e){} DOCV._pdf = null; }
 }
-/* بايتات الوثيقة نفسها (لا رابط) — تُعاد من الذاكرة المؤقّتة إن كانت محمّلة */
+/* بايتات الوثيقة نفسها (لا رابط) — من المصدر الموحّد نفسه */
 async function docvBytes(path){
-  const blob = DOCV.blobs.get(path) || await regDocFetch(path);
-  DOCV.blobs.set(path, blob);
-  while (DOCV.blobs.size > 3){                 // سقف ذاكرة كسقف الروابط
-    const oldest = [...DOCV.blobs.keys()].find(k => k !== (DOCV.list[DOCV.i]||{}).path);
-    if (!oldest) break;
-    DOCV.blobs.delete(oldest);
-  }
-  return new Uint8Array(await blob.arrayBuffer());
+  return new Uint8Array(await (await docvSourceBlob(path)).arrayBuffer());
 }
 async function docvRenderPdf(stage, bytes, d){
   const lib = await docvPdfLib();

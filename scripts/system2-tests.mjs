@@ -257,6 +257,8 @@ const NEEDED_FNS = [
   'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
   'regDocRegId', 'regDocSignedGet', 'regDocToken', 'regDocFromR2', 'regDocFromLegacy', 'regDocFetch',
+  'prDocFetchBlob', 'prAuthHeader', 'prDocvList', 'prIsFinal', 'prCanRemoveAttachment', 'prFmtBytes',
+  'prDocKindLabel', 'docvSourceBlob', 'docvBlobUrl',
   // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
   'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
@@ -288,7 +290,10 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
-  'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL'];
+  'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL',
+  // مرفقات طلب الشراء — فضاء مفاتيح مستقلّ بنقطة خادمية أخرى
+  'PRDOC_PREFIX', 'PR_DOC_TYPES', 'PR_DOC_MAX', 'PR_DOC_LIMIT', 'PR_FINAL_STATUSES',
+  'PR_DOC_KIND_LABEL', 'DOCV'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1468,6 +1473,59 @@ await (async () => {
     const gone = await text(api.regDocFetch('DG-GONE04/cr/x.pdf'));
     T('المفقود في المخزنَين يُبلَّغ بوضوح بعد تجربتهما', /ERR:.*مخزن النظام/.test(gone), gone);
     T('وقد جُرِّب المخزنان فعلاً قبل الإخفاق', c.r2.length === 1 && c.sign.length === 1);
+  } finally { globalThis.fetch = realFetch; api.window.CLOUD = null; }
+})();
+
+/* ── مرفق طلب الشراء يُجلَب من نقطته — اختبار **سلوكيّ** (بلاغ إنتاج 2026-09-16)
+   «تعذّر فتح المستند: تعذّر جلب الملف (HTTP 400)». الجذر: مفتاح `docs/pr/…`
+   كان يُرسَل إلى `/api/reg-doc` (وثائق الموردين) فيرتدّ من `safeKey`؛ و`docvShow`
+   ينادي `docvBlobUrl` **قبل** تفرّع النوع، و`docvBlobUrl` لم يكن يقرأ الـblob
+   المحقون. حارسٌ نصّيّ مرّ من تحته العطل كاملاً — فهذه تُشغِّل الدوال فعلاً. */
+await (async () => {
+  const realFetch = globalThis.fetch;
+  const KEY = 'docs/pr/PR-DG2026-0006/7dad81c9-35cf.pdf';
+  const calls = { pr: [], reg: [], auth: [] };
+  globalThis.fetch = async (u, init) => {
+    const s = String(u);
+    const key = decodeURIComponent(new URL(s, 'http://x').searchParams.get('key') || '');
+    if (s.startsWith('/api/pr-doc')) {
+      calls.pr.push(key);
+      calls.auth.push((init && init.headers && init.headers.Authorization) || '');
+      return new Response('PRDOC', { status: 200 });
+    }
+    if (s.startsWith('/api/reg-doc')) { calls.reg.push(key); return new Response('{}', { status: 400 }); }
+    return new Response('{}', { status: 500 });
+  };
+  api.window.CLOUD = { enabled: true, client: {
+    auth: { getSession: async () => ({ data: { session: { access_token: 'jwt-pr' } } }) },
+  } };
+  try {
+    api.REGDOC_R2_MISS.clear(); api.DOCV.blobs.clear(); api.DOCV.urls.clear();
+    let body = '';
+    try { body = await (await api.regDocFetch(KEY)).text(); } catch (e) { body = 'ERR:' + e.message; }
+    T('مفتاح مرفق الطلب يُجلَب من /api/pr-doc لا من نقطة وثائق الموردين',
+      body === 'PRDOC' && calls.pr.length === 1 && calls.reg.length === 0);
+    T('  ويحمل رمز جلسة الموظّف (الرؤية تُفحَص بهويّته لا بمفتاح خدمة)',
+      calls.auth[0] === 'Bearer jwt-pr');
+
+    // الرسالة الخادمية تصل المستخدم كما هي بدل «HTTP 403» خام
+    globalThis.fetch = async () => new Response(JSON.stringify({ error: 'هذا الطلب خارج نطاقك' }), { status: 403 });
+    let msg = '';
+    try { await api.regDocFetch(KEY); } catch (e) { msg = e.message; }
+    T('  وخطأ الصلاحية يصل بنصّه العربيّ لا برقم خام', msg === 'هذا الطلب خارج نطاقك');
+
+    // ⚠️ لبّ العطل: blob محقون ⇒ **صفر** رحلة شبكة من docvBlobUrl
+    let netCalls = 0;
+    globalThis.fetch = async () => { netCalls++; return new Response('{}', { status: 400 }); };
+    api.DOCV.blobs.clear(); api.DOCV.urls.clear();
+    api.DOCV.list = [{ path: KEY, label: 'مرفق' }]; api.DOCV.i = 0;
+    api.DOCV.blobs.set(KEY, new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+    // يُلتقَط الرمي: عودةُ العيب تجعلها ترمي «HTTP 400» — نريد إخفاقاً مقروءاً
+    // لا انهيار الحزمة كلّها.
+    let url = null; try { url = await api.docvBlobUrl(KEY); } catch (e) { url = 'ERR:' + e.message; }
+    T('docvBlobUrl يستهلك الـblob المحقون ولا يطلب الملفّ من الشبكة',
+      typeof url === 'string' && url.startsWith('blob:') && netCalls === 0);
+    api.DOCV.blobs.clear(); api.DOCV.urls.clear(); api.DOCV.list = [];
   } finally { globalThis.fetch = realFetch; api.window.CLOUD = null; }
 })();
 
@@ -2751,6 +2809,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('escapeHtml'), grab('escapeAttr'), grab('poDays'),
       grab('prDaysSince'), grab('prSinceText'), grab('prIsLive'),
       `function prIsProcurement(){ return __proc; }`,
+      grabConst('PR_FINAL_STATUSES'), grab('prIsFinal'), grab('prCanAddAttachment'),
       grab('prJourneyHTML'), grab('prThreadHTML'), grab('prTemplatesHTML'),
     ].join('\n\n');
     return new Function(src + `; return {STATE, window, prDaysSince, prSinceText,
@@ -2917,9 +2976,20 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && !/طلبات شراء بانتظار اعتمادك/.test(CODE));
 
   // ── عرض السند داخل النظام لا في تبويب خارجيّ ──
-  T('السند يُفتح داخل النظام بحقن blob في عارض المستندات',
-    /DOCV\.blobs\.set\(pr\.doc_key, blob\)/.test(CODE)
-    && /docvOpen\(\[\{ path: pr\.doc_key/.test(CODE));
+  /* ⚠️ كان هذا الحارس يُرمّز **الآليّة** (حقن blob) بديلاً عن الثابت، فمرّ من
+     تحته عيبُ الإنتاج كاملاً: `docvShow` ينادي `docvBlobUrl` قبل تفرّع النوع،
+     و`docvBlobUrl` لا يقرأ `DOCV.blobs` — فالمحقون يُتجاهَل ويُطلَب المرفق من
+     نقطة وثائق الموردين فيرتدّ 400. الثابت الحقيقيّ: **مفتاح `docs/pr/` يُجلَب
+     من `/api/pr-doc` دائماً**، ومصدر البايتات واحد للرابط وللـPDF. */
+  T('مفتاح مرفق الطلب يُوجَّه لنقطته الخادمية لا لنقطة وثائق الموردين',
+    /if \(String\(path\|\|''\)\.startsWith\(PRDOC_PREFIX\)\) return await prDocFetchBlob\(path\)/.test(CODE)
+    && /\/api\/pr-doc\?key=/.test(CODE));
+  T('  ومصدر البايتات واحد: docvBlobUrl وdocvBytes كلاهما عبر docvSourceBlob',
+    /async function docvSourceBlob\(path\)\{[\s\S]{0,200}DOCV\.blobs\.get\(path\)/.test(CODE)
+    && /async function docvBlobUrl\(path\)\{[\s\S]{0,160}await docvSourceBlob\(path\)/.test(CODE)
+    && /async function docvBytes\(path\)\{[\s\S]{0,160}await docvSourceBlob\(path\)/.test(CODE)
+    // ولا يبقى مسار يقفز فوق المصدر الموحّد إلى الجلب الخام
+    && !/async function docvBlobUrl\(path\)\{[\s\S]{0,160}await regDocFetch\(path\)/.test(CODE));
   T('وسكّ روابط التخزين مقصور على وثائق التسجيل',
     /filter\(p => p && \/\^\(\?:supplier-docs\\\/\)\?DG-\/\.test\(p\)/.test(CODE));
 }
@@ -3223,15 +3293,15 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     (CODE.match(/prEditDraft\('/g) || []).length >= 2
     && /إكمال المسودّة وإرسالها/.test(CODE));
   T('وفتح «طلب جديد» يُلغي وضع التعديل (لا يُحدَّث طلبٌ آخر بالخطأ)',
-    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDoc=null; __prEditId=null; \}/.test(CODE));
+    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDocs=\[\]; __prEditId=null; \}/.test(CODE));
 
-  // ③ الإرسال والحفظ في معاملة واحدة؛ المرفق الداعم مستقلّ.
-  T('الحفظ والإرسال ذريّان ثم يُرفع المرفق الداعم ويُرسل الإشعار',
+  // ③ الإرسال والحفظ في معاملة واحدة؛ المرفقات الداعمة مستقلّة.
+  T('الحفظ والإرسال ذريّان ثم تُرفع المرفقات ويُرسل الإشعار',
     (() => {
       const i = CODE.indexOf('async function prSubmitNew');
-      const body = CODE.slice(i, i + 3000);
+      const body = CODE.slice(i, i + 4000);
       const save = body.indexOf('await prSaveCloud(pr, items');
-      const up   = body.indexOf('await prUploadDoc(pr.id, __prDraftDoc)');
+      const up   = body.indexOf('await prUploadDocs(pr.id, __prDraftDocs)');
       const noti = body.indexOf(`prNotifyPR(pr.id, 'pending')`);
       return save > 0 && up > save && noti > up && body.includes('!asDraft');
     })());
@@ -3622,6 +3692,133 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('  وينتظر النتيجة ويُبلّغها (لا fire-and-forget كـprNotifyPR)',
     /async function prRemindApprover[\s\S]{0,1400}await r\.json\(\)[\s\S]{0,600}toast\('error'/.test(CODE)
     && /async function prRemindApprover[\s\S]{0,1400}j\.skipped/.test(CODE));
+}
+
+
+/* ═══ ٣٨) مرفقات الطلب: عدّة ملفات · إضافة بعد الإرسال · إزالة · مناقشة ═══
+   بلاغ المالك (2026-09-16): «المرفقات لا يمكن فتحها · ولا تظهر لجميع المسجّلين
+   — أنا فقط · وبعد الرفع يظهر أنه لا يوجد مرفقات · ولا يمكن إلا رفع مرفق واحد».
+   الشقّ الخادميّ في PA1–PA12؛ وهنا **سلوك الواجهة** مُشغَّلاً لا مقروءاً. */
+{
+  const R = (() => {
+    const src = [
+      `const STATE = { currentUser:null, purchaseRequests:[] };`,
+      `let __perms = {}; let __proc = false; const TOASTS = [];`,
+      `function hasPermission(k){ return __perms[k] === true; }`,
+      `function prIsProcurement(){ return __proc; }`,
+      `function toast(k,t,b){ TOASTS.push(k+'|'+t+'|'+(b||'')); }`,
+      grab('escapeHtml'), grab('escapeAttr'),
+      grabConst('PR_DOC_TYPES'), grabConst('PR_DOC_MAX'), grabConst('PR_DOC_LIMIT'),
+      grabConst('PR_FINAL_STATUSES'), grabConst('PR_DOC_KIND_LABEL'),
+      `let __prDraftDocs = [];`,
+      grab('prPickDoc'), grab('prRemoveDraftDoc'), grab('prRenderDocChip'), grab('prFmtBytes'),
+      grab('prIsFinal'), grab('prCanAddAttachment'), grab('prCanRemoveAttachment'),
+      grab('prDocKindLabel'), grab('prDocvList'), grab('prWorkspaceAttachmentsHTML'),
+      `let __chipHtml = ''; const document = { getElementById: () => ({ set innerHTML(v){ __chipHtml = v; }, get innerHTML(){ return __chipHtml; } }) };`,
+      `async function prUploadDoc(prId, file){ if (file.name.startsWith('bad')) throw new Error('مرفوض'); return 'k/'+file.name; }`,
+      grab('prUploadDocs'),
+    ].join('\n\n');
+    return new Function(src + `; return { STATE, TOASTS, prPickDoc, prRemoveDraftDoc, prRenderDocChip,
+      prUploadDocs, prWorkspaceAttachmentsHTML, prDocvList, prCanRemoveAttachment, prFmtBytes,
+      docs:()=>__prDraftDocs, reset:()=>{ __prDraftDocs.length=0; TOASTS.length=0; },
+      chip:()=>__chipHtml,
+      setUser:(u,proc,perms)=>{ STATE.currentUser=u; __proc=!!proc; __perms=perms||{}; } };`)();
+  })();
+  const F = (name, size = 2048, type = 'application/pdf') => ({ name, size, type });
+  const pick = list => R.prPickDoc({ files: list, value: 'x' });
+
+  // ① الاختيار يُضيف ولا يستبدل — العلّة المُبلَّغ عنها حرفيّاً
+  R.reset(); pick([F('a.pdf')]); pick([F('b.png', 1024, 'image/png')]);
+  T('اختيار ثانٍ يُضيف مرفقاً ولا يمحو الأوّل',
+    R.docs().length === 2 && R.docs()[0].name === 'a.pdf' && R.docs()[1].name === 'b.png');
+  pick([F('a.pdf')]);
+  T('  والملفّ نفسه لا يتكرّر (الاسم + الحجم)', R.docs().length === 2);
+
+  // ② الرفض المُعلَن لا الصامت
+  R.reset(); pick([F('big.pdf', 11 * 1024 * 1024), F('x.txt', 10, 'text/plain'), F('ok.pdf')]);
+  T('الحجم الزائد والصيغة المرفوضة يُبلَّغان ويمرّ السليم',
+    R.docs().length === 1 && R.docs()[0].name === 'ok.pdf'
+    && R.TOASTS.some(t => t.startsWith('error|') && /يتجاوز 10/.test(t) && /صيغة غير مقبولة/.test(t)));
+
+  // ③ سقف المرفقات
+  R.reset(); pick(Array.from({ length: 12 }, (_, i) => F('f' + i + '.pdf')));
+  T('سقف مرفقات المسودّة مُنفَّذ ويُبلَّغ',
+    R.docs().length === 10 && R.TOASTS.some(t => /تجاوز سقف 10/.test(t)));
+  R.prRemoveDraftDoc(0);
+  T('  وإزالة مرفق من الشريحة تعمل بالفهرس', R.docs().length === 9 && R.docs()[0].name === 'f1.pdf');
+  R.prRenderDocChip();
+  T('  والشريحة تعرض العدد وأزرار الإزالة', /9 من 10 مرفقات/.test(R.chip()) && /prRemoveDraftDoc\(0\)/.test(R.chip()));
+
+  // ④ فشل مرفق لا يُسقِط البقيّة — سبب الطلبات المكرّرة على الإنتاج
+  const up = await R.prUploadDocs('PR-1', [F('ok1.pdf'), F('bad.pdf'), F('ok2.pdf')]);
+  T('رفعُ مجموعة يُكمِل بعد الفشل ويُرجع ما فشل باسمه',
+    up.done === 2 && up.failed.length === 1 && /bad\.pdf/.test(up.failed[0]));
+
+  // ⑤ لوحة المرفقات: عدّة مرفقات · إضافة · إزالة محكومة
+  const prBase = { id:'PR-7', status:'in_review', attachments:[
+    { id:11, object_key:'docs/pr/PR-7/a.pdf', file_name:'مواصفة.pdf', kind:'support',   uploaded_by:'field1' },
+    { id:12, object_key:'docs/pr/PR-7/b.png', file_name:'موقع.png',   kind:'other',     uploaded_by:'proc1'  }], messages:[] };
+  R.setUser({ username:'field1' }, false, { can_upload_docs:true });
+  let h = R.prWorkspaceAttachmentsHTML(prBase);
+  T('اللوحة تسرد كل المرفقات لا واحداً',
+    /مواصفة\.pdf/.test(h) && /موقع\.png/.test(h)
+    && (h.match(/prViewAttachment\(/g) || []).length === 2);
+  T('  وفيها حقل إضافة مرفقات بعد إنشاء الطلب (لم يكن له مسار إطلاقاً)',
+    /type="file"[^>]*multiple/.test(h) && /prAddAttachments\('PR-7'/.test(h));
+  T('  والإزالة لمرفقه هو لا لمرفق غيره',
+    /prRemoveAttachment\(11,/.test(h) && !/prRemoveAttachment\(12,/.test(h));
+  T('  والنوع يُعرَض بالعربية لا بمفتاحه الإنجليزيّ',
+    /مرفق داعم/.test(h) && !/>support</.test(h));
+
+  R.setUser({ username:'proc1' }, true, { can_upload_docs:true });
+  h = R.prWorkspaceAttachmentsHTML(prBase);
+  T('  والمشتريات تُزيل أيّاً منها', /prRemoveAttachment\(11,/.test(h) && /prRemoveAttachment\(12,/.test(h));
+
+  const closed = Object.assign({}, prBase, { status:'closed' });
+  h = R.prWorkspaceAttachmentsHTML(closed);
+  T('طلبٌ منتهٍ: لا إضافة ولا إزالة (سجلّه أثرٌ تاريخيّ)',
+    !/type="file"/.test(h) && !/prRemoveAttachment\(/.test(h) && /مواصفة\.pdf/.test(h));
+
+  // ⑥ مرفق المناقشة يُوسَم من إشارة الرسالة إليه لا من تخمين نوعه
+  const withMsg = Object.assign({}, prBase, { status:'in_review',
+    messages:[{ id:1, kind:'question', body:'أين؟', attachment_ids:[12] }] });
+  R.setUser({ username:'proc1' }, true, { can_upload_docs:true });
+  h = R.prWorkspaceAttachmentsHTML(withMsg);
+  T('المرفق المُشار إليه في رسالة يُوسَم «مرفق مناقشة»', /مرفق مناقشة/.test(h));
+
+  // ⑦ العارض يفتح كل مرفقات الطلب
+  T('قائمة العارض تحمل كل المرفقات لا المنقور وحده',
+    R.prDocvList(prBase).length === 2 && R.prDocvList({ doc_key:'docs/pr/X/y.pdf', doc_name:'قديم' }).length === 1
+    && R.prDocvList({}).length === 0);
+
+  T('حجم الملفّ يُعرَض بوحدة مقروءة', R.prFmtBytes(2048) === '2 ك.ب' && R.prFmtBytes(2 * 1048576) === '2.0 م.ب');
+
+  // ⑧ حرّاس بنيوية لما لا يُمسَك سلوكيّاً
+  T('حقل مرفقات النموذج يقبل عدّة ملفات', /id="pr-doc-input"[^>]*multiple/.test(HTML));
+  T('وفشل المرفق لا يُبلَّغ «تعذّر الحفظ» والطلب محفوظ',
+    /وتعذّر رفع بعض المرفقات/.test(CODE) && /أعد إرفاقها من شاشة متابعة الطلب/.test(CODE));
+  T('ومرفق المناقشة يُرفع أوّلاً ثمّ تُنشأ الرسالة مشيرةً إليه',
+    (() => { const i = CODE.indexOf('async function prPostMessage');
+             const b = CODE.slice(i, i + 2200);
+             return b.indexOf('prUploadMsgDoc(prId, f)') > 0
+                 && b.indexOf('prUploadMsgDoc(prId, f)') < b.indexOf("rpc('pr_post_message'")
+                 && /p_attachment_ids: ids\.length\?ids:null/.test(b); })());
+  T('وصندوق المناقشة فيه حقل إرفاق متعدّد',
+    /id="pr-msg-doc"[^>]*multiple/.test(CODE) && /إرفاق مع الرسالة/.test(CODE));
+  const UNLOCK   = fs.readFileSync(path.join(ROOT, 'db/system2-pr-attachments-unlock.sql'), 'utf8');
+  const LOCKDOWN = fs.readFileSync(path.join(ROOT, 'db/system2-scoped-table-lockdown.sql'), 'utf8');
+  const lockList = LOCKDOWN.split('tables text[] := ARRAY[')[1].split('];')[0];
+  T('SQL: الإقفال العامّ رُفِع عن جدولَي الموديل ولم يُرفَع عن غيرهما',
+    /tables text\[\] := ARRAY\['proc_pr_attachments', 'proc_pr_audit'\]/.test(UNLOCK)
+    && !/'proc_pr_attachments'/.test(lockList) && !/'proc_pr_audit'/.test(lockList)
+    // والخمسة الأخرى ما تزال في قائمة الإقفال
+    && /'proc_supplier_registrations'/.test(lockList) && /'proc_rfqs'/.test(lockList)
+    && /'proc_rfq_quotes'/.test(lockList) && /'proc_item_aliases'/.test(lockList)
+    && /'proc_ai_usage'/.test(lockList));
+  T('SQL: إزالة المرفق حذف ناعم بأثر تدقيق لا حذف صفّ',
+    /UPDATE proc_pr_attachments SET deleted_at = now\(\)/.test(UNLOCK)
+    && !/DELETE FROM proc_pr_attachments/.test(UNLOCK)
+    && /'attachment_removed'/.test(UNLOCK));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
