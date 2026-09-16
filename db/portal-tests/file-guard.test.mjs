@@ -1039,7 +1039,7 @@ const TK_PR = { id: 'PR-DG2026-0007', title: 'طلب', department_id: 'DEP-OPS',
 const TK_APPROVALS = [{ seq: 1, stage_label: 'اعتماد الحاجة', role_key: 'pr_approve_maintenance', approver: 'maintmgr', decision: 'pending' }];
 
 /** شبكة مُقلَّدة: `revisionColumn:false` تحاكي قاعدة قبل الهجرة (PostgREST 400). */
-function tkNet({ revisionColumn = true, requestRevision = 3 } = {}) {
+function tkNet({ revisionColumn = true, requestRevision = 3, approvers = null } = {}) {
   const calls = [];
   const real = globalThis.fetch;
   globalThis.fetch = async (url, o = {}) => {
@@ -1050,7 +1050,12 @@ function tkNet({ revisionColumn = true, requestRevision = 3 } = {}) {
       return new Response(JSON.stringify([{ revision: requestRevision }]), { status: 200 });
     }
     if (u.includes('/proc_users')) {
-      return new Response(JSON.stringify([{ username: 'maintmgr', email: 'maintmgr@aldeyabi.com', active: true, is_away: false }]), { status: 200 });
+      const names = approvers || ['maintmgr'];
+      // استعلام بريد شخص بعينه يعيد صفّه وحده؛ واستعلام حاملي الدور يعيدهم كلّهم.
+      const one = names.find((x) => u.includes(encodeURIComponent(x)) || u.includes(x));
+      const rows = (u.includes('select=email') && one ? [one] : names)
+        .map((x) => ({ username: x, email: `${x}@aldeyabi.com`, active: true, is_away: false }));
+      return new Response(JSON.stringify(rows), { status: 200 });
     }
     if (u.includes('/proc_email_tokens') && method === 'POST') {
       if (!revisionColumn && body && 'revision' in body) {
@@ -1078,14 +1083,31 @@ console.log('\n── ختم رمز الاعتماد البريديّ بإصدا
   } finally { n.restore(); }
 }
 {
-  // الإصدار يُقرأ من الحمولة حين تحملها (لا رحلة شبكة زائدة لكل معتمِد)
+  /* إصدار الحمولة له الأولوية على أي قراءة.
+     ⚠️ صُحِّح هذا التأكيد (2026-09-16): كان يشترط **صفر** استعلام على
+     `/proc_purchase_requests` كبديلٍ عن «لا استعلام لكل معتمِد». وبعد أن صار
+     البريد يحمل حقول القرار (مشروع/موعد/مبرّر) لزم استعلامٌ واحد يجلبها —
+     فصفرٌ صار يعني «بريد أعمى». الثابت الحقيقيّ المحروس الآن: **قراءة واحدة
+     لكل الإشعار مهما كثر المعتمِدون**، والإصدار من الحمولة لا من القراءة. */
   const n = tkNet({ requestRevision: 3 });
   try {
     await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, { ...TK_PR, revision: 9 }, TK_APPROVALS, 'https://x');
     const ins = tkInserts(n.calls);
-    tkT('إصدار الحمولة يُستعمل بلا استعلام إضافي', ins[0] && ins[0].body.revision === 9
-      && !n.calls.some((c) => c.url.includes('/proc_purchase_requests')),
+    tkT('إصدار الحمولة يُستعمل ولو لزمت قراءة حقول القرار', ins[0] && ins[0].body.revision === 9,
       `revision=${ins[0] && ins[0].body.revision}`);
+  } finally { n.restore(); }
+}
+{
+  // ثلاثة معتمِدين مؤهَّلين ⇒ ثلاثة رموز وثلاث رسائل، لكن **قراءة طلب واحدة
+  // وقراءة بنود واحدة**. الحارس يمنع عودة الاستعلام إلى داخل حلقة المعتمِدين.
+  const n = tkNet({ requestRevision: 3, approvers: ['maintmgr', 'ops2', 'ops3'] });
+  try {
+    await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, TK_PR,
+      [{ ...TK_APPROVALS[0], approver: null, role_key: 'pr_approve_maintenance' }], 'https://x');
+    const prReads = n.calls.filter((c) => c.url.includes('/proc_purchase_requests') && c.method === 'GET').length;
+    const itemReads = n.calls.filter((c) => c.url.includes('/proc_pr_items')).length;
+    tkT('قراءة الطلب والبنود مرّة واحدة لا مرّة لكل معتمِد',
+      prReads <= 1 && itemReads <= 1, `prReads=${prReads} itemReads=${itemReads}`);
   } finally { n.restore(); }
 }
 {
@@ -1116,3 +1138,76 @@ console.log('\n── ختم رمز الاعتماد البريديّ بإصدا
 
 if (tkFailed) { console.error(`\n❌ ختم رمز البريد: ${tkFailed} فشل`); process.exit(1); }
 console.log(`\n✅ ختم رمز البريد بالإصدار: ${tkTotal}/${tkTotal} PASS`);
+
+/* ═════════════════════════════════════════════════════════════════════════
+   (ط) تفاصيل القرار داخل بريد الاعتماد (functions/api/_pr-shared.js)
+   ─────────────────────────────────────────────────────────────────────────
+   بلاغ المالك: «التمبلت يجب أن تكون واضحة فيه تفاصيل الطلب — المشروع أو الجهة
+   وموعد التوريد المطلوب… بناءً على ماذا يقرّر وهو لا يعلم أي شيء عن الطلب؟»
+   الجذر كان في `loadPR`: لا مشروع ولا موعد ولا مبرّر ولا بند واحد.
+   التأكيدات **سلوكية**: تُشغّل بناء البريد فعلاً وتقرأ مُخرَجه.
+   ══════════════════════════════════════════════════════════════════════════ */
+const PRS = await import('../../functions/api/_pr-shared.js');
+let dtTotal = 0, dtFailed = 0;
+const dtT = (name, ok, detail = '') => {
+  dtTotal++; if (!ok) dtFailed++;
+  console.log(`${ok ? '  ✓' : '  ✗'} ${name}${ok ? '' : `  — ${detail}`}`);
+};
+console.log('\n── تفاصيل القرار داخل بريد الاعتماد ──');
+{
+  const pr = {
+    id: 'PR-DG2026-0003', title: 'مواد نظافة', project: 'جامعة الملك سعود',
+    department: 'الصيانة والتشغيل', requester: 'mostafa.kishk', requester_name: 'مصطفى كشك',
+    request_date: '2026-09-15', needed_by: '2099-01-20', priority: 'عاجل',
+    justification: 'نفاد مخزون الموقع', est_total: 48500, currency: 'ر.س',
+    revision: 2, return_reason: 'الكميات غير مطابقة للعقد', doc_name: 'طلب موقّع.pdf',
+  };
+  const items = Array.from({ length: 17 }, (_, i) => ({
+    seq: i + 1, description: `صنف ${i + 1}`, unit: 'كرتون', requested_qty: 10 + i,
+    stock_balance: 0, unit_price: 100 + i,
+  }));
+  const build = (money) => PRS.buildActionEmail(pr, 'https://x', 'https://x/api/pr-action?token=t', 'اعتماد الحاجة', items, money);
+  const blind = build(false), rich = build(true);
+
+  dtT('المشروع/الجهة يظهر — وهو أوّل ما شكا منه المالك', blind.includes('جامعة الملك سعود'));
+  dtT('وموعد التوريد المطلوب بصيغة عربية', blind.includes('20 يناير 2099'));
+  dtT('ومعه «باقٍ/تجاوز» فتصير الأولوية ملموسة', /باقٍ .*(يوم|أيام)/.test(blind));
+  dtT('والأولوية ومقدّم الطلب وتاريخه', blind.includes('عاجل') && blind.includes('مصطفى كشك') && blind.includes('15 سبتمبر 2026'));
+  dtT('ومبرّر الحاجة', blind.includes('نفاد مخزون الموقع'));
+  dtT('وسبب الإرجاع السابق حين يكون الطلب منقَّحاً', blind.includes('الكميات غير مطابقة للعقد'));
+  dtT('والبنود بكمياتها ووحداتها', blind.includes('البنود المطلوبة (17)') && blind.includes('صنف 1') && blind.includes('كرتون'));
+  dtT('والقائمة الطويلة تُقصّ بإشارة صريحة لا تُبتَر بصمت', blind.includes('و5 بنود أخرى'));
+
+  // ⚠️ أهمّ تأكيدين: البريد لا تحرسه RLS، فبوّابة المبالغ هي الحارس الوحيد.
+  dtT('⚠️ بلا رؤية مالية: لا قيمة تقديرية ولا سعر وحدة',
+    !blind.includes('48,500') && !blind.includes('سعر الوحدة') && !blind.includes('القيمة التقديرية'));
+  dtT('ومع الرؤية المالية تظهر القيمة وسعر الوحدة',
+    rich.includes('48,500') && rich.includes('سعر الوحدة'));
+
+  // إجماليّ صفر لا يُطبَع «0 ر.س» (درس المحضر: رقمٌ مُلفَّق أسوأ من غيابه)
+  const zero = PRS.buildActionEmail({ ...pr, est_total: 0 }, 'https://x', 'https://x?t=1', 'اعتماد', items, true);
+  dtT('إجماليّ صفر لا يُطبَع قيمةً مُلفَّقة', !zero.includes('القيمة التقديرية'));
+
+  // طلب بلا بنود: يُعلَن نقصاً لا يُقرأ سلامةً (درس «null يُسقِط الصفّ»)
+  const noItems = PRS.buildActionEmail(pr, 'https://x', 'https://x?t=1', 'اعتماد', [], false);
+  dtT('طلب بلا بنود يُعلِن ذلك صراحةً', noItems.includes('لا توجد بنود مسجّلة'));
+
+  // مشروع غائب يُعلَن «غير محدّدة» (نفس قاعدة poProjectCell)
+  const noProj = PRS.buildActionEmail({ ...pr, project: '' }, 'https://x', 'https://x?t=1', 'اعتماد', items, false);
+  dtT('ومشروع غائب يُعلَن «غير محدّدة» لا يُترَك فراغاً', noProj.includes('غير محدّدة'));
+
+  // بريد Outlook-آمن: جداول وأنماط سطرية لا flex/grid (درس قالب الدعوة)
+  dtT('القالب بجداول وأنماط سطرية (لا flex/grid)',
+    !/display\s*:\s*(flex|grid)/.test(blind) && blind.includes('role="presentation"'));
+
+  // الحقن: قيمة حقل تحمل وسماً لا تُنفَّذ
+  const xss = PRS.buildActionEmail({ ...pr, project: '<img src=x onerror=alert(1)>' }, 'https://x', 'https://x?t=1', 'اعتماد', items, false);
+  dtT('قيم الحقول مُهرَّبة (لا حقن في البريد)', !xss.includes('<img src=x') && xss.includes('&lt;img'));
+
+  // صيغة «بند» العربية مستقلّة عن صيغة «يوم»
+  dtT('تمييز «بند» صحيح ولا يُشتقّ من صيغة الأيام',
+    PRS.arItems(1) === 'بند واحد' && PRS.arItems(2) === 'بندان' && PRS.arItems(3) === '3 بنود' && PRS.arItems(11) === '11 بنداً');
+  dtT('و«تجاوز الموعد» يُحسب للماضي', /تجاوز الموعد/.test(PRS.dueHint('2000-01-01').text));
+}
+if (dtFailed) { console.error(`\n❌ تفاصيل بريد الاعتماد: ${dtFailed} فشل`); process.exit(1); }
+console.log(`\n✅ تفاصيل القرار في بريد الاعتماد: ${dtTotal}/${dtTotal} PASS`);

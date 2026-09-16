@@ -1904,6 +1904,20 @@ await (async () => {
     REG.indexOf("!docPaths['local_content']") > REG.indexOf('const uploadFailures = []'));
   T('التحقّق الأماميّ يُلزِم المرفق أيضاً (رحلة فاشلة أقلّ)',
     /!uploadedDocs\['local_content'\][\s\S]{0,120}يرجى إرفاق شهادة المحتوى المحلي/.test(REG));
+
+  /* ── إغلاق كتابة التخزين من المتصفّح (المرحلة 2 من system1-storage-hardening) ──
+     كان في `uploadDocViaServer` سقوطٌ إلى `SB.storage.from(BUCKET).upload` عند
+     ردّ الخادم 503 not_configured — وهو **يتجاوز الحارس الطبقيّ `_file-guard`**
+     (تدقيق SEC-06). بعد حذف سياسة كتابة anon حيّاً صار ذلك المسار ميّتاً، ولو
+     بقي لرمى خطأ RLS خاماً في وجه المورّد وسط تسجيله. الحارس **سلوكيّ المعنى**:
+     أي عودة للرفع المباشر — بأي اسم متغيّر — تُفشِل البناء. */
+  T('صفحة التسجيل بلا أي كتابة مباشرة على التخزين',
+    !/storage\s*\.\s*from\s*\([^)]*\)\s*\.\s*upload\s*\(/.test(REG));
+  T('ولا سقوط إلى anon عند 503 not_configured',
+    !/reason\s*===?\s*'not_configured'/.test(REG) &&
+    /resp\.status === 503[\s\S]{0,160}throw new Error/.test(REG));
+  T('وفشل الاتصال بالخادم خطأٌ ظاهر لا رفعٌ صامت',
+    /catch\s*\(_\)\s*\{\s*\n?\s*throw new Error\('تعذّر الاتصال بخادم رفع الملفات/.test(REG));
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

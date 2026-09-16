@@ -88,16 +88,23 @@ CREATE POLICY "supplier_docs_insert_public_TEMP"
 
 COMMIT;
 
--- ═══════════════════════ المرحلة 2 — إغلاق الكتابة ═══════════════════════════
---  ⚠️ لا تُشغّلها إلا بعد أن يعيد /api/reg-doc القيمة {"ok":true}.
---  بعدها: العميل بلا أي صلاحية على المخزن؛ كل رفع يمرّ بالحارس الطبقي على الخادم.
+-- ═══════════════════ المرحلة 2 — إغلاق الكتابة ✅ مُطبَّقة حيّاً ═══════════════
+--  الهجرة: `system1_storage_hardening_phase2_close_anon_write` (2026-09-16).
+--  الشرط المسبق كان متحقّقاً: /api/reg-doc = {"ok":true,"store":"r2"} على النطاقين.
 --
--- BEGIN;
---   DROP POLICY IF EXISTS "supplier_docs_insert_public_TEMP" ON storage.objects;
--- COMMIT;
+BEGIN;
+  DROP POLICY IF EXISTS "supplier_docs_insert_public_TEMP" ON storage.objects;
+COMMIT;
 --
---  وبعد تنفيذها: أزِل «السقوط المؤقّت» في register.html (دالة uploadDocViaServer)
---  كي يصبح فشل الخادم خطأً ظاهراً لا رفعاً مباشراً صامتاً.
+--  ✅ وأُزيل «السقوط المؤقّت» في register.html (`uploadDocViaServer`) في الدفعة
+--     نفسها — فلم يعد في الصفحة أي مسار كتابة على التخزين، وفشل الخادم صار خطأً
+--     ظاهراً مفهوماً بدل رفعٍ مباشر يتجاوز الحارس الطبقيّ (تدقيق SEC-06).
+--
+--  التحقّق بعد التطبيق (مُنفَّذ فعلاً، لا مُقترَح):
+--    • السياسات الباقية على supplier-docs = `supplier_docs_read_staff [SELECT→authenticated]` فقط.
+--    • رفع anon لملف PDF سليم ⇒ 403 «new row violates row-level security policy».
+--    • صفر كائن فحص في المخزن بعده، و657 وثيقة قائمة سليمة.
+--    • تنزيل/توقيع anon لوثيقة **موجودة فعلاً** ⇒ NoSuchKey (المرحلة 1 قائمة).
 
 -- ═══════════════════════ متابعة موصى بها (ليست جزءاً من الإصلاح) ═════════════
 --  • تدوير المفتاح العام (anon) للمشروع القديم — كان يمنح وصولاً واسعاً لفترة،

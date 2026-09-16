@@ -2926,7 +2926,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 /* ══════════════════════════════════════════════════════ */
 
 const REG_TABLE     = 'proc_supplier_registrations';
-const BUCKET        = 'supplier-docs';
+// ⚠️ لا ثابت لاسم المخزن هنا عمداً: الصفحة لا تملك أي صلاحية كتابة على التخزين
+//    (سياسة كتابة anon محذوفة — المرحلة 2 من db/system1-storage-hardening.sql).
+//    كل رفع يمرّ بـ/api/reg-doc الذي يفحص الملف ويكتب على R2 بمفتاح خادميّ.
 const AI_MODELS     = ['gemini-2.5-flash','gemini-2.5-flash-lite']; // النماذج المجانية المتاحة فعلاً (2.0/pro تُرجع 429 limit:0)
 // Local-hosted libs — no CDN dependency
 const PDFJS_CDN     = '/lib/pdf.min.js';
@@ -2993,43 +2995,31 @@ let regId = _resumeId || genRegId();
 let _resumeData = null;   // holds existing registration when in resume mode
 
 /* ── رفع وثيقة عبر الخادم (/api/reg-doc) ─────────────────────────────────────
-   الحارس الحقيقي على الخادم: يفحص الملف بعمق ثم يرفعه بمفتاح الخدمة، فلا يملك
-   المتصفّح أي صلاحية كتابة على المخزن.
+   الحارس الحقيقي على الخادم: يفحص الملف بعمق (`functions/api/_file-guard.js`) ثم
+   يرفعه إلى R2، فلا يملك المتصفّح أي صلاحية كتابة على المخزن.
 
-   ⚠️ سقوط مؤقّت مقصود: إن ردّ الخادم 503 بـreason="not_configured" (لأنّ
-   SUPABASE_SERVICE_ROLE_KEY لم يُضبط بعد في Cloudflare) نعود للمسار القديم كي لا
-   يتعطّل تسجيل موردين حقيقيين. **يُزال هذا السقوط فور تأكيد ضبط المتغيّر** ومعه
-   تُغلق صلاحية الكتابة العامة على المخزن (db/system1-storage-hardening.sql).
-   أمّا رفض الملف نفسه (400) فلا سقوط له إطلاقاً — يُرفض ويُبلَّغ المستخدم. */
+   ⚠️ لا سقوط إلى الرفع المباشر بعد الآن. كان هناك مسار احتياطيّ يرفع بمفتاح anon
+   حين يردّ الخادم 503 not_configured — وهو **يتجاوز الحارس الطبقيّ** (تدقيق SEC-06)،
+   وبقي مؤقّتاً حتى يُضبط رفع الخادم. اليوم `/api/reg-doc` يرفع على R2 بلا حاجة
+   لمفتاح الخدمة، و**المرحلة 2 من `db/system1-storage-hardening.sql` مُطبَّقة حيّاً**
+   (سياسة كتابة anon محذوفة) — فذلك المسار صار ميّتاً، ولو بقي لرمى خطأ RLS خاماً
+   في وجه المورّد وسط تسجيله. الآن كل فشل خطأٌ ظاهر مفهوم، وهو الفشل المغلق الصحيح. */
 async function uploadDocViaServer(regIdVal, docId, file, realType, ext){
   let resp = null;
   try {
     resp = await fetch(`/api/reg-doc?reg_id=${encodeURIComponent(regIdVal)}&doc=${encodeURIComponent(docId)}`, {
       method: 'POST', headers: { 'Content-Type': realType }, body: file
     });
-  } catch(_) { resp = null; }   // تعذّر الوصول للنقطة (شبكة/بيئة محلية) → سقوط
-
-  if (resp) {
-    let body = null; try { body = await resp.json(); } catch(_) {}
-    if (resp.ok && body && body.path) return body.path;
-    // الملف مرفوض أمنياً أو مُدخَل غير صالح → لا سقوط، الخطأ نهائي
-    if (resp.status === 400) throw new Error((body && body.error) || 'الملف مرفوض لأسباب أمنية');
-    if (!(resp.status === 503 && body && body.reason === 'not_configured') && resp.status !== 404) {
-      throw new Error((body && body.error) || 'تعذّر رفع الملف عبر الخادم');
-    }
-    console.warn('[reg-doc] الخادم غير مهيّأ — رفع مباشر مؤقّت حتى ضبط SUPABASE_SERVICE_ROLE_KEY');
+  } catch(_) {
+    throw new Error('تعذّر الاتصال بخادم رفع الملفات — تحقّق من الاتصال وأعد المحاولة');
   }
 
-  // ── المسار القديم (مؤقّت): رفع مباشر بمفتاح anon ──
-  // ⚠️ تدقيق SEC-06: هذا المسار **يتجاوز حارس الخادم (`_file-guard`) والقائمة البيضاء**
-  //   لأنّه يرفع مباشرةً إلى Storage بمفتاح anon العام. يبقى مؤقّتاً كي لا يتعطّل تسجيل
-  //   الموردين الحقيقيين ما دام `SUPABASE_SERVICE_ROLE_KEY` غير مضبوط. **يُزال بالكامل**
-  //   عند تفعيل المفتاح، ومعه تُلغى كتابة anon على المخزن (db/system1-storage-hardening.sql).
-  //   أُزيل منه الحذف المُتلِف (list+remove) مطابقةً لإصلاح الخادم — لا محو لوثائق قائمة.
-  const path = `${regIdVal}/${docId}/${Date.now()}.${ext}`;
-  const {error} = await SB.storage.from(BUCKET).upload(path, file, { contentType: realType, upsert: true });
-  if (error) throw error;
-  return path;
+  let body = null; try { body = await resp.json(); } catch(_) {}
+  if (resp.ok && body && body.path) return body.path;
+  // الملف مرفوض أمنياً أو مُدخَل غير صالح → الخطأ نهائي ويُبلَّغ المستخدم
+  if (resp.status === 400) throw new Error((body && body.error) || 'الملف مرفوض لأسباب أمنية');
+  if (resp.status === 503) throw new Error('خدمة رفع الملفات غير متاحة حالياً — أعد المحاولة بعد قليل');
+  throw new Error((body && body.error) || 'تعذّر رفع الملف عبر الخادم');
 }
 
 /* ── مقاييس كفاءة التعبئة (مؤشرات أداء التسجيل: نقرات/دقائق/تعبئة تلقائية مقابل يدوية) ── */
