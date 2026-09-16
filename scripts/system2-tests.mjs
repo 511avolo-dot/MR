@@ -3988,6 +3988,70 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && !/DELETE FROM proc_pr_audit/.test(CLAR));
 }
 
+/* ═══ ٤٠) عنوان المراسلة مستقلّ عن بريد الدخول ═══
+   بلاغ المالك (2026-09-16): «مين محمود السيد اللي بتروح له إيميلات وهو مش معنا؟»
+   الجذر مقيس: `email` فارغ لثلاثة حسابات فالعنوان يُشتقّ من ثابت في الكود منذ مايو،
+   والمُشتقّ `mahmoud@aldeyabi.com` صندوق شخص آخر. وقرار المالك: قسم المشتريات له
+   صندوق عامّ واحد (supply@) ولا بريد مخصّص لموظّف بعينه.
+   ⚠️ السلوك نفسه محروس سلوكيّاً في `db/portal-tests/file-guard.test.mjs` (قسم ي)؛
+   وهذه حرّاس **بنيوية** لما لا يُمسَك سلوكيّاً: القيد المعماريّ ومسار الحفظ. */
+{
+  G('٤٠) عنوان المراسلة (notify_email)');
+  const NE  = fs.readFileSync(path.join(ROOT, 'db/system2-notify-email.sql'), 'utf8');
+  const SHR = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+  const ADM = fs.readFileSync(path.join(ROOT, 'functions/api/admin-users.js'), 'utf8');
+  const bareSql = (s) => s.replace(/--[^\n]*/g, '');
+
+  // ⚠️ أخطر تأكيد في القسم: الهجرة يجب ألّا تكتب صندوق القسم في `email`.
+  // `proc_me()` تُطابق بالبريد أوّلاً، فبريدٌ مشترك هناك يجعل دخول supply@ يُحلّ
+  // إلى صاحب الصفّ الخطأ — أي مدير (admin) ينقلب موظّفاً عاديّاً في كل جلسة.
+  T('الهجرة تضبط notify_email ولا تلمس email إطلاقاً',
+    /SET\s+notify_email\s*=\s*'supply@aldeyabi\.com'/.test(bareSql(NE))
+    && !/SET\s+email\s*=/.test(bareSql(NE))
+    && !/\bemail\s*=\s*'supply@/.test(bareSql(NE)));
+
+  // القاعدة 16: عمود يحمل توجيهاً حسّاساً يدخل قائمة الحارس في الهجرة نفسها.
+  // (من يُبدّل بريد مراسلة معتمِد يستقبل رموز الاعتماد بضغطة في صندوقه.)
+  T('وعمود notify_email داخل قائمة proc_users_guard في الهجرة نفسها',
+    /CREATE OR REPLACE FUNCTION public\.proc_users_guard/.test(NE)
+    && /NEW\.notify_email\s+IS NOT DISTINCT FROM OLD\.notify_email/.test(NE));
+
+  T('وقيد الشكل يرفض بريداً خارج نطاق الشركة',
+    /CHECK \(notify_email IS NULL OR notify_email ~/.test(NE) && /aldeyabi/.test(NE));
+
+  // ⚠️ AUTH_EMAIL_MAP هويّةٌ لا مراسلة: تغييرها كان يمنع محمود من /api/notify
+  // (verifyStaff تطابق بريد الجلسة بالمُشتقّ) ويوجّه عمليات حسابه لصندوق آخر.
+  T('ولم تُمَسّ خريطة الهويّة AUTH_EMAIL_MAP في notify.js/admin-users.js',
+    /mahmoud:\s*'mahmoud@aldeyabi\.com'/.test(fs.readFileSync(path.join(ROOT, 'functions/api/notify.js'), 'utf8'))
+    && /mahmoud:\s*'mahmoud@aldeyabi\.com'/.test(ADM));
+
+  // كل مستلِم بريد يمرّ بمصدر واحد — لا اشتقاق مباشر عند موضع إرسال.
+  const recipientDerives = (SHR.match(/\.map\(\(u\) => \(u\.email/g) || []).length;
+  T('لا موضع إرسال يشتقّ العنوان بنفسه (المصدر الوحيد rowNotifyEmail)',
+    recipientDerives === 0 && /export function rowNotifyEmail/.test(SHR)
+    && /\.map\(rowNotifyEmail\)/.test(SHR));
+  T('وترتيب الأفضليّة في المصدر: notify_email ← email ← الاشتقاق',
+    /pick\(row && row\.notify_email\) \|\| pick\(row && row\.email\) \|\| usernameToEmail/.test(SHR));
+
+  // التسامح: قاعدة قبل الهجرة ترفض العمود بـ400 — فلا ينقطع البريد كلّه.
+  T('وقاعدة قبل الهجرة لا تُسقِط البريد (سقوط للأعمدة القديمة)',
+    /select=\$\{legacy\}/.test(SHR) && /select=username,email`/.test(SHR));
+
+  // النقطة الإدارية تقبل المفتاح — وإلّا فشل الحفظ كلّه (درس LEGACY_PERMISSIONS).
+  T('و/api/admin-users يقبل notify_email بنفس بوّابة الأدمن وتحقّق النطاق',
+    /'notify_email' in payload/.test(ADM) && /patch\.notify_email/.test(ADM)
+    && /بريد المراسلة يجب أن يكون ضمن @aldeyabi\.com/.test(ADM));
+
+  // الواجهة: حقل ظاهر + قراءة الصفّ + تمريره عبر setProfile لا كتابة مباشرة.
+  T('وللمدير حقل «بريد المراسلة» في نافذة المستخدم',
+    /id="uf-notify-email"/.test(HTML) && /بريد المراسلة/.test(HTML));
+  T('والواجهة تقرأ notify_email من الصفّ وتعرضه عند التعديل',
+    /notifyEmail:\s*u\.notify_email/.test(CODE) && /notifyEmailInput\.value=u\.notifyEmail/.test(CODE));
+  T('وتحفظه عبر setProfile (بوّابة الأدمن) لا بكتابة مباشرة',
+    /profilePayload\.notify_email=updates\.notifyEmail/.test(CODE)
+    && !/payload\.notify_email\s*=/.test(CODE));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

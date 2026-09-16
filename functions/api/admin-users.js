@@ -321,6 +321,16 @@ export async function onRequestPost({ request, env }) {
       if (e && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(e)) return json({ error: 'البريد يجب أن يكون ضمن @aldeyabi.com' }, 400);
       patch.email = e || null;
     }
+    // عنوان **المراسلة** — مستقلّ عن بريد الدخول عمداً (صندوق قسم مشترك مثلاً).
+    // ⚠️ لا يُكتب في `email`: `proc_me()` تُطابق بالبريد أوّلاً، فبريدٌ مشترك هناك
+    // يجعل دخول الصندوق يُحلّ إلى صاحب الصفّ الخطأ (مدير ينقلب موظّفاً عاديّاً).
+    // ⚠️ وهو توجيهٌ حسّاس: من يُبدّله لمعتمِد يستقبل رموز الاعتماد بضغطة في صندوقه —
+    // ولهذا يمرّ بنفس بوّابة الأدمن، وعمودُه داخل قائمة `proc_users_guard`.
+    if ('notify_email' in payload) {
+      const e = String(payload.notify_email || '').trim().toLowerCase();
+      if (e && !/^[a-z0-9._%+-]+@aldeyabi\.com$/i.test(e)) return json({ error: 'بريد المراسلة يجب أن يكون ضمن @aldeyabi.com' }, 400);
+      patch.notify_email = e || null;
+    }
     if (!Object.keys(patch).length) return json({ error: 'لا تغييرات' }, 400);
     const r = await api.restWrite('PATCH', `proc_users?username=eq.${encodeURIComponent(username)}`, patch);
     if (!r.ok) return json({ error: 'تعذّر حفظ التغييرات' }, 400);
