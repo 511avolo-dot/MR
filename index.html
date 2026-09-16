@@ -1623,6 +1623,30 @@ body.print-preview-active .print-document{display:block}
   font-size:10.5px;font-weight:700;line-height:1.6;white-space:nowrap}
 .pr-work-due.danger{background:var(--prw-red-bg);color:var(--prw-red);border:1px solid var(--prw-red-line)}
 .pr-work-due.warn{background:var(--prw-warn-bg);color:var(--prw-warn);border:1px solid var(--prw-warn-line)}
+/* شريط جاهزية النموذج — لاصقٌ في قاع لوح الطلب فيبقى زرّ الإرسال في المتناول
+   مهما طال النموذج (5756px مقيسة على الجوال). */
+/* ⚠️ **ليس `sticky`.** القياس على الجوال: أقرب حاوية تمرير هي `.pr-work-editor`
+   بـ`overflow:auto`، لكن ارتفاعها = ارتفاع محتواها فهي **لا تمرّر**؛ وعنصرٌ
+   لاصق داخل حاوية لا تمرّر يُثبَّت على صندوقها لا على الشاشة، فبقي الشريط عند
+   2059px خارج الرؤية. فعلى الجوال يُثبَّت بـ`fixed`، وعلى سطح المكتب يبقى
+   كتلةً عادية (اللوح هناك يمرّر والزرّ في المتناول). */
+.pr-form-bar{margin:16px -18px -18px;padding:12px 18px;
+  background:var(--prw-paper);border-top:1px solid var(--prw-line)}
+.pr-form-ready{font-size:12px;line-height:1.8;margin-bottom:10px}
+.pr-form-ready.gaps{color:var(--prw-warn)}
+.pr-form-ready.ok{color:var(--prw-green)}
+.pr-form-ready span{color:var(--prw-muted);font-weight:400}
+.pr-form-acts{display:flex;gap:10px;flex-wrap:wrap}
+/* على الجوال يعلو الشريطُ السفليّ للتنقّل (`.mnav` ثابت عند bottom:0) فلا يختفي
+   خلفه. ⚠️ القيمة **إزاحة** لا ارتفاعٌ مفروض — ارتفاع `.mnav` يتبع محتواه،
+   ولذلك يقيس فحصُ المتصفّح التداخل الفعليّ بدل الوثوق بالثابت.
+   والحشو السفليّ على اللوح يمنع اختفاء آخر المحتوى خلف الشريط الثابت. */
+@media(max-width:900px){
+  .pr-form-bar{position:fixed;inset-inline:0;z-index:870;margin:0;
+    bottom:calc(56px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -6px 18px rgba(11,27,54,.10)}
+  .pr-work-editor:has(.pr-form-bar){padding-bottom:150px}
+}
 .pr-work-next{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;margin-bottom:12px;border:1px solid var(--prw-gold-soft);border-inline-start:4px solid var(--prw-gold);border-radius:12px;background:linear-gradient(180deg,#fffdf7,#fbf4e5);box-shadow:var(--prw-sh1)}.pr-work-next small{display:block;color:var(--prw-gold-3);font-size:9.5px;font-weight:600;letter-spacing:.03em}.pr-work-next b{display:block;color:var(--prw-ink);font-size:13px;margin-top:3px}.pr-work-next .owner{font-size:10.5px;color:var(--prw-muted);white-space:nowrap}
 /* ══ مسار سير العمل — بطاقات بحالات ومسؤولين وتواريخ فعليّة ══
    ⚠️ كان الأصل قائمة `<li>` مسطّحة بخطّ 9–10px بلا مسؤول ولا تاريخ ولا رابط
@@ -13061,6 +13085,12 @@ async function renderPRPortal(){
        فيرى المستخدم القاعدة قبل أن يصطدم بها. */
     const nd=document.getElementById('pr-needed');
     if(nd) nd.min=new Date().toISOString().slice(0,10);
+    /* شريط «ما ينقص» — مستمعٌ واحد بالتفويض على النموذج كلّه، فيغطّي صفوف
+       البنود المولَّدة وقت التشغيل ولا يحتاج ربطاً لكل حقل. */
+    const form=document.getElementById('pr-form-bar')?.closest('.pr-work-canvas')||host;
+    form.addEventListener('input', prSyncFormBar);
+    form.addEventListener('change', prSyncFormBar);
+    prSyncFormBar();
   }
   /* ⚠️ هذه الشاشة تُرسَم **بعد** `navigate` (التحميل لا تزامنيّ)، فنداء
      `mobileTableWrap` العامّ يسبق وجود عناصرها. بدون هذا السطر يبقى مسار سير
@@ -14406,10 +14436,13 @@ function prBuilderHTML(){
           يحفظ مسمّيات البنود وكمّياتها فلا تُكتب في كل مرّة. القالب لا يختصر أي اعتماد.</span>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 إرسال للمشتريات</button>
-        <button class="btn btn-ghost" onclick="prSubmitNew(true)">💾 ${__prEditId?'حفظ التعديل كمسودة':'حفظ كمسودة'}</button>
-        <button class="btn btn-ghost" onclick="prGoView('list')">إلغاء</button>
+      <div class="pr-form-bar" id="pr-form-bar">
+        <div class="pr-form-ready" id="pr-form-ready"></div>
+        <div class="pr-form-acts">
+          <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 إرسال للمشتريات</button>
+          <button class="btn btn-ghost" onclick="prSubmitNew(true)">💾 ${__prEditId?'حفظ التعديل كمسودة':'حفظ كمسودة'}</button>
+          <button class="btn btn-ghost" onclick="prGoView('list')">إلغاء</button>
+        </div>
       </div>
     </div>`;
 }
@@ -14503,6 +14536,9 @@ function prRenderItems(){
       <td class="num pr-line-total" data-label="الإجمالي">${fmtPrice(num0(it.requested_qty)*num0(it.unit_price))}</td>`:''}
       <td class="center pr-cell-del"><button class="btn btn-ghost btn-sm pr-del-item" title="حذف" onclick="prRemoveDraftItem(${i})">✕<span class="pr-del-label"> حذف البند</span></button></td>
     </tr>`).join('');
+  /* إضافة بند أو حذفه أو قراءة ذكية تغيّر الجاهزية بلا أي حدث `input` —
+     وهذه نقطة الرسم الوحيدة التي تمرّ بها كل تلك المسارات. */
+  try{ prSyncFormBar(); }catch(_){}
 }
 function prCollectItems(){
   const body=document.getElementById('pr-items-body'); if(!body) return;
@@ -14533,6 +14569,31 @@ async function prAuthHeader(){
   }catch(e){ return {}; }
 }
 
+/* ══════════ «ما ينقص قبل الإرسال» — قبل النزول لا بعده ══════════
+   نموذج الطلب على الجوال **5756 بكسلاً** (مقيس)، وزرّ الإرسال في قاعه. فمن
+   ينسى بنداً أو عنواناً يهبط كل ذلك الطول، يضغط، ثمّ يقرأ توستاً ويعود صاعداً.
+   ⚠️ والقائمة تُشتقّ من **حُرّاس `prSubmitNew` نفسها**، لا نسخة ثانية منها:
+   بوّابة الزرّ = بوّابة الفعل حرفيّاً (القاعدة 14). أي حارس جديد هناك يُضاف هنا. */
+function prDraftGaps(){
+  const gaps=[];
+  const title=(document.getElementById('pr-title')?.value||'').trim();
+  if(!title) gaps.push('نوع/فئة المواد');
+  const items=(__prDraftItems||[]).filter(it=>(it.description||'').trim() && num0(it.requested_qty)>0);
+  if(!items.length) gaps.push('بند واحد على الأقل باسمه وكميته');
+  const needed=document.getElementById('pr-needed')?.value||'';
+  if(needed && needed < new Date().toISOString().slice(0,10)) gaps.push('تاريخ توريد غير ماضٍ');
+  return gaps;
+}
+/* يُحدَّث من مستمع واحد على النموذج — لا مستمع لكل حقل. */
+function prSyncFormBar(){
+  const el=document.getElementById('pr-form-ready'); if(!el) return;
+  prCollectItems();
+  const gaps=prDraftGaps();
+  el.className='pr-form-ready'+(gaps.length?' gaps':' ok');
+  el.innerHTML = gaps.length
+    ? `<b>ينقص قبل الإرسال:</b> ${gaps.map(escapeHtml).join(' · ')}`
+    : `<b>✓ جاهز للإرسال</b> <span>يمكنك الحفظ كمسودة والعودة إليها لاحقاً.</span>`;
+}
 async function prSubmitNew(asDraft){
   if(!prCloudReady()){ toast('error','غير متصل','يجب الاتصال بالسحابة'); return; }
   prCollectItems();

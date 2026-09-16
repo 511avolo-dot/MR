@@ -58,8 +58,12 @@ await page.evaluate(() => prApplyParsed({ title:'مواد نظافة', items:[
 ok('القراءة الذكية تبدأ من الصفّ الأوّل ولا تفقد بنداً',
   (await names()) === 'أكياس نفايات 50 جالون|صابون سائل 441 لتر|منظف للزجاج 21*1', await names());
 /* لقطة الجدول نفسه لا أعلى الصفحة — أوّل صياغة قصّت فوق البنود فلم تُظهر شيئاً. */
-await page.locator('.pr-items-table').scrollIntoViewIfNeeded();
-await page.locator('.pr-items-table').screenshot({ path: '/tmp/pr-items-after-ai.png' });
+/* ⚠️ كان هنا `scrollIntoViewIfNeeded` فيتوقّف السكربت دائماً بمهلة 30 ثانية:
+   الجدول **مرئيّ فعلاً** (قِيس: 518×195 عند y=800)، لكنّ الدالّة تنتظر
+   استقرار الصندوق بين إطارين، وفي الصفحة حركةٌ دائمة فلا يستقرّ أبداً.
+   واللقطة تُمرّر بنفسها، و`animations:'disabled'` تُثبّت الإطار.
+   (عطلٌ سابق لهذه الدفعة — مُثبَت بتشغيله على `index.html` قبلها.) */
+await page.locator('.pr-items-table').screenshot({ path: '/tmp/pr-items-after-ai.png', animations: 'disabled' });
 
 /* ── ٢) حذف صفّ من الوسط يُصيبه هو ── */
 await page.evaluate(() => prRemoveDraftItem(1));

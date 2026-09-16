@@ -228,6 +228,38 @@ try {
     report[vp.name].itemsTbl=itemsTbl;
     T(`جدول البنود ملفوف أو ضمن العرض`, !itemsTbl || itemsTbl.wrapped || itemsTbl.tableW<=itemsTbl.vw+1,
       itemsTbl?`عرض الجدول ${itemsTbl.tableW}px والشاشة ${itemsTbl.vw}px وملفوف=${itemsTbl.wrapped}`:'');
+    /* ── شريط الجاهزية: مرئيّ بلا نزول + لا يختفي خلف الشريط السفليّ ── */
+    const bar = await page.evaluate(()=>{
+      const el=document.getElementById('pr-form-bar'); if(!el) return null;
+      const r=el.getBoundingClientRect();
+      const nav=document.querySelector('.mnav');
+      const nr=nav?nav.getBoundingClientRect():null;
+      const send=[...el.querySelectorAll('button')].find(b=>/إرسال/.test(b.textContent||''));
+      const sr=send?send.getBoundingClientRect():null;
+      return { visible: r.height>0 && r.bottom<=window.innerHeight+1 && r.top<window.innerHeight,
+               overlap: nr ? Math.round(Math.max(0, r.bottom - nr.top)) : 0,
+               sendVisible: !!sr && sr.width>0 && sr.top<window.innerHeight,
+               txt: (document.getElementById('pr-form-ready')?.textContent||'').trim().slice(0,60) };
+    });
+    report[vp.name].formBar = bar;
+    /* ⚠️ التداخل **يُقاس** ولا يُفترَض: ارتفاع `.mnav` يتبع محتواه، والإزاحة ثابت. */
+    T(`شريط الجاهزية لاصق ولا يختفي خلف الشريط السفليّ`,
+      !!bar && bar.visible && bar.overlap<=0 && bar.sendVisible,
+      bar?`تداخل ${bar.overlap}px · مرئيّ=${bar.visible} · زرّ الإرسال=${bar.sendVisible}`:'الشريط غير موجود');
+    T(`  ويقول ما ينقص قبل الإرسال`, !!bar && /ينقص قبل الإرسال|جاهز للإرسال/.test(bar.txt), bar?bar.txt:'');
+    /* ⚠️ شريطٌ ثابت يحجب آخر المحتوى ما لم يُعوَّض بحشو — عيبٌ سبق أن قِيس
+       («آخر 53px من كل شاشة محجوبة دائماً»). يُقاس بعد التمرير للنهاية. */
+    const tail = await page.evaluate(async ()=>{
+      window.scrollTo(0, document.body.scrollHeight);
+      await new Promise(r=>setTimeout(r,250));
+      const bar=document.getElementById('pr-form-bar'); if(!bar) return null;
+      const br=bar.getBoundingClientRect();
+      const tpl=document.getElementById('pr-tpl-name');   // آخر حقل قبل الشريط
+      const tr=tpl?tpl.getBoundingClientRect():null;
+      return { hidden: tr ? Math.round(Math.max(0, tr.bottom - br.top)) : -1 };
+    });
+    T(`  ولا يحجب آخر حقل في النموذج بعد التمرير للنهاية`,
+      !!tail && tail.hidden<=0, tail?`محجوب ${tail.hidden}px`:'');
     if (SHOTS) await page.screenshot({path:path.join(outDir,`${vp.name}-04-create.png`),fullPage:true});
 
     T(`صفر خطأ صفحة`, errors.length===0, errors.slice(0,3).join(' | '));

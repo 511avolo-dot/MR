@@ -199,10 +199,24 @@ T('وصفر فيض على الجوال مع بقاء عناوين المجموع
    «تحتاج إجراءك» فتتصدّر قبل مجموعة الموعد — وهو الصواب، لكنّه يُخفي ما نقيسه. */
 await page.setViewportSize({ width: 1440, height: 950 });
 await page.evaluate(async () => {
+  /* ⚠️ `#app-root` يبدأ مخفيّاً وشاشةُ الدخول فوقه، فكل `getBoundingClientRect`
+     يُرجع صفراً ويبدو العنصر غير مرسوم وهو مرسوم. وإظهارُ التطبيق كان يحدث
+     بمسار مصادقة لاتزامنيّ — أي **سباق**: القياس ينجح أحياناً ويسقط أحياناً.
+     يُحسم صراحةً هنا (نفس ما يفعله scoped-staff-screens). */
+  try { hideLoginScreen(); } catch (_) {}
   STATE.currentUser = { username: 'mostafa.kishk', displayName: 'مصطفى كشك', role: 'user',
     permissions: { can_create_pr: true }, scopeSectors: ['الصيانة والتشغيل'] };
   STATE.prView = 'list'; await renderPRPortal();
 });
+await page.waitForFunction(() => {
+  const all = [...document.querySelectorAll('.pr-work-queue .pr-work-due')];
+  return all.length > 0 && all.every((c) => { const r = c.getBoundingClientRect();
+    return r.width > 0 && r.height > 0; });
+}, { timeout: 8000 });
+/* ⚠️ القياس بعد **استقرار التخطيط**: تبديل المقاس ثمّ القراءة فوراً يُرجع
+   صناديق صفريّة (قِيس: النصّ صحيح والصندوق 0×0)، فيبدو العنصر غير مرسوم وهو
+   مرسوم. ننتظر أوّل صندوق غير صفريّ بدل مهلة ثابتة. */
+
 const dueUI = await page.evaluate(() => {
   const list = document.querySelector('.pr-work-queue .pr-work-list');
   const rows = [...list.children].map(el => el.classList.contains('pr-work-group')

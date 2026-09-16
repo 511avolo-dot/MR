@@ -4265,6 +4265,47 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('ومجموعة الموعد معرَّفة في الطابور بعد «يحتاج إجراءك»',
     Q.PR_QUEUE_GROUPS.findIndex(g => g.key === 'due') === 1
     && Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
+
+  /* ── شريط «ما ينقص قبل الإرسال» ──
+     النموذج على الجوال 5756px وزرّ الإرسال في قاعه، فمن ينسى بنداً يهبط كل ذلك
+     الطول ليقرأ توستاً. ⚠️ والقائمة **مرآة حُرّاس `prSubmitNew`** لا نسخة ثانية. */
+  const F = (() => {
+    const els = {};
+    const doc = { getElementById: (id) => els[id] || null };
+    const api = new Function('document', 'num0', 'escapeHtml',
+      `let __prDraftItems = [];\n` + grab('prDraftGaps') + '\n'
+      + 'return { prDraftGaps, items:(v)=>{ __prDraftItems = v || []; } };'
+    )(doc, (x) => Number(x) || 0, (x) => String(x));
+    return { api, els };
+  })();
+  const gapsFor = (title, items, needed) => {
+    F.els['pr-title'] = { value: title };
+    F.els['pr-needed'] = { value: needed || '' };
+    F.api.items(items || []);
+    return F.api.prDraftGaps();
+  };
+  const past = (() => { const t = new Date(); t.setDate(t.getDate() - 3);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
+  T('الشريط يسمّي كل ما ينقص لا أوّل عائق فقط',
+    gapsFor('', [], '').length === 2);
+  T('وبند بلا كمية لا يُحتسب بنداً (نفس حارس الإرسال)',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 0 }], '').length === 1);
+  T('وتاريخ توريد ماضٍ يُعَدّ نقصاً',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], past).length === 1
+    && /تاريخ توريد/.test(gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], past)[0]));
+  T('والنموذج المكتمل بلا نقص',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], '').length === 0);
+
+  // ⚠️ `sticky` لا يعمل داخل حاوية لا تمرّر — مقيس: الشريط بقي عند 2059px.
+  T('الشريط على الجوال ثابت لا لاصق (الحاوية لا تمرّر)',
+    /@media\(max-width:900px\)\{\s*\.pr-form-bar\{position:fixed/.test(HTML)
+    && !/\.pr-form-bar\{position:sticky/.test(HTML));
+  T('ومعه حشوٌ يمنع حجب آخر المحتوى خلفه',
+    /\.pr-work-editor:has\(\.pr-form-bar\)\{padding-bottom:/.test(HTML));
+  // كل مسار يغيّر البنود يمرّ بـ`prRenderItems` — فالتحديث عندها لا عند كل زرّ.
+  T('والجاهزية تُحدَّث من نقطة رسم البنود الوحيدة ومن مستمع مفوَّض على النموذج',
+    /try\{ prSyncFormBar\(\); \}catch\(_\)\{\}/.test(CODE)
+    && /form\.addEventListener\('input', prSyncFormBar\)/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
