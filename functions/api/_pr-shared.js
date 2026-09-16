@@ -130,11 +130,27 @@ export async function loadPR(env, base, prId) {
   // ⚠️ `proc_started_by`/`quotes_collected_by` ليسا زينة: بدونهما كان فرع
   // «الأولوية لمن بدأ العمل عليه» في notifyProcurementEvent **ميّتاً دائماً**،
   // فردّ الطالب على استفسارٍ شخصيّ يذهب بريداً جماعيّاً لكل فريق المشتريات.
-  const cols = 'id,title,department,department_id,requester,requester_name,status,current_seq,est_total,po_number,proc_status,proc_started_by,quotes_collected_by';
+  // ⚠️ حقول القرار ليست زينة: بلا `project`/`needed_by`/`priority`/`justification`
+  // كان بريد «بانتظار اعتمادك» يعرض رقم الطلب وسطراً واحداً فقط — فيُطلب من
+  // المعتمِد أن يقرّر وهو لا يعرف لأي جهة، ولا متى يُطلب التوريد، ولا ما البنود.
+  const cols = 'id,request_no,title,department,department_id,sector,project,requester,requester_name,'
+    + 'status,current_seq,est_total,currency,po_number,proc_status,proc_started_by,quotes_collected_by,'
+    + 'needed_by,request_date,priority,justification,doc_name,revision,return_reason';
   const r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(prId)}&select=${cols}`, { headers: svcHeaders(env) });
   if (!r.ok) return null;
   const rows = await r.json();
   return Array.isArray(rows) ? rows[0] || null : null;
+}
+// بنود الطلب — ما يقرّر عليه المعتمِد فعلاً. تُجلب مرّة واحدة لكل إشعار
+// (لا مرّة لكل مستلِم)، والسعر يُجلب لكنه لا يُعرَض إلا لمن يملك الرؤية المالية.
+export async function loadItems(env, base, prId) {
+  try {
+    const cols = 'seq,description,unit,requested_qty,stock_balance,unit_price,line_total,notes';
+    const r = await fetch(`${base}/rest/v1/proc_pr_items?pr_id=eq.${encodeURIComponent(prId)}&order=seq.asc&select=${cols}`, { headers: svcHeaders(env) });
+    if (!r.ok) return [];
+    const rows = await r.json();
+    return Array.isArray(rows) ? rows : [];
+  } catch (_) { return []; }
 }
 export async function loadApprovals(env, base, prId) {
   const r = await fetch(`${base}/rest/v1/proc_pr_approvals?pr_id=eq.${encodeURIComponent(prId)}&order=seq.asc&select=seq,stage_label,resolver,role_key,approver,decision`, { headers: svcHeaders(env) });
@@ -190,23 +206,11 @@ export async function resolveStageApprovers(env, base, pr, stage) {
   return [];
 }
 
-/**
- * إصدار الطلب وقت سكّ الرمز.
- * ⚠️ الرمز يُختَم به لأن بريد القرار يصف محتوىً بعينه: لو أُعيد الطلب وعُدِّل
- * ثمّ أُعيد إرساله، وجب أن يموت الرمز القديم — وإلّا اعتمد المعتمِد كميةً لم
- * يرها. الختم يُفحَص في القاعدة (`pr_transition_email`) فلا يعتمد على إعادة
- * الإرسال ولا على العميل.
- */
-async function prRevision(env, base, prId) {
-  try {
-    const r = await fetch(`${base}/rest/v1/proc_purchase_requests?id=eq.${encodeURIComponent(prId)}&select=revision`,
-      { headers: svcHeaders(env) });
-    if (!r.ok) return null;
-    const rows = await r.json();
-    const v = Array.isArray(rows) && rows[0] ? rows[0].revision : null;
-    return Number.isInteger(v) ? v : null;
-  } catch (_) { return null; }
-}
+/* ⚠️ حُذفت `prRevision` (استعلام مستقلّ لعمود `revision` وحده): صار `loadPR`
+   يجلب الإصدار **مع** حقول القرار في استعلام واحد، فبقاؤها مسارُ قراءةٍ ثانٍ
+   مهجور يدعو للتفارق. سبب الختم نفسه لم يتغيّر: بريد القرار يصف محتوىً بعينه،
+   فلو أُعيد الطلب وعُدِّل ثمّ أُعيد إرساله وجب أن يموت الرمز القديم — والختم
+   يُفحَص في القاعدة (`pr_transition_email`) لا في طبقة البريد. */
 
 // ── إنشاء رمز اعتماد لمرة واحدة (يُبطل الرموز السابقة غير المستخدَمة لنفس الطلب/المرحلة/المعتمِد) ──
 export async function createToken(env, base, prId, seq, approver, revision) {
@@ -310,8 +314,144 @@ function prMetaBox(pr) {
     </td></tr></table>`;
 }
 
+/* ── تفاصيل القرار داخل البريد ────────────────────────────────────────────────
+   بلاغ المالك: «التمبلت يجب أن تكون واضحة فيه تفاصيل الطلب — المشروع أو الجهة
+   وموعد التوريد المطلوب… بناءً على ماذا يقرّر وهو لا يعلم أي شيء عن الطلب؟»
+   الجذر كان في `loadPR`: لم تكن تجلب المشروع ولا الموعد ولا المبرّر ولا أي بند.
+
+   ⚠️ المبالغ **مقنّعة افتراضاً**: تُعرَض فقط حين يملك المستلِم رؤية مالية فعلية
+   (`showMoney` يُحسب لكل معتمِد من `pr_effective_permissions`) — البريد لا تحرسه
+   RLS، فطباعة المبلغ فيه بلا بوّابة تتجاوز نظام الصلاحيات كلّه. */
+
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+export function fmtDateAr(v) {
+  if (!v) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v));
+  if (!m) return String(v);
+  return `${Number(m[3])} ${AR_MONTHS[Number(m[2]) - 1] || m[2]} ${m[1]}`;
+}
+// صيغة الأيام العربية الصحيحة (نفس قاعدة poDays في index.html).
+export function arDays(n) {
+  const a = Math.abs(n);
+  if (a === 1) return 'يوم واحد';
+  if (a === 2) return 'يومان';
+  if (a >= 3 && a <= 10) return `${a} أيام`;
+  return `${a} يوماً`;
+}
+// صيغة «بند» العربية — مستقلّة عن arDays عمداً (الاشتقاق بـreplace من صيغة
+// الأيام كان يُنتج «و3 أيام آخر»؛ التمييز العربيّ يختلف بين المعدودات).
+export function arItems(n) {
+  const a = Math.abs(n);
+  if (a === 1) return 'بند واحد';
+  if (a === 2) return 'بندان';
+  if (a >= 3 && a <= 10) return `${a} بنود`;
+  return `${a} بنداً`;
+}
+// «باقٍ/متأخّر» بالنسبة لليوم — هذا ما يجعل الأولوية ملموسة للمعتمِد.
+export function dueHint(needed_by, now) {
+  if (!needed_by) return null;
+  const t = Date.parse(`${String(needed_by).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(t)) return null;
+  const today = now instanceof Date ? now : new Date();
+  const d0 = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const diff = Math.round((t - d0) / 86400000);
+  if (diff < 0) return { text: `تجاوز الموعد بـ${arDays(diff)}`, color: '#dc2626' };
+  if (diff === 0) return { text: 'الموعد اليوم', color: '#dc2626' };
+  if (diff <= 7) return { text: `باقٍ ${arDays(diff)}`, color: '#d97706' };
+  return { text: `باقٍ ${arDays(diff)}`, color: '#6b7280' };
+}
+const numTxt = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '';
+  return String(Math.round(n * 100) / 100);
+};
+const money = (v, cur) => `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${cur || 'ر.س'}`;
+
+const MAX_ROWS = 12;   // بريدٌ بـ60 بنداً لا يُقرأ — الباقي يُفتح في النظام
+
+export function prDetailsBlock(pr, items, opts) {
+  const B = BRAND;
+  const showMoney = !!(opts && opts.showMoney);
+  const list = Array.isArray(items) ? items : [];
+
+  const cell = (label, value, strong) => value
+    ? `<tr>
+         <td style="padding:7px 0;font-size:12.5px;color:${B.soft};white-space:nowrap;vertical-align:top;width:40%">${esc(label)}</td>
+         <td style="padding:7px 0;font-size:13.5px;color:${strong || B.navy};font-weight:700;vertical-align:top">${value}</td>
+       </tr>` : '';
+
+  const due = dueHint(pr.needed_by);
+  const neededVal = pr.needed_by
+    // nowrap: بدونها تتيتّم «أيام» في سطر مستقلّ على عرض الجوال (مقيس).
+    ? `${esc(fmtDateAr(pr.needed_by))}${due ? ` <span style="font-weight:600;color:${due.color};white-space:nowrap">· ${esc(due.text)}</span>` : ''}`
+    : '';
+  const urgent = /عاجل|فوري/.test(String(pr.priority || ''));
+
+  const facts = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:4px 0 0">
+      ${cell('المشروع / الجهة', esc(pr.project || '') || `<span style="color:#dc2626;font-weight:600">غير محدّدة</span>`)}
+      ${cell('القسم', esc(pr.department || pr.sector || ''))}
+      ${cell('مقدّم الطلب', esc(pr.requester_name || pr.requester || ''))}
+      ${cell('تاريخ الطلب', esc(fmtDateAr(pr.request_date)))}
+      ${cell('موعد التوريد المطلوب', neededVal)}
+      ${cell('الأولوية', pr.priority ? `<span style="color:${urgent ? '#dc2626' : B.navy}">${esc(pr.priority)}</span>` : '')}
+      ${showMoney && Number(pr.est_total) > 0 ? cell('القيمة التقديرية', esc(money(pr.est_total, pr.currency))) : ''}
+      ${cell('السند المرفق', pr.doc_name ? esc(pr.doc_name) : '')}
+    </table>`;
+
+  const just = pr.justification ? `
+    <div style="margin:14px 0 0;padding:11px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px">
+      <div style="font-size:11.5px;color:#92400e;font-weight:700;margin-bottom:4px">مبرّر الحاجة</div>
+      <div style="font-size:13px;color:${B.ink};line-height:1.8">${esc(pr.justification)}</div>
+    </div>` : '';
+
+  // طلبٌ أُعيد ثم عاد: سبب الإعادة السابق سياقٌ يلزم المعتمِد قبل قراره.
+  const prev = (Number(pr.revision) > 1 && pr.return_reason) ? `
+    <div style="margin:10px 0 0;padding:11px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px">
+      <div style="font-size:11.5px;color:#1d4ed8;font-weight:700;margin-bottom:4px">سبق إرجاعه للتعديل (إصدار ${esc(pr.revision)}) — السبب</div>
+      <div style="font-size:13px;color:${B.ink};line-height:1.8">${esc(pr.return_reason)}</div>
+    </div>` : '';
+
+  let itemsHtml = '';
+  if (list.length) {
+    const shown = list.slice(0, MAX_ROWS);
+    const anyStock = shown.some((i) => Number(i.stock_balance) > 0);
+    const priced = showMoney && shown.some((i) => Number(i.unit_price) > 0);
+    const th = (t, align) => `<th style="padding:8px 6px;font-size:11.5px;font-weight:700;color:#fff;text-align:${align || 'right'}">${esc(t)}</th>`;
+    const rows = shown.map((i, n) => {
+      const bg = n % 2 ? '#fbfaf7' : '#fff';
+      return `<tr style="background:${bg}">
+        <td style="padding:8px 6px;font-size:11.5px;color:${B.soft};text-align:center;border-top:1px solid ${B.line}">${esc(i.seq || n + 1)}</td>
+        <td style="padding:8px 6px;font-size:12.5px;color:${B.ink};border-top:1px solid ${B.line};line-height:1.6">${esc(i.description || '—')}${i.notes ? `<div style="font-size:11px;color:${B.soft};margin-top:2px">${esc(i.notes)}</div>` : ''}</td>
+        <td style="padding:8px 6px;font-size:12px;color:${B.soft};text-align:center;border-top:1px solid ${B.line};white-space:nowrap">${esc(i.unit || '—')}</td>
+        <td style="padding:8px 6px;font-size:13px;color:${B.navy};font-weight:800;text-align:center;border-top:1px solid ${B.line};white-space:nowrap">${esc(numTxt(i.requested_qty) || '—')}</td>
+        ${anyStock ? `<td style="padding:8px 6px;font-size:12px;color:${B.soft};text-align:center;border-top:1px solid ${B.line}">${esc(numTxt(i.stock_balance) || '—')}</td>` : ''}
+        ${priced ? `<td style="padding:8px 6px;font-size:12px;color:${B.ink};text-align:center;border-top:1px solid ${B.line};white-space:nowrap" dir="ltr">${Number(i.unit_price) > 0 ? esc(numTxt(i.unit_price)) : '—'}</td>` : ''}
+      </tr>`;
+    }).join('');
+    const more = list.length > MAX_ROWS
+      ? `<tr><td colspan="${4 + (anyStock ? 1 : 0) + (priced ? 1 : 0)}" style="padding:9px 6px;font-size:12px;color:${B.soft};text-align:center;background:${B.wash};border-top:1px solid ${B.line}">و${esc(arItems(list.length - MAX_ROWS))} أخرى — افتح الطلب في النظام لعرض القائمة كاملة</td></tr>`
+      : '';
+    itemsHtml = `
+      <div style="font-size:12.5px;color:${B.navy};font-weight:800;margin:18px 0 8px">البنود المطلوبة (${esc(list.length)})</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid ${B.line};border-radius:10px;overflow:hidden">
+        <tr style="background:${B.navy}">
+          ${th('#', 'center')}${th('الصنف')}${th('الوحدة', 'center')}${th('الكمية', 'center')}
+          ${anyStock ? th('الرصيد', 'center') : ''}${priced ? th('سعر الوحدة', 'center') : ''}
+        </tr>
+        ${rows}${more}
+      </table>`;
+  } else {
+    itemsHtml = `<div style="margin:16px 0 0;padding:11px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:12.5px;color:#991b1b">لا توجد بنود مسجّلة على هذا الطلب — راجعه في النظام قبل اتخاذ القرار.</div>`;
+  }
+
+  return `<div style="margin:16px 0 4px;padding:16px 18px;background:#fff;border:1px solid ${B.line};border-radius:14px">
+    ${facts}${just}${prev}${itemsHtml}
+  </div>`;
+}
+
 // بريد «بانتظار اعتمادك» مع أزرار اتخاذ القرار من داخل البريد (لكل معتمِد رمزه الخاص).
-export function buildActionEmail(pr, origin, actionBase, stageLabel) {
+export function buildActionEmail(pr, origin, actionBase, stageLabel, items, showMoney) {
   const B = BRAND; const title = pr.title || 'طلب شراء';
   const portalUrl = requestUrl(origin, pr.id);
   const approveUrl = `${actionBase}&do=approve`;
@@ -332,6 +472,7 @@ export function buildActionEmail(pr, origin, actionBase, stageLabel) {
     <p style="font-size:14.5px;line-height:1.95;margin:6px 0;color:${B.ink}">${esc(LINES(title).pending)}</p>
     ${stageNote}
     ${prMetaBox(pr)}
+    ${prDetailsBlock(pr, items, { showMoney })}
     ${actions}
     ${portalBtn}
     <p style="font-size:11px;color:${B.soft};text-align:center;line-height:1.7;margin:14px 0 0">أزرار القرار صالحة لمرة واحدة ولفترة محدودة. لا تُعِد توجيه هذه الرسالة.</p>
@@ -371,19 +512,36 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   if (!approvers.length) return { skipped: true, reason: 'no_approver' };
   // إصدار الطلب يُقرأ مرّة واحدة لكل الرموز (لا مرّة لكل معتمِد). و`pr` قد يأتي
   // من `loadPR` أو من حمولة الـRPC، وكلاهما قد لا يحمله ⇒ يُستكمَل من القاعدة.
-  const revision = Number.isInteger(pr.revision) ? pr.revision : await prRevision(env, base, pr.id);
+  /* ⚠️ استعلام واحد يخدم الإصدار **وحقول القرار** معاً (مشروع/موعد/مبرّر).
+     `pr` قد يأتي من حمولة RPC بلا هذه الحقول، فيلزم استكمالها وإلّا عاد البريد
+     أعمى كما كان. والثابت المحروس: **استعلام واحد لكل الإشعار لا واحد لكل
+     معتمِد** — وهو ما يهمّ فعلاً حين تكون المرحلة لعدّة مؤهَّلين. */
+  const items = await loadItems(env, base, pr.id);
+  const hasFields = ('project' in pr) && ('needed_by' in pr);
+  const hasRevision = Number.isInteger(pr.revision);
+  let full = pr;
+  let revision = hasRevision ? pr.revision : null;
+  if (!hasFields || !hasRevision) {
+    const fresh = await loadPR(env, base, pr.id);
+    // حمولة الـRPC لها الأولوية على القراءة (هي الأحدث)، والقراءة تسدّ النواقص.
+    if (fresh) full = { ...fresh, ...pr };
+    if (!hasRevision && fresh && Number.isInteger(fresh.revision)) revision = fresh.revision;
+  }
   let sent = 0, failed = 0, lastDetail = '';
   for (const uname of approvers) {
     const email = await userEmail(env, base, uname);
     if (!/@aldeyabi\.com$/i.test(email)) continue;
+    // ⚠️ بوّابة المبالغ لكل مستلِم: البريد لا تحرسه RLS، فلا يُطبَع مبلغ إلا لمن
+    // يملك رؤية مالية فعلية (`pr_view_financials`). التعذّر ⇒ إخفاء (فشل مغلق).
+    const showMoney = await seesFinancials(env, base, uname);
     let html;
     if (origin) {
       const token = await createToken(env, base, pr.id, stage.seq, uname, revision);
       if (!token) { failed++; continue; }
       const actionBase = `${origin}/api/pr-action?token=${encodeURIComponent(token)}`;
-      html = buildActionEmail(pr, origin, actionBase, stage.stage_label);
+      html = buildActionEmail(full, origin, actionBase, stage.stage_label, items, showMoney);
     } else {
-      html = buildActionEmail(pr, '', '', stage.stage_label);
+      html = buildActionEmail(full, '', '', stage.stage_label, items, showMoney);
     }
     const res = await sendResend(env, [email], subjectFor('pending', pr), html);
     if (res && res.ok) sent += res.sent;
@@ -393,6 +551,25 @@ export async function notifyPending(env, base, pr, approvals, origin) {
   // (حتى لا يبقى الطلب عالقاً بصمت بانتظار اعتماد لم يصل بريده).
   if (sent === 0 && failed > 0) return { error: true, detail: lastDetail || 'all_sends_failed' };
   return { ok: true, sent };
+}
+
+/**
+ * هل يرى هذا المستخدم المبالغ؟ المصدر الوحيد هو `pr_effective_permissions`
+ * (ملفّ الوظيفة + التجاوزات) — نفس ما تحتكم إليه الواجهة والقاعدة، فلا تتفارق
+ * بوّابتان. **يفشل مغلقاً:** أي تعذّر (شبكة/دالّة غائبة) ⇒ إخفاء المبلغ.
+ */
+export async function seesFinancials(env, base, username) {
+  if (!username) return false;
+  try {
+    const r = await fetch(`${base}/rest/v1/rpc/pr_effective_permissions`, {
+      method: 'POST',
+      headers: { ...svcHeaders(env), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_username: username }),
+    });
+    if (!r.ok) return false;
+    const perms = await r.json();
+    return !!(perms && perms.pr_view_financials === true);
+  } catch (_) { return false; }
 }
 
 // بريد المستخدم: يفضّل البريد الحقيقي المخزَّن في proc_users.email على الاشتقاق من الاسم.
@@ -415,7 +592,7 @@ export async function notifyResult(env, base, pr, event, origin, comment) {
 }
 
 // بريد المشتريات عند الاعتماد النهائي — طلب جاهز للمعالجة (توريد/تسعير داخل النظام أو خارجه).
-export function buildProcurementEmail(pr, origin) {
+export function buildProcurementEmail(pr, origin, items) {
   const B = BRAND;
   const portalUrl = requestUrl(origin, pr.id);
   const btn = portalUrl ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px"><tr><td align="center" bgcolor="${B.gold}" style="background:${B.gold};border-radius:12px"><a href="${esc(portalUrl)}" style="display:block;padding:15px 18px;color:#fff;text-decoration:none;font-weight:800;font-size:15px">فتح الطلب في النظام</a></td></tr></table>` : '';
@@ -428,6 +605,7 @@ export function buildProcurementEmail(pr, origin) {
         <span dir="ltr" style="font-size:17px;font-weight:800;color:${B.navy};letter-spacing:.05em">${esc(pr.id)}</span>
         <div style="font-size:12px;color:${B.soft};margin-top:6px">القسم: ${esc(pr.department || '—')}${pr.requester_name ? ' · الطالب: ' + esc(pr.requester_name) : ''}</div>
       </td></tr></table>
+    ${prDetailsBlock(pr, items, { showMoney: true })}
   </td></tr>`;
   return emailShell(inner, 'approved');
 }
@@ -449,7 +627,12 @@ export async function notifyProcurement(env, base, pr, origin) {
   } catch (_) {}
   const toList = [...new Set(recips)];
   if (!toList.length) return { skipped: true, reason: 'no_procurement' };
-  const html = buildProcurementEmail(pr, origin);
+  // ⚠️ `showMoney:true` هنا مقصود ومبرَّر: المستلِمون مُنتقَون بصلاحية التسعير
+  // (can_manage_rfq / pr_manage_pricing / ملفّات المشتريات) أو أدمن — وكلّهم
+  // أصحاب رؤية مالية بحكم الدور. وهذا إرسال دفعيّ واحد فلا بوّابة لكل شخص.
+  const items = await loadItems(env, base, pr.id);
+  const full = ('project' in pr && 'needed_by' in pr) ? pr : ((await loadPR(env, base, pr.id)) || pr);
+  const html = buildProcurementEmail(full, origin, items);
   return sendResend(env, toList, `طلب معتمد جاهز للمشتريات — طلب ${pr.id} | مجموعة الذيابي`, html);
 }
 
