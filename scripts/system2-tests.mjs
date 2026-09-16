@@ -1679,8 +1679,86 @@ await (async () => {
     !/table\{display:block;overflow-x:auto/.test(HTML));
   T('لافّ الجداول مربوط بنقاط الرسم الثلاث (وإلّا فاتته الجداول المولَّدة)',
     (CODE.match(/mobileTableWrap\(/g) || []).length >= 4);
-  T('حقول البحث ≥16px فلا يُقرّب iOS الشاشة عند التركيز',
-    /\.topbar \.search input\{font-size:16px\}/.test(HTML));
+  /* ⚠️ كان هذا الحارس يفحص حقل البحث **وحده** — والقياس على الجوال (2026-09-16)
+     أظهر **118 من 119** حقلاً في النظام دون 16px، أي أنّ كل نقرة على أي حقل
+     تُقرّب سفاري الصفحة. القاعدة صارت شاملة، والحارس يفحص الخاصيّة الأقوى:
+     قاعدة عامّة على input/select/textarea داخل كتلة الجوال. */
+  {
+    const re = /input:not\(\[type=checkbox\]\)[^{]*,\s*select,\s*textarea\s*\{\s*font-size:16px\s*!important\s*\}/;
+    const at = HTML.search(re);
+    /* ⚠️ الوجود وحده لا يكفي: قاعدة `!important` على كل الحقول **خارج** استعلام
+       وسائط تُكبّر خطّ سطح المكتب كلّه. فيُتحقَّق أنّها داخل كتلة @media فعلاً
+       بحساب عمق الأقواس من أقرب استعلام قبلها — لا بمطابقة نصّ. */
+    let inMedia = false, mq = '';
+    if (at > 0) {
+      const j = HTML.lastIndexOf('@media', at);
+      if (j > 0) {
+        mq = HTML.slice(j, HTML.indexOf('{', j));
+        let depth = 0;
+        for (const ch of HTML.slice(HTML.indexOf('{', j), at)) { if (ch === '{') depth++; else if (ch === '}') depth--; }
+        inMedia = depth >= 1 && /max-width\s*:\s*(\d+)px/.test(mq) && +RegExp.$1 <= 900;
+      }
+    }
+    T('كل حقول الإدخال ≥16px على الجوال فلا يُقرّب iOS الشاشة عند التركيز',
+      at > 0 && inMedia, at < 0 ? 'القاعدة الشاملة غائبة' : `القاعدة خارج كتلة الجوال (${mq.trim()})`);
+  }
+
+  /* ── هويّة المستخدم: `ilike` للقراءة و`eq.` للكتابة (2026-09-16) ─────────
+     ⚠️ القاعدة المكتوبة سابقاً «أي مطابقة على username تكون ilike لا eq» **مفرطة
+     في العموم**، وتطبيقها حرفيّاً على الكتابة **عيب جسيم**: الإنتاج يحمل صفَّين
+     يختلفان بحالة الأحرف فقط (`Abdullah` أدمن نشط · `abdullah` مستخدم موقوف)،
+     فـ`PATCH proc_users?username=ilike.abdullah` يعدّل **الصفّين معاً**.
+     التمييز الصحيح: قراءةُ حلّ الهويّة تتسامح مع الحالة، والكتابة تستهدف صفّاً
+     بعينه فتبقى `eq.` — وهذا ما عليه الكود اليوم، ويُثبَّت هنا كي لا «يُصلَح». */
+  {
+    const files = ['functions/api/admin-users.js','functions/api/staff-invite.js','functions/api/_pr-shared.js'];
+    const bad = [];
+    for (const f of files) {
+      const src = fs.readFileSync(path.join(ROOT,f),'utf8');
+      for (const m of src.matchAll(/restWrite\(\s*'(PATCH|DELETE)'[^`']*[`']([^`']*username=(eq|ilike)\.)/g)) {
+        if (m[3] !== 'eq') bad.push(`${f}: ${m[1]} بـ${m[3]} — يطال أكثر من صفّ`);
+      }
+    }
+    T('كتابات المستخدمين تستهدف صفّاً بعينه بـeq. (لا ilike تطال المتشابهين)', bad.length===0, bad.join(' | '));
+    const inv = fs.readFileSync(path.join(ROOT,'functions/api/staff-invite.js'),'utf8');
+    T('حلّ هويّة المستدعي يتسامح مع حالة الأحرف ويختار الأدمن النشط صراحةً',
+      /username=ilike\./.test(inv) && /role\s*===?\s*'admin'/.test(inv));
+  }
+
+  /* ── مساحة طلبات الشراء على الجوال (2026-09-16) ────────────────────────
+     ثلاث خصائص قِيست في متصفّح حقيقيّ ثمّ ثُبِّتت هنا لأنّ كسرها صامت بصريّاً. */
+
+  /* ⚠️ `overflow:hidden` على سلف يُبطِل `position:sticky` لكل ما بداخله — قاعدة
+     CSS لا رأي. الشريط الملاحيّ كان `sticky` داخل `.pr-workspace{overflow:hidden}`
+     فلم يلتصق قطّ: مقيس عند scrollY=700 عند **-541px**، وبرفع القناع **+62px**.
+     أثره أنّ مستخدم الهاتف يفقد التنقّل بمجرّد التمرير داخل الطلب. */
+  {
+    const ws = (HTML.match(/\.pr-workspace\{[^}]*\}/g) || []).filter(r => /margin:-16px/.test(r));
+    T('سطح مساحة الطلبات لا يقنع الالتصاق بـoverflow:hidden على الجوال',
+      ws.length === 1 && /overflow:visible/.test(ws[0]),
+      ws.length ? ws[0].slice(0, 120) : 'قاعدة الجوال غير موجودة');
+  }
+
+  /* ⚠️ المحتوى كان ينتهي عند حافة الشاشة تماماً بينما الشريط السفليّ ثابت
+     فوقه، فيبقى آخر ~53px **محجوباً دائماً** (مقيس: زرّ «فتح داخل النظام» لا
+     يُرى حتى بعد التمرير للنهاية). الحشو السفليّ يُعيد ما يسحبه الهامش السالب. */
+  T('محتوى مساحة الطلبات يُخلي ارتفاع الشريط السفليّ الثابت',
+    /\.pr-work-canvas,\.pr-work-editor\{padding:14px;padding-bottom:calc\([^)]*env\(safe-area-inset-bottom\)\)/.test(HTML));
+
+  /* ⚠️ جدول البنود: 9 أعمدة بعرض 636px داخل نافذة 335px على الهاتف (مقيس).
+     صار بطاقةً لكل بند، والتسمية تأتي من `data-label` على كل خليّة — فبدونها
+     يُدخل المستخدم كميّةً لا يعرف عمودها. الترميز والقاعدة يجب أن يتلازما. */
+  {
+    const labels = ['إسم الصنف','الوحدة','كمية العقد','رصيد مستودعي','الكمية المطلوبة'];
+    const missing = labels.filter(l => !CODE.includes(`data-label="${l}"`));
+    T('كل خليّة بند تحمل تسميتها (بطاقة الجوال تستبدل رأس الجدول)',
+      missing.length === 0 && /\.pr-items-table td::before\{content:attr\(data-label\)/.test(HTML),
+      missing.length ? `تسميات ناقصة: ${missing.join(' · ')}` : 'قاعدة ::before غائبة');
+    /* ⚠️ نصّ حقيقيّ لا `::after`: المحتوى المولَّد زاحم الأيقونة داخل
+       `overflow:hidden` فلم يُرسَم أصلاً (مُثبَت بلقطة)، ولا يُقرأ بقارئ الشاشة. */
+    T('زرّ حذف البند يحمل نصّاً حقيقيّاً لا محتوىً مولَّداً',
+      /<span class="pr-del-label">/.test(CODE) && !/\.pr-del-item::after\{content/.test(HTML));
+  }
 
   /* 🐛 عيب وقعتُ فيه فعلاً (2026-09-08): كتبتُ قواعد «النوافذ كأوراق سفليّة» على
      `.modal-box`/`.modal-content` — **وهما غير موجودين** في هذا الملف؛ فلم تُطبَّق،
@@ -3298,6 +3376,16 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
      ولا تتأثّر بهذا المُساعد إطلاقاً. */
   T('ولا مساس ببوابة نظام 3 المعزولة',
     !/purchase-portal/.test(SH) && !/portal_/.test(SH));
+
+  /* ── ختم رمز الاعتماد البريديّ بالإصدار: رسالة المستلِم ──────────────────
+     السلوك نفسه مُختبَر سلوكيّاً (SQL في `22_email_token_revision.sql`
+     وجافاسكربت في `file-guard.test.mjs`). الباقي هنا أثرٌ لا يُقاس هناك:
+     `pr_transition_email` يُرجِع `stale_revision`، وبلا ترجمة له في `ERR_AR`
+     يقرأ المعتمِد «تعذّر إتمام الطلب» — فيظنّه عطلاً ويُعيد المحاولة، بدل أن
+     يعرف أنّ الطلب عُدِّل وأنّ عليه مراجعة النسخة الجديدة. */
+  const PRACT = fs.readFileSync(path.join(ROOT, 'functions/api/pr-action.js'), 'utf8');
+  T('رفض الرمز القديم يُشرَح للمعتمِد لا يُقرأ عطلاً',
+    /stale_revision:\s*'[^']*عُدِّل الطلب[^']*'/.test(PRACT));
 
   T('والنظام يقرأ المعامل عند الإقلاع (لم يكن يقرأ شيئاً)',
     /function openDeepLink\(\)/.test(CODE)

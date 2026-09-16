@@ -1013,3 +1013,106 @@ const tokenOf = (u) => new URL(u).searchParams.get('t');
 
 if (siFailed) { console.error(`\n❌ نقطة /api/staff-invite: ${siFailed} فشل`); process.exit(1); }
 console.log(`\n✅ نقطة /api/staff-invite: ${siTotal}/${siTotal} PASS`);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   (ح) ختم رمز الاعتماد البريديّ بإصدار الطلب (functions/api/_pr-shared.js)
+   ─────────────────────────────────────────────────────────────────────────
+   الثغرة (مُعاد إنتاجها على PostgreSQL قبل الإصلاح): رمز مسكوك على إصدار 1
+   (كمية 5) اعتمد إصدار 2 (كمية 500) بضغطة في بريد يصف الكمية القديمة.
+   القاعدة هي الحكم (`pr_transition_email` يفحص الختم)، وهنا نؤكّد أنّ الطبقة
+   الخادمية **تختم** الرمز — وأنّها تبقى عاملة على قاعدة لم تُطبَّق عليها
+   الهجرة بعدُ (نافذة ما بين النشر والهجرة)، فلا يتوقّف بريد الاعتماد.
+   ══════════════════════════════════════════════════════════════════════════ */
+const { notifyPending: prNotifyPending } = await import('../../functions/api/_pr-shared.js');
+
+let tkTotal = 0, tkFailed = 0;
+const tkT = (name, ok, detail = '') => {
+  tkTotal++; if (!ok) tkFailed++;
+  console.log(`${ok ? '  ✓' : '  ✗'} ${name}${ok ? '' : `  — ${detail}`}`);
+};
+
+const TK_ENV = {
+  SUPABASE_URL: 'https://db.example.co', SUPABASE_SERVICE_ROLE_KEY: 'svc-key',
+  RESEND_API_KEY: 're_test', SUPPLIERS_ORIGIN: 'https://suppliers.aldeyabi.com',
+};
+const TK_PR = { id: 'PR-DG2026-0007', title: 'طلب', department_id: 'DEP-OPS', requester: 'requester1' };
+const TK_APPROVALS = [{ seq: 1, stage_label: 'اعتماد الحاجة', role_key: 'pr_approve_maintenance', approver: 'maintmgr', decision: 'pending' }];
+
+/** شبكة مُقلَّدة: `revisionColumn:false` تحاكي قاعدة قبل الهجرة (PostgREST 400). */
+function tkNet({ revisionColumn = true, requestRevision = 3 } = {}) {
+  const calls = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, o = {}) => {
+    const u = String(url); const method = (o.method || 'GET').toUpperCase();
+    const body = o.body ? JSON.parse(o.body) : null;
+    calls.push({ url: u, method, body });
+    if (u.includes('/proc_purchase_requests') && method === 'GET') {
+      return new Response(JSON.stringify([{ revision: requestRevision }]), { status: 200 });
+    }
+    if (u.includes('/proc_users')) {
+      return new Response(JSON.stringify([{ username: 'maintmgr', email: 'maintmgr@aldeyabi.com', active: true, is_away: false }]), { status: 200 });
+    }
+    if (u.includes('/proc_email_tokens') && method === 'POST') {
+      if (!revisionColumn && body && 'revision' in body) {
+        return new Response(JSON.stringify({ code: 'PGRST204', message: "column 'revision' does not exist" }), { status: 400 });
+      }
+      return new Response('', { status: 201 });
+    }
+    if (u.includes('/proc_email_tokens')) return new Response('', { status: 204 });
+    if (u.includes('api.resend.com')) return new Response(JSON.stringify({ id: 'sent' }), { status: 200 });
+    return new Response('[]', { status: 200 });
+  };
+  return { calls, restore: () => { globalThis.fetch = real; } };
+}
+const tkInserts = (calls) => calls.filter((c) => c.url.includes('/proc_email_tokens') && c.method === 'POST');
+
+console.log('\n── ختم رمز الاعتماد البريديّ بإصدار الطلب ──');
+{
+  const n = tkNet({ requestRevision: 3 });
+  try {
+    const res = await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, TK_PR, TK_APPROVALS, 'https://suppliers.aldeyabi.com');
+    const ins = tkInserts(n.calls);
+    tkT('الرمز يُسكّ مختوماً بإصدار الطلب الجاري', ins.length === 1 && ins[0].body.revision === 3,
+      `inserts=${ins.length} revision=${ins[0] && ins[0].body.revision}`);
+    tkT('والبريد أُرسل فعلاً', res && res.ok === true && n.calls.some((c) => c.url.includes('api.resend.com')));
+  } finally { n.restore(); }
+}
+{
+  // الإصدار يُقرأ من الحمولة حين تحملها (لا رحلة شبكة زائدة لكل معتمِد)
+  const n = tkNet({ requestRevision: 3 });
+  try {
+    await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, { ...TK_PR, revision: 9 }, TK_APPROVALS, 'https://x');
+    const ins = tkInserts(n.calls);
+    tkT('إصدار الحمولة يُستعمل بلا استعلام إضافي', ins[0] && ins[0].body.revision === 9
+      && !n.calls.some((c) => c.url.includes('/proc_purchase_requests')),
+      `revision=${ins[0] && ins[0].body.revision}`);
+  } finally { n.restore(); }
+}
+{
+  // ⚠️ نافذة ما بين النشر وتطبيق الهجرة: العمود غير موجود ⇒ 400.
+  // البريد أهمّ من الختم هنا — لا يجوز أن يبقى الطلب بلا بريد قرار.
+  const n = tkNet({ revisionColumn: false, requestRevision: 2 });
+  try {
+    const res = await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, TK_PR, TK_APPROVALS, 'https://x');
+    const ins = tkInserts(n.calls);
+    tkT('قاعدة قبل الهجرة: يُعاد السكّ بلا ختم بدل إسقاط البريد',
+      ins.length === 2 && 'revision' in ins[0].body && !('revision' in ins[1].body),
+      `inserts=${ins.length}`);
+    tkT('والبريد يصل رغم ذلك', res && res.ok === true && n.calls.some((c) => c.url.includes('api.resend.com')),
+      JSON.stringify(res));
+  } finally { n.restore(); }
+}
+{
+  // إصدار غير معروف (تعذّر الاستعلام) ⇒ لا ختم مُلفَّق. الختم الخاطئ أسوأ من غيابه:
+  // ختمٌ بـ1 على طلب إصداره 3 كان سيرفض كلَّ اعتماد بريديّ لذلك الطلب.
+  const n = tkNet({ requestRevision: null });
+  try {
+    await prNotifyPending(TK_ENV, TK_ENV.SUPABASE_URL, TK_PR, TK_APPROVALS, 'https://x');
+    const ins = tkInserts(n.calls);
+    tkT('إصدار مجهول ⇒ لا ختم مُلفَّق', ins.length === 1 && !('revision' in ins[0].body),
+      JSON.stringify(ins[0] && ins[0].body));
+  } finally { n.restore(); }
+}
+
+if (tkFailed) { console.error(`\n❌ ختم رمز البريد: ${tkFailed} فشل`); process.exit(1); }
+console.log(`\n✅ ختم رمز البريد بالإصدار: ${tkTotal}/${tkTotal} PASS`);
