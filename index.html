@@ -5529,6 +5529,11 @@ CREATE POLICY "allow_all"    ON proc_users FOR ALL   USING (true) WITH CHECK (tr
           <span class="form-label">الإدارة داخل موديل الطلبات</span>
           <select id="uf-pr-department"><option value="">— بلا إدارة محددة —</option></select>
         </label>
+        <label class="form-field">
+          <span class="form-label">بريد المراسلة <span style="font-size:11px;color:var(--muted);font-weight:400">(اتركه فارغاً = بريد الدخول)</span></span>
+          <input type="email" id="uf-notify-email" dir="ltr" autocomplete="off" placeholder="مثال: supply@aldeyabi.com">
+          <span style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6">تصل إليه إشعارات الطلبات. استعمله حين لا يملك الموظّف صندوقاً خاصّاً ويستخدم صندوق قسمه.</span>
+        </label>
       </div>
       <div style="margin-top:16px;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--ink)">الصلاحيات التفصيلية</div>
@@ -6217,6 +6222,11 @@ async function fetchCloudUsers(force){
         departmentId:u.department_id||null,
         prDepartmentIds:Array.isArray(u.pr_department_ids)?u.pr_department_ids:[],
         active: u.active !== false,
+        // ⚠️ بريد الدخول وبريد المراسلة حقلان مختلفان: `email` هويّة (proc_me تُطابق
+        // به)، و`notify_email` صندوق تصل إليه الإشعارات حين لا يملك الموظّف صندوقاً
+        // خاصّاً (صندوق قسم مشترك). خلطهما يقلب هويّة من يدخل بالصندوق المشترك.
+        email: u.email || '',
+        notifyEmail: u.notify_email || '',
         // نطاق القطاعات — كان المُخطِّط يُسقِطه فلا تراه الواجهة إطلاقاً.
         scopeSectors: normScopeSectors(u.scope_sectors),
         last_login: u.last_login,
@@ -6808,13 +6818,17 @@ async function updateUser(username, updates){
     const sc = normScopeSectors(updates.scopeSectors);
     payload.scope_sectors = sc.length ? sc : null;
   }
-  if(updates.prProfileKey!==undefined || updates.departmentId!==undefined || updates.permissions!==undefined){
-    const profileRes=await adminUsersCall('setProfile',{
+  if(updates.prProfileKey!==undefined || updates.departmentId!==undefined || updates.permissions!==undefined || updates.notifyEmail!==undefined){
+    // ⚠️ بريد المراسلة يمرّ بـsetProfile لا بكتابة مباشرة: توجيهُ بريد معتمِد يعني
+    // استقبال رموز الاعتماد بضغطة، فيلزمه نفس بوّابة الأدمن الخادمية.
+    const profilePayload={
       username,permissions:updates.permissions||target.permissions,
       pr_profile_key:updates.prProfileKey||target.prProfileKey||'requester',
       department_id:updates.departmentId||null,
       pr_department_ids:updates.departmentId?[updates.departmentId]:[]
-    });
+    };
+    if(updates.notifyEmail!==undefined) profilePayload.notify_email=updates.notifyEmail||'';
+    const profileRes=await adminUsersCall('setProfile',profilePayload);
     if(!profileRes.ok) return {ok:false,error:profileRes.error};
     delete payload.permissions;
   }
@@ -15992,6 +16006,7 @@ async function openUserForm(mode, username){
   const roleSel = document.getElementById('uf-role');
   const prProfileSel=document.getElementById('uf-pr-profile');
   const prDepartmentSel=document.getElementById('uf-pr-department');
+  const notifyEmailInput=document.getElementById('uf-notify-email');
   const activeChk = document.getElementById('uf-active');
   let departments=STATE.departments||[];
   if(!departments.length){ try{ const r=await CLOUD.client.from('proc_departments').select('*').eq('active',true).order('name_ar'); departments=r.data||[]; }catch(_){} }
@@ -16008,6 +16023,7 @@ async function openUserForm(mode, username){
     roleSel.value = 'user';
     if(prProfileSel) prProfileSel.value='requester';
     if(prDepartmentSel) prDepartmentSel.value='';
+    if(notifyEmailInput) notifyEmailInput.value='';
     activeChk.checked = true;
     setUserFormPermissions(DEFAULT_PERMISSIONS.user, 'user');
     setUserFormScope([]);
@@ -16025,6 +16041,7 @@ async function openUserForm(mode, username){
     roleSel.value = u.role;
     if(prProfileSel) prProfileSel.value=u.prProfileKey||'requester';
     if(prDepartmentSel) prDepartmentSel.value=u.departmentId||'';
+    if(notifyEmailInput) notifyEmailInput.value=u.notifyEmail||'';
     activeChk.checked = u.active !== false;
     // دمج صلاحيات المستخدم فوق افتراضات دوره، حتى لا تظهر الصلاحيات المُضافة
     // حديثاً (غير المحفوظة) كغير مُحدّدة فتُسحب عند الحفظ بالخطأ.
@@ -16148,9 +16165,15 @@ async function saveUserForm(){
   const role = document.getElementById('uf-role').value;
   const prProfileKey=document.getElementById('uf-pr-profile').value;
   const departmentId=document.getElementById('uf-pr-department').value||null;
+  const notifyEmail=(document.getElementById('uf-notify-email')?.value||'').trim().toLowerCase();
   const active = document.getElementById('uf-active').checked;
   const permissions = readUserFormPermissions();
   const scopeSectors = readUserFormScope();
+  if(notifyEmail && !/^[a-z0-9._%+-]+@aldeyabi\.com$/.test(notifyEmail)){
+    errEl.textContent='بريد المراسلة يجب أن يكون ضمن @aldeyabi.com';
+    errEl.style.display='block';
+    return;
+  }
   const btn = document.getElementById('uf-save');
   btn.disabled = true;
   btn.textContent = 'جاري الحفظ...';
@@ -16159,7 +16182,7 @@ async function saveUserForm(){
     if(__userFormMode === 'add'){
       res = await createUser({username, displayName, password, role, active, permissions, scopeSectors, prProfileKey, departmentId});
     } else {
-      const updates = {displayName, role, active, permissions, scopeSectors, prProfileKey, departmentId};
+      const updates = {displayName, role, active, permissions, scopeSectors, prProfileKey, departmentId, notifyEmail};
       if(password) updates.password = password;
       res = await updateUser(__userFormTarget, updates);
     }

@@ -1210,4 +1210,112 @@ console.log('\n── تفاصيل القرار داخل بريد الاعتما
   dtT('و«تجاوز الموعد» يُحسب للماضي', /تجاوز الموعد/.test(PRS.dueHint('2000-01-01').text));
 }
 if (dtFailed) { console.error(`\n❌ تفاصيل بريد الاعتماد: ${dtFailed} فشل`); process.exit(1); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   (ي) عنوان المراسلة مستقلّ عن بريد الدخول (functions/api/_pr-shared.js)
+   ─────────────────────────────────────────────────────────────────────────
+   بلاغ المالك 2026-09-16: بريد «طلب معتمد جاهز للمشتريات» كان يصل إلى
+   `mahmoud@aldeyabi.com` — صندوق **شخص آخر** (محمود السيد) لا علاقة له بمحمود
+   العامودي. الجذر أنّ العنوان **مُشتقّ** من ثابت في الكود لأن عمود `email` فارغ.
+   وقرار المالك: لقسم المشتريات صندوق عامّ واحد (supply@) ولا بريد لموظّف بعينه.
+
+   ⚠️ والتأكيدات **سلوكية**: تُشغّل حلّ المستلِمين فعلاً على شبكة مُقلَّدة، لأنّ
+   فحصاً نصّيّاً على وجود `notify_email` كان سيمرّ حتى لو لم يصل العنوان للمُرسِل.
+   ══════════════════════════════════════════════════════════════════════════ */
+let neTotal = 0, neFailed = 0;
+const neT = (name, ok, detail = '') => {
+  neTotal++; if (!ok) neFailed++;
+  console.log(`${ok ? '  ✓' : '  ✗'} ${name}${ok ? '' : `  — ${detail}`}`);
+};
+console.log('\n── عنوان المراسلة مستقلّ عن بريد الدخول ──');
+{
+  // صفوف الإنتاج حرفيّاً: البريد فارغ للثلاثة، والقسم يتشارك supply@.
+  const PROD_USERS = [
+    { username: 'Abdullah', role: 'admin', email: null, notify_email: null, permissions: { can_manage_rfq: true }, pr_profile_key: 'module_admin', pr_permission_overrides: {} },
+    { username: 'Mostafa',  role: 'admin', email: null, notify_email: null, permissions: { can_manage_rfq: true }, pr_profile_key: 'procurement_officer', pr_permission_overrides: {} },
+    { username: 'Mahmoud',  role: 'user',  email: null, notify_email: 'supply@aldeyabi.com', permissions: { can_manage_rfq: true }, pr_profile_key: 'procurement_officer', pr_permission_overrides: {} },
+    { username: 'mostafa.kishk', role: 'user', email: 'mostafa.kishk@aldeyabi.com', notify_email: null, permissions: {}, pr_profile_key: 'requester', pr_permission_overrides: {} },
+  ];
+  const env = { SUPABASE_SERVICE_ROLE_KEY: 'svc', RESEND_API_KEY: 'rk', NOTIFY_FROM: 'x <no@aldeyabi.com>' };
+  const BASE = 'https://db.test';
+  const strip = (row) => { const { notify_email, ...rest } = row; return rest; };
+
+  // hasCol=false يحاكي قاعدة **قبل** الهجرة: PostgREST يردّ 400 على عمود مجهول.
+  const mockNet = ({ hasCol = true, users = PROD_USERS } = {}) => {
+    const sent = [];
+    globalThis.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      if (u.startsWith('https://api.resend.com')) {
+        sent.push(JSON.parse(opts.body || '{}'));
+        return { ok: true, json: async () => ({ id: 'e1' }) };
+      }
+      if (u.includes('/rest/v1/proc_users')) {
+        if (!hasCol && u.includes('notify_email')) {
+          return { ok: false, status: 400, json: async () => ({}), text: async () => 'column does not exist' };
+        }
+        const m = u.match(/username=eq\.([^&]+)/);
+        let rows = users;
+        if (m) { const want = decodeURIComponent(m[1]); rows = users.filter((x) => x.username === want); }
+        return { ok: true, json: async () => rows.map((r) => (hasCol ? r : strip(r))) };
+      }
+      if (u.includes('/rest/v1/proc_pr_items')) return { ok: true, json: async () => [] };
+      if (u.includes('/rest/v1/proc_purchase_requests')) return { ok: true, json: async () => [] };
+      return { ok: true, json: async () => [] };
+    };
+    return sent;
+  };
+  const realFetch = globalThis.fetch;
+
+  // ① الدالّة الخالصة — ترتيب الأفضليّة
+  neT('notify_email يسبق email ويسبق الاشتقاق',
+    PRS.rowNotifyEmail({ username: 'Mahmoud', email: 'mahmoud@aldeyabi.com', notify_email: 'supply@aldeyabi.com' }) === 'supply@aldeyabi.com');
+  neT('وبلا notify_email يُستعمَل بريد الدخول المخزَّن',
+    PRS.rowNotifyEmail({ username: 'x', email: 'Real@Aldeyabi.com', notify_email: null }) === 'real@aldeyabi.com');
+  neT('⚠️ وبلا الاثنين يسقط للاشتقاق — وهو بالضبط ما أرسل البريد لصندوق غريب',
+    PRS.rowNotifyEmail({ username: 'Mahmoud', email: null, notify_email: null }) === 'mahmoud@aldeyabi.com');
+  neT('وعنوان خارج نطاق الشركة يُتجاهَل (لا يصله بريد أصلاً فوعدُه كاذب)',
+    PRS.rowNotifyEmail({ username: 'Mahmoud', email: null, notify_email: 'x@gmail.com' }) === 'mahmoud@aldeyabi.com');
+
+  // ② المسار الحقيقيّ: بريد المشتريات لا يصل الصندوق الغريب
+  {
+    const sent = mockNet();
+    const res = await PRS.notifyProcurement(env, BASE, { id: 'PR-1', requester: 'mostafa.kishk' }, 'https://x');
+    const to = (sent[0] && sent[0].to) || [];
+    neT('بريد المشتريات لا يصل mahmoud@ (صندوق شخص آخر)', !to.includes('mahmoud@aldeyabi.com'), JSON.stringify(to));
+    neT('ويصل صندوق القسم supply@', to.includes('supply@aldeyabi.com'), JSON.stringify(to));
+    neT('ومرّة واحدة رغم أنّ موظّفَين يتشاركانه', to.filter((e) => e === 'supply@aldeyabi.com').length === 1);
+    neT('ومقدّم الطلب مستثنى من نسخة المشتريات', !to.includes('mostafa.kishk@aldeyabi.com') && res.ok !== false);
+  }
+
+  // ③ نفس الحارس على المسار الثاني (ردّ الطالب على استفسار)
+  {
+    const sent = mockNet();
+    await PRS.notifyProcurementEvent(env, BASE, { id: 'PR-1', requester: 'mostafa.kishk', proc_started_by: 'Mahmoud' },
+      'requester_replied', 'https://x', 'ردّ');
+    const to = (sent[0] && sent[0].to) || [];
+    neT('وردّ الطالب يذهب لصندوق القسم لا للصندوق الغريب',
+      to.includes('supply@aldeyabi.com') && !to.includes('mahmoud@aldeyabi.com'), JSON.stringify(to));
+  }
+
+  // ④ رمز الاعتماد بضغطة — أخطر بريد، فلا يُسلَّم لصندوق غريب
+  {
+    const sent = mockNet();
+    const e = await PRS.userEmail(env, BASE, 'Mahmoud');
+    neT('userEmail (مسار رموز الاعتماد) يقرأ notify_email', e === 'supply@aldeyabi.com', e);
+    void sent;
+  }
+
+  // ⑤ التسامح: قاعدة قبل الهجرة لا تُسقِط البريد كلّه
+  {
+    const sent = mockNet({ hasCol: false });
+    await PRS.notifyProcurement(env, BASE, { id: 'PR-1', requester: 'mostafa.kishk' }, 'https://x');
+    const to = (sent[0] && sent[0].to) || [];
+    neT('قاعدة قبل الهجرة: البريد يُرسَل ولا ينقطع', to.length > 0, JSON.stringify(to));
+    const e2 = await PRS.userEmail(env, BASE, 'mostafa.kishk');
+    neT('وuserEmail يسقط للأعمدة القديمة بلا خطأ', e2 === 'mostafa.kishk@aldeyabi.com', e2);
+  }
+
+  globalThis.fetch = realFetch;
+}
+if (neFailed) { console.error(`\n❌ عنوان المراسلة: ${neFailed} فشل`); process.exit(1); }
 console.log(`\n✅ تفاصيل القرار في بريد الاعتماد: ${dtTotal}/${dtTotal} PASS`);

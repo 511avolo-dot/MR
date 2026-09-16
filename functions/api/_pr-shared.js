@@ -572,14 +572,40 @@ export async function seesFinancials(env, base, username) {
   } catch (_) { return false; }
 }
 
-// بريد المستخدم: يفضّل البريد الحقيقي المخزَّن في proc_users.email على الاشتقاق من الاسم.
+// عنوان **المراسلة** لصفّ مستخدم — مستقلّ عن بريد الدخول عمداً.
+//
+// ⚠️ الترتيب مقصود: notify_email ← email ← الاشتقاق من الاسم.
+//   `notify_email` هو صندوق المراسلة حين لا يملك الموظّف صندوقاً خاصّاً (قسم
+//   المشتريات عندنا يتشارك supply@aldeyabi.com — قرار المالك 2026-09-16).
+//   و`email` هو بريد الدخول، وهو المصدر حين يكون الصندوق شخصيّاً فعلاً.
+//   والاشتقاق آخر مَلاذ: عنوانٌ **مُخمَّن** من ثابت في الكود، وهو الذي أرسل
+//   بريد المشتريات شهراً كاملاً إلى صندوق شخص لا علاقة له بالشركة. فلا تجعله
+//   الطريق الأوّل، ولا تُوسّعه بأسماء جديدة — خزّن العنوان في القاعدة بدلاً منه.
+export function rowNotifyEmail(row) {
+  const pick = (v) => {
+    const s = String(v || '').trim();
+    return (s && /@aldeyabi\.com$/i.test(s)) ? s.toLowerCase() : '';
+  };
+  return pick(row && row.notify_email) || pick(row && row.email) || usernameToEmail(row && row.username);
+}
+
+// بريد المستخدم: يفضّل بريد المراسلة ثمّ بريد الدخول المخزَّن على الاشتقاق من الاسم.
 export async function userEmail(env, base, username) {
   if (!username) return '';
   try {
-    const r = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=email`, { headers: svcHeaders(env) });
-    const rows = await r.json();
-    const e = rows && rows[0] && rows[0].email ? String(rows[0].email).trim() : '';
-    if (e && /@aldeyabi\.com$/i.test(e)) return e.toLowerCase();
+    const r = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=username,email,notify_email`, { headers: svcHeaders(env) });
+    if (r.ok) {
+      const rows = await r.json();
+      if (rows && rows[0]) return rowNotifyEmail(rows[0]);
+    } else {
+      // قاعدة قبل الهجرة (لا عمود notify_email) ⇒ 400: أعِد المحاولة بالأعمدة القديمة
+      // كي لا يسقط البريد كلّه في نافذة ما قبل التطبيق.
+      const r2 = await fetch(`${base}/rest/v1/proc_users?username=eq.${encodeURIComponent(username)}&select=username,email`, { headers: svcHeaders(env) });
+      if (r2.ok) {
+        const rows2 = await r2.json();
+        if (rows2 && rows2[0]) return rowNotifyEmail(rows2[0]);
+      }
+    }
   } catch (_) {}
   return usernameToEmail(username);
 }
@@ -610,21 +636,31 @@ export function buildProcurementEmail(pr, origin, items) {
   return emailShell(inner, 'approved');
 }
 
-// إشعار فريق المشتريات (أصحاب صلاحية can_manage_rfq، وإلا الأدمن) عند الاعتماد النهائي.
-export async function notifyProcurement(env, base, pr, origin) {
-  let recips = [];
+// مستلِمو بريد المشتريات — مصدر واحد للموضعين (الاعتماد النهائي · أحداث الطلب).
+// يُرجِع عناوين مراسلة جاهزة، ولا يقبل أي عنوان من العميل.
+// ⚠️ الصندوق المشترك يعني أنّ عدّة موظّفين قد يُنتجون العنوان نفسه — والتخلّص من
+// التكرار يقع عند المُستدعي (`new Set`) فلا تصل الرسالة مرّتين.
+export async function procurementRecipients(env, base, excludeUsername) {
+  const cols = 'username,role,permissions,email,notify_email,pr_profile_key,pr_permission_overrides';
+  const legacy = 'username,role,permissions,email,pr_profile_key,pr_permission_overrides';
   try {
-    const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
+    let ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=${cols}`, { headers: svcHeaders(env) });
+    // قاعدة قبل الهجرة (لا عمود notify_email) ⇒ 400: أعِد الطلب بالأعمدة القديمة.
+    if (!ur.ok) ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=${legacy}`, { headers: svcHeaders(env) });
+    if (!ur.ok) return [];
     const users = await ur.json();
     let pick = (users || []).filter((u) =>
       (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
       || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
       || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
     if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
-    // البريد الحقيقي المخزَّن إن وُجد، وإلا الاشتقاق.
-    recips = pick.filter((u) => u.username !== pr.requester)
-      .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));
-  } catch (_) {}
+    return pick.filter((u) => u.username !== excludeUsername).map(rowNotifyEmail).filter(Boolean);
+  } catch (_) { return []; }
+}
+
+// إشعار فريق المشتريات (أصحاب صلاحية can_manage_rfq، وإلا الأدمن) عند الاعتماد النهائي.
+export async function notifyProcurement(env, base, pr, origin) {
+  const recips = await procurementRecipients(env, base, pr.requester);
   const toList = [...new Set(recips)];
   if (!toList.length) return { skipped: true, reason: 'no_procurement' };
   // ⚠️ `showMoney:true` هنا مقصود ومبرَّر: المستلِمون مُنتقَون بصلاحية التسعير
@@ -649,19 +685,7 @@ export async function notifyProcurementEvent(env, base, pr, event, origin, comme
     const e = await userEmail(env, base, owner);
     if (e) recips.push(e);
   }
-  if (!recips.length) {
-    try {
-      const ur = await fetch(`${base}/rest/v1/proc_users?active=eq.true&select=username,role,permissions,email,pr_profile_key,pr_permission_overrides`, { headers: svcHeaders(env) });
-      const users = await ur.json();
-      let pick = (users || []).filter((u) =>
-        (u.permissions && (u.permissions.can_manage_rfq === true || u.permissions.pr_manage_pricing === true))
-        || (u.pr_permission_overrides && u.pr_permission_overrides.pr_manage_pricing === true)
-        || ['procurement_officer','procurement_manager'].includes(u.pr_profile_key));
-      if (!pick.length) pick = (users || []).filter((u) => u.role === 'admin');
-      recips = pick.filter((u) => u.username !== pr.requester)
-        .map((u) => (u.email && /@aldeyabi\.com$/i.test(u.email)) ? String(u.email).toLowerCase() : usernameToEmail(u.username));
-    } catch (_) {}
-  }
+  if (!recips.length) recips = await procurementRecipients(env, base, pr.requester);
   const toList = [...new Set(recips.filter(Boolean))];
   if (!toList.length) return { skipped: true, reason: 'no_procurement' };
   return sendResend(env, toList, subjectFor(event, pr), buildResultEmail(event, pr, origin, comment));
