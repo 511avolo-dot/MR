@@ -24,6 +24,7 @@ on:
       - 'db/system2-approval-identity-and-history.sql'
       - 'db/system2-email-token-revision.sql'
       - 'db/system2-pr-attachments-unlock.sql'
+      - 'db/system2-request-workspace-clarity.sql'
       - 'functions/api/pr-action.js'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
@@ -41,6 +42,7 @@ on:
       - 'scripts/e2e/purchase-workspace-visual.test.mjs'
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
+      - 'scripts/e2e/pr-workspace-clarity.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -64,6 +66,7 @@ on:
       - 'db/system2-approval-identity-and-history.sql'
       - 'db/system2-email-token-revision.sql'
       - 'db/system2-pr-attachments-unlock.sql'
+      - 'db/system2-request-workspace-clarity.sql'
       - 'functions/api/pr-action.js'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
@@ -81,6 +84,7 @@ on:
       - 'scripts/e2e/purchase-workspace-visual.test.mjs'
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
+      - 'scripts/e2e/pr-workspace-clarity.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -165,6 +169,7 @@ jobs:
           fi
           node scripts/e2e/field-permissions.mjs
           node scripts/e2e/pr-attachments.mjs
+          node scripts/e2e/pr-workspace-clarity.mjs
           # ⚠️ `scoped-staff-screens.mjs` **ليس هنا عمداً.** حاولتُ ضمّه (2026-09-15)
           # بعد إصلاح خمسة فحوص ساقطة فيه، فسقط في العدّاء وحده (43/43 محليّاً
           # مقابل 31/43 ثمّ 25/43 هنا) بنمط «الهوية والبيانات غائبتان» — سباق

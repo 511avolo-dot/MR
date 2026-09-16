@@ -1644,6 +1644,17 @@ body.print-preview-active .print-document{display:block}
 @media(prefers-reduced-motion:reduce){.prw-node.current .prw-badge{animation:none}.prw-node{transition:none}}
 .pr-work-tablewrap{overflow:auto}.pr-work-table{width:100%;min-width:620px;border-collapse:collapse;font-size:11.5px}.pr-work-table th{padding:10px;background:var(--prw-surface-2);color:var(--prw-muted);text-align:start;font-size:10.5px;font-weight:600;border-bottom:1px solid var(--prw-line)}.pr-work-table td{padding:11px 10px;border-bottom:1px solid var(--prw-line-2);vertical-align:top}.pr-work-table tfoot td{background:var(--prw-surface-2);border-top:1.5px solid var(--prw-line);border-bottom:0}.pr-work-table tbody tr{animation:none}.pr-work-table tbody tr:last-child td{border-bottom:0}.pr-work-table .num{text-align:center;font-variant-numeric:tabular-nums}.pr-work-itemnote{display:block;color:var(--prw-faint);font-size:9.5px;margin-top:2px}
 .pr-work-empty{padding:34px 15px;text-align:center;color:var(--prw-faint);font-size:12px}.pr-work-audit{position:relative;padding:2px 0}.pr-work-event{position:relative;padding:0 22px 17px 0;border-inline-start:1px solid var(--prw-line);margin-inline-start:5px}.pr-work-event::before{content:'';position:absolute;inset-inline-start:-5px;top:4px;width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid var(--prw-gold-dark)}.pr-work-event b{display:block;font-size:12px}.pr-work-event small{display:block;color:var(--prw-faint);font-size:10px;margin-top:2px}
+/* سطر الحدث: العنوان يمينَه والوقت يسارَه بعرض ثابت — يمنع انكسار الأرقام
+   اللاتينية داخل النصّ العربيّ (بلاغ «غير متّزنة في الواجهة»). */
+.pr-work-eventrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.pr-work-eventrow b{flex:1;min-width:0}
+.pr-work-eventrow time{flex:0 0 auto;font-size:10px;color:var(--prw-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* عنوان مجموعة داخل طابور الطلبات — يلتصق أعلى القائمة عند التمرير */
+.pr-work-group{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:7px 12px;margin:10px 0 4px;background:var(--prw-surface-2,#eef1f6);border-radius:8px;
+  font-size:10.5px;font-weight:700;color:var(--prw-faint);letter-spacing:.2px}
+.pr-work-group:first-child{margin-top:0}
+.pr-work-group b{font-variant-numeric:tabular-nums;color:var(--prw-ink,#231f20);background:#fff;border-radius:999px;padding:1px 7px;font-size:10px}
 .pr-work-report{max-width:900px;margin:auto;background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:6px;box-shadow:var(--prw-sh2);padding:30px}.pr-work-reporthead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--prw-ink);padding-bottom:14px;margin-bottom:22px}.pr-work-reporthead h3{font-size:17px;margin:0}.pr-work-reporthead small{color:var(--prw-muted)}.pr-work-report-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--prw-line);border-radius:8px;overflow:hidden;margin-bottom:18px}.pr-work-report-grid div{padding:9px 11px;border-inline-start:1px solid var(--prw-line)}.pr-work-report-grid div:first-child{border-inline-start:0}.pr-work-report-grid small{display:block;color:var(--prw-muted);font-size:8.5px}.pr-work-report-grid b{font-size:10.5px}.pr-work-signatures{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:22px;margin-top:34px}.pr-work-signatures div{border-top:1px solid #aeb7c4;padding-top:7px;text-align:center;font-size:9.5px;color:var(--prw-muted)}
 .pr-work-editor{padding:22px 28px;background:var(--prw-canvas);min-height:calc(100vh - 276px);overflow:auto}.pr-work-editor>.pr-card{background:#fff}
 @media(max-width:1180px){.pr-work-grid{grid-template-columns:68px 270px minmax(0,1fr)}.pr-work-summary{grid-template-columns:repeat(3,1fr)}.pr-work-stat:nth-child(n+4){display:none}.pr-work-search{max-width:420px}}
@@ -12991,6 +13002,9 @@ async function renderPRPortal(){
   host.innerHTML=prWorkspaceHTML({view,mode,requests,selected,canCreatePR});
   if(view==='create'){
     if(!__prDraftItems.length) prAddDraftItem();
+    /* المُنتقي يُملأ **قبل** التعبئة المسبقة: القيمة تُضبط بـ`select.value` ولا
+       تلتصق إن لم يكن خيارها موجوداً. */
+    prFillProjectSelect('');
     if(__prTplPrefill){ prApplyTemplateFields(__prTplPrefill); __prTplPrefill=null; }
     prRenderItems(); prRecalcTotal(); prRenderDocChip();
     /* الحدّ الأدنى = اليوم: المتصفّح يمنع الاختيار الماضي في المُنتقي نفسه
@@ -13058,7 +13072,40 @@ function prWorkspaceQueueData(mode){
   else if(filter==='blocked') list=list.filter(prWorkspaceIsBlocked);
   const q=String(STATE.prWorkspaceSearch||'').trim().toLowerCase();
   if(q) list=list.filter(pr=>[pr.id,pr.title,pr.project,pr.requester_name,pr.requester].some(x=>String(x||'').toLowerCase().includes(q)));
-  return list;
+  return prQueueSort(list);
+}
+/* ══════════ ترتيب الطابور — كان **بلا فرز إطلاقاً** ══════════
+   ⚠️ بلاغ المالك (2026-09-16): «ترتيب الطلبات المعتمدة مع قيد الاعتماد مع
+   يتم تسعيره — هناك تشتيت في ترتيبهم». الجذر: `prWorkspaceQueueData` تُرجع
+   ما تعطيه `prWorkspaceVisible()` بترتيب الجلب (نصّيّ على `id`)، فتختلط
+   الحالات بلا منطق. الترتيب الآن **بالإلحاح لا بالأبجدية**: ما ينتظرك أوّلاً،
+   ثمّ ما تعثّر، ثمّ ما ينتظر غيرك، ثمّ الجاري، ثمّ المنتهي. وداخل كل مجموعة
+   الأحدث أوّلاً **برقم الطلب عدديّاً** (لا نصّيّاً — درس تسلسل أوامر الشراء). */
+const PR_QUEUE_GROUPS = [
+  {key:'action',  label:'يحتاج إجراءك الآن'},
+  {key:'blocked', label:'متعثّر — أُعيد أو رُفض'},
+  {key:'review',  label:'قيد الاعتماد لدى غيرك'},
+  {key:'active',  label:'جارٍ لدى المشتريات'},
+  {key:'done',    label:'صدر أمر الشراء / مكتمل'},
+  {key:'closed',  label:'منتهٍ'},
+];
+function prQueueGroup(pr){
+  if(prWorkspaceNeedsAction(pr)) return 'action';
+  if(['returned','rejected'].includes(pr.status)) return 'blocked';
+  if(['cancelled','closed'].includes(pr.status)) return 'closed';
+  if(pr.status==='in_review') return 'review';
+  if(['ordered','converted_to_po'].includes(pr.workflow_state)||pr.status==='converted_to_po') return 'done';
+  if(['pricing','partially_ordered'].includes(pr.workflow_state)||['approved','rfq_issued','submitted','draft'].includes(pr.status)) return 'active';
+  return 'active';
+}
+function prQueueSeq(pr){
+  const m=String(pr&&pr.id||'').match(/(\d+)\s*$/);
+  return m?Number(m[1]):0;
+}
+function prQueueSort(list){
+  const rank=g=>Math.max(0,PR_QUEUE_GROUPS.findIndex(x=>x.key===g));
+  return list.slice().sort((a,b)=>
+    (rank(prQueueGroup(a))-rank(prQueueGroup(b))) || (prQueueSeq(b)-prQueueSeq(a)));
 }
 function prWorkspaceStage(pr){
   let state=['draft','returned','rejected','cancelled'].includes(pr.status)?pr.status:(pr.workflow_state||pr.status);
@@ -13095,9 +13142,20 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
   const discussed=all.filter(p=>(p.messages||[]).length).length;
   const headings={requests:'الطلبات',approvals:'موافقاتي',links:'الارتباطات',discussion:'المناقشات',reports:'المحاضر',archive:'الأرشيف',settings:'إعدادات الطلبات'};
   const filter=STATE.prWorkspaceFilter||'all';
+  /* عنوان مجموعة قبل أوّل طلب منها — فلا تختلط «قيد الاعتماد» بـ«معتمد» في
+     قائمة واحدة بلا فاصل (بلاغ المالك: «تشتيت في ترتيبهم وطريقة عرضهم»). */
+  let lastGroup='';
   const queue=requests.length?requests.map(pr=>{
     const stage=prWorkspaceStage(pr), next=prWorkspaceNext(pr);
-    return `<button class="pr-work-request${selected?.id===pr.id&&!['create','templates'].includes(view)?' active':''}" data-prq-search="${escapeAttr([pr.id,pr.title,pr.project,pr.requester_name,pr.requester].join(' ').toLowerCase())}" onclick="prSelectWorkspaceRequest('${escapeAttr(pr.id)}')">
+    const g=prQueueGroup(pr);
+    let head='';
+    if(g!==lastGroup){
+      lastGroup=g;
+      const meta=PR_QUEUE_GROUPS.find(x=>x.key===g);
+      const n=requests.filter(p=>prQueueGroup(p)===g).length;
+      head=`<div class="pr-work-group" role="separator"><span>${escapeHtml(meta?meta.label:'')}</span><b>${n}</b></div>`;
+    }
+    return head+`<button class="pr-work-request${selected?.id===pr.id&&!['create','templates'].includes(view)?' active':''}" data-prq-search="${escapeAttr([pr.id,pr.title,pr.project,pr.requester_name,pr.requester].join(' ').toLowerCase())}" onclick="prSelectWorkspaceRequest('${escapeAttr(pr.id)}')">
       <span class="pr-work-request-top"><span class="pr-work-request-id">${escapeHtml(pr.id)}</span>${prStatusBadge(pr.status)}</span>
       <span class="pr-work-request-title">${escapeHtml(pr.title||'طلب شراء')}</span>
       <span class="pr-work-request-proj" title="المشروع / الجهة">📍 ${escapeHtml(poProjectText(pr))}</span>
@@ -13193,7 +13251,12 @@ function prWorkspaceStepsHTML(pr){
     {label:'رفع الطلب',who:pr.requester_name||pr.requester||'مقدّم الطلب',at:d(pr.submitted_at||pr.created_at)},
     {label:'اعتماد الاحتياج',who:'مدير الصيانة والتشغيل',ap:ap[0]},
     {label:'السماح بالتسعير',who:'مدير المشتريات',ap:ap[1]},
-    {label:'التسعير والمقارنة',who:'فريق المشتريات',at:d(pr.proc_started_at),actor:pr.proc_started_by},
+    /* ⚠️ المرحلة تُنسَب لمن **بدأ العمل** فعلاً — لا لمن أذِن بالتسعير. كانت
+       `pr_decide` تختم `proc_started_by` بالمعتمِد، فتظهر المرحلة باسمه وهو لم
+       يبدأ شيئاً (بلاغ المالك بلقطة 2026-09-16). وحتى بعد إصلاح الخادم نعرض
+       **الاسم الكامل** لا اسم الدخول، وقبل أن يبدأ أحدٌ نقول «فريق المشتريات». */
+    {label:'التسعير والمقارنة',who:'فريق المشتريات',at:d(pr.proc_started_at),
+     actor:pr.proc_started_by?prPersonName(pr,pr.proc_started_by):''},
     {label:'تغطية البنود',who:'فريق المشتريات',at:prPoLinksOf(pr).length?`${prPoLinksOf(pr).length} أمر مرتبط`:''},
     {label:'التوريد والاستلام',who:'المستودع والصيانة',at:d(pr.closed_at)}
   ];
@@ -13327,11 +13390,133 @@ function prWorkspaceItemsHTML(pr){
 function prWorkspaceApprovalsHTML(pr){
   const decisionLabel={approved:'تم الاعتماد',pending:'بانتظار القرار',returned:'أعيد للاستكمال',rejected:'مرفوض'};
   const approvals=(pr.approvals||[]).map(a=>`<div class="pr-work-event"><b>${escapeHtml(a.stage_label||a.stage_key||'قرار')}</b><small>${escapeHtml(decisionLabel[a.decision]||a.decision||'—')} · ${escapeHtml(a.approver||'غير مسند')}${a.acted_at?' · '+escapeHtml(String(a.acted_at).slice(0,16).replace('T',' ')):''}</small>${a.comment?`<small>${escapeHtml(a.comment)}</small>`:''}</div>`).join('');
-  const audit=(pr.audit||[]).slice().reverse().map(a=>`<div class="pr-work-event"><b>${escapeHtml(prAuditLabel(a.event))}</b><small>${escapeHtml(a.actor_name||a.actor||'النظام')} · ${escapeHtml(String(a.created_at||a.at||'').slice(0,16).replace('T',' '))}</small>${a.note?`<small>${escapeHtml(a.note)}</small>`:''}</div>`).join('');
-  return `${prWorkspaceDecisionHTML(pr)}<div class="pr-work-surface"><h3>سلسلة الموافقات</h3><div class="pr-work-audit">${approvals||'<div class="pr-work-empty">لم يُنشأ مسار اعتماد لهذا الطلب بعد.</div>'}</div></div><div class="pr-work-surface"><h3>سجل القرارات والتغييرات</h3><div class="pr-work-audit">${audit||'<div class="pr-work-empty">لا أحداث إضافية مسجّلة.</div>'}</div></div>`;
+  /* ⚠️ الاتّزان: الوقت رقم لاتينيّ داخل نصّ عربيّ — بلا `dir="ltr"` وعمود
+     مستقلّ ينكسر السطر ويبدو مائلاً (بلاغ المالك). العنوان يمينَ السطر والوقت
+     يسارَه، والاسم تحته. */
+  const audit=prAuditGroups(pr).map(g=>`<div class="pr-work-event" title="${escapeAttr(g.events.join(' · '))}">
+      <span class="pr-work-eventrow"><b>${escapeHtml(g.events.map(prAuditLabel).join(' · '))}</b><time dir="ltr">${escapeHtml(g.when.slice(0,16).replace('T',' '))}</time></span>
+      <small>${escapeHtml(g.name)}</small>${g.note?`<small>${escapeHtml(g.note)}</small>`:''}
+    </div>`).join('');
+  return `${prWorkspaceDecisionHTML(pr)}<div class="pr-work-surface"><h3>سلسلة الموافقات</h3><div class="pr-work-audit">${approvals||'<div class="pr-work-empty">لم يُنشأ مسار اعتماد لهذا الطلب بعد.</div>'}</div></div><div class="pr-work-surface"><h3>سجل القرارات والتغييرات</h3><div class="pr-work-audit" data-pr-audit>${audit||'<div class="pr-work-empty">لا أحداث إضافية مسجّلة.</div>'}</div></div>`;
 }
+/* ⚠️ الخريطة كانت **بمفاتيح لا يُصدرها النظام إطلاقاً** (`proc_started` ·
+   `quotes_collected` · `po_linked` · `rfq_attached` · `message`)، والمفاتيح
+   الحقيقية في `proc_pr_audit` غيرها — فكان كل حدث يسقط إلى البديل
+   `replaceAll('_',' ')` فيظهر في واجهة عربية: «stage approved» · «proc in
+   progress» · «attachment added» (بلاغ المالك بلقطة 2026-09-16).
+   المفاتيح أدناه مأخوذة من `select distinct event from proc_pr_audit` على
+   الإنتاج + ما تُصدره دوالّ الهجرات. */
+const PR_AUDIT_LABEL = {
+  created:'إنشاء الطلب', submitted:'إرسال الطلب', request_edited:'تعديل الطلب',
+  approved:'اكتمال الاعتماد', returned:'إعادة للاستكمال', rejected:'رفض الطلب',
+  cancelled:'إلغاء الطلب', closed:'إقفال الطلب', archived:'أرشفة الطلب',
+  stage_approved:'اعتماد مرحلة', stage_returned:'إعادة من مرحلة',
+  stage_rejected:'رفض في مرحلة', stage_cancelled:'إلغاء مرحلة معلّقة',
+  attachment_added:'إضافة مرفق', attachment_removed:'إزالة مرفق',
+  proc_in_progress:'بدء العمل لدى المشتريات', proc_quotes_collected:'اكتمال جمع العروض',
+  proc_rfq_issued:'إصدار طلب تسعير', proc_po_issued:'إصدار أمر الشراء',
+  proc_closed:'إقفال معالجة المشتريات',
+  proc_reset_to_received:'إعادة الطلب إلى «وصل للمشتريات»',
+  po_linked:'ربط أمر شراء', po_unlinked:'فكّ ربط أمر شراء',
+  rfq_issued:'إصدار طلب تسعير', rfq_linked:'ربط طلب تسعير',
+};
 function prAuditLabel(event){
-  return ({created:'إنشاء الطلب',submitted:'إرسال الطلب',approved:'اعتماد الطلب',returned:'إعادة للاستكمال',rejected:'رفض الطلب',message:'إضافة مناقشة',proc_started:'بدء معالجة المشتريات',quotes_collected:'اكتمال جمع العروض',po_linked:'ربط أمر شراء',po_unlinked:'فك ربط أمر شراء',rfq_attached:'ربط طلب تسعير'})[event]||String(event||'حدث على الطلب').replaceAll('_',' ');
+  /* لا نُظهر المفتاح الخام في واجهة عربية؛ ويبقى في `title` للتشخيص. */
+  return PR_AUDIT_LABEL[event] || 'تحديث على الطلب';
+}
+/* الاسم المعروض لمستخدم من البيانات التي يحملها الطلب نفسه — فالموظّف المُنطَّق
+   تحجب عنه `users_select` صفوف غيره فلا يستطيع الترجمة من جدول المستخدمين. */
+function prPersonName(pr, username){
+  const u=String(username||'').trim(); if(!u) return '';
+  const key=u.toLowerCase();
+  const hit=[
+    ...(pr&&pr.approvals||[]).map(a=>[a.approver,a.approver_name]),
+    ...(pr&&pr.messages||[]).map(m=>[m.author,m.author_name]),
+    ...(pr&&pr.audit||[]).map(a=>[a.actor,a.actor_name]),
+    [pr&&pr.requester, pr&&pr.requester_name],
+  ].find(([n,d])=>String(n||'').toLowerCase()===key && String(d||'').trim() && d!==n);
+  return hit?hit[1]:u;
+}
+/* ⚠️ فعلٌ واحد يكتب عدّة صفوف في الثانية نفسها (اعتماد المرحلة + اكتمال
+   الاعتماد + حالة المشتريات)، فيبدو السجلّ مكرّراً و«كلّه باسم واحد». نجمع
+   صفوف الفاعل نفسه في الثانية نفسها في مدخل واحد بعناوينه. */
+function prAuditGroups(pr){
+  const rows=(pr&&pr.audit||[]).slice().sort((a,b)=>
+    new Date(b.created_at||b.at||0)-new Date(a.created_at||a.at||0));
+  const out=[];
+  rows.forEach(r=>{
+    const when=String(r.created_at||r.at||'').slice(0,19);
+    const who=String(r.actor||'').toLowerCase();
+    const last=out[out.length-1];
+    if(last && last.when===when && last.who===who){
+      if(!last.events.includes(r.event)) last.events.push(r.event);
+      if(r.detail&&r.detail.stage_label&&!last.note) last.note=r.detail.stage_label;
+      return;
+    }
+    out.push({ when, who,
+      name:r.actor_name||prPersonName(pr,r.actor)||r.actor||'النظام',
+      events:[r.event],
+      note:(r.detail&&(r.detail.stage_label||r.detail.file_name||r.detail.reason))||'' });
+  });
+  return out;
+}
+/* ══════════ المشروع في نموذج الطلب — من السجلّ المعتمد لا نصّاً حرّاً ══════════
+   ⚠️ بلاغ المالك (2026-09-16): «عند إنشاء طلب جديد يجب أن تظهر قائمة منسدلة
+   بأسماء المشاريع المسجّلة». وكان الحقل `<input>` حرّاً بينما وحدة أوامر الشراء
+   لها **سجلّ مشاريع معتمد كامل** بمرادفات وكشف تشابه — فتسرّبت إلى الإنتاج
+   كتابات مثل «امانة الاحساء» و«الادارة تجربة»، وهي العلّة نفسها التي عولجت في
+   أوامر الشراء. نعيد استعمال المحرّك نفسه (`prjNames`/`prjResolve`/`prjAdd`)
+   بمعرّفات النموذج هنا — لا نسخة ثانية من المنطق. */
+function prFillProjectSelect(cur){
+  const sel=document.getElementById('pr-project'); if(!sel) return;
+  const val=String(cur==null?sel.value:cur).trim();
+  let names=[]; try{ names=prjNames(); }catch(e){ names=[]; }
+  const extra=(val && !names.includes(val)) ? val : '';
+  sel.innerHTML='<option value="">— اختر المشروع / الجهة —</option>'
+    + names.map(v=>`<option value="${escapeAttr(v)}">${escapeHtml(v)}</option>`).join('')
+    + (extra?`<option value="${escapeAttr(extra)}">${escapeHtml(extra)} (غير معتمد)</option>`:'')
+    + '<option value="__new__">➕ مشروع جديد…</option>';
+  sel.value=val;
+  const nw=document.getElementById('pr-project-new');
+  if(nw){ nw.style.display='none'; nw.value=''; }
+}
+function prProjectSelChanged(){
+  const sel=document.getElementById('pr-project'), nw=document.getElementById('pr-project-new'),
+        hint=document.getElementById('pr-project-hint');
+  if(!sel||!nw) return;
+  const isNew=(sel.value==='__new__');
+  nw.style.display=isNew?'':'none';
+  if(isNew) nw.focus();
+  if(hint) hint.textContent=isNew
+    ? 'اكتب الاسم كاملاً — سينبّهك النظام إن كان مشروعاً قائماً بكتابة مختلفة.'
+    : 'الاختيار من سجل المشاريع المعتمد — فلا تتكرّر الجهة الواحدة بكتابات مختلفة.';
+}
+function prProjectNewTyping(){
+  const nw=document.getElementById('pr-project-new'), hint=document.getElementById('pr-project-hint');
+  if(!nw||!hint) return;
+  try{ hint.innerHTML=prjTypeHint(nw.value); }catch(e){}
+}
+/* يُرجع الاسم **المعتمد**: الاختيار يُحلّ قطعاً، والجديد يمرّ بحوار «هل تقصد…؟»
+   قبل إنشاء مشروع مستقلّ (نفس سلوك نموذج أمر الشراء حرفيّاً). */
+function prReadProjectField(){
+  const sel=document.getElementById('pr-project');
+  if(!sel) return '';
+  if(sel.value!=='__new__'){
+    const v=String(sel.value||'').trim();
+    if(!v) return '';
+    try{ return prjCanonical(v)||v; }catch(e){ return v; }
+  }
+  const nw=document.getElementById('pr-project-new');
+  const nm=String(nw?nw.value:'').trim();
+  if(!nm) return '';
+  let r=null; try{ r=prjResolve(nm); }catch(e){ return nm; }
+  if(r.status==='ok') return r.project.name;
+  if(r.status==='suggest'){
+    const ok=confirm(`يوجد مشروع قائم مشابه:\n\n«${r.project.name}»\n\nموافق = استخدام المشروع القائم (وتُحفظ «${nm}» مرادفاً له)\nإلغاء = إنشاء مشروع جديد مستقل باسم «${nm}»`);
+    if(ok){ try{ prjAddAlias(r.project.id,nm); }catch(e){} return r.project.name; }
+  }
+  let p=null; try{ p=prjAdd(nm); }catch(e){}
+  return p?p.name:nm;
 }
 function prWorkspaceDiscussionHTML(pr){
   const html=prThreadHTML(pr);
@@ -13342,7 +13527,7 @@ function prWorkspaceLinksHTML(pr){
   const cards=links.map(l=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--prw-line-2)"><div><b dir="ltr">${escapeHtml(l.po_number)}</b><small class="pr-work-itemnote">${l._legacy?'مرتبط برقم الأمر (قبل جدول الروابط)':`${(l.allocations||[]).length} توزيع على البنود`}${l.note?' · '+escapeHtml(l.note):''}</small></div><button class="btn btn-ghost btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح الأمر</button></div>`).join('');
   const isReady=['pricing','partially_ordered','ordered'].includes(pr.workflow_state)||['approved','rfq_issued','converted_to_po'].includes(pr.status);
   const procurement=isReady&&prIsProcurement();
-  const process=procurement?`<div class="pr-work-surface"><h3>معالجة المشتريات ${procStatusBadge(pr)}</h3>${pr.proc_started_by?`<div class="pr-work-sub">بدأ العمل: <b>${escapeHtml(pr.proc_started_by)}</b> · ${escapeHtml(String(pr.proc_started_at||'').slice(0,10))}</div>`:''}${pr.quotes_collected_by?`<div class="pr-work-sub">تم جمع العروض: <b>${escapeHtml(pr.quotes_collected_by)}</b> · ${escapeHtml(String(pr.quotes_collected_at||'').slice(0,10))}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-ghost" onclick="prPrint('${escapeAttr(pr.id)}')">طباعة الطلب</button>${(pr.proc_status||'received')==='received'?`<button class="btn btn-primary" onclick="prStart('${escapeAttr(pr.id)}')">بدأت العمل عليه</button>`:''}${pr.proc_status==='in_progress'?`<button class="btn btn-accent" onclick="prQuotesDone('${escapeAttr(pr.id)}')">تم جمع العروض</button>`:''}${!pr.rfq_id&&hasPermission('can_manage_rfq')?`<button class="btn btn-ghost" onclick="prConvertManual('${escapeAttr(pr.id)}')">إنشاء طلب تسعير</button>`:''}${pr.rfq_id?`<button class="btn btn-ghost" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح طلب التسعير ${escapeHtml(pr.rfq_id)}</button>`:''}</div></div>`:'';
+  const process=procurement?`<div class="pr-work-surface"><h3>معالجة المشتريات ${procStatusBadge(pr)}</h3>${pr.proc_started_by?`<div class="pr-work-sub">بدأ العمل: <b>${escapeHtml(prPersonName(pr,pr.proc_started_by))}</b> · ${escapeHtml(String(pr.proc_started_at||'').slice(0,10))}</div>`:''}${pr.quotes_collected_by?`<div class="pr-work-sub">تم جمع العروض: <b>${escapeHtml(prPersonName(pr,pr.quotes_collected_by))}</b> · ${escapeHtml(String(pr.quotes_collected_at||'').slice(0,10))}</div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-ghost" onclick="prPrint('${escapeAttr(pr.id)}')">طباعة الطلب</button>${(pr.proc_status||'received')==='received'?`<button class="btn btn-primary" onclick="prStart('${escapeAttr(pr.id)}')">بدأت العمل عليه</button>`:''}${pr.proc_status==='in_progress'?`<button class="btn btn-accent" onclick="prQuotesDone('${escapeAttr(pr.id)}')">تم جمع العروض</button>`:''}${!pr.rfq_id&&hasPermission('can_manage_rfq')?`<button class="btn btn-ghost" onclick="prConvertManual('${escapeAttr(pr.id)}')">إنشاء طلب تسعير</button>`:''}${pr.rfq_id?`<button class="btn btn-ghost" onclick="rfqOpenDetail('${escapeAttr(pr.rfq_id)}')">فتح طلب التسعير ${escapeHtml(pr.rfq_id)}</button>`:''}</div></div>`:'';
   return `${process}<div class="pr-work-surface"><h3>أوامر الشراء المرتبطة (${links.length})</h3>${cards||'<div class="pr-work-empty">لم يُربط أمر شراء بهذا الطلب بعد.</div>'}${procurement?prPoLinkPanel(pr):''}</div>`;
 }
 /* ⚠️ معاينة المحضر على الشاشة تطابق المطبوعة: نفس الحقائق ونفس التواقيع
@@ -13830,7 +14015,7 @@ function prNormDate(v){
 function prApplyParsed(obj){
   const setV=(id,v)=>{ const el=document.getElementById(id); if(el && v!=null && String(v)!=='') el.value=v; };
   setV('pr-title', obj.title);
-  setV('pr-project', obj.project);
+  if(obj.project) prFillProjectSelect(String(obj.project).trim());
   setV('pr-needed', prNormDate(obj.needed_by));
   setV('pr-from', prNormDate(obj.period_from));
   setV('pr-to', prNormDate(obj.period_to));
@@ -13966,7 +14151,8 @@ async function prUseTemplate(id){
 
 function prApplyTemplateFields(t){
   const set=(id,v)=>{ const e=document.getElementById(id); if(e && v!=null && v!=='') e.value=v; };
-  set('pr-title', t.title); set('pr-project', t.project); set('pr-just', t.justification);
+  set('pr-title', t.title); if(t.project) prFillProjectSelect(String(t.project).trim());
+  set('pr-just', t.justification);
   set('pr-priority', t.priority); set('pr-needed', t.needed_by);
   const d=document.getElementById('pr-dept');
   if(d && t.department_id && [...d.options].some(o=>o.value===t.department_id)) d.value=t.department_id;
@@ -13991,7 +14177,7 @@ async function prSaveTemplate(){
     id: 'TPL-' + Date.now().toString(36).toUpperCase() + rnd,
     name, owner: STATE.currentUser?.username || null,
     title: g('pr-title')||null, department_id: g('pr-dept')||null, sector: g('pr-sector')||null,
-    project: g('pr-project')||null, priority: g('pr-priority')||'متوسط', justification: g('pr-just')||null,
+    project: prReadProjectField()||null, priority: g('pr-priority')||'متوسط', justification: g('pr-just')||null,
     items: items.map(it=>({ description:String(it.description||'').trim(), unit:it.unit||'',
       contract_qty:it.contract_qty??'', stock_balance:it.stock_balance??'',
       requested_qty:it.requested_qty??'', unit_price:it.unit_price??'' })),
@@ -14072,7 +14258,12 @@ function prBuilderHTML(){
         <div class="rep-field"><label>الإدارة / القسم</label><select class="select" id="pr-dept">${deptOpts}</select></div>
         <div class="rep-field"><label>القطاع</label><select class="select" id="pr-sector"${_lockSector?' disabled':''}>${sectorOpts}</select>${
           _lockSector?`<div style="font-size:11px;color:var(--muted);margin-top:4px">قطاعك المسنَد — لا يمكن تغييره.</div>`:''}</div>
-        <div class="rep-field"><label>المشروع / الموقع</label><input class="input" id="pr-project" placeholder="مثل: برج الابتكار"></div>
+        <div class="rep-field"><label>المشروع / الجهة</label>
+          <select class="input" id="pr-project" onchange="prProjectSelChanged()"></select>
+          <input class="input" id="pr-project-new" style="display:none;margin-top:6px" placeholder="اسم المشروع الجديد كاملاً"
+                 oninput="prProjectNewTyping()">
+          <small id="pr-project-hint" style="display:block;margin-top:5px;font-size:11px;color:var(--muted)">الاختيار من سجل المشاريع المعتمد — فلا تتكرّر الجهة الواحدة بكتابات مختلفة.</small>
+        </div>
         <div class="rep-field"><label>الأولوية</label><select class="select" id="pr-priority">${prioOpts}</select></div>
         <div class="rep-field"><label>تاريخ التوريد المطلوب</label><input type="date" class="input" id="pr-needed"></div>
         <div class="rep-field"><label>الفترة من</label><input type="date" class="input" id="pr-from"></div>
@@ -14209,7 +14400,7 @@ async function prSubmitNew(asDraft){
     id: editing ? __prEditId : null, request_no:null, title,
     department_id: deptId||null, department: dept?dept.name_ar:null,
     sector: document.getElementById('pr-sector')?.value||null,
-    project: document.getElementById('pr-project')?.value||null,
+    project: prReadProjectField()||null,
     requester: STATE.currentUser?.username||null,
     request_date: new Date().toISOString().slice(0,10),
     needed_by: document.getElementById('pr-needed')?.value||null,

@@ -602,9 +602,17 @@ BEGIN
       current_owner=(SELECT approver FROM proc_pr_approvals WHERE pr_id=p_pr_id AND seq=2),
       maintenance_approved_by=v_me,maintenance_approved_at=v_now,updated_by=v_me,updated_at=v_now WHERE id=p_pr_id;
   ELSE
-    UPDATE proc_purchase_requests SET status='approved',current_seq=0,workflow_state='pricing',proc_status='in_progress',
+    /* ⚠️ `received` لا `in_progress` (بلاغ المالك 2026-09-16): الإذن بالتسعير
+       تسليمٌ للمشتريات لا بدءُ عمل. كتابة `proc_started_by=v_me` هنا كانت تنسب
+       مرحلة «التسعير والمقارنة» للمعتمِد، **وتستهلك انتقال `received →
+       in_progress`** فيتعذّر على المشتريات تسجيل بدء العمل أصلاً. الختم يقع في
+       `pr_proc_stage` حين يبدأ العمل فعلاً. (يُصحَّح حيّاً في
+       `db/system2-request-workspace-clarity.sql` مع مداواة الصفوف القائمة.) */
+    UPDATE proc_purchase_requests SET status='approved',current_seq=0,workflow_state='pricing',
+      proc_status=CASE WHEN coalesce(nullif(proc_status,''),'received')='received'
+                       THEN 'received' ELSE proc_status END,
       current_owner=NULL,pricing_authorized_by=v_me,pricing_authorized_at=v_now,
-      proc_started_by=v_me,proc_started_at=coalesce(proc_started_at,v_now),updated_by=v_me,updated_at=v_now WHERE id=p_pr_id;
+      updated_by=v_me,updated_at=v_now WHERE id=p_pr_id;
   END IF;
   INSERT INTO proc_audit_log(username,display_name,action,entity_type,entity_id,new_value)
   VALUES(v_me,coalesce(v_name,v_me),'pr_'||v_action,'pr',p_pr_id,
@@ -683,9 +691,12 @@ BEGIN
       maintenance_approved_by=v_me,maintenance_approved_at=v_now,updated_by=v_me,updated_at=v_now WHERE id=v_pr.id;
   ELSE
     v_state:='pricing';v_status:='approved';
-    UPDATE proc_purchase_requests SET status=v_status,current_seq=0,workflow_state=v_state,proc_status='in_progress',current_owner=NULL,
-      pricing_authorized_by=v_me,pricing_authorized_at=v_now,proc_started_by=v_me,
-      proc_started_at=coalesce(proc_started_at,v_now),updated_by=v_me,updated_at=v_now WHERE id=v_pr.id;
+    -- العلّة نفسها في مسار البريد (انظر التعليق في `pr_decide` أعلاه)
+    UPDATE proc_purchase_requests SET status=v_status,current_seq=0,workflow_state=v_state,
+      proc_status=CASE WHEN coalesce(nullif(proc_status,''),'received')='received'
+                       THEN 'received' ELSE proc_status END,
+      current_owner=NULL,pricing_authorized_by=v_me,pricing_authorized_at=v_now,
+      updated_by=v_me,updated_at=v_now WHERE id=v_pr.id;
   END IF;
   RETURN jsonb_build_object('ok',true,'action',v_action,'status',v_status,'workflow_state',v_state,
     'finalized',v_status<>'in_review','seq',v_step.seq,
