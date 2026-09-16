@@ -3522,10 +3522,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prWorkspaceVisible'), grab('prIsArchived'), grab('prArchiveCount'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
       grab('prWorkspaceQueueData'), grab('prCanCancel'),
+      // بُعد موعد التوريد — دخل الطابور مجموعةً وفرزاً لا شارةً فقط.
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
     ].join('\n\n');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
-      prQueueGroup, prQueueSeq, prQueueSort,
+      prQueueGroup, prQueueSeq, prQueueSort, prNeedDays, prDueChip,
       set:(u,scoped,perms)=>{ STATE.currentUser=u; __scoped=!!scoped; __perms=perms||{}; } };`)();
   })();
 
@@ -3847,9 +3849,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     const src = [
       `let __act=new Set();`,
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
+      `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
+      prNeedDays, prDueChip,
       act:(ids)=>{ __act=new Set(ids||[]); } };`)();
   })();
 
@@ -4172,6 +4177,94 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('و«المسؤول» يُسمّى بشخصه متى استُلِم، ونداءٌ صريح متى كان بلا صاحب',
     /بانتظار من يستلمه من فريق المشتريات/.test(CODE)
     && /const owner=pr\.proc_started_by\?prPersonName\(pr,pr\.proc_started_by\)/.test(CODE));
+}
+
+/* ═══ ٤٢) موعد التوريد — البُعد الغائب عن الطابور ═══
+   القياس على الإنتاج (2026-09-16): أربعة طلبات «عاجل» موعد توريدها الغد وما تزال
+   عند التسعير بلا مُستلِم — **ولا إشارة واحدة إلى الموعد في الشاشة كلّها**. فطلبٌ
+   يستحقّ غداً كان يقع تحت طلبٍ يستحقّ بعد ثلاثة أشهر لأنّ رقمه أصغر.
+   ⚠️ تأكيدات سلوكية تُشغّل الفرز والتصنيف فعلاً على تواريخ محسوبة من اليوم. */
+{
+  G('٤٢) موعد التوريد في الطابور');
+  // صندوق مستقلّ — لا يرث `Q` من قسم ٣٩ (نطاقه كتلته).
+  const Q = (() => {
+    const src = [
+      `let __act=new Set();`,
+      `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
+      `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
+    ].join('\n\n');
+    return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS,
+      prNeedDays, prDueChip, act:(ids)=>{ __act=new Set(ids||[]); } };`)();
+  })();
+  const iso = (d) => { const t = new Date(); t.setDate(t.getDate() + d);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; };
+
+  // ── الحساب بيوم التقويم لا بالساعة: موعدُ اليوم ليس «فات» ──
+  T('حساب الأيام حتى الموعد صحيح (اليوم = صفر لا سالب)',
+    Q.prNeedDays({ needed_by: iso(0) }) === 0 && Q.prNeedDays({ needed_by: iso(1) }) === 1
+    && Q.prNeedDays({ needed_by: iso(-3) }) === -3);
+  T('وبلا موعد أو بموعد مشوَّه لا يُلفَّق حكم',
+    Q.prNeedDays({}) === null && Q.prNeedDays({ needed_by: 'غداً' }) === null
+    && Q.prNeedDays({ needed_by: '' }) === null);
+
+  // ── الشارة: لغةٌ تقول ما يجب فعله، ولا تظهر على ما انتهى ──
+  const chip = (o) => { const c = Q.prDueChip(o); return c ? c[0] : null; };
+  T('الشارة تفرّق بين «فات» و«اليوم» و«غداً»',
+    /تجاوز موعد التوريد/.test(chip({ status:'approved', needed_by: iso(-2) }) || '')
+    && chip({ status:'approved', needed_by: iso(0) }) === 'موعد التوريد اليوم'
+    && chip({ status:'approved', needed_by: iso(1) }) === 'موعد التوريد غداً');
+  T('والبعيد لا يُزاحم (أكثر من أسبوع = لا شارة)',
+    Q.prDueChip({ status:'approved', needed_by: iso(30) }) === null);
+  // ⚠️ موعدُ طلبٍ مُلغى أو مُقفَل أو مؤرشَف لا معنى له — شارةٌ حمراء عليه ضجيج.
+  T('ولا شارة على ملغى أو مرفوض أو مُقفَل أو مؤرشَف',
+    ['cancelled','rejected','closed'].every(st => Q.prDueChip({ status: st, needed_by: iso(-5) }) === null)
+    && Q.prDueChip({ status:'approved', needed_by: iso(-5), archived_at: '2026-09-01' }) === null);
+
+  // ── التصنيف: مجموعة مستقلّة، وما بيدك يبقى أوّلاً ──
+  Q.act([]);
+  T('الطلب الذي فات موعده أو يستحقّ غداً يدخل مجموعة الموعد',
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'due'
+    && Q.prQueueGroup({ id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1) }) === 'due'
+    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'pricing', needed_by: iso(9) }) === 'active');
+  Q.act(['PR-1']);
+  T('وما يحتاج إجراءك يبقى قبله مهما كان موعده',
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'action');
+  Q.act([]);
+  T('والملغى يبقى منتهياً لا «فات موعده»',
+    Q.prQueueGroup({ id:'PR-4', status:'cancelled', workflow_state:'cancelled', needed_by: iso(-9) }) === 'closed');
+
+  // ── الفرز: داخل مجموعة الموعد **الأقرب استحقاقاً أوّلاً** لا الأحدث رقماً ──
+  {
+    const list = [
+      { id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1)  },  // غداً، رقم أكبر
+      { id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-4) },  // فات، رقم أصغر
+      { id:'PR-9', status:'approved', workflow_state:'pricing', needed_by: iso(40) },  // بعيد
+    ];
+    const order = Q.prQueueSort(list).map(x => x.id).join('|');
+    T('ما فات موعده يسبق ما يستحقّ غداً رغم أنّ رقمه أصغر', order === 'PR-1|PR-2|PR-9', order);
+  }
+  // ⚠️ وخارج مجموعة الموعد يبقى الفرز بالرقم عدديّاً (صفر انحدار على #112).
+  {
+    const list = [
+      { id:'PR-9',  status:'approved', workflow_state:'pricing', needed_by: iso(60) },
+      { id:'PR-10', status:'approved', workflow_state:'pricing', needed_by: iso(60) },
+    ];
+    T('وفرز الأرقام العدديّ باقٍ خارج مجموعة الموعد',
+      Q.prQueueSort(list).map(x => x.id).join('|') === 'PR-10|PR-9');
+  }
+
+  // ── الواجهة: الشارة تصل البطاقة ولوحة الطلب، ولها أنماط دلاليّة ──
+  T('الشارة تُرسَم على بطاقة الطابور وعلى تاريخ الاحتياج في اللوحة',
+    (CODE.match(/prDueChip\(pr\)/g) || []).length >= 2
+    && /class="pr-work-due \$\{c\[1\]\}"/.test(CODE));
+  T('وأنماطها من رموز اللوحة الدلاليّة لا ألوان مخترَعة',
+    /\.pr-work-due\.danger\{background:var\(--prw-red-bg\)/.test(HTML)
+    && /\.pr-work-due\.warn\{background:var\(--prw-warn-bg\)/.test(HTML));
+  T('ومجموعة الموعد معرَّفة في الطابور بعد «يحتاج إجراءك»',
+    Q.PR_QUEUE_GROUPS.findIndex(g => g.key === 'due') === 1
+    && Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

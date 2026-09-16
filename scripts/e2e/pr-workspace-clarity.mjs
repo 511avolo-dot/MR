@@ -38,6 +38,10 @@ await page.evaluate(async () => {
     auth: { getSession: async () => ({ data: { session: { access_token: 'jwt' } } }) },
     from: () => ({ select: () => ({ order: () => ({ range: async () => ({ data: [], error: null }) }) }) }),
   } };
+  /* ⚠️ المواعيد محسوبة من **اليوم** لا ثابتة: تاريخٌ مكتوب بيده يصير ماضياً
+     بعد أسابيع فينقلب التأكيد صامتاً. */
+  const DUE = (d) => { const t = new Date(); t.setDate(t.getDate() + d);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; };
   const mk = (n, o) => Object.assign({
     id: 'PR-DG2026-' + String(n).padStart(4, '0'), request_no: 'PR-DG2026-' + String(n).padStart(4, '0'),
     title: 'طلب ' + n, requester: 'mostafa.kishk', requester_name: 'مصطفى كشك',
@@ -46,11 +50,11 @@ await page.evaluate(async () => {
   }, o);
   STATE.currentUser = { username: 'Abdullah', displayName: 'عبدالله الذيابي', role: 'admin', permissions: {} };
   STATE.purchaseRequests = [
-    mk(3,  { status: 'approved',  workflow_state: 'pricing' }),
+    mk(3,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(-4) }),
     mk(12, { status: 'in_review', workflow_state: 'maintenance_review', current_seq: 1 }),
     mk(11, { status: 'in_review', workflow_state: 'maintenance_review', current_seq: 1 }),
-    mk(10, { status: 'approved',  workflow_state: 'pricing' }),
-    mk(9,  { status: 'approved',  workflow_state: 'pricing' }),
+    mk(10, { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(1) }),
+    mk(9,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(45) }),
     mk(2,  { status: 'returned',  workflow_state: 'returned' }),
   ];
   STATE.prWorkspaceMode = 'requests'; STATE.prWorkspaceFilter = 'all'; STATE.prWorkspaceSearch = '';
@@ -190,6 +194,41 @@ const mob = await page.evaluate(() => {
   return { w, group: !!g };
 });
 T('وصفر فيض على الجوال مع بقاء عناوين المجموعات', mob.w <= 0 && mob.group, String(mob.w));
+// ── ⑤ موعد التوريد: شارة مرسومة فعلاً + مجموعة + ترتيب بالاستحقاق ──
+/* ⚠️ الهويّة تتبدّل إلى **مقدّم الطلب**: عند المشتريات تكون طلبات التسعير
+   «تحتاج إجراءك» فتتصدّر قبل مجموعة الموعد — وهو الصواب، لكنّه يُخفي ما نقيسه. */
+await page.setViewportSize({ width: 1440, height: 950 });
+await page.evaluate(async () => {
+  STATE.currentUser = { username: 'mostafa.kishk', displayName: 'مصطفى كشك', role: 'user',
+    permissions: { can_create_pr: true }, scopeSectors: ['الصيانة والتشغيل'] };
+  STATE.prView = 'list'; await renderPRPortal();
+});
+const dueUI = await page.evaluate(() => {
+  const list = document.querySelector('.pr-work-queue .pr-work-list');
+  const rows = [...list.children].map(el => el.classList.contains('pr-work-group')
+    ? { group: el.querySelector('span')?.textContent.trim() }
+    : { id: (el.querySelector('.pr-work-request-id')?.textContent || '').trim(),
+        due: (el.querySelector('.pr-work-due')?.textContent || '').trim(),
+        box: (() => { const c = el.querySelector('.pr-work-due'); if (!c) return 0;
+          const r = c.getBoundingClientRect(); return Math.round(r.width * r.height); })() });
+  return { rows, groups: rows.filter(r => r.group).map(r => r.group) };
+});
+const dueRows = dueUI.rows.filter(r => r.id);
+T('مجموعة موعد التوريد تظهر في الطابور',
+  dueUI.groups.some(g => /موعد التوريد/.test(g)), JSON.stringify(dueUI.groups));
+/* صندوقٌ غير صفريّ = **مرسومة فعلاً**، لا موجودة في الترميز وحده. */
+T('  وشارة الموعد مرسومة بصندوق غير صفريّ',
+  dueRows.filter(r => r.box > 0).length === 2, JSON.stringify(dueRows.map(r => [r.id.slice(-4), r.box])));
+T('  ونصّها يفرّق بين ما فات وما يستحقّ غداً',
+  dueRows.some(r => /تجاوز موعد التوريد/.test(r.due)) && dueRows.some(r => /غداً/.test(r.due)),
+  JSON.stringify(dueRows.map(r => r.due).filter(Boolean)));
+/* 0003 فات موعده و0010 يستحقّ غداً — ورقم 0010 أكبر، فالفرز بالرقم كان سيقلبهما. */
+T('  وما فات موعده يسبق ما يستحقّ غداً رغم أنّ رقمه أصغر',
+  dueRows.findIndex(r => r.id.endsWith('0003')) < dueRows.findIndex(r => r.id.endsWith('0010')),
+  dueRows.map(r => r.id.slice(-4)).join(','));
+T('  والبعيد (45 يوماً) بلا شارة',
+  (dueRows.find(r => r.id.endsWith('0009')) || {}).box === 0);
+
 T('صفر خطأ صفحة', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
 T('صفر انتهاك CSP', csp.length === 0, csp.slice(0, 2).join(' | '));
 

@@ -1618,6 +1618,11 @@ body.print-preview-active .print-document{display:block}
 /* لوحة «بانتظار من يستلمه» — نداءُ عملٍ لا بطاقة عرض، فتُميَّز بحافّة ذهبية
    بارزة كلوحة القرار نفسها (اللون علامةٌ لا سطح). */
 .pr-work-claim{border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5);border-inline-start:4px solid var(--prw-gold,#a8842c)}
+/* شارة موعد التوريد — تظهر على بطاقة الطابور وفي لوحة الطلب. */
+.pr-work-due{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:3px 9px;border-radius:999px;
+  font-size:10.5px;font-weight:700;line-height:1.6;white-space:nowrap}
+.pr-work-due.danger{background:var(--prw-red-bg);color:var(--prw-red);border:1px solid var(--prw-red-line)}
+.pr-work-due.warn{background:var(--prw-warn-bg);color:var(--prw-warn);border:1px solid var(--prw-warn-line)}
 .pr-work-next{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;margin-bottom:12px;border:1px solid var(--prw-gold-soft);border-inline-start:4px solid var(--prw-gold);border-radius:12px;background:linear-gradient(180deg,#fffdf7,#fbf4e5);box-shadow:var(--prw-sh1)}.pr-work-next small{display:block;color:var(--prw-gold-3);font-size:9.5px;font-weight:600;letter-spacing:.03em}.pr-work-next b{display:block;color:var(--prw-ink);font-size:13px;margin-top:3px}.pr-work-next .owner{font-size:10.5px;color:var(--prw-muted);white-space:nowrap}
 /* ══ مسار سير العمل — بطاقات بحالات ومسؤولين وتواريخ فعليّة ══
    ⚠️ كان الأصل قائمة `<li>` مسطّحة بخطّ 9–10px بلا مسؤول ولا تاريخ ولا رابط
@@ -12892,6 +12897,34 @@ function prAgeDays(pr){
   const t = Date.parse(pr.updated_at||pr.created_at||''); if(isNaN(t)) return 0;
   return Math.max(0, Math.floor((Date.now()-t)/86400000));
 }
+/* ══════════ موعد التوريد — البُعد الغائب عن الطابور كلّه ══════════
+   ⚠️ القياس على الإنتاج (2026-09-16): **أربعة طلبات «عاجل» موعد توريدها الغد**
+   وما تزال عند التسعير بلا مُستلِم — ولم يكن في الشاشة إشارةٌ واحدة إلى الموعد.
+   فطلبٌ يستحقّ غداً كان يقع تحت طلبٍ يستحقّ بعد ثلاثة أشهر لمجرّد أنّ رقمه أصغر.
+   ⚠️ والمقارنة **بيوم التقويم لا بالساعة**: موعدٌ اليوم ليس «فات». */
+function prNeedDays(pr){
+  const s = String(pr && pr.needed_by || '').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;      // بلا موعد ⇒ لا حكم
+  const due = Date.parse(s + 'T00:00:00');
+  if(isNaN(due)) return null;
+  const now = new Date();
+  const today = Date.parse(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T00:00:00`);
+  return Math.round((due - today)/86400000);
+}
+/* الموعد لا يعني شيئاً لطلبٍ انتهى — فلا شارة على مُقفَل أو ملغى أو مرفوض. */
+function prDueLive(pr){
+  return !!pr && !PR_FINAL_STATUSES.includes(pr.status) && !prIsArchived(pr);
+}
+/* [نصّ, صنف] — أو null فلا شارة. `poDays` للصيغة العربية الصحيحة للأيام. */
+function prDueChip(pr){
+  if(!prDueLive(pr)) return null;
+  const d = prNeedDays(pr);
+  if(d===null || d>7) return null;                      // البعيد لا يُزاحم
+  if(d < 0)  return ['تجاوز موعد التوريد بـ'+poDays(-d), 'danger'];
+  if(d === 0) return ['موعد التوريد اليوم', 'danger'];
+  if(d === 1) return ['موعد التوريد غداً', 'warn'];
+  return ['باقٍ '+poDays(d)+' على التوريد', 'warn'];
+}
 function prAgeBadge(pr){
   if(pr.status!=='in_review') return '';
   const d = prAgeDays(pr);
@@ -13100,6 +13133,9 @@ function prWorkspaceQueueData(mode){
    الأحدث أوّلاً **برقم الطلب عدديّاً** (لا نصّيّاً — درس تسلسل أوامر الشراء). */
 const PR_QUEUE_GROUPS = [
   {key:'action',  label:'يحتاج إجراءك الآن'},
+  /* ⚠️ الموعد مجموعةٌ لا شارة: طلبٌ يستحقّ غداً يجب أن يُرى قبل طلبٍ يستحقّ بعد
+     ثلاثة أشهر مهما كان رقمه. ويقع **بعد** «يحتاج إجراءك» فما بيدك يبقى أوّلاً. */
+  {key:'due',     label:'موعد التوريد فات أو قارب'},
   {key:'blocked', label:'متعثّر — أُعيد أو رُفض'},
   {key:'review',  label:'قيد الاعتماد لدى غيرك'},
   {key:'active',  label:'جارٍ لدى المشتريات'},
@@ -13109,6 +13145,7 @@ const PR_QUEUE_GROUPS = [
 function prQueueGroup(pr){
   if(prWorkspaceNeedsAction(pr)) return 'action';
   if(['returned','rejected'].includes(pr.status)) return 'blocked';
+  { const d = prDueLive(pr) ? prNeedDays(pr) : null; if(d!==null && d<=1) return 'due'; }
   if(['cancelled','closed'].includes(pr.status)) return 'closed';
   if(pr.status==='in_review') return 'review';
   if(['ordered','converted_to_po'].includes(pr.workflow_state)||pr.status==='converted_to_po') return 'done';
@@ -13121,8 +13158,15 @@ function prQueueSeq(pr){
 }
 function prQueueSort(list){
   const rank=g=>Math.max(0,PR_QUEUE_GROUPS.findIndex(x=>x.key===g));
-  return list.slice().sort((a,b)=>
-    (rank(prQueueGroup(a))-rank(prQueueGroup(b))) || (prQueueSeq(b)-prQueueSeq(a)));
+  /* ⚠️ داخل مجموعة الموعد يُقلَب المعيار: **الأقرب استحقاقاً أوّلاً** لا الأحدث
+     رقماً. فرزٌ برقم الطلب هناك يضع ما فات موعده تحت ما يستحقّ غداً. */
+  const due=pr=>{ const d=prDueLive(pr)?prNeedDays(pr):null; return d===null?1e9:d; };
+  return list.slice().sort((a,b)=>{
+    const ga=prQueueGroup(a), gb=prQueueGroup(b);
+    const r=rank(ga)-rank(gb); if(r) return r;
+    if(ga==='due'){ const t=due(a)-due(b); if(t) return t; }
+    return prQueueSeq(b)-prQueueSeq(a);
+  });
 }
 function prWorkspaceStage(pr){
   let state=['draft','returned','rejected','cancelled'].includes(pr.status)?pr.status:(pr.workflow_state||pr.status);
@@ -13187,6 +13231,7 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
       <span class="pr-work-request-title">${escapeHtml(pr.title||'طلب شراء')}</span>
       <span class="pr-work-request-proj" title="المشروع / الجهة">📍 ${escapeHtml(poProjectText(pr))}</span>
       <span class="pr-work-request-meta"><span><i class="pr-work-dot ${stage[1]}"></i>${escapeHtml(stage[0])}</span><span>${escapeHtml(next[0])}</span></span>
+      ${(()=>{const c=prDueChip(pr);return c?`<span class="pr-work-due ${c[1]}">⏳ ${escapeHtml(c[0])}</span>`:'';})()}
     </button>`;
   }).join(''):`<div class="pr-work-empty">لا توجد طلبات ضمن قائمة العمل الحالية.</div>`;
   return `<section class="pr-workspace" aria-label="مساحة عمل طلبات الشراء">
@@ -13399,7 +13444,7 @@ async function prRemoveAttachment(id, prId){
 function prWorkspaceOverviewHTML(pr){
   const next=prWorkspaceNext(pr);
   const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p><button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button></div>`:'';
-  return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${prClaimCardHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
+  return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${prClaimCardHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}${(()=>{const c=prDueChip(pr);return c?` <span class="pr-work-due ${c[1]}">${escapeHtml(c[0])}</span>`:'';})()}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
 }
 function prWorkspaceItemsHTML(pr){
   const links=pr.po_links||[], showMoney=canViewAmounts();
