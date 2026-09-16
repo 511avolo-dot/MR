@@ -61,14 +61,17 @@ DECLARE
   t text;
   -- ⚠️ قائمة صريحة لا تعداد آليّ: الإقفال قرار لكل جدول على حدة، وجدولٌ
   --    جديد يجب أن يُراجَع لا أن يُقفَل تلقائيّاً (قد يحتاجه الموظّف).
+  -- ⚠️ أُخرِج من القائمة (2026-09-16، `db/system2-pr-attachments-unlock.sql`):
+  --    `proc_pr_attachments` و`proc_pr_audit`. كانا يومها «بقايا بصفر صفّ بلا
+  --    مرجع في الواجهة»، ثمّ صارا قلبَ موديل مساحة عمل الطلبات (2026-09-14):
+  --    RESTRICTIVE تُجمَع بـAND فألغت حارسهما `pr_can_view_request` ⇒ الموظّف
+  --    المُنطَّق لا يرى مرفق طلبه ولا سجلّه. إعادتهما هنا تُعيد العطل.
   tables text[] := ARRAY[
     'proc_supplier_registrations',
-    'proc_pr_attachments',
     'proc_rfqs',
     'proc_rfq_quotes',
     'proc_item_aliases',
-    'proc_ai_usage',
-    'proc_pr_audit'
+    'proc_ai_usage'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -133,7 +136,8 @@ COMMENT ON FUNCTION proc_is_scoped() IS
 -- ═══════════ التحقّق (شغّلها بعد التطبيق) ═══════════
 -- SELECT tablename, policyname, permissive FROM pg_policies
 --  WHERE schemaname='public' AND policyname='no_scoped_access' ORDER BY tablename;
---   ⇒ سبعة صفوف، permissive = 'RESTRICTIVE'
+--   ⇒ خمسة صفوف، permissive = 'RESTRICTIVE'
+--     (كانت سبعة قبل 2026-09-16؛ الجدولان المُخرَجان في التعليق أعلاه)
 -- SELECT count(*) FROM pg_policies WHERE schemaname='public'
 --   AND tablename='proc_supplier_registrations' AND 'anon' = ANY(roles);
 --   ⇒ 2 (public_insert + public_insert_pending — لم تُمَسّا)

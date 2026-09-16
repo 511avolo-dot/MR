@@ -32,10 +32,12 @@ BEGIN
   INSERT INTO proc_rfq_quotes  (id,rfq_id,supplier,status) VALUES ('LK-Q','LK-RFQ','مورّد','submitted');
   INSERT INTO proc_item_aliases(item_code,alias,normalized_alias) VALUES ('LK-C','اسم بديل','اسم بديل');
   INSERT INTO proc_ai_usage    (date,username,tokens) VALUES ('2026-09-13','lk_office',10);
-  INSERT INTO proc_pr_attachments (pr_id,path,uploaded_by) VALUES ('LK-PR','docs/x.pdf','lk_office');
-  INSERT INTO proc_pr_audit    (pr_id,action,actor) VALUES ('LK-PR','created','lk_office');
+  /* ⚠️ `proc_pr_attachments` و`proc_pr_audit` خرجا من الإقفال (2026-09-16،
+     `db/system2-pr-attachments-unlock.sql`): صارا قلبَ موديل مساحة عمل الطلبات
+     ولهما حارسهما `pr_can_view_request`، والإقفال العامّ كان يُلغيه فيحجب عن
+     الموظّف مرفقاتِ طلبه هو. رؤيتهما تُختبَر في PA1–PA12. */
 
-  -- ── LK1: صفر انحدار — موظّف المكتب يقرأ الجداول السبعة كما كان ──
+  -- ── LK1: صفر انحدار — موظّف المكتب يقرأ الجداول الخمسة كما كان ──
   PERFORM set_config('request.jwt.claims','{"email":"lk_office@aldeyabi.com"}',true);
   PERFORM set_config('role','authenticated',true);
   SELECT (SELECT count(*) FROM proc_supplier_registrations WHERE id='LK-1')
@@ -43,15 +45,13 @@ BEGIN
        + (SELECT count(*) FROM proc_rfq_quotes     WHERE id='LK-Q')
        + (SELECT count(*) FROM proc_item_aliases   WHERE item_code='LK-C')
        + (SELECT count(*) FROM proc_ai_usage       WHERE username='lk_office')
-       + (SELECT count(*) FROM proc_pr_attachments WHERE pr_id='LK-PR')
-       + (SELECT count(*) FROM proc_pr_audit       WHERE pr_id='LK-PR')
     INTO v_cnt;
   PERFORM set_config('role','postgres',true);
-  IF v_cnt <> 7 THEN
-    RAISE EXCEPTION 'LK1 فشل (انحدار): موظّف المكتب يقرأ % من 7 جداول', v_cnt;
+  IF v_cnt <> 5 THEN
+    RAISE EXCEPTION 'LK1 فشل (انحدار): موظّف المكتب يقرأ % من 5 جداول', v_cnt;
   END IF;
 
-  -- ── LK2: الموظّف المُنطَّق محجوب عن الجداول السبعة كلّها ──
+  -- ── LK2: الموظّف المُنطَّق محجوب عن الجداول الخمسة كلّها ──
   PERFORM set_config('request.jwt.claims','{"email":"lk_field@aldeyabi.com"}',true);
   PERFORM set_config('role','authenticated',true);
   SELECT (SELECT count(*) FROM proc_supplier_registrations)
@@ -59,8 +59,6 @@ BEGIN
        + (SELECT count(*) FROM proc_rfq_quotes)
        + (SELECT count(*) FROM proc_item_aliases)
        + (SELECT count(*) FROM proc_ai_usage)
-       + (SELECT count(*) FROM proc_pr_attachments)
-       + (SELECT count(*) FROM proc_pr_audit)
     INTO v_cnt;
   PERFORM set_config('role','postgres',true);
   IF v_cnt <> 0 THEN
@@ -137,7 +135,7 @@ BEGIN
   RAISE NOTICE 'LK5 نجحت';
 END $$;
 
--- ── LK6: كل سياسة إقفال RESTRICTIVE فعلاً، وعلى السبعة كلّها ──
+-- ── LK6: كل سياسة إقفال RESTRICTIVE فعلاً، وعلى الخمسة كلّها ──
 --    RESTRICTIVE تُجمَع بـAND؛ ولو أُنشئت متساهلةً لجُمِعت بـOR فوسّعت الوصول
 --    بدل أن تُضيّقه — وهو انقلاب صامت لا يُمسَك إلا بفحص نوع السياسة.
 DO $$
@@ -145,8 +143,8 @@ DECLARE v_n int; v_bad text;
 BEGIN
   SELECT count(*) INTO v_n FROM pg_policies
    WHERE schemaname='public' AND policyname='no_scoped_access' AND permissive='RESTRICTIVE';
-  IF v_n <> 7 THEN
-    RAISE EXCEPTION 'LK6 فشل: سياسات الإقفال RESTRICTIVE عددها % لا 7', v_n;
+  IF v_n <> 5 THEN
+    RAISE EXCEPTION 'LK6 فشل: سياسات الإقفال RESTRICTIVE عددها % لا 5', v_n;
   END IF;
   SELECT string_agg(tablename, ', ') INTO v_bad FROM pg_policies
    WHERE schemaname='public' AND policyname='no_scoped_access' AND permissive <> 'RESTRICTIVE';
@@ -232,7 +230,5 @@ DELETE FROM proc_rfq_quotes  WHERE id='LK-Q';
 DELETE FROM proc_rfqs        WHERE id='LK-RFQ';
 DELETE FROM proc_item_aliases WHERE item_code='LK-C';
 DELETE FROM proc_ai_usage    WHERE username='lk_office';
-DELETE FROM proc_pr_attachments WHERE pr_id='LK-PR';
-DELETE FROM proc_pr_audit    WHERE pr_id='LK-PR';
 DELETE FROM proc_users WHERE username IN ('lk_office','lk_field','lk_admin');
 SELECT set_config('request.jwt.claims', '', false);

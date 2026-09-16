@@ -15,10 +15,18 @@ BEGIN
                FROM proc_users WHERE username='ws_legacy_scoped'),false) IS TRUE THEN
     RAISE EXCEPTION 'WS31 scoped account received amount visibility';
   END IF;
+  /* ⚠️ كان هنا تأكيدٌ يشترط بقاء سياسة الإقفال العامّة `no_scoped_access` على
+     جدولَي المرفقات والسجلّ — وهو **يُرمّز العطل نفسه**: تلك السياسة RESTRICTIVE
+     تُجمَع بـAND فتُلغي حارس الموديل `pr_can_view_request`، فلا يرى الموظّف
+     المُنطَّق مرفقاتِ طلبه هو (بلاغ المالك 2026-09-16). حُذِف الإقفال عن
+     الجدولين في `db/system2-pr-attachments-unlock.sql`، والثابت الحقيقيّ الذي
+     يجب أن يبقى هو **وجود حارس الموديل لكلٍّ منهما** — وهو ما يُفحَص هنا،
+     وغيابُ الإقفال يُفحَص في PA6 بعد تطبيق الهجرة. */
   IF (SELECT count(*) FROM pg_policies WHERE schemaname='public'
       AND tablename IN ('proc_pr_attachments','proc_pr_audit')
-      AND policyname='no_scoped_access' AND permissive='RESTRICTIVE')<>2 THEN
-    RAISE EXCEPTION 'WS32 restrictive lockdown policies were removed';
+      AND permissive='PERMISSIVE' AND cmd='SELECT'
+      AND qual LIKE '%pr_can_view_request%')<>2 THEN
+    RAISE EXCEPTION 'WS32 per-request visibility guard missing on attachments/audit';
   END IF;
 
   PERFORM set_config('request.jwt.claims','{"email":"ws_legacy_office@aldeyabi.com","role":"authenticated"}',true);

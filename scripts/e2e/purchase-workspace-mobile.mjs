@@ -162,9 +162,13 @@ try {
     });
     T(`أهداف اللمس ≥36px ارتفاعاً`, small.length===0, `${small.length}: ${small.slice(0,6).join(' | ')}`);
 
-    // حقول الإدخال 16px فأكثر (دونها يُقرّب iOS الصفحة تلقائياً)
+    /* حقول الإدخال 16px فأكثر (دونها يُقرّب iOS الصفحة تلقائياً).
+       ⚠️ حقول الملفّات مستثناة هنا كما هي مستثناة في CSS: النقر عليها يفتح
+       مُنتقي النظام ولا يُدخِل المستخدم فيها نصّاً، فلا تقريب. الثابت المحروس
+       هو **حقول إدخال النصّ**؛ توسيعه لكل `input` يُنتج إخفاقاً كاذباً. */
     const tiny = await page.evaluate(()=>[...document.querySelectorAll('#page-pr input,#page-pr select,#page-pr textarea')]
       .filter(e=>e.getBoundingClientRect().height>0)
+      .filter(e=>!['file','checkbox','radio','range'].includes((e.type||'').toLowerCase()))
       .map(e=>({t:e.id||e.name||e.placeholder||e.tagName,fs:parseFloat(getComputedStyle(e).fontSize)}))
       .filter(x=>x.fs<16).map(x=>`${x.t} ${x.fs}px`));
     T(`حقول الإدخال ≥16px (لا تقريب iOS)`, tiny.length===0, `${tiny.length}: ${tiny.slice(0,6).join(' | ')}`);
