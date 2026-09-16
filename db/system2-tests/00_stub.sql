@@ -55,7 +55,10 @@ CREATE TABLE IF NOT EXISTS proc_departments (
   id TEXT PRIMARY KEY, name_ar TEXT NOT NULL, sector TEXT, cost_center TEXT,
   manager_user TEXT, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT);
+-- ⚠️ مطابق لأعمدة الإنتاج حرفيّاً (information_schema، 2026-09-16): تسعة أعمدة
+-- **بلا أي عمود ماليّ** — الأسعار في proc_history لا هنا.
+CREATE TABLE IF NOT EXISTS proc_items    (code TEXT PRIMARY KEY, name TEXT, category TEXT, unit TEXT, notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), created_by TEXT, updated_by TEXT);
 CREATE TABLE IF NOT EXISTS proc_suppliers(id TEXT PRIMARY KEY, name TEXT, phone TEXT, iban TEXT);
 CREATE TABLE IF NOT EXISTS proc_history  (num BIGINT PRIMARY KEY, code TEXT, supplier TEXT, price NUMERIC, date TEXT, reference TEXT);
 -- ⚠️ أعمدة معالجة المشتريات بأنواع الإنتاج نفسها (db/pr-portal.sql §11):

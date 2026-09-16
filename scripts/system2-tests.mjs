@@ -4052,6 +4052,128 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && !/payload\.notify_email\s*=/.test(CODE));
 }
 
+/* ═══ ٤١) كتالوج بلا أسعار + سجلّ الوحدات + إسناد مسؤول المشتريات ═══
+   القياس على قاعدة الإنتاج (2026-09-16) قبل أي كود:
+     • سياسة `cat_select` = ((NOT proc_is_scoped()) OR proc_can_view_amounts())
+       ⇒ موظّف الميدان يقرأ **صفر صنف**، وقائمة الإكمال تُبنى من `STATE.items`
+       فتصله فارغة. النتيجة: 63 وصفاً في بنود الطلبات، **صفر تطابق** مع 711 صنفاً.
+     • 39 وحدة لـ711 صنفاً، أكثرها كتابات لنفس الوحدة (حبة 475 · حبه 13 · ﺣبة 4).
+     • خمسة طلبات عند التسعير `proc_status='received'` و`proc_started_by` فارغ،
+       وزرّ الاستلام مدفون في تبويب «الارتباطات» لا على المهبط.
+   ⚠️ التأكيدات هنا **سلوكية**: تُشغّل `unitNorm`/`prCatalogUnit`/`prItemPicked`
+   على DOM مُقلَّد وتقرأ الأثر — لا تفحص وجود نصّ (الفحص النصّيّ هو ما يمرّ عليه العيب). */
+{
+  G('٤١) الكتالوج والوحدات وإسناد المشتريات');
+  const ILU = fs.readFileSync(path.join(ROOT, 'db/system2-item-lookup-and-units.sql'), 'utf8');
+  const bare = ILU.replace(/--[^\n]*/g, '');
+
+  // ── القاعدة: العرض بلا أي عمود ماليّ، ولا يُمنَح لـanon ──
+  const viewBody = (bare.match(/CREATE VIEW public\.proc_items_lookup[\s\S]*?;/) || [''])[0];
+  T('عرض الكتالوج يحمل الاسم والوحدة والفئة فقط — بلا أي عمود ماليّ',
+    /i\.name/.test(viewBody) && /proc_unit_canon\(i\.unit\)/.test(viewBody)
+    && !/price|cost|avg_|offers_count|last_/i.test(viewBody));
+  T('ولا يُمنَح لـanon (الكتالوج ليس عامّاً)',
+    /REVOKE ALL ON public\.proc_items_lookup FROM PUBLIC, anon/.test(bare)
+    && /GRANT SELECT ON public\.proc_items_lookup TO authenticated/.test(bare));
+  // امتياز المالك هو ما يجعله يتجاوز cat_select — نفس نمط portal_user_directory.
+  T('والعرض بامتياز المالك (security_invoker=false) وإلّا بقي محجوباً',
+    /security_invoker\s*=\s*false/.test(bare));
+  // التنظيف يمسّ الكتالوج وحده: بند طلبٍ مُرسَل سجلُّ قرار لا يُعاد كتابته.
+  T('وتنظيف الوحدات يمسّ الكتالوج ولا يمسّ بنود الطلبات',
+    /UPDATE public\.proc_items/.test(bare) && !/UPDATE public\.proc_pr_items/.test(bare));
+  T('وسحب تنفيذ anon عن دوال المُشغِّلات الثلاث',
+    /pr_guard_status/.test(bare) && /pr_set_due/.test(bare)
+    && /proc_pr_audit_fill_actor_name/.test(bare) && /REVOKE ALL ON FUNCTION/.test(bare));
+
+  // ── الخريطتان يجب أن تتطابقا: تطبيعٌ في الواجهة يخالف الخادم يُنتج وحدتين ──
+  const jsMap = {};
+  const jsBlock = (CODE.match(/const UNIT_CANON = \{[\s\S]*?\n\};/) || [''])[0];
+  for (const m of jsBlock.matchAll(/'([^']+)':'([^']+)'/g)) jsMap[m[1]] = m[2];
+  const sqlMap = {};
+  const sqlBlock = (bare.match(/SELECT CASE lower\(u\)[\s\S]*?ELSE u/) || [''])[0];
+  for (const m of sqlBlock.matchAll(/WHEN '([^']+)'\s*THEN '([^']+)'/g)) sqlMap[m[1].toLowerCase()] = m[2];
+  const jsKeys = Object.keys(jsMap).sort(), sqlKeys = Object.keys(sqlMap).sort();
+  T('خريطة الوحدات في الواجهة تطابق نظيرتها الخادمية مفتاحاً بمفتاح',
+    jsKeys.length > 12 && jsKeys.join('|') === sqlKeys.join('|')
+    && jsKeys.every(k => jsMap[k] === sqlMap[k]));
+
+  // ── سلوكيّ: التطبيع يوحّد الكتابات القاطعة ولا يدمج دلاليّاً ──
+  const ST = { itemLookup: [], items: [] };
+  const S = new Function('STATE',
+    grabConst('PR_UNITS') + '\n' + grabConst('UNIT_CANON') + '\n'
+    + grab('unitNorm') + '\n' + grab('arNorm') + '\n'
+    + grab('prCatalog') + '\n' + grab('prCatalogUnit') + '\n' + grab('prItemPicked') + '\n'
+    + 'return { PR_UNITS, UNIT_CANON, unitNorm, prCatalog, prCatalogUnit, prItemPicked };'
+  )(ST);
+  S.STATE = ST;
+  const decisive = [['حبه','حبة'],['ﺣبة','حبة'],['حيه','حبة'],['جبه','حبة'],['pcs','حبة'],
+                    ['كرتونة','كرتون'],['BOX','كرتون'],['قطمة','قطعة'],['وحده','وحدة'],
+                    ['لفه','لفة'],['باالة','بالة'],['دزينة','درزن'],['كجم','كيلو'],
+                    ['م مربع','متر مربع'],['M2','متر مربع'],['متر  طولي','متر طولي']];
+  T('التطبيع يوحّد كل الكتابات القاطعة المقيسة على الإنتاج',
+    decisive.every(([src, want]) => S.unitNorm(src) === want));
+  // ⚠️ «عدد»/«بالعدد» دمجٌ دلاليّ لا إملائيّ — يُعرَض ولا يُطبَّق (درس المشاريع).
+  T('ولا يُجري دمجاً دلاليّاً: عدد/بالعدد/علبة 300 مل تبقى كما هي',
+    ['عدد','بالعدد','علبة 300 مل'].every(u => S.unitNorm(u) === u));
+  T('وقائمة الوحدات المعتمدة فيها المستعمَل فعلاً ولا تكرار فيها',
+    S.PR_UNITS.includes('حبة') && S.PR_UNITS.includes('كرتون') && S.PR_UNITS.includes('شوال')
+    && new Set(S.PR_UNITS).size === S.PR_UNITS.length
+    && S.PR_UNITS.every(u => S.unitNorm(u) === u));
+
+  // ── سلوكيّ: مصدر الكتالوج يخدم الميدان والمكتب معاً ──
+  S.STATE.items = [{ name: 'صابون سائل', unit: 'حبه' }];
+  S.STATE.itemLookup = [];
+  T('موظّف المكتب يقرأ الكتالوج الذي جلبه أصلاً (بلا رحلة زائدة)',
+    S.prCatalog().length === 1 && S.prCatalogUnit('صابون سائل') === 'حبة');
+  S.STATE.items = [];                       // الحالة الحقيقية لموظّف الميدان
+  S.STATE.itemLookup = [{ name: 'صابون سائل', unit: 'حبة' }, { name: 'منظف زجاج', unit: 'لتر' }];
+  T('وموظّف الميدان — الذي تقرأ له STATE.items صفراً — يقرأ العرض بلا أسعار',
+    S.prCatalog().length === 2 && S.prCatalogUnit('منظف زجاج') === 'لتر');
+  // المطابقة بـarNorm فكتابةٌ بهمزة/ياء مختلفة تصيب الصنف نفسه.
+  T('والمطابقة مطبَّعة عربيّاً فلا تُفوّت كتابة مختلفة للاسم',
+    S.prCatalogUnit('صابون سائل') === 'حبة');
+
+  // ── سلوكيّ: اختيار الصنف يملأ وحدته ولا يدهس ما كتبه المستخدم ──
+  const mkRow = (desc, unit) => {
+    const unitEl = { value: unit, getAttribute: () => 'unit' };
+    const tr = { querySelector: (sel) => (sel.includes('unit') ? unitEl : null) };
+    return { input: { value: desc, closest: () => tr }, unitEl };
+  };
+  let r = mkRow('منظف زجاج', '');
+  S.prItemPicked(r.input);
+  T('اختيار صنف من الكتالوج يملأ وحدته تلقائياً', r.unitEl.value === 'لتر');
+  r = mkRow('منظف زجاج', 'كرتون');
+  S.prItemPicked(r.input);
+  T('ولا يدهس وحدةً كتبها المستخدم بنفسه', r.unitEl.value === 'كرتون');
+  r = mkRow('صنف غير مسجّل في الكتالوج', '');
+  S.prItemPicked(r.input);
+  T('وصنفٌ خارج الكتالوج لا يُلفَّق له وحدة', r.unitEl.value === '');
+
+  // ── الواجهة: القائمة تُبنى من prCatalog لا من STATE.items ──
+  T('قائمة الإكمال تُبنى من prCatalog (وإلّا وصلت الميدان فارغة)',
+    /datalist id="pr-item-names">\$\{\[\.\.\.new Set\(prCatalog\(\)/.test(CODE)
+    && /datalist id="pr-unit-names"/.test(CODE));
+  T('وحقل الوحدة مربوط بالسجلّ ويُطبَّع عند الخروج منه',
+    /list="pr-unit-names"/.test(CODE) && /onchange="this\.value=unitNorm\(this\.value\)"/.test(CODE));
+  T('و`loadAll` يجلب العرض للمُنطَّق بتسامح مع قاعدة قبل الهجرة',
+    /proc_items_lookup/.test(CODE) && /catch\(_\)\{ itemLookup = \[\]; \}/.test(CODE)
+    && /STATE\.itemLookup\s*=\s*data\.itemLookup/.test(CODE));
+
+  // ── إسناد مسؤول المشتريات ──
+  // ⚠️ تعريفٌ واحد للأزرار يخدم الشاشتين — لا بوّابتان تتفارقان (القاعدة 14).
+  T('أزرار المشتريات تعريفٌ واحد (prProcActionsHTML) يُستدعى من الشاشتين',
+    /function prProcActionsHTML\(pr\)\{/.test(CODE)
+    && (CODE.match(/prProcActionsHTML\(pr\)/g) || []).length >= 3
+    && !/بدأت العمل عليه<\/button>\$\{pr\.proc_status==='in_progress'/.test(CODE));
+  T('ولوحة «بانتظار من يستلمه» على النظرة العامة لا مدفونة في الارتباطات',
+    /function prClaimCardHTML\(pr\)\{/.test(CODE) && /بانتظار من يستلمه/.test(CODE)
+    && /\$\{prWorkspaceDecisionHTML\(pr\)\}\$\{prClaimCardHTML\(pr\)\}/.test(CODE));
+  // «فريق المشتريات» ليست مسؤولاً — والقياس أثبت خمسة طلبات بلا صاحب.
+  T('و«المسؤول» يُسمّى بشخصه متى استُلِم، ونداءٌ صريح متى كان بلا صاحب',
+    /بانتظار من يستلمه من فريق المشتريات/.test(CODE)
+    && /const owner=pr\.proc_started_by\?prPersonName\(pr,pr\.proc_started_by\)/.test(CODE));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);

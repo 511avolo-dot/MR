@@ -26,7 +26,8 @@ for f in db/system2-tests/00_stub.sql db/system2-staff-scope.sql db/system2-test
          db/system2-email-token-revision.sql db/system2-tests/22_email_token_revision.sql \
          db/system2-pr-attachments-unlock.sql db/system2-tests/23_pr_attachments.sql \
          db/system2-request-workspace-clarity.sql db/system2-tests/24_workspace_clarity.sql \
-         db/system2-notify-email.sql db/system2-tests/25_notify_email.sql; do
+         db/system2-notify-email.sql db/system2-tests/25_notify_email.sql \
+         db/system2-item-lookup-and-units.sql db/system2-tests/26_item_lookup_units.sql; do
   printf '  %-42s' "$(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/s2t.err \
     && echo "ok" \
@@ -49,6 +50,7 @@ psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-staff-scope.sql >/dev/null 2>&
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-pr-attachments-unlock.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-request-workspace-clarity.sql >/dev/null 2>&1 \
   && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-notify-email.sql >/dev/null 2>&1 \
+  && psql -q -v ON_ERROR_STOP=1 -d "$DB" -f db/system2-item-lookup-and-units.sql >/dev/null 2>&1 \
   && echo "ok" || { echo "FAILED"; exit 1; }
 
 psql -q -d postgres -c "DROP DATABASE IF EXISTS $DB;" >/dev/null
@@ -56,4 +58,4 @@ echo "✓ النطاق (SC1–SC16) · دورة الطلب (FL1–FL16) · ال�
 echo "  الترقيم (NM1–NM6) · أقلّ امتياز (LP1–LP5) · الإشعارات (NT1–NT9) · الإقفال (LK1–LK9) · مساحة العمل (WS1–WS43)"
 echo "  هويّة المعتمِدين (AI1–AI9) · ختم رمز البريد بالإصدار (TK1–TK8)"
 echo "  مرفقات الطلب والمناقشة (PA1–PA12) · وضوح مساحة الطلبات (WC1–WC10)"
-echo "  عنوان المراسلة (NE1–NE7) — خروج 0"
+echo "  عنوان المراسلة (NE1–NE7) · الكتالوج والوحدات (IL0–IL9) — خروج 0"
