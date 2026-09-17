@@ -1606,6 +1606,8 @@ body.print-preview-active .print-document{display:block}
 .pr-work-rail{background:var(--prw-navy);color:#9fb0c8;border-inline-start:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;padding:12px 7px;gap:5px}
 .pr-work-navbtn{min-height:62px;border:0;border-radius:11px;background:transparent;color:inherit;font:inherit;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;position:relative;transition:.18s var(--prw-ease)}.pr-work-navbtn .ico{font-size:18px;line-height:1}.pr-work-navbtn:hover{background:rgba(255,255,255,.06);color:#f4ead8}.pr-work-navbtn.active{background:rgba(194,160,99,.15);color:#f0d9a8}.pr-work-navbtn.active::after{content:'';position:absolute;inset-inline-end:-7px;top:13px;bottom:13px;width:2.5px;border-radius:2px;background:var(--prw-gold)}.pr-work-navcount{position:absolute;top:6px;inset-inline-start:9px;min-width:16px;height:16px;border-radius:8px;background:var(--prw-gold);color:#241f1c;font-size:9px;display:grid;place-items:center;font-weight:700}
 .pr-work-queue{background:var(--prw-surface-2);border-inline-start:1px solid var(--prw-line);min-width:0;display:flex;flex-direction:column}.pr-work-queuehead{padding:20px 18px 14px;border-bottom:1px solid var(--prw-line)}.pr-work-kicker{font-size:10px;font-weight:700;color:var(--prw-gold-dark);letter-spacing:.08em}.pr-work-queue-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 13px}.pr-work-queue-title h2{font-family:'Fraunces',serif;font-size:23px;margin:0;color:var(--prw-ink)}.pr-work-total{min-width:28px;height:24px;padding:0 7px;border-radius:8px;background:var(--prw-ink);color:#fff;display:grid;place-items:center;font:600 11px 'IBM Plex Mono',monospace}
+/* سطر تعريف الخانة — يقول ما تحمله بالضبط، فلا تُقرأ خانةٌ على أنّها «الكل». */
+.pr-work-modehint{margin:0 0 9px;font-size:11px;line-height:1.75;color:var(--prw-muted)}
 .pr-work-filterrow{display:flex;gap:7px}.pr-work-filterrow input{min-width:0;flex:1;height:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;padding:0 11px;font-family:inherit}.pr-work-filterrow button{width:38px;border:1px solid var(--prw-line);border-radius:9px;background:#fff;cursor:pointer}.pr-work-quick{display:flex;gap:5px;flex-wrap:wrap;margin-top:11px}.pr-work-chip{border:1px solid var(--prw-line);border-radius:16px;background:var(--prw-surface-2);color:var(--prw-muted);padding:5px 9px;font:inherit;font-size:10.5px;cursor:pointer}.pr-work-chip.active{background:var(--prw-ink);border-color:var(--prw-ink);color:#fff}
 .pr-work-list{padding:10px;overflow:auto;max-height:calc(100vh - 356px)}.pr-work-request{width:100%;padding:13px 12px;margin-bottom:8px;border:1px solid transparent;border-radius:10px;background:transparent;text-align:start;font-family:inherit;cursor:pointer;color:var(--prw-ink);display:block}.pr-work-request{transition:.18s var(--prw-ease)}.pr-work-request:hover{background:var(--prw-paper);border-color:var(--prw-line);box-shadow:var(--prw-sh1)}.pr-work-request.active{background:var(--prw-paper);border-color:var(--prw-gold);box-shadow:var(--prw-sh2),0 0 0 3px rgba(194,160,99,.13)}.pr-work-request-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.pr-work-request-id{font:600 10.5px 'IBM Plex Mono',monospace;direction:ltr;color:var(--prw-muted)}.pr-work-request-title{font-size:12.5px;font-weight:700;margin:5px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-request-proj{display:block;font-size:10.5px;font-weight:600;color:var(--prw-gold-3);margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-request-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--prw-faint);font-size:10px}.pr-work-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-inline-end:4px;background:var(--prw-blue)}.pr-work-dot.ok{background:var(--prw-green)}.pr-work-dot.warn{background:var(--prw-gold-dark)}.pr-work-dot.danger{background:var(--prw-red)}
 .pr-work-detail{direction:rtl;min-width:0;background:var(--prw-canvas)}.pr-work-detailhead{padding:18px 28px 14px;background:var(--prw-paper);border-bottom:1px solid var(--prw-line)}.pr-work-breadcrumb{font-size:10px;color:var(--prw-faint);margin-bottom:8px}.pr-work-titlebar{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.pr-work-titlebar h2{font-family:'Fraunces',serif;font-size:25px;line-height:1.3;margin:0 0 5px;color:var(--prw-ink)}.pr-work-sub{font-size:11px;color:var(--prw-muted)}.pr-work-version{display:inline-flex;padding:3px 8px;margin-inline-start:8px;border:1px solid var(--prw-line);border-radius:6px;background:var(--prw-surface-2);font-size:9px;color:var(--prw-muted);vertical-align:middle}.pr-work-archived{display:inline-flex;align-items:center;gap:5px;padding:0 10px;min-height:38px;border:1px solid var(--prw-line);border-radius:8px;background:var(--prw-surface-2);color:var(--prw-muted);font-size:11px}.pr-work-headbuttons{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.pr-work-headbuttons .btn{min-height:38px}
@@ -13086,7 +13088,7 @@ async function renderPRPortal(){
   const canCreatePR = hasPermission('can_create_pr');
   if(!canCreatePR && (view==='create' || view==='templates')) view='list';
   if(view==='inbox') STATE.prWorkspaceMode='approvals';
-  if(view==='incoming') STATE.prWorkspaceMode='links';
+  if(view==='incoming') STATE.prWorkspaceMode='receiving';
   if(view==='depts') STATE.prWorkspaceMode='settings';
   const mode=STATE.prWorkspaceMode||'requests';
   const requests=prWorkspaceQueueData(mode);
@@ -13167,6 +13169,21 @@ function prAwaitingReceipt(pr){
   if(!pr || prIsFinal(pr) || prIsArchived(pr)) return false;
   return prPoLinksOf(pr).length>0;
 }
+/* ══════════ «الطلبات» = ما لم يُسلَّم بعدُ لطورٍ له خانته ══════════
+   ⚠️ بلاغ المالك (2026-09-17، لقطة ثانية): «طلب مستلم ومرتبط بأمر شراء، ليه
+   لحدّ الآن بين زحمة الطلبات؟ مو واضح اللي استُلِم من اللي صدر — مختلطة في
+   بعض. شيله إلى الاستلام والإقفال **وشيله من قائمة الطلبات**، عشان أعرف
+   أتابع كمدير مشتريات الطلبات اللي باقي ما عليها أي عمل.»
+   الجذر: الخانات الجديدة كانت **مجموعاتٍ داخل القائمة نفسها**، فالطلب يظهر
+   مرّتين — في خانته وفي «الطلبات». ومجموعة الموعد تسحب طلباً صدر أمره إلى
+   صدارة القائمة فيبدو عملاً معلّقاً. الآن **الخانات متنافية**: كل طلبٍ في
+   خانة واحدة، و«جميع الطلبات» وحدها تجمعها كلّها بعناوينها. */
+function prInWorkQueue(pr){
+  if(!pr || prIsArchived(pr)) return false;
+  /* المُقفَل والملغى والمرفوض لا عمل عليها — مكانها «جميع الطلبات» والأرشيف. */
+  if(prIsFinal(pr)) return false;
+  return !prInExecution(pr) && !prAwaitingReceipt(pr);
+}
 /* استلمه أحدٌ من المشتريات ويعمل عليه — ولم يصدر أمره بعد. */
 function prInExecution(pr){
   if(!pr || prIsFinal(pr) || prIsArchived(pr) || prAwaitingReceipt(pr)) return false;
@@ -13222,11 +13239,19 @@ function prWorkspaceQueueData(mode){
      بطلبات أُقفلت باستلام كامل أو أُلغيت. */
   if(mode==='archive') list=list.filter(prIsArchived);
   else list=list.filter(pr=>!prIsArchived(pr));
-  if(mode==='approvals') list=list.filter(pr=>!!prPendingApproval(pr));
+  /* ⚠️ الأرشيف والمحاضر والإعدادات **تُستثنى من السقوط الأخير**: صُفّي الأرشيف
+     أعلاه، والمحاضر تُطبَع من أي طلب مهما كانت حالته. بلا هذا الاستثناء يبتلعها
+     مرشّح «قيد العمل» فتظهر خاويةً. */
+  if(['archive','reports','settings'].includes(mode)){ /* لا تصفية إضافية */ }
+  else if(mode==='approvals') list=list.filter(pr=>!!prPendingApproval(pr));
   else if(mode==='execution') list=list.filter(prInExecution);
   else if(mode==='receiving') list=list.filter(prAwaitingReceipt);
-  else if(mode==='links') list=list.filter(pr=>(pr.po_links||[]).length||pr.po_number||prIsLive(pr));
+  else if(mode==='links') list=list.filter(pr=>prPoLinksOf(pr).length);
   else if(mode==='discussion') list=list.filter(pr=>(pr.messages||[]).length);
+  /* «جميع الطلبات» بلا تصفية — هي الخانة الوحيدة التي تجمع الأطوار كلّها
+     (طلب المالك: «ضف خانة جميع الطلبات وهناك حط كل التصنيفات»). */
+  else if(mode==='all'){ /* لا تصفية */ }
+  else list=list.filter(prInWorkQueue);
   const filter=STATE.prWorkspaceFilter||'all';
   if(filter==='mine'){
     const me=String(STATE.currentUser?.username||'').toLowerCase();
@@ -13334,11 +13359,23 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
   const live=all.filter(p=>!prIsArchived(p));
   const inExec=live.filter(prInExecution).length;
   const inRecv=live.filter(prAwaitingReceipt).length;
-  const linked=all.filter(p=>(p.po_links||[]).length||p.po_number).length;
+  const working=live.filter(prInWorkQueue).length;
   /* عدّاد المناقشات = ما **يحتاج ردّاً** لا مجرّد ما فيه رسائل: رقمٌ لا يزول
      بفعلٍ ليس تنبيهاً بل زينة (بلاغ المالك: «يظهر تنبيه ومنشن للرد»). */
   const discussed=live.filter(p=>!!prDiscussionFlag(p)).length;
-  const headings={requests:'الطلبات',approvals:'موافقاتي',execution:'مستلمة — تحت التنفيذ',receiving:'بانتظار الاستلام والإقفال',links:'الارتباطات',discussion:'المناقشات',reports:'المحاضر',archive:'الأرشيف',settings:'إعدادات الطلبات'};
+  const headings={requests:'الطلبات قيد العمل',all:'جميع الطلبات',approvals:'موافقاتي',execution:'مستلمة — تحت التنفيذ',receiving:'بانتظار الاستلام والإقفال',links:'المرتبطة بأوامر شراء',discussion:'المناقشات',reports:'المحاضر',archive:'الأرشيف',settings:'إعدادات الطلبات'};
+  /* سطرٌ يقول ما تحمله الخانة بالضبط — الخانة التي لا تُعرِّف نفسها تُقرأ
+     «كل الطلبات» فيظنّ صاحبها أنّ شيئاً ضاع (بلاغ المالك: «متلخبط الوضع»). */
+  const modeHint={
+    requests:'ما لم يبدأ العمل عليه بعد: مسودّات · مُعادة · قيد الاعتماد · بانتظار استلام المشتريات. ما استُلِم أو صدر أمره له خانته.',
+    all:'كل الطلبات النشطة بأطوارها كلّها، مجموعةً بعناوينها. (المُقفَل والملغى المؤرشَف في «الأرشيف».)',
+    approvals:'ما ينتظر قرارك أنت.',
+    execution:'استلمها فريق المشتريات ويعمل عليها — ولم يصدر أمر شرائها بعد.',
+    receiving:'صدر أمر شرائها وتنتظر استلام البضاعة. يُقفَل الطلب ويُؤرشَف تلقائياً عند اكتمال استلام كل أوامره.',
+    links:'كل طلبٍ رُبط بأمر شراء، مهما كانت حالته.',
+    discussion:'ما فيه استفهام أو ردّ.',
+    archive:'المُقفَل والملغى — خارج طوابير العمل.'
+  }[mode]||'';
   const filter=STATE.prWorkspaceFilter||'all';
   /* عنوان مجموعة قبل أوّل طلب منها — فلا تختلط «قيد الاعتماد» بـ«معتمد» في
      قائمة واحدة بلا فاصل (بلاغ المالك: «تشتيت في ترتيبهم وطريقة عرضهم»). */
@@ -13371,18 +13408,18 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
     </header>
     <div class="pr-work-grid">
       <nav class="pr-work-rail" aria-label="تنقل مساحة الطلبات">
-        ${prWorkspaceNavButton(mode,'requests','📋','الطلبات',all.length)}
+        ${prWorkspaceNavButton(mode,'requests','📋','قيد العمل',working)}
         ${prWorkspaceNavButton(mode,'approvals','✅','موافقاتي',approvals)}
         ${prWorkspaceNavButton(mode,'execution','⚙️','تحت التنفيذ',inExec)}
         ${prWorkspaceNavButton(mode,'receiving','📦','الاستلام والإقفال',inRecv)}
-        ${prWorkspaceNavButton(mode,'links','🔗','الارتباطات',linked)}
+        ${prWorkspaceNavButton(mode,'all','🗂','جميع الطلبات',live.length)}
         ${prWorkspaceNavButton(mode,'discussion','💬','المناقشات',discussed)}
         ${prWorkspaceNavButton(mode,'reports','🖨','المحاضر',0)}
         ${prWorkspaceNavButton(mode,'archive','🗄','الأرشيف',prArchiveCount())}
         ${hasPermission('can_manage_users')?prWorkspaceNavButton(mode,'settings','⚙️','الإعدادات',0):''}
       </nav>
       <aside class="pr-work-queue" aria-label="قائمة عمل الطلبات">
-        <div class="pr-work-queuehead"><div class="pr-work-queue-title"><h2>${headings[mode]||'الطلبات'}</h2><span class="pr-work-total">${requests.length}</span></div>
+        <div class="pr-work-queuehead"><div class="pr-work-queue-title"><h2>${headings[mode]||'الطلبات'}</h2><span class="pr-work-total">${requests.length}</span></div>${modeHint?`<p class="pr-work-modehint">${escapeHtml(modeHint)}</p>`:''}
           <div class="pr-work-quick"><button class="pr-work-chip${filter==='all'?' active':''}" onclick="prSetWorkspaceFilter('all')">الكل</button><button class="pr-work-chip${filter==='mine'?' active':''}" onclick="prSetWorkspaceFilter('mine')">طلباتي</button>${prIsProcurement()?`<button class="pr-work-chip${filter==='claimed'?' active':''}" onclick="prSetWorkspaceFilter('claimed')">طلباتي المستلمة</button>`:''}<button class="pr-work-chip${filter==='action'?' active':''}" onclick="prSetWorkspaceFilter('action')">تحتاج إجراء</button><button class="pr-work-chip${filter==='blocked'?' active':''}" onclick="prSetWorkspaceFilter('blocked')">متعثرة</button></div>
         </div><div class="pr-work-list">${queue}</div>
       </aside>
@@ -13401,6 +13438,7 @@ function prSetWorkspaceMode(mode){
   if(mode==='reports') STATE.prDetailTab='report';
   else if(mode==='approvals') STATE.prDetailTab='approvals';
   else if(mode==='links'||mode==='execution') STATE.prDetailTab='links';
+  else if(mode==='all'||mode==='requests') STATE.prDetailTab='overview';
   /* الاستلام والإقفال يهبط على «نظرة عامة»: هناك اللوحة التي تشرح أنّ الفعل
      على أمر الشراء وأنّ الإقفال يقع تلقائياً — وهي الإرشاد المطلوب لا جدول. */
   else if(mode==='receiving') STATE.prDetailTab='overview';

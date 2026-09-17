@@ -403,8 +403,12 @@ async function session(viewport, tag) {
      والطلب هنا يحمل `po_number` بلا صفّ في `proc_pr_po_links` (شكل الصفوف
      السابقة للموديل) — فالتأكيد يحرس أيضاً سقوط `prPoLinksOf` إليه، وإلّا
      ظهر طلبٌ مرتبط فعلاً بأنّه «لم يُربط أمر شراء بعد». */
+  /* ⚠️ الخانات صارت **متنافية** (بلاغ 2026-09-17): الطلب الذي صدر أمره غادر
+     «قيد العمل» إلى «الاستلام والإقفال» — وهو بالضبط ما طلبه المالك لموظّف
+     الصيانة. فيُفتَح من خانته لا من القائمة الرئيسية. */
   await page.evaluate(async () => {
-    prGoView('list'); prSelectWorkspaceRequest('PR-DG2026-0001');
+    prSetWorkspaceMode('receiving'); prGoView('list');
+    prSelectWorkspaceRequest('PR-DG2026-0001');
     prSetDetailTab('links'); await renderPRPortal();
   });
   await page.waitForTimeout(400);
