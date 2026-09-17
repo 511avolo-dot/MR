@@ -2780,7 +2780,10 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
      يعرض «— ر.س» = وحدة عملة بلا رقم. */
   T('الموافقات والوارد مندمجان في مساحة عمل الطلبات',
     /prWorkspaceNavButton\(mode,'approvals'/.test(CODE)
-    && /prWorkspaceNavButton\(mode,'links'/.test(CODE)
+    /* ⚠️ «الوارد» صار خانة «الاستلام والإقفال» بعد بلاغ 2026-09-17 — وأُسقطت
+       خانة «الارتباطات» من الشريط (مرشّحها كان «كل طلب حيّ» فاسمها يَعِد بما
+       لا يعرضه)، وتبويب الارتباطات داخل الطلب باقٍ كما هو. */
+    && /prWorkspaceNavButton\(mode,'receiving'/.test(CODE)
     && !/prTab\('depts'/.test(CODE));
   /* ⚠️ عيبٌ وقع فعلاً وأمسكه المتصفّح وحده: بقي `const showInbox = inboxN > 0`
      بعد حذف `inboxN` ⇒ ReferenceError يُفرِغ شاشة الطلبات كاملةً، و`node --check`
@@ -3527,7 +3530,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
       // أطوار ما بعد الاعتماد — ثلاث خانات صريحة (بلاغ المالك 2026-09-17).
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
-      grab('prInExecution'), grab('prUnclaimed'), grab('prClaimedByMe'),
+      grab('prInExecution'), grab('prUnclaimed'), grab('prClaimedByMe'), grab('prInWorkQueue'),
     ].join('\n\n');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
@@ -3546,8 +3549,11 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('علم الأرشفة يُقرأ من archived_at وحده',
     C.prIsArchived({archived_at:'2026-09-11'}) === true
     && C.prIsArchived({archived_at:null}) === false && C.prIsArchived(null) === false);
+  /* ⚠️ `'all'` صار **اسم خانة حقيقية** (جميع الطلبات) بعد بلاغ 2026-09-17،
+     فلم يعُد مرادفاً لـ«الطابور الافتراضيّ». الاسم الصريح هو `'requests'`. */
   T('الطابور الافتراضيّ يُخلى من المؤرشَف',
-    C.prWorkspaceQueueData('all').map(p=>p.id).join(',') === 'PR-1');
+    C.prWorkspaceQueueData('requests').map(p=>p.id).join(',') === 'PR-1'
+    && C.prWorkspaceQueueData('all').map(p=>p.id).join(',') === 'PR-1');
   T('ووضع «الأرشيف» يعرض المؤرشَف وحده (الأحدث أولاً)',
     C.prWorkspaceQueueData('archive').map(p=>p.id).join(',') === 'PR-3,PR-2');
   T('وعدّاد الأرشيف يَعُدّ المؤرشَف من المرئيّ',  C.prArchiveCount() === 2);
@@ -3856,7 +3862,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
-      grab('prInExecution'), grab('prUnclaimed'),
+      grab('prInExecution'), grab('prUnclaimed'), grab('prInWorkQueue'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
@@ -4205,7 +4211,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
-      grab('prInExecution'), grab('prUnclaimed'),
+      grab('prInExecution'), grab('prUnclaimed'), grab('prInWorkQueue'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS,
@@ -4427,7 +4433,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('escapeHtml'), grab('escapeAttr'), grab('poDays'),
       grab('prIsArchived'), grab('prPoLinksOf'), grabConst('PR_FINAL_STATUSES'), grab('prIsFinal'),
       grab('prProcLive'), grab('prAwaitingReceipt'), grab('prInExecution'), grab('prUnclaimed'),
-      grab('prClaimedByMe'), grab('prOpenQuestion'), grab('prDiscussionFlag'), grab('prAwaitingReply'),
+      grab('prInWorkQueue'), grab('prClaimedByMe'), grab('prOpenQuestion'), grab('prDiscussionFlag'), grab('prAwaitingReply'),
       grab('prWorkspaceNeedsAction'), grab('prWorkspaceIsBlocked'),
       grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
@@ -4436,7 +4442,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prCanAddAttachment'), grab('prThreadHTML'),
     ].join('\n\n');
     return new Function(src + `; return { STATE, PR_QUEUE_GROUPS, prQueueGroup, prWorkspaceQueueData,
-      prAwaitingReceipt, prInExecution, prUnclaimed, prOpenQuestion, prDiscussionFlag,
+      prAwaitingReceipt, prInExecution, prUnclaimed, prInWorkQueue, prOpenQuestion, prDiscussionFlag,
       prAwaitingReply, prWorkspaceNeedsAction, prReceivingCardHTML, prReplyCardHTML, prThreadHTML,
       set:(u,proc)=>{ STATE.currentUser=u; __proc=!!proc; } };`)();
   })();
@@ -4484,6 +4490,21 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     Q.prQueueGroup({ id:'PR-DG2026-0018', status:'draft', requester:'other' }) === 'other'
     && Q.PR_QUEUE_GROUPS.some(g => g.key === 'other'));
 
+  /* ══════════ الخانات **متنافية**: كل طلبٍ في خانة واحدة ══════════
+     ⚠️ بلاغ المالك الثاني (2026-09-17، لقطة): «طلب مستلم ومرتبط بأمر شراء،
+     ليه لحدّ الآن بين زحمة الطلبات؟ … شيله إلى الاستلام والإقفال **وشيله من
+     قائمة الطلبات**.» فالخانات كانت مجموعاتٍ داخل القائمة نفسها لا بدائل. */
+  T('«قيد العمل» تُخرِج ما استُلِم وما صدر أمره وما انتهى',
+    Q.prInWorkQueue(unclaimed) === true
+    && Q.prInWorkQueue(claimed) === false
+    && Q.prInWorkQueue(ordered) === false
+    && Q.prInWorkQueue(legacyPo) === false
+    && Q.prInWorkQueue({ id:'X', status:'closed' }) === false
+    && Q.prInWorkQueue({ id:'Y', status:'cancelled' }) === false
+    && Q.prInWorkQueue({ id:'Z', status:'in_review' }) === true
+    && Q.prInWorkQueue({ id:'W', status:'returned' }) === true
+    && Q.prInWorkQueue({ id:'V', status:'approved', archived_at:'2026-09-01' }) === false);
+
   // أوضاع التنقّل والمرشّح — «طلباتي المستلمة» = من ثبّت اسمه بالاستلام
   Q.STATE.purchaseRequests = [unclaimed, claimed, ordered,
     Object.assign({}, claimed, { id:'PR-DG2026-0017', proc_started_by:'proc2' })];
@@ -4492,6 +4513,28 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
              return ids.length === 2 && ids.every(i => ['PR-DG2026-0012','PR-DG2026-0017'].includes(i)); })());
   T('ووضع «الاستلام والإقفال» يعرض ما صدر أمره وحده',
     Q.prWorkspaceQueueData('receiving').map(p => p.id).join('|') === 'PR-DG2026-0013');
+  /* المحكّ الذي يُعيد إنتاج اللقطة: الطلب المُرتبط **لا يظهر** في القائمة
+     الرئيسية، ويظهر في خانته وفي «جميع الطلبات». */
+  T('والطلب المرتبط بأمر شراء يغادر القائمة الرئيسية ولا يختفي من النظام',
+    (() => { const work = Q.prWorkspaceQueueData('requests').map(p => p.id);
+             const all  = Q.prWorkspaceQueueData('all').map(p => p.id);
+             return !work.includes('PR-DG2026-0013') && all.includes('PR-DG2026-0013')
+                    && !work.includes('PR-DG2026-0012') && all.includes('PR-DG2026-0012')
+                    && work.includes('PR-DG2026-0011'); })());
+  T('و«جميع الطلبات» تجمع الأطوار كلّها بعناوين مجموعاتها',
+    (() => { const all = Q.prWorkspaceQueueData('all');
+             const keys = new Set(all.map(Q.prQueueGroup));
+             return all.length === 4 && keys.has('unclaimed') && keys.has('execution')
+                    && keys.has('receiving'); })());
+  T('والأرشيف والمحاضر لا يبتلعهما مرشّح «قيد العمل»',
+    (() => { const before = Q.STATE.purchaseRequests;
+             Q.STATE.purchaseRequests = [
+               { id:'PR-A', requester:'x', status:'closed', archived_at:'2026-09-11' },
+               { id:'PR-B', requester:'x', status:'closed' }];
+             const arc = Q.prWorkspaceQueueData('archive').map(p => p.id);
+             const rep = Q.prWorkspaceQueueData('reports').map(p => p.id);
+             Q.STATE.purchaseRequests = before;
+             return arc.join('|') === 'PR-A' && rep.join('|') === 'PR-B'; })());
   T('ومرشّح «طلباتي المستلمة» يحصرها فيمن ثبّت اسمه بالاستلام',
     (() => { Q.set({ username:'proc1', role:'user' }, true);
              Q.STATE.prWorkspaceFilter = 'claimed';
@@ -4510,6 +4553,20 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /prWorkspaceNavButton\(mode,'execution','⚙️','تحت التنفيذ',inExec\)/.test(CODE)
     && /prWorkspaceNavButton\(mode,'receiving','📦','الاستلام والإقفال',inRecv\)/.test(CODE)
     && /execution:'مستلمة — تحت التنفيذ'/.test(CODE) && /receiving:'بانتظار الاستلام والإقفال'/.test(CODE));
+  /* ⚠️ عدّادٌ لا يطابق قائمته هو «اللخبطة» نفسها: كان عدّاد «الطلبات» يَعُدّ
+     **كل** المرئيّ (بالمؤرشَف) بينما القائمة مُصفّاة. */
+  T('وعدّاد «قيد العمل» يَعُدّ ما تعرضه قائمته لا كل المرئيّ',
+    /prWorkspaceNavButton\(mode,'requests','📋','قيد العمل',working\)/.test(CODE)
+    && /const working=live\.filter\(prInWorkQueue\)\.length/.test(CODE));
+  T('وخانة «جميع الطلبات» معروضة بعدّاد الطلبات الحيّة',
+    /prWorkspaceNavButton\(mode,'all','🗂','جميع الطلبات',live\.length\)/.test(CODE)
+    && /all:'جميع الطلبات'/.test(CODE));
+  /* كل خانة تُعرِّف نفسها بسطر — الخانة الصامتة تُقرأ «كل الطلبات». */
+  T('ولكل خانة سطرٌ يقول ما تحمله بالضبط',
+    /const modeHint=\{/.test(CODE) && /pr-work-modehint/.test(CODE)
+    && /\.pr-work-modehint\{/.test(HTML)
+    && ['requests','all','execution','receiving','archive'].every(k =>
+         new RegExp('\\b' + k + ":'[^']{20,}").test(CODE)));
   T('ومرشّح «طلباتي المستلمة» لا يُعرض لغير المشتريات',
     /\$\{prIsProcurement\(\)\?`<button class="pr-work-chip\$\{filter==='claimed'/.test(CODE));
 

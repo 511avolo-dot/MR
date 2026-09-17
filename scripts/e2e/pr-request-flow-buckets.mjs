@@ -129,12 +129,43 @@ T('  وزرّ الإرسال يقول «إعادة الإرسال بعد الت�
 await seed('mostafa.kishk', 'مصطفى كشك', { perms: { can_create_pr: true, can_comment: true },
   track: 'PR-DG2026-0024' });
 await page.waitForSelector('.pr-work-queue .pr-work-list', { timeout: 15000 });
+/* ⚠️ المحكّ الذي يُعيد إنتاج اللقطة الثانية: الطلب المستلَم والمرتبط بأمر شراء
+   **يغادر القائمة الرئيسية** ولا يختفي من النظام (يبقى في خانته وفي «جميع
+   الطلبات»). كان يظهر في الاثنين معاً فتختلط الأطوار. */
+const ids = () => page.evaluate(() => [...document.querySelectorAll('.pr-work-request-id')]
+  .map(e => e.textContent.trim()));
 {
-  const g = await groups();
-  T('الطابور يفصل «تحت التنفيذ» عن «بانتظار الاستلام والإقفال» بعناوين',
-    g.some(x => /مستلمة — تحت التنفيذ/.test(x)) && g.some(x => /بانتظار استلام البضاعة والإقفال/.test(x)), g.join(' | '));
+  const work = await ids();
+  T('«قيد العمل» بلا ما استُلِم ولا ما صدر أمره',
+    !work.includes('PR-DG2026-0022') && !work.includes('PR-DG2026-0024')
+    && work.includes('PR-DG2026-0021') && work.includes('PR-DG2026-0023'), work.join(','));
+  T('  وسطر الخانة يقول ما تحمله بالضبط',
+    await page.evaluate(() => /ما لم يبدأ العمل عليه بعد/
+      .test(document.querySelector('.pr-work-modehint')?.textContent || '')));
+  T('  وعدّاد الشريط يطابق عدد ما تعرضه القائمة',
+    await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('.pr-work-navbtn')].find(b => /قيد العمل/.test(b.textContent));
+      const n = Number((btn?.querySelector('.pr-work-navcount')?.textContent || '0').trim());
+      return n === document.querySelectorAll('.pr-work-request-id').length;
+    }));
 }
-await shot('3-buckets-queue');
+await shot('3-work-queue');
+await page.click('.pr-work-navbtn:has-text("جميع الطلبات")');
+await page.waitForSelector('.pr-work-queue .pr-work-list', { timeout: 15000 });
+{
+  const g = await groups(), all = await ids();
+  T('و«جميع الطلبات» تجمعها كلّها بعناوين تصنيفاتها',
+    all.includes('PR-DG2026-0022') && all.includes('PR-DG2026-0024')
+    && g.some(x => /مستلمة — تحت التنفيذ/.test(x)) && g.some(x => /بانتظار استلام البضاعة والإقفال/.test(x)),
+    g.join(' | '));
+}
+await shot('3b-all-requests');
+await page.click('.pr-work-navbtn:has-text("الاستلام والإقفال")');
+await page.waitForSelector('.pr-work-queue .pr-work-list', { timeout: 15000 });
+T('وخانة «الاستلام والإقفال» تعرض ما صدر أمره وحده',
+  (await ids()).join('|') === 'PR-DG2026-0024');
+await page.evaluate(async () => { STATE.prTrackId = 'PR-DG2026-0024'; await renderPRPortal(); });
+await shot('3c-receiving');
 T('ولوحة الاستلام تفتح أمر الشراء وتشرح أنّ الإقفال تلقائيّ',
   await page.evaluate(() => {
     const c = document.querySelector('.pr-work-receiving');
@@ -142,7 +173,8 @@ T('ولوحة الاستلام تفتح أمر الشراء وتشرح أنّ ا
   }));
 
 /* ④ التنبيه والنداء بالاسم */
-await page.evaluate(async () => { STATE.prTrackId = 'PR-DG2026-0025'; await renderPRPortal(); });
+await page.evaluate(async () => { STATE.prWorkspaceMode = 'all'; STATE.prTrackId = 'PR-DG2026-0025';
+  await renderPRPortal(); });
 await page.waitForSelector('.pr-work-reply', { timeout: 15000 });
 T('نداء «بانتظار ردّك» يقتبس السؤال ويسمّي سائله',
   await page.evaluate(() => {

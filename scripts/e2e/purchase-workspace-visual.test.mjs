@@ -116,7 +116,17 @@ try {
   assert.ok(desktop.width>800 && desktop.height>450,`integrated workspace is unexpectedly small: ${JSON.stringify(desktop)}`);
   assert.equal(await page.locator('.pr-work-grid').count(),1);
   assert.equal(await page.locator('.pr-work-rail').count(),1);
-  assert.equal(await page.locator('.pr-work-request').count(),2);
+  /* ⚠️ الخانات صارت **متنافية** (بلاغ المالك 2026-09-17): `PR-DG2026-0147`
+     مرتبط بأمر شراء فغادر «قيد العمل» إلى «الاستلام والإقفال». الثابت الحقيقيّ
+     ليس «طلبان في القائمة» بل **أنّ كل طلبٍ في خانة واحدة ولا يختفي من النظام**.
+     يُقاس بلا تبديل الوضع كي لا تنكسر التأكيدات التالية على نفس الشاشة. */
+  assert.equal(await page.locator('.pr-work-request').count(),1);
+  assert.deepEqual(
+    await page.evaluate(()=>({ work:prWorkspaceQueueData('requests').map(p=>p.id),
+                               recv:prWorkspaceQueueData('receiving').map(p=>p.id),
+                               all:prWorkspaceQueueData('all').map(p=>p.id).sort() })),
+    { work:['PR-DG2026-0148'], recv:['PR-DG2026-0147'],
+      all:['PR-DG2026-0147','PR-DG2026-0148'] });
   assert.equal(await page.locator('.pr-work-stat').count(),6);// +المشروع/الجهة
 
   // ── اسم المشروع في البطاقة الجانبية (بلاغ المالك 2026-09-15) ──
@@ -209,6 +219,11 @@ try {
   await page.evaluate(()=>{ try{ closePrintPreview(); }catch(e){ document.getElementById('modal-print-preview')?.classList.remove('active'); } });
   await page.locator('.pr-work-tab',{hasText:'الموافقات'}).click();
   assert.match(await page.locator('.pr-work-canvas').innerText(),/مدير المشتريات/);
+  /* ⚠️ `0147` مرتبط بأمر شراء فمكانه «الاستلام والإقفال» لا القائمة الرئيسية
+     (خانات متنافية — بلاغ 2026-09-17). تبويب «الارتباطات» داخل الطلب باقٍ. */
+  await page.locator('.pr-work-navbtn',{hasText:'الاستلام والإقفال'}).click();
+  await page.waitForFunction(()=>[...document.querySelectorAll('.pr-work-request')]
+    .some(el=>el.textContent.includes('PR-DG2026-0147')));
   await page.locator('.pr-work-request',{hasText:'PR-DG2026-0147'}).click();
   await page.locator('.pr-work-tab',{hasText:'الارتباطات'}).click();
   assert.match(await page.locator('#pr-root').innerText(),/أوامر الشراء والتوزيع على البنود/);
@@ -216,10 +231,10 @@ try {
   await page.screenshot({path:path.join(outDir,'purchase-workspace-desktop.png'),fullPage:true});
 
   // ── دورة الطلب حتى نهايتها: الأرشفة والإلغاء (طلب المالك 2026-09-14) ──
-  // الطابور الافتراضيّ لا يحمل المؤرشَف (طلبان حيّان فقط رغم وجود ثالث مُقفَل).
-  await page.evaluate(async ()=>{ STATE.prWorkspaceFilter='all'; STATE.prWorkspaceSearch=''; prGoView('list'); await renderPRPortal(); });
+  /* المؤرشَف خارج كل طوابير العمل: «جميع الطلبات» تحمل الحيَّين لا الثلاثة. */
+  await page.evaluate(async ()=>{ STATE.prWorkspaceMode='all'; STATE.prWorkspaceFilter='all'; STATE.prWorkspaceSearch=''; prGoView('list'); await renderPRPortal(); });
   await page.waitForSelector('.pr-workspace');
-  assert.equal(await page.locator('.pr-work-request').count(),2,'الطابور الافتراضيّ يجب أن يُخلى من المؤرشَف');
+  assert.equal(await page.locator('.pr-work-request').count(),2,'«جميع الطلبات» يجب أن تُخلى من المؤرشَف');
   // زرّ «الأرشيف» موجود في التنقّل وبعدّاد حيّ = 1
   const archiveBtn = page.locator('.pr-work-navbtn',{hasText:'الأرشيف'});
   assert.equal(await archiveBtn.count(),1,'زرّ الأرشيف يجب أن يظهر في التنقّل');
