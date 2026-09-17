@@ -1618,11 +1618,30 @@ body.print-preview-active .print-document{display:block}
 /* لوحة «بانتظار من يستلمه» — نداءُ عملٍ لا بطاقة عرض، فتُميَّز بحافّة ذهبية
    بارزة كلوحة القرار نفسها (اللون علامةٌ لا سطح). */
 .pr-work-claim{border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5);border-inline-start:4px solid var(--prw-gold,#a8842c)}
+/* ثلاث لوحات نداء بأصنافها الدلالية — اللون علامةٌ على نوع الفعل المطلوب لا
+   زينة: أحمر = مردود إليك · أخضر = بضاعة تنتظر استلامك · أزرق = سؤال ينتظرك. */
+.pr-work-returned{border-color:var(--prw-red-line,#e7bcbc);background:linear-gradient(180deg,#fffaf9,#fdf0ee);border-inline-start:4px solid var(--prw-red,#b3261e)}
+.pr-work-receiving{border-color:var(--prw-green-line,#bcdcc6);background:linear-gradient(180deg,#f8fdfa,#eef8f1);border-inline-start:4px solid var(--prw-green,#1f7a45)}
+.pr-work-reply{border-color:var(--prw-line,#dde3ec);background:linear-gradient(180deg,#f9fbff,#eef4fd);border-inline-start:4px solid var(--prw-blue,#2a5db0)}
+.pr-work-quote{margin:10px 0 0;padding:9px 12px;border-inline-start:3px solid var(--prw-blue,#2a5db0);
+  background:#fff;border-radius:0 9px 9px 0;font-size:13px;line-height:1.85;color:var(--prw-ink,#231f20)}
+/* اقتباس ما يُردّ عليه فوق صندوق الكتابة — «نعرف الرد على ايش». */
+.pr-reply-to{margin-top:12px;padding:9px 12px;border:1px solid var(--accent-2,#2a5db0);border-radius:10px;background:#f7fbff}
+.pr-reply-to.waiting{border-color:var(--line,#ddd);background:var(--prw-surface-2,#f7f9fc)}
+.pr-reply-to small{display:block;color:var(--muted);font-size:11.5px}
+.pr-reply-to blockquote{margin:6px 0 0;padding:0;font-size:13px;line-height:1.85;color:var(--ink)}
+/* لافتة المُحرِّر: مسودّة (أزرق) أو مُعاد للاستكمال (أحمر بسبب الإعادة). */
+.pr-edit-banner{border-color:var(--accent-2,#2a5db0);background:#f7fbff}
+.pr-edit-banner.returned{border-color:var(--prw-red,#b3261e);background:#fffaf9}
 /* شارة موعد التوريد — تظهر على بطاقة الطابور وفي لوحة الطلب. */
-.pr-work-due{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:3px 9px;border-radius:999px;
+/* ⚠️ `.pr-work-tag` صنفٌ مستقلّ بالشكل نفسه — **لا تُعِد استعمال `.pr-work-due`**
+   لشارةٍ ليست موعداً: صنفٌ مُحمَّل بمعنيين يُبطل كل قياسٍ عليه (حارسُ «شارتا
+   موعد فقط» انكسر فعلاً حين أُلحِقت به شارة إعادة). */
+.pr-work-due,.pr-work-tag{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:3px 9px;border-radius:999px;
   font-size:10.5px;font-weight:700;line-height:1.6;white-space:nowrap}
-.pr-work-due.danger{background:var(--prw-red-bg);color:var(--prw-red);border:1px solid var(--prw-red-line)}
-.pr-work-due.warn{background:var(--prw-warn-bg);color:var(--prw-warn);border:1px solid var(--prw-warn-line)}
+.pr-work-due.danger,.pr-work-tag.danger{background:var(--prw-red-bg);color:var(--prw-red);border:1px solid var(--prw-red-line)}
+.pr-work-due.warn,.pr-work-tag.warn{background:var(--prw-warn-bg);color:var(--prw-warn);border:1px solid var(--prw-warn-line)}
+.pr-work-tag.info{background:var(--prw-blue-bg);color:var(--prw-blue);border:1px solid var(--prw-blue-line)}
 /* شريط جاهزية النموذج — لاصقٌ في قاع لوح الطلب فيبقى زرّ الإرسال في المتناول
    مهما طال النموذج (5756px مقيسة على الجوال). */
 /* ⚠️ **ليس `sticky`.** القياس على الجوال: أقرب حاوية تمرير هي `.pr-work-editor`
@@ -12642,7 +12661,10 @@ let __prTplPrefill = null; // قالب بانتظار تعبئة حقول الن
    واحد فقط وهذا غير صحيح»). طلبُ شراءٍ واقعيّ يحمل مواصفةً ومخطّطاً وصورة موقع
    وعرض سعر — وكان النموذج يقبل واحداً، والثاني يمحو الأوّل بلا إنذار. */
 let __prDraftDocs  = []; // مرفقات داعمة اختيارية؛ الاعتماد يتم إلكترونياً في النظام
-let __prEditId     = null; // مسودّة قائمة قيد التعديل (تُحدَّث بمعرّفها لا تُنشأ من جديد)
+let __prEditId     = null; // طلب قائم قيد التعديل (مسودّة أو مُعاد — يُحدَّث بمعرّفه لا يُنشأ من جديد)
+/* حالة الطلب قيد التعديل: `draft` أو `returned`. اللافتة والأزرار تختلفان —
+   «إكمال مسودّة» ليست «معالجة ملاحظات إعادة ثم إعادة الإرسال». */
+let __prEditStatus = null;
 
 /* ══════════ المرفقات الداعمة ══════════ */
 const PR_DOC_TYPES = ['application/pdf','image/jpeg','image/png'];
@@ -13126,11 +13148,70 @@ function prPoLinksOf(pr){
   return [{po_number:pr.po_number,allocations:[],note:'',_legacy:true}];
 }
 function prArchiveCount(){ return prWorkspaceVisible().filter(prIsArchived).length; }
+
+/* ══════════ أطوار الطلب بعد الاعتماد — خانات صريحة لا كتلة واحدة ══════════
+   ⚠️ بلاغ المالك (2026-09-17): «تصنيف وترتيب الطلبات مشتّت جدًا … عندما يتم
+   استلام الطلب المفروض يذهب لخانة الطلبات المستلمة تحت التنفيذ وتظهر للمستلم
+   في طلباتي المستلمة، والطلبات بعد التنفيذ تذهب لموظّف الصيانة في خانة الطلبات
+   اللي تبقى لها الاستلام وتقفل.» وكانت المجموعة الواحدة «جارٍ لدى المشتريات»
+   تبتلع الثلاثة: ما لم يستلمه أحد، وما يعمل عليه شخصٌ باسمه، وما صدر أمره
+   وينتظر استلام البضاعة. ثلاثة أطوار بثلاثة مسؤولين مختلفين — فثلاث خانات.
+   المصدر واحد هنا، تستعمله المجموعات وأوضاع التنقّل واللوحات معاً. */
+function prProcLive(pr){
+  return !!pr && (['pricing','partially_ordered'].includes(pr.workflow_state)
+                  || ['approved','rfq_issued'].includes(pr.status));
+}
+/* صدر أمر شراء واحد فأكثر ولم يُقفل الطلب بعد. `prPoLinksOf` لا `po_links`
+   مباشرةً (القاعدة: الطلبات السابقة للموديل تحمل `po_number` بلا صفّ روابط). */
+function prAwaitingReceipt(pr){
+  if(!pr || prIsFinal(pr) || prIsArchived(pr)) return false;
+  return prPoLinksOf(pr).length>0;
+}
+/* استلمه أحدٌ من المشتريات ويعمل عليه — ولم يصدر أمره بعد. */
+function prInExecution(pr){
+  if(!pr || prIsFinal(pr) || prIsArchived(pr) || prAwaitingReceipt(pr)) return false;
+  return ['in_progress','quotes_collected'].includes(pr.proc_status||'');
+}
+/* أُذِن ببدء تسعيره ولم يسجّل أحدٌ أنّه استلمه. */
+function prUnclaimed(pr){
+  if(!pr || prIsArchived(pr) || prAwaitingReceipt(pr)) return false;
+  return prProcLive(pr) && (pr.proc_status||'received')==='received';
+}
+/* «طلباتي المستلمة» — من ثبّت اسمه عليه باستلامه (`proc_started_by`). */
+function prClaimedByMe(pr){
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  return !!me && String(pr&&pr.proc_started_by||'').toLowerCase()===me;
+}
+
+/* ══════════ المناقشة: من يُنتظَر ردّه ══════════
+   ⚠️ لا «غير مقروء» هنا — لا يخزّن النظام حالة قراءة، واختراعها يُنتج شارةً
+   تكذب. المحكّ **حقيقة في البيانات**: آخر رسالة استفهام لم يأتِ بعدها ردّ. */
+function prOpenQuestion(pr){
+  const msgs=(pr&&pr.messages)||[];
+  if(!msgs.length) return null;
+  const last=msgs.slice().sort((a,b)=>Number(a.id||0)-Number(b.id||0)).pop();
+  return last && last.kind==='question' ? last : null;
+}
+/* [نصّ, صنف, نوع] أو null. النوع: reply = عليك أنت · waiting = بانتظار غيرك. */
+function prDiscussionFlag(pr){
+  const q=prOpenQuestion(pr); if(!q) return null;
+  const me=String(STATE.currentUser?.username||'').toLowerCase();
+  const mine=String(q.author||'').toLowerCase()===me;
+  if(!mine && String(pr.requester||'').toLowerCase()===me) return ['بانتظار ردّك','danger','reply'];
+  if(mine) return ['بانتظار ردّ مقدّم الطلب','warn','waiting'];
+  if(prIsProcurement()) return ['استفهام مفتوح','warn','waiting'];
+  return null;
+}
+function prAwaitingReply(pr){ const f=prDiscussionFlag(pr); return !!f && f[2]==='reply'; }
+
 function prWorkspaceNeedsAction(pr){
   const me=String(STATE.currentUser?.username||'').toLowerCase();
   if(prPendingApproval(pr)) return true;
   if(['draft','returned'].includes(pr.status) && String(pr.requester||'').toLowerCase()===me) return true;
-  return prIsProcurement() && (pr.workflow_state==='pricing'||pr.status==='approved') && (pr.proc_status||'received')==='received';
+  /* استفهامٌ مفتوح موجَّه إليك فعلٌ مطلوب منك — كان يمرّ صامتاً فيبقى الطلب
+     معلّقاً بانتظار ردٍّ لا يعلم صاحبه أنّه مطلوب منه. */
+  if(prAwaitingReply(pr)) return true;
+  return prIsProcurement() && prUnclaimed(pr);
 }
 function prWorkspaceIsBlocked(pr){
   return ['returned','rejected'].includes(pr.status)||prAgeDays(pr)>7&&['in_review','submitted'].includes(pr.status);
@@ -13142,13 +13223,16 @@ function prWorkspaceQueueData(mode){
   if(mode==='archive') list=list.filter(prIsArchived);
   else list=list.filter(pr=>!prIsArchived(pr));
   if(mode==='approvals') list=list.filter(pr=>!!prPendingApproval(pr));
+  else if(mode==='execution') list=list.filter(prInExecution);
+  else if(mode==='receiving') list=list.filter(prAwaitingReceipt);
   else if(mode==='links') list=list.filter(pr=>(pr.po_links||[]).length||pr.po_number||prIsLive(pr));
   else if(mode==='discussion') list=list.filter(pr=>(pr.messages||[]).length);
   const filter=STATE.prWorkspaceFilter||'all';
   if(filter==='mine'){
     const me=String(STATE.currentUser?.username||'').toLowerCase();
     list=list.filter(pr=>String(pr.requester||'').toLowerCase()===me);
-  }else if(filter==='action') list=list.filter(prWorkspaceNeedsAction);
+  }else if(filter==='claimed') list=list.filter(prClaimedByMe);
+  else if(filter==='action') list=list.filter(prWorkspaceNeedsAction);
   else if(filter==='blocked') list=list.filter(prWorkspaceIsBlocked);
   const q=String(STATE.prWorkspaceSearch||'').trim().toLowerCase();
   if(q) list=list.filter(pr=>[pr.id,pr.title,pr.project,pr.requester_name,pr.requester].some(x=>String(x||'').toLowerCase().includes(q)));
@@ -13168,8 +13252,12 @@ const PR_QUEUE_GROUPS = [
   {key:'due',     label:'موعد التوريد فات أو قارب'},
   {key:'blocked', label:'متعثّر — أُعيد أو رُفض'},
   {key:'review',  label:'قيد الاعتماد لدى غيرك'},
-  {key:'active',  label:'جارٍ لدى المشتريات'},
-  {key:'done',    label:'صدر أمر الشراء / مكتمل'},
+  {key:'unclaimed',label:'بانتظار استلام المشتريات'},
+  {key:'execution',label:'مستلمة — تحت التنفيذ لدى المشتريات'},
+  {key:'receiving',label:'بانتظار استلام البضاعة والإقفال'},
+  /* ما لا يقع في طورٍ معلوم (مسودّة غيرك · حالة قديمة) — لا يُحشر في خانةٍ
+     تصفه بغير حقيقته. «تحت التنفيذ» على مسودّةٍ وصفٌ كاذب. */
+  {key:'other',   label:'أخرى — قيد المتابعة'},
   {key:'closed',  label:'منتهٍ'},
 ];
 function prQueueGroup(pr){
@@ -13178,9 +13266,13 @@ function prQueueGroup(pr){
   { const d = prDueLive(pr) ? prNeedDays(pr) : null; if(d!==null && d<=1) return 'due'; }
   if(['cancelled','closed'].includes(pr.status)) return 'closed';
   if(pr.status==='in_review') return 'review';
-  if(['ordered','converted_to_po'].includes(pr.workflow_state)||pr.status==='converted_to_po') return 'done';
-  if(['pricing','partially_ordered'].includes(pr.workflow_state)||['approved','rfq_issued','submitted','draft'].includes(pr.status)) return 'active';
-  return 'active';
+  /* ⚠️ الترتيب هنا مقصود: صدور أمر الشراء يُقدَّم على طور التنفيذ. طلبٌ
+     مُغطّى جزئياً يظلّ لدى المشتريات، لكنّ ما صدر منه **ينتظر استلام الميدان
+     الآن** — وهو الفعل الأقرب استحقاقاً. */
+  if(prAwaitingReceipt(pr)) return 'receiving';
+  if(prInExecution(pr)) return 'execution';
+  if(prUnclaimed(pr)) return 'unclaimed';
+  return 'other';
 }
 function prQueueSeq(pr){
   const m=String(pr&&pr.id||'').match(/(\d+)\s*$/);
@@ -13239,9 +13331,14 @@ function prWorkspaceNavButton(mode,key,icon,label,count){
 }
 function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
   const all=prWorkspaceVisible(), approvals=prApprovalInbox().length;
+  const live=all.filter(p=>!prIsArchived(p));
+  const inExec=live.filter(prInExecution).length;
+  const inRecv=live.filter(prAwaitingReceipt).length;
   const linked=all.filter(p=>(p.po_links||[]).length||p.po_number).length;
-  const discussed=all.filter(p=>(p.messages||[]).length).length;
-  const headings={requests:'الطلبات',approvals:'موافقاتي',links:'الارتباطات',discussion:'المناقشات',reports:'المحاضر',archive:'الأرشيف',settings:'إعدادات الطلبات'};
+  /* عدّاد المناقشات = ما **يحتاج ردّاً** لا مجرّد ما فيه رسائل: رقمٌ لا يزول
+     بفعلٍ ليس تنبيهاً بل زينة (بلاغ المالك: «يظهر تنبيه ومنشن للرد»). */
+  const discussed=live.filter(p=>!!prDiscussionFlag(p)).length;
+  const headings={requests:'الطلبات',approvals:'موافقاتي',execution:'مستلمة — تحت التنفيذ',receiving:'بانتظار الاستلام والإقفال',links:'الارتباطات',discussion:'المناقشات',reports:'المحاضر',archive:'الأرشيف',settings:'إعدادات الطلبات'};
   const filter=STATE.prWorkspaceFilter||'all';
   /* عنوان مجموعة قبل أوّل طلب منها — فلا تختلط «قيد الاعتماد» بـ«معتمد» في
      قائمة واحدة بلا فاصل (بلاغ المالك: «تشتيت في ترتيبهم وطريقة عرضهم»). */
@@ -13262,6 +13359,8 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
       <span class="pr-work-request-proj" title="المشروع / الجهة">📍 ${escapeHtml(poProjectText(pr))}</span>
       <span class="pr-work-request-meta"><span><i class="pr-work-dot ${stage[1]}"></i>${escapeHtml(stage[0])}</span><span>${escapeHtml(next[0])}</span></span>
       ${(()=>{const c=prDueChip(pr);return c?`<span class="pr-work-due ${c[1]}">⏳ ${escapeHtml(c[0])}</span>`:'';})()}
+      ${(()=>{const f=prDiscussionFlag(pr);return f?`<span class="pr-work-tag ${f[1]}">💬 ${escapeHtml(f[0])}</span>`:'';})()}
+      ${pr.status==='returned'&&prCanEditRequest(pr)?`<span class="pr-work-tag info">↩ اضغط للتعديل وإعادة الإرسال</span>`:''}
     </button>`;
   }).join(''):`<div class="pr-work-empty">لا توجد طلبات ضمن قائمة العمل الحالية.</div>`;
   return `<section class="pr-workspace" aria-label="مساحة عمل طلبات الشراء">
@@ -13274,6 +13373,8 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
       <nav class="pr-work-rail" aria-label="تنقل مساحة الطلبات">
         ${prWorkspaceNavButton(mode,'requests','📋','الطلبات',all.length)}
         ${prWorkspaceNavButton(mode,'approvals','✅','موافقاتي',approvals)}
+        ${prWorkspaceNavButton(mode,'execution','⚙️','تحت التنفيذ',inExec)}
+        ${prWorkspaceNavButton(mode,'receiving','📦','الاستلام والإقفال',inRecv)}
         ${prWorkspaceNavButton(mode,'links','🔗','الارتباطات',linked)}
         ${prWorkspaceNavButton(mode,'discussion','💬','المناقشات',discussed)}
         ${prWorkspaceNavButton(mode,'reports','🖨','المحاضر',0)}
@@ -13282,7 +13383,7 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
       </nav>
       <aside class="pr-work-queue" aria-label="قائمة عمل الطلبات">
         <div class="pr-work-queuehead"><div class="pr-work-queue-title"><h2>${headings[mode]||'الطلبات'}</h2><span class="pr-work-total">${requests.length}</span></div>
-          <div class="pr-work-quick"><button class="pr-work-chip${filter==='all'?' active':''}" onclick="prSetWorkspaceFilter('all')">الكل</button><button class="pr-work-chip${filter==='mine'?' active':''}" onclick="prSetWorkspaceFilter('mine')">طلباتي</button><button class="pr-work-chip${filter==='action'?' active':''}" onclick="prSetWorkspaceFilter('action')">تحتاج إجراء</button><button class="pr-work-chip${filter==='blocked'?' active':''}" onclick="prSetWorkspaceFilter('blocked')">متعثرة</button></div>
+          <div class="pr-work-quick"><button class="pr-work-chip${filter==='all'?' active':''}" onclick="prSetWorkspaceFilter('all')">الكل</button><button class="pr-work-chip${filter==='mine'?' active':''}" onclick="prSetWorkspaceFilter('mine')">طلباتي</button>${prIsProcurement()?`<button class="pr-work-chip${filter==='claimed'?' active':''}" onclick="prSetWorkspaceFilter('claimed')">طلباتي المستلمة</button>`:''}<button class="pr-work-chip${filter==='action'?' active':''}" onclick="prSetWorkspaceFilter('action')">تحتاج إجراء</button><button class="pr-work-chip${filter==='blocked'?' active':''}" onclick="prSetWorkspaceFilter('blocked')">متعثرة</button></div>
         </div><div class="pr-work-list">${queue}</div>
       </aside>
       <main class="pr-work-detail">${prWorkspaceDetailHTML(selected,view,mode)}</main>
@@ -13299,7 +13400,10 @@ function prSetWorkspaceMode(mode){
   STATE.prWorkspaceMode=mode; STATE.prView='list';
   if(mode==='reports') STATE.prDetailTab='report';
   else if(mode==='approvals') STATE.prDetailTab='approvals';
-  else if(mode==='links') STATE.prDetailTab='links';
+  else if(mode==='links'||mode==='execution') STATE.prDetailTab='links';
+  /* الاستلام والإقفال يهبط على «نظرة عامة»: هناك اللوحة التي تشرح أنّ الفعل
+     على أمر الشراء وأنّ الإقفال يقع تلقائياً — وهي الإرشاد المطلوب لا جدول. */
+  else if(mode==='receiving') STATE.prDetailTab='overview';
   else if(mode==='discussion') STATE.prDetailTab='discussion';
   renderPRPortal();
 }
@@ -13473,8 +13577,8 @@ async function prRemoveAttachment(id, prId){
 }
 function prWorkspaceOverviewHTML(pr){
   const next=prWorkspaceNext(pr);
-  const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p><button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button></div>`:'';
-  return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${prClaimCardHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}${(()=>{const c=prDueChip(pr);return c?` <span class="pr-work-due ${c[1]}">${escapeHtml(c[0])}</span>`:'';})()}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
+  const draft=pr.status==='draft'?`<div class="pr-work-surface" style="border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5)"><h3>مسودة لم تُرسل بعد</h3><p class="pr-work-sub">أكمل البيانات والبنود ثم أرسل الطلب ليبدأ مسار الاعتماد.</p>${prCanEditRequest(pr)?`<button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">إكمال المسودة وإرسالها</button>`:''}</div>`:'';
+  return `${prWorkspaceStepsHTML(pr)}<div class="pr-work-next"><div><small>المطلوب الآن</small><b>${escapeHtml(next[1])}</b></div><span class="owner">المسؤول: ${escapeHtml(next[0])}</span></div>${prWorkspaceDecisionHTML(pr)}${prReturnedCardHTML(pr)}${prReceivingCardHTML(pr)}${prReplyCardHTML(pr)}${prClaimCardHTML(pr)}${draft}<div class="pr-work-surface"><h3>الاحتياج والسياق</h3><p style="font-size:13px;margin:0 0 16px;line-height:1.8">${escapeHtml(pr.justification||pr.title||'لم يُسجّل وصف تفصيلي للاحتياج.')}</p><dl class="pr-work-meta"><div><dt>الإدارة</dt><dd>${escapeHtml(pr.department||pr.department_id||'—')}</dd></div><div><dt>المشروع / الموقع</dt><dd>${escapeHtml(pr.project||'—')}</dd></div><div><dt>مقدّم الطلب</dt><dd>${escapeHtml(pr.requester_name||pr.requester||'—')}</dd></div><div><dt>تاريخ الاحتياج</dt><dd>${escapeHtml(pr.needed_by||'—')}${(()=>{const c=prDueChip(pr);return c?` <span class="pr-work-due ${c[1]}">${escapeHtml(c[0])}</span>`:'';})()}</dd></div><div><dt>الأولوية</dt><dd>${escapeHtml(pr.priority||'—')}</dd></div><div><dt>أساس القرار</dt><dd>اعتماد إلكتروني موثّق داخل النظام</dd></div></dl></div><div class="pr-work-surface"><h3>المرفقات الداعمة</h3>${prWorkspaceAttachmentsHTML(pr)}</div>`;
 }
 function prWorkspaceItemsHTML(pr){
   const links=pr.po_links||[], showMoney=canViewAmounts();
@@ -13641,11 +13745,51 @@ function prProcActionsHTML(pr){
 /* لوحة نداء على «النظرة العامة» — لا تظهر إلا حين يكون الطلب **بلا صاحب فعليّ**
    وأنت من يستطيع استلامه. غيرُ ذلك لا لوحة (لا نصنع ضجيجاً لمن لا يعنيه). */
 function prClaimCardHTML(pr){
-  const live=['pricing','partially_ordered'].includes(pr.workflow_state)||['approved','rfq_issued'].includes(pr.status);
-  if(!live || prIsArchived(pr) || (pr.proc_status||'received')!=='received') return '';
+  if(!prProcLive(pr) || prIsArchived(pr) || (pr.proc_status||'received')!=='received') return '';
   const acts=prProcActionsHTML(pr);
   if(!acts) return '';
   return `<div class="pr-work-surface pr-work-claim"><h3>بانتظار من يستلمه</h3><div class="pr-work-sub">أُذِن ببدء التسعير ولم يسجّل أحدٌ أنّه بدأ العمل على هذا الطلب بعد. استلامُه يُثبّت اسمك عليه ويُشعِر مقدّمه.</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${acts}</div></div>`;
+}
+/* ══════════ لوحة «أُعيد إليك للاستكمال» ══════════
+   ⚠️ كان الطلب المُعاد يظهر بلافتة حالة فقط: «يحتاج استكمالاً» — **بلا سبب
+   الإعادة وبلا أي زرّ**. فمقدّمه يقرأ أنّ عليه شيئاً ولا يجد ما يفعله، ومخرجه
+   الوحيد إلغاء الطلب (وهو ما وقع فعلاً على الإنتاج). */
+function prReturnedCardHTML(pr){
+  if(!pr || pr.status!=='returned') return '';
+  const why=pr.return_reason||prLastReturnComment(pr)||'';
+  const who=(()=>{ const rows=(pr.approvals||[]); for(let i=rows.length-1;i>=0;i--){ if(rows[i].decision==='returned') return rows[i].approver_name||rows[i].approver||''; } return ''; })();
+  const btn=prCanEditRequest(pr)
+    ? `<button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">✏️ تعديل الطلب وإعادة إرساله</button>`
+    : `<div class="pr-work-sub" style="margin-top:10px">التعديل لمقدّم الطلب <b>${escapeHtml(pr.requester_name||pr.requester||'—')}</b> أو مدير مساحة الطلبات.</div>`;
+  return `<div class="pr-work-surface pr-work-returned"><h3>↩ أُعيد إليك للاستكمال</h3>
+    ${why?`<div class="pr-work-sub" style="font-size:13px"><b>سبب الإعادة${who?` (${escapeHtml(who)})`:''}:</b> ${escapeHtml(why)}</div>`:`<div class="pr-work-sub">أُعيد الطلب${who?` من ${escapeHtml(who)}`:''} دون تسجيل سبب مكتوب.</div>`}
+    <div class="pr-work-sub" style="margin-top:8px">عدّل البيانات أو البنود أو المرفقات ثم أعد إرساله — يبقى على رقمه نفسه بإصدارٍ جديد، ويُحفَظ سجلّ القرارات السابق كاملاً.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${btn}</div></div>`;
+}
+/* ══════════ لوحة «بانتظار استلام البضاعة والإقفال» ══════════
+   طلب المالك (2026-09-17): «الطلبات بعد التنفيذ تذهب لموظّف الصيانة في خانة
+   الطلبات اللي تبقى لها الاستلام وتقفل». والإقفال نفسه **خادميّ** — مُشغِّل
+   `trg_po_receipt_closes_pr` يُقفل الطلب ويؤرشفه متى بلغت كل أوامره «تسليم
+   كامل». فالفعل المطلوب على **أمر الشراء** لا على الطلب، ولهذا اللوحة تفتحه. */
+function prReceivingCardHTML(pr){
+  if(!prAwaitingReceipt(pr)) return '';
+  const links=prPoLinksOf(pr);
+  const btns=links.map(l=>`<button class="btn btn-primary btn-sm" onclick="prOpenLinkedPO('${escapeAttr(l.po_number)}')">فتح الأمر <span dir="ltr">${escapeHtml(l.po_number)}</span></button>`).join('');
+  return `<div class="pr-work-surface pr-work-receiving"><h3>📦 بانتظار استلام البضاعة والإقفال</h3>
+    <div class="pr-work-sub">صدر لهذا الطلب ${links.length===1?'أمر شراء واحد':links.length===2?'أمرا شراء':`${links.length} أوامر شراء`}. سجّل الاستلام على أمر الشراء نفسه — ومتى اكتمل استلام كل الأوامر أُقفل الطلب وأُرشف تلقائياً.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${btns}</div></div>`;
+}
+/* ══════════ لوحة «بانتظار ردّك على استفهام» ══════════
+   ⚠️ بلاغ المالك: «الطلبات اللي عليها نقاش يظهر تنبيه ومنشن للرد، وليس ما نعرف
+   الرد على ايش». فالنداء يحمل **نصّ السؤال واسم سائله** لا مجرّد عدّاد. */
+function prReplyCardHTML(pr){
+  const f=prDiscussionFlag(pr);
+  if(!f || f[2]!=='reply') return '';
+  const q=prOpenQuestion(pr);
+  return `<div class="pr-work-surface pr-work-reply"><h3>💬 بانتظار ردّك</h3>
+    <div class="pr-work-sub">سألك <b>${escapeHtml(q.author_name||q.author||'فريق المشتريات')}</b>${q.created_at?` · <span dir="ltr">${escapeHtml(String(q.created_at).slice(0,16).replace('T',' '))}</span>`:''}</div>
+    <blockquote class="pr-work-quote">${escapeHtml(q.body||'(سؤال بلا نصّ — انظر مرفقه)')}</blockquote>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-primary" onclick="prSetDetailTab('discussion')">↪ اكتب ردّك الآن</button></div></div>`;
 }
 function prWorkspaceLinksHTML(pr){
   const links=prPoLinksOf(pr);
@@ -13718,7 +13862,7 @@ function prGoView(view, id){
     if(!requirePermission('can_create_pr', 'رفع طلبات الشراء')) { view='list'; id=null; }
   }
   STATE.prView=view; STATE.prTrackId=id||null;
-  if(view==='create'){ __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null; }
+  if(view==='create'){ __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null; __prEditStatus=null; }
   renderPRPortal();
 }
 
@@ -13777,8 +13921,8 @@ function prListHTML(){
   const rows = list.map(p=>{
     // المرحلة الحالية تشمل قرار الاعتماد ثم التسعير والتنفيذ.
     // والمسودّة تُفتح للإكمال مباشرةً — كانت صفّاً ميّتاً لا يصير طلباً أبداً.
-    const stageTxt = p.status==='draft'
-      ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();prEditDraft('${escapeAttr(p.id)}')">✏️ إكمال المسودّة وإرسالها</button>`
+    const stageTxt = ['draft','returned'].includes(p.status) && prCanEditRequest(p)
+      ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();prEditDraft('${escapeAttr(p.id)}')">${p.status==='returned'?'↩ تعديل وإعادة الإرسال':'✏️ إكمال المسودّة وإرسالها'}</button>`
       : (p.po_number ? `أمر الشراء ${escapeHtml(p.po_number)}`
                      : (prIsLive(p) ? procStatusBadge(p) : '—'));
     return `<tr onclick="prGoView('track','${escapeAttr(p.id)}')" style="cursor:pointer">
@@ -14364,10 +14508,22 @@ function prBuilderHTML(){
      معتمِدها من القسم بعد اليوم، فالتحذير صار إنذاراً كاذباً يخيف بلا سبب.
      حقل القسم يبقى للتصنيف لا للاعتماد. */
   // لافتة «تُكمل مسودّة» — وإلّا بدا للمستخدم أنّه يُنشئ طلباً ثانياً.
+  /* ⚠️ والمُعاد ليس مسودّة: لافتته تحمل **سبب الإرجاع** أمام عينه وهو يُعدّل،
+     لأنّ `pr_save_request` تُصفّر `return_reason` عند الحفظ — فلو لم يُعرَض هنا
+     لم يعُد له أثر يقرؤه المُعدِّل. */
+  const _editPr = __prEditId ? (STATE.purchaseRequests||[]).find(p=>p.id===__prEditId) : null;
+  const _isReturned = __prEditStatus==='returned';
+  const _retWhy = _isReturned ? (_editPr?.return_reason||prLastReturnComment(_editPr)||'') : '';
   const _deptWarn = __prEditId
-    ? `<div class="pr-card" style="border-color:var(--accent-2);background:#f7fbff;margin-bottom:12px">
-         ✏️ تُكمل الآن المسودّة <b dir="ltr">${escapeHtml(__prEditId)}</b> — الحفظ يُحدّثها ولا يُنشئ طلباً جديداً.
-       </div>`
+    ? (_isReturned
+      ? `<div class="pr-card pr-edit-banner returned" style="margin-bottom:12px">
+           <div style="font-weight:700;margin-bottom:4px">↩ تعديل طلب أُعيد إليك للاستكمال — <b dir="ltr">${escapeHtml(__prEditId)}</b></div>
+           ${_retWhy?`<div style="font-size:12.5px;line-height:1.8"><b>سبب الإعادة:</b> ${escapeHtml(_retWhy)}</div>`:''}
+           <div style="font-size:12px;color:var(--muted);margin-top:6px">عدّل ما يلزم ثم اضغط «📤 إرسال للمشتريات» — يُحفَظ على نفس الرقم بإصدارٍ جديد ويعود لمسار الاعتماد من أوّله.</div>
+         </div>`
+      : `<div class="pr-card pr-edit-banner" style="margin-bottom:12px">
+           ✏️ تُكمل الآن المسودّة <b dir="ltr">${escapeHtml(__prEditId)}</b> — الحفظ يُحدّثها ولا يُنشئ طلباً جديداً.
+         </div>`)
     : '';
   return `
     ${itemDatalist}
@@ -14439,7 +14595,7 @@ function prBuilderHTML(){
       <div class="pr-form-bar" id="pr-form-bar">
         <div class="pr-form-ready" id="pr-form-ready"></div>
         <div class="pr-form-acts">
-          <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 إرسال للمشتريات</button>
+          <button class="btn btn-primary" onclick="prSubmitNew(false)">📤 ${_isReturned?'إعادة الإرسال بعد التعديل':'إرسال للمشتريات'}</button>
           <button class="btn btn-ghost" onclick="prSubmitNew(true)">💾 ${__prEditId?'حفظ التعديل كمسودة':'حفظ كمسودة'}</button>
           <button class="btn btn-ghost" onclick="prGoView('list')">إلغاء</button>
         </div>
@@ -14652,7 +14808,7 @@ async function prSubmitNew(asDraft){
       toast('success', asDraft?'حُفظت المسودة':'أُرسل الطلب لمدير الصيانة',
         asDraft?'يمكنك فتحها وإكمالها وإرسالها لاحقاً':'بدأ مسار الاعتماد الإلكتروني ويمكنك متابعة كل قرار من هنا.');
     }
-    __prLoaded=false; __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null;
+    __prLoaded=false; __prDraftItems=[]; __prDraftDocs=[]; __prEditId=null; __prEditStatus=null;
     prGoView('track', pr.id);
     prLoadAll().then(renderPRPortal);
   }catch(e){ toast('error','تعذّر الحفظ', e.message||'خطأ غير متوقع'); }
@@ -14662,14 +14818,50 @@ async function prSubmitNew(asDraft){
    ⚠️ كان طريقاً مسدوداً: `prSubmitNew` تولّد رقماً جديداً في كل مرّة، فلا مسار
    يفتح مسودّة ويُكملها — التوست يَعِد «يمكنك إكمالها لاحقاً» والنتيجة صفٌّ ميّت
    لا يصير طلباً أبداً. وهو يصيب بالضبط من لم تجهز ورقته الموقَّعة بعد. */
+/* ══════════ من يُعدِّل الطلب ومتى — المصدر الواحد ══════════
+   ⚠️ بلاغ المالك (2026-09-17): «ارجاع الطلبات لمقدم الطلب — عندما يعود له الطلب
+   لا يمكنه اجراء اي تعديل عليه، فقط عاد اليه. اليوم اضطرينا الغاء طلب تم اعادته
+   للاستكمال بسبب عدم قدرتنا على تعديل الطلب واعادة رفعه.»
+   الجذر: `prEditDraft` كانت ترفض كل ما ليس `draft`، و**لا زرّ تعديل يظهر لطلبٍ
+   `returned` في أي شاشة** — فالإرجاع «للاستكمال» طريقٌ مسدود ومخرجه الوحيد
+   إلغاء الطلب وإنشاء بديل (يفقد رقمه وسجلّ قراراته). والخادم كان يسمح أصلاً:
+   `pr_save_request` تقبل `status IN ('draft','returned')` منذ بنائها.
+   فبوّابة الزرّ كانت **أضيق من بوّابة الفعل** — والقاعدة 14 تُلزم تطابقهما.
+   ⚠️ والحارس هنا منسوخ عن الخادم حرفيّاً: `pr_create` (= `can_create_pr`) +
+   صاحب الطلب، أو `pr_manage_users` (= `can_manage_users`) أو الأدمن. **لا
+   `can_manage_rfq`** — الخادم لا يقبله فزرٌّ يعرضه يُرفَض بعد النقر. */
+/* سبب الإعادة من سلسلة القرارات — احتياطيّ حين صُفّر `return_reason` بحفظٍ سابق.
+   ⚠️ يُقرأ من `approvals` (السجل الكامل) لا `approvals_current`: الإصدار الجاري
+   لا يحمل قرار الإعادة الذي وقع على الإصدار السابق. */
+function prLastReturnComment(pr){
+  const rows=(pr&&pr.approvals)||[];
+  for(let i=rows.length-1;i>=0;i--){
+    const a=rows[i];
+    if(a && a.decision==='returned' && String(a.comment||'').trim()) return String(a.comment).trim();
+  }
+  return '';
+}
+function prCanEditRequest(pr){
+  if(!pr || !STATE.currentUser) return false;
+  if(!['draft','returned'].includes(pr.status)) return false;
+  if(prIsArchived(pr)) return false;
+  if(!hasPermission('can_create_pr')) return false;
+  const me=String(STATE.currentUser.username||'').toLowerCase();
+  if(String(pr.requester||'').toLowerCase()===me) return true;
+  return prPermStrict('can_manage_users') || STATE.currentUser.role==='admin';
+}
 function prEditDraft(id){
   const pr=(STATE.purchaseRequests||[]).find(p=>p.id===id);
   if(!pr){ toast('error','غير موجود',''); return; }
-  if(pr.status!=='draft'){ toast('warn','غير قابل للتعديل','لا يُعدَّل إلا ما كان مسودّة'); return; }
-  const me = STATE.currentUser?.username;
-  if(pr.requester && me && pr.requester!==me && !prIsProcurement()){
-    toast('error','غير مصرّح','المسودّة يُكملها صاحبها'); return; }
+  if(!prCanEditRequest(pr)){
+    toast('warn','غير قابل للتعديل',
+      ['draft','returned'].includes(pr.status)
+        ? 'التعديل لصاحب الطلب أو مدير مساحة الطلبات'
+        : 'لا يُعدَّل إلا ما كان مسودّة أو مُعاداً للاستكمال');
+    return;
+  }
   __prEditId = id;
+  __prEditStatus = pr.status;
   __prDraftDocs = [];
   __prDraftItems = (pr.items||[]).map(it=>({
     item_code:it.item_code||'', description:it.description||'', unit:it.unit||'',
@@ -14792,9 +14984,19 @@ function prThreadHTML(pr){
   // بوّابة الصندوق = بوّابة الفعل (`prPostMessage`): من سُحب منه التعليق يقرأ
   // المحادثة ولا يرى مربّع الكتابة — لا يكتب ثمّ يُرفَض.
   const canPost = (isProc || isOwner) && hasPermission('can_comment');
+  /* ⚠️ «ما نعرف الرد على ايش» (بلاغ المالك): صندوق الكتابة كان بلا سياق —
+     نصّ السؤال أعلى الشاشة وقد يكون خارج المرئي. الاقتباس هنا يضع السؤال
+     **فوق الصندوق** باسم سائله، فيُكتب الردّ على شيء معلوم. */
+  const openQ = prOpenQuestion(pr);
+  const flag  = prDiscussionFlag(pr);
+  const replyTo = (canPost && openQ && flag && flag[2]==='reply')
+    ? `<div class="pr-reply-to"><small>تردّ على استفهام <b>${escapeHtml(openQ.author_name||openQ.author||'')}</b></small><blockquote>${escapeHtml(openQ.body||'(بلا نصّ — انظر المرفق)')}</blockquote></div>` : '';
+  const waiting = (canPost && openQ && flag && flag[2]==='waiting')
+    ? `<div class="pr-reply-to waiting"><small>استفهامك ما زال بلا ردّ من <b>${escapeHtml(pr.requester_name||pr.requester||'مقدّم الطلب')}</b></small></div>` : '';
   return `<div class="pr-card" style="margin-top:12px">
-      <div class="pr-section-title">المحادثة والاستفسارات${msgs.length?` (${msgs.length})`:''}</div>
+      <div class="pr-section-title">المحادثة والاستفسارات${msgs.length?` (${msgs.length})`:''}${flag?` <span class="pr-badge ${flag[1]}">${escapeHtml(flag[0])}</span>`:''}</div>
       ${items || '<div style="font-size:12.5px;color:var(--muted)">لا استفسارات على هذا الطلب.</div>'}
+      ${replyTo}${waiting}
       ${canPost?`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <input id="pr-msg-input" class="input" style="flex:1;min-width:200px" maxlength="4000" placeholder="${ph}">
         <button class="btn btn-ghost btn-sm" onclick="prPostMessage('${escapeAttr(pr.id)}','${kind}')">${btn}</button>
@@ -14922,12 +15124,15 @@ function prTrackingHTML(id){
   // والاعتمادات والسجل في تبويبات مترابطة حول الطلب نفسه.
   const itemsRows=(pr.items||[]).map((it,i)=>`<tr><td class="center">${i+1}</td><td>${escapeHtml(it.description)}</td><td class="center">${escapeHtml(it.unit||'—')}</td><td class="num">${escapeHtml(String(it.requested_qty??'—'))}</td><td class="num">${it.unit_price!=null?fmtPrice(it.unit_price):'—'}</td><td class="num">${it.line_total!=null?fmtPrice(it.line_total):'—'}</td></tr>`).join('');
   // المسودّة تُكمَل من شاشتها نفسها — لا يبحث صاحبها عن مدخل آخر.
-  const actionPanel = (pr.status==='draft')
-    ? `<div class="pr-card" style="margin-top:12px;border-color:var(--accent-2);background:#f7fbff">
-         <div class="pr-section-title">مسودّة لم تُرسَل بعد</div>
+  // والمُعاد للاستكمال كذلك: كان يصل هذه الشاشة بلا أي مدخل تعديل.
+  const actionPanel = prCanEditRequest(pr)
+    ? `<div class="pr-card" style="margin-top:12px;border-color:${pr.status==='returned'?'var(--danger)':'var(--accent-2)'};background:${pr.status==='returned'?'#fffaf9':'#f7fbff'}">
+         <div class="pr-section-title">${pr.status==='returned'?'أُعيد إليك للاستكمال':'مسودّة لم تُرسَل بعد'}</div>
          <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
-           لن تدخل مسار الاعتماد حتى ترسلها. يمكنك إضافة المرفقات الداعمة الآن أو لاحقاً.</div>
-         <button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">✏️ إكمال المسودّة وإرسالها</button>
+           ${pr.status==='returned'
+             ? escapeHtml(pr.return_reason||prLastReturnComment(pr)||'عدّل ما يلزم ثم أعد إرساله — يبقى على رقمه نفسه بإصدارٍ جديد.')
+             : 'لن تدخل مسار الاعتماد حتى ترسلها. يمكنك إضافة المرفقات الداعمة الآن أو لاحقاً.'}</div>
+         <button class="btn btn-primary" onclick="prEditDraft('${escapeAttr(pr.id)}')">${pr.status==='returned'?'↩ تعديل الطلب وإعادة إرساله':'✏️ إكمال المسودّة وإرسالها'}</button>
        </div>`
     : '';
   return `

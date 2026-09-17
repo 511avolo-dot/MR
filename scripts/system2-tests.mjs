@@ -2811,6 +2811,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prDaysSince'), grab('prSinceText'), grab('prIsLive'),
       `function prIsProcurement(){ return __proc; }`,
       grabConst('PR_FINAL_STATUSES'), grab('prIsFinal'), grab('prCanAddAttachment'),
+      grab('prOpenQuestion'), grab('prDiscussionFlag'),
       grab('prJourneyHTML'), grab('prThreadHTML'), grab('prTemplatesHTML'),
     ].join('\n\n');
     return new Function(src + `; return {STATE, window, prDaysSince, prSinceText,
@@ -3294,7 +3295,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     (CODE.match(/prEditDraft\('/g) || []).length >= 2
     && /إكمال المسودّة وإرسالها/.test(CODE));
   T('وفتح «طلب جديد» يُلغي وضع التعديل (لا يُحدَّث طلبٌ آخر بالخطأ)',
-    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDocs=\[\]; __prEditId=null; \}/.test(CODE));
+    /if\(view==='create'\)\{ __prDraftItems=\[\]; __prDraftDocs=\[\]; __prEditId=null; __prEditStatus=null; \}/.test(CODE));
 
   // ③ الإرسال والحفظ في معاملة واحدة؛ المرفقات الداعمة مستقلّة.
   T('الحفظ والإرسال ذريّان ثم تُرفع المرفقات ويُرسل الإشعار',
@@ -3524,6 +3525,9 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prWorkspaceQueueData'), grab('prCanCancel'),
       // بُعد موعد التوريد — دخل الطابور مجموعةً وفرزاً لا شارةً فقط.
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      // أطوار ما بعد الاعتماد — ثلاث خانات صريحة (بلاغ المالك 2026-09-17).
+      grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
+      grab('prInExecution'), grab('prUnclaimed'), grab('prClaimedByMe'),
     ].join('\n\n');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
@@ -3851,6 +3855,8 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
+      grab('prInExecution'), grab('prUnclaimed'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
@@ -4172,7 +4178,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && !/بدأت العمل عليه<\/button>\$\{pr\.proc_status==='in_progress'/.test(CODE));
   T('ولوحة «بانتظار من يستلمه» على النظرة العامة لا مدفونة في الارتباطات',
     /function prClaimCardHTML\(pr\)\{/.test(CODE) && /بانتظار من يستلمه/.test(CODE)
-    && /\$\{prWorkspaceDecisionHTML\(pr\)\}\$\{prClaimCardHTML\(pr\)\}/.test(CODE));
+    /* ⚠️ الثابت هو **موضع اللوحة** لا جيرانها: صُحِّح بعد أن دخلت ثلاث لوحات
+       نداء بينها وبين لوحة القرار (بلاغ 2026-09-17). */
+    /* ⚠️ النافذة **محدودة** والاستدعاء بصيغة الإقحام `${…}`: نمطٌ مفتوح
+       (`[\s\S]*?`) يلتقط تعريف الدالّة نفسها لاحقاً في الملف فيمرّ وإن حُذف
+       الاستدعاء — إيجابيّة كاذبة أمسكها البيت-بروف. */
+    && /function prWorkspaceOverviewHTML\(pr\)\{[\s\S]{0,3000}?\$\{prClaimCardHTML\(pr\)\}/.test(CODE));
   // «فريق المشتريات» ليست مسؤولاً — والقياس أثبت خمسة طلبات بلا صاحب.
   T('و«المسؤول» يُسمّى بشخصه متى استُلِم، ونداءٌ صريح متى كان بلا صاحب',
     /بانتظار من يستلمه من فريق المشتريات/.test(CODE)
@@ -4193,6 +4204,8 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
+      grab('prInExecution'), grab('prUnclaimed'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS,
@@ -4227,7 +4240,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('الطلب الذي فات موعده أو يستحقّ غداً يدخل مجموعة الموعد',
     Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'due'
     && Q.prQueueGroup({ id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1) }) === 'due'
-    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'pricing', needed_by: iso(9) }) === 'active');
+    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'pricing', needed_by: iso(9) }) === 'unclaimed');
   Q.act(['PR-1']);
   T('وما يحتاج إجراءك يبقى قبله مهما كان موعده',
     Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'action');
@@ -4260,8 +4273,8 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     (CODE.match(/prDueChip\(pr\)/g) || []).length >= 2
     && /class="pr-work-due \$\{c\[1\]\}"/.test(CODE));
   T('وأنماطها من رموز اللوحة الدلاليّة لا ألوان مخترَعة',
-    /\.pr-work-due\.danger\{background:var\(--prw-red-bg\)/.test(HTML)
-    && /\.pr-work-due\.warn\{background:var\(--prw-warn-bg\)/.test(HTML));
+    /\.pr-work-due\.danger,\.pr-work-tag\.danger\{background:var\(--prw-red-bg\)/.test(HTML)
+    && /\.pr-work-due\.warn,\.pr-work-tag\.warn\{background:var\(--prw-warn-bg\)/.test(HTML));
   T('ومجموعة الموعد معرَّفة في الطابور بعد «يحتاج إجراءك»',
     Q.PR_QUEUE_GROUPS.findIndex(g => g.key === 'due') === 1
     && Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
@@ -4306,6 +4319,254 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('والجاهزية تُحدَّث من نقطة رسم البنود الوحيدة ومن مستمع مفوَّض على النموذج',
     /try\{ prSyncFormBar\(\); \}catch\(_\)\{\}/.test(CODE)
     && /form\.addEventListener\('input', prSyncFormBar\)/.test(CODE));
+}
+
+/* ═══ ٤٣) الطلب المُعاد · خانات ما بعد الاعتماد · تنبيه المناقشة ═══
+   بلاغ المالك (2026-09-17) بأربعة بنود:
+   ① «ارجاع الطلبات لمقدم الطلب — عندما يعود له الطلب لا يمكنه اجراء اي تعديل
+      عليه، فقط عاد اليه. اليوم اضطرينا الغاء طلب تم اعادته للاستكمال.»
+   ② «عندما يتم استلام الطلب المفروض يذهب لخانة الطلبات المستلمة تحت التنفيذ
+      وتظهر للمستلم في طلباتي المستلمة.»
+   ③ «الطلبات بعد التنفيذ تذهب لموظّف الصيانة في خانة الطلبات اللي تبقى لها
+      الاستلام وتقفل.»
+   ④ «الطلبات اللي عليها نقاش يظهر تنبيه ومنشن للرد، وليس ما نعرف الرد على ايش.»
+   التأكيدات هنا **سلوكية** تُشغّل الدوال نفسها — الفحص النصّيّ هو ما مرّ عليه
+   العيب ① سنةً كاملة (الخادم يقبل `returned` منذ بنائه والواجهة لا تعرض زرّاً). */
+{
+  G('٤٣) الطلب المُعاد · خانات ما بعد الاعتماد · تنبيه المناقشة');
+
+  // ── ① التعديل بعد الإعادة: بوّابة الزرّ = بوّابة الخادم حرفيّاً ──
+  const E = (() => {
+    const src = [
+      `const STATE = { currentUser:null };`,
+      `let __perms = {}; let __strict = {};`,
+      `function hasPermission(k){ return __perms[k] === true; }`,
+      `function prPermStrict(k){ return __strict[k] === true; }`,
+      grab('escapeHtml'), grab('escapeAttr'), grab('prIsArchived'),
+      grab('prLastReturnComment'), grab('prCanEditRequest'), grab('prReturnedCardHTML'),
+    ].join('\n\n');
+    return new Function(src + `; return { prCanEditRequest, prLastReturnComment, prReturnedCardHTML,
+      set:(u,perms,strict)=>{ STATE.currentUser=u; __perms=perms||{}; __strict=strict||{}; } };`)();
+  })();
+  const owner = { username:'field1', role:'user' };
+  const ret = { id:'PR-1', status:'returned', requester:'field1', return_reason:'أضف عرض سعر ثالث',
+                approvals:[{decision:'returned', comment:'أضف عرض سعر ثالث', approver:'m.elsobky',
+                            approver_name:'م.محمد السبكي'}] };
+
+  E.set(owner, { can_create_pr:true }, {});
+  T('المُعاد للاستكمال يُعدَّل بيد مقدّمه (وهو ما كان مستحيلاً فأُلغي الطلب بدله)',
+    E.prCanEditRequest(ret) === true);
+  T('والمسودّة كما كانت',
+    E.prCanEditRequest({ id:'PR-2', status:'draft', requester:'field1' }) === true);
+  T('وما تجاوز الإعادة لا يُعدَّل (in_review · approved · closed)',
+    ['in_review','approved','closed','cancelled'].every(st =>
+      E.prCanEditRequest({ id:'PR-3', status:st, requester:'field1' }) === false));
+  T('والمؤرشَف لا يُعدَّل مهما كانت حالته',
+    E.prCanEditRequest(Object.assign({}, ret, { archived_at:'2026-09-01' })) === false);
+  T('وبلا صلاحية رفع الطلبات لا تعديل',
+    (() => { E.set(owner, {}, {}); const r = E.prCanEditRequest(ret); E.set(owner, { can_create_pr:true }, {});
+             return r === false; })());
+  T('وغير صاحبه يُمنَع — إلا مدير مساحة الطلبات (نفس حارس pr_save_request)',
+    (() => { E.set({ username:'other', role:'user' }, { can_create_pr:true }, {});
+             const no = E.prCanEditRequest(ret);
+             E.set({ username:'other', role:'user' }, { can_create_pr:true }, { can_manage_users:true });
+             const yes = E.prCanEditRequest(ret);
+             E.set(owner, { can_create_pr:true }, {});
+             return no === false && yes === true; })());
+  /* ⚠️ `can_manage_rfq` **ليس** بوّابة تعديل: الخادم يقبل `pr_manage_users`
+     أو الأدمن وحدهما، فزرٌّ يعرضه للمشتريات يُرفَض بعد النقر (القاعدة 14). */
+  T('و«إدارة التسعير» ليست بوّابة تعديل (الخادم يرفضها)',
+    (() => { E.set({ username:'proc1', role:'user' }, { can_create_pr:true }, { can_manage_rfq:true });
+             const r = E.prCanEditRequest(ret); E.set(owner, { can_create_pr:true }, {}); return r === false; })());
+
+  T('سبب الإعادة يُقرأ من سلسلة القرارات حين صُفّر الحقل بحفظٍ سابق',
+    E.prLastReturnComment({ approvals:[
+      { decision:'approved', comment:'تمام' },
+      { decision:'returned', comment:'ناقص مواصفة' }] }) === 'ناقص مواصفة'
+    && E.prLastReturnComment({ approvals:[{ decision:'approved', comment:'تمام' }] }) === '');
+
+  {
+    const card = E.prReturnedCardHTML(ret);
+    T('لوحة «أُعيد إليك للاستكمال» تحمل السبب واسم من أعاده وزرّ التعديل',
+      card.includes('أُعيد إليك للاستكمال') && card.includes('أضف عرض سعر ثالث')
+      && card.includes('م.محمد السبكي') && card.includes("prEditDraft('PR-1')"));
+    E.set({ username:'other', role:'user' }, { can_create_pr:true }, {});
+    const ro = E.prReturnedCardHTML(ret);
+    T('ولمن لا يملك التعديل تقول من يملكه بدل زرٍّ يُرفَض',
+      !ro.includes('prEditDraft') && ro.includes('التعديل لمقدّم الطلب'));
+    E.set(owner, { can_create_pr:true }, {});
+    T('ولا تظهر لغير المُعاد',
+      E.prReturnedCardHTML({ id:'PR-9', status:'in_review' }) === '');
+  }
+
+  // بنيويّ: المداخل الثلاثة تمرّ بالبوّابة الواحدة لا بفحص `status==='draft'`
+  T('prEditDraft لم تعُد ترفض كل ما ليس مسودّة',
+    /function prEditDraft\(id\)\{/.test(CODE) && /if\(!prCanEditRequest\(pr\)\)\{/.test(CODE)
+    && !/if\(pr\.status!=='draft'\)\{ toast\('warn','غير قابل للتعديل'/.test(CODE));
+  T('واللوحة على النظرة العامة، والطابور يدلّ على التعديل، والشاشة القديمة كذلك',
+    /function prWorkspaceOverviewHTML\(pr\)\{[\s\S]{0,3000}?\$\{prReturnedCardHTML\(pr\)\}/.test(CODE)
+    && /pr\.status==='returned'&&prCanEditRequest\(pr\)/.test(CODE)
+    && /const actionPanel = prCanEditRequest\(pr\)/.test(CODE));
+  T('ولافتة المُحرِّر تُفرّق المُعاد عن المسودّة وتُظهر سبب الإعادة',
+    /const _isReturned = __prEditStatus==='returned'/.test(CODE)
+    && /تعديل طلب أُعيد إليك للاستكمال/.test(CODE)
+    && /_retWhy\?`<div[^`]*سبب الإعادة/.test(CODE)
+    && /إعادة الإرسال بعد التعديل/.test(CODE));
+
+  // ── ②③ خانات ما بعد الاعتماد: ثلاث بدل واحدة ──
+  const Q = (() => {
+    const src = [
+      `const STATE = { currentUser:null, purchaseRequests:[] };`,
+      `let __proc=false;`,
+      `function prIsProcurement(){ return __proc; }`,
+      `function prPendingApproval(){ return null; }`,
+      `function prCanSeeAll(){ return true; }`,
+      `function hasPermission(){ return true; }`,
+      `function prIsLive(pr){ return pr && !['draft','rejected','cancelled'].includes(pr.status); }`,
+      `function prAgeDays(){ return 0; }`,
+      grab('escapeHtml'), grab('escapeAttr'), grab('poDays'),
+      grab('prIsArchived'), grab('prPoLinksOf'), grabConst('PR_FINAL_STATUSES'), grab('prIsFinal'),
+      grab('prProcLive'), grab('prAwaitingReceipt'), grab('prInExecution'), grab('prUnclaimed'),
+      grab('prClaimedByMe'), grab('prOpenQuestion'), grab('prDiscussionFlag'), grab('prAwaitingReply'),
+      grab('prWorkspaceNeedsAction'), grab('prWorkspaceIsBlocked'),
+      grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'),
+      grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
+      grab('prWorkspaceVisible'), grab('prWorkspaceQueueData'),
+      grab('prReceivingCardHTML'), grab('prReplyCardHTML'),
+      grab('prCanAddAttachment'), grab('prThreadHTML'),
+    ].join('\n\n');
+    return new Function(src + `; return { STATE, PR_QUEUE_GROUPS, prQueueGroup, prWorkspaceQueueData,
+      prAwaitingReceipt, prInExecution, prUnclaimed, prOpenQuestion, prDiscussionFlag,
+      prAwaitingReply, prWorkspaceNeedsAction, prReceivingCardHTML, prReplyCardHTML, prThreadHTML,
+      set:(u,proc)=>{ STATE.currentUser=u; __proc=!!proc; } };`)();
+  })();
+
+  Q.set({ username:'proc1', role:'user' }, true);
+  const unclaimed = { id:'PR-DG2026-0011', status:'approved', workflow_state:'pricing', requester:'field1' };
+  const claimed   = { id:'PR-DG2026-0012', status:'approved', workflow_state:'pricing', requester:'field1',
+                      proc_status:'in_progress', proc_started_by:'proc1' };
+  const ordered   = { id:'PR-DG2026-0013', status:'approved', workflow_state:'ordered', requester:'field1',
+                      proc_status:'po_issued', po_links:[{ po_number:'P.O-DG26-3210', allocations:[] }] };
+  const legacyPo  = { id:'PR-DG2026-0014', status:'approved', workflow_state:'ordered', requester:'field1',
+                      po_number:'P.O-DG26-3199' };
+
+  /* ⚠️ التصنيف يُقاس بعين **مقدّم الطلب**: عين المشتريات ترفع ما لم يُستلَم إلى
+     «يحتاج إجراءك» — وهو الصواب، ويُثبَت بتأكيده الخاصّ بعده. */
+  Q.set({ username:'field1', role:'user' }, false);
+  T('«بانتظار استلام المشتريات» خانة مستقلّة عن «مستلمة تحت التنفيذ»',
+    Q.prQueueGroup(unclaimed) === 'unclaimed' && Q.prQueueGroup(claimed) === 'execution');
+  T('وعينُ المشتريات ترفع ما لم يُستلَم إلى «يحتاج إجراءك»',
+    (() => { Q.set({ username:'proc1', role:'user' }, true);
+             const g = Q.prQueueGroup(unclaimed);
+             Q.set({ username:'field1', role:'user' }, false);
+             return g === 'action'; })());
+  T('وما صدر أمره يذهب لخانة «بانتظار استلام البضاعة والإقفال»',
+    Q.prQueueGroup(ordered) === 'receiving');
+  /* ⚠️ الطلبات السابقة للموديل تحمل `po_number` بلا صفّ روابط — فلو قُرئ
+     `po_links` مباشرةً لسقطت من خانة الاستلام وهي أحوج ما تكون إليها. */
+  T('والطلب القديم برقم أمرٍ بلا صفّ روابط يدخلها أيضاً',
+    Q.prQueueGroup(legacyPo) === 'receiving');
+  T('وصدورُ الأمر يُقدَّم على طور التنفيذ (تغطية جزئية ما يزال لدى المشتريات)',
+    Q.prQueueGroup({ id:'PR-DG2026-0015', status:'approved', workflow_state:'partially_ordered',
+      proc_status:'in_progress', po_links:[{ po_number:'X', allocations:[] }] }) === 'receiving');
+  T('والمُقفَل يبقى منتهياً لا «بانتظار استلام»',
+    Q.prQueueGroup({ id:'PR-DG2026-0016', status:'closed', workflow_state:'closed',
+      po_links:[{ po_number:'X', allocations:[] }] }) === 'closed');
+  T('والمجموعات الثلاث مُعلَنة بترتيبها: استلام المشتريات ← التنفيذ ← استلام البضاعة',
+    (() => { const k = Q.PR_QUEUE_GROUPS.map(g => g.key);
+             return k.indexOf('unclaimed') >= 0 && k.indexOf('unclaimed') < k.indexOf('execution')
+                    && k.indexOf('execution') < k.indexOf('receiving'); })());
+  T('وكل مجموعة يُرجعها التصنيف لها عنوان مُعرَّف (لا مفتاح بلا اسم)',
+    [unclaimed, claimed, ordered, legacyPo].every(p =>
+      Q.PR_QUEUE_GROUPS.some(g => g.key === Q.prQueueGroup(p))));
+  /* ⚠️ مسودّة غيرك ليست «تحت التنفيذ»: السقوط الأخير خانةٌ محايدة لا وصفٌ كاذب. */
+  T('وما لا يقع في طورٍ معلوم يسقط لخانة محايدة لا لـ«تحت التنفيذ»',
+    Q.prQueueGroup({ id:'PR-DG2026-0018', status:'draft', requester:'other' }) === 'other'
+    && Q.PR_QUEUE_GROUPS.some(g => g.key === 'other'));
+
+  // أوضاع التنقّل والمرشّح — «طلباتي المستلمة» = من ثبّت اسمه بالاستلام
+  Q.STATE.purchaseRequests = [unclaimed, claimed, ordered,
+    Object.assign({}, claimed, { id:'PR-DG2026-0017', proc_started_by:'proc2' })];
+  T('وضع «تحت التنفيذ» يعرض المستلَمة وحدها',
+    (() => { const ids = Q.prWorkspaceQueueData('execution').map(p => p.id);
+             return ids.length === 2 && ids.every(i => ['PR-DG2026-0012','PR-DG2026-0017'].includes(i)); })());
+  T('ووضع «الاستلام والإقفال» يعرض ما صدر أمره وحده',
+    Q.prWorkspaceQueueData('receiving').map(p => p.id).join('|') === 'PR-DG2026-0013');
+  T('ومرشّح «طلباتي المستلمة» يحصرها فيمن ثبّت اسمه بالاستلام',
+    (() => { Q.set({ username:'proc1', role:'user' }, true);
+             Q.STATE.prWorkspaceFilter = 'claimed';
+             const ids = Q.prWorkspaceQueueData('execution').map(p => p.id);
+             Q.STATE.prWorkspaceFilter = 'all'; Q.set({ username:'field1', role:'user' }, false);
+             return ids.join('|') === 'PR-DG2026-0012'; })());
+
+  {
+    const card = Q.prReceivingCardHTML(ordered);
+    T('ولوحة الاستلام تفتح أمر الشراء نفسه وتشرح أنّ الإقفال تلقائيّ',
+      card.includes("prOpenLinkedPO('P.O-DG26-3210')") && card.includes('أُقفل الطلب وأُرشف تلقائياً'));
+    T('ولا تظهر لطلبٍ بلا أمر شراء',
+      Q.prReceivingCardHTML(unclaimed) === '');
+  }
+  T('وأوضاع التنقّل الجديدة معروضة بعدّاداتها وبعناوينها',
+    /prWorkspaceNavButton\(mode,'execution','⚙️','تحت التنفيذ',inExec\)/.test(CODE)
+    && /prWorkspaceNavButton\(mode,'receiving','📦','الاستلام والإقفال',inRecv\)/.test(CODE)
+    && /execution:'مستلمة — تحت التنفيذ'/.test(CODE) && /receiving:'بانتظار الاستلام والإقفال'/.test(CODE));
+  T('ومرشّح «طلباتي المستلمة» لا يُعرض لغير المشتريات',
+    /\$\{prIsProcurement\(\)\?`<button class="pr-work-chip\$\{filter==='claimed'/.test(CODE));
+
+  // ── ④ المناقشة: تنبيه على ما ينتظر ردّاً، ونداء يقتبس السؤال ──
+  const qOnly = { id:'PR-D1', requester:'field1', messages:[
+    { id:1, kind:'question', body:'هل الكمية 10 أم 100؟', author:'proc1', author_name:'أحمد' }] };
+  const answered = { id:'PR-D2', requester:'field1', messages:[
+    { id:1, kind:'question', body:'كم؟', author:'proc1', author_name:'أحمد' },
+    { id:2, kind:'answer',   body:'100', author:'field1', author_name:'سالم' }] };
+
+  Q.set({ username:'field1', role:'user' }, false);
+  T('استفهامٌ بلا ردّ = «بانتظار ردّك» لمقدّم الطلب',
+    (() => { const f = Q.prDiscussionFlag(qOnly);
+             return !!f && f[0] === 'بانتظار ردّك' && f[2] === 'reply' && Q.prAwaitingReply(qOnly); })());
+  T('وما أُجيب عنه لا يحمل تنبيهاً (لا شارة لا تزول بفعل)',
+    Q.prDiscussionFlag(answered) === null && Q.prOpenQuestion(answered) === null
+    && Q.prDiscussionFlag({ id:'PR-D3', messages:[] }) === null);
+  T('وبانتظار الردّ فعلٌ مطلوب يدخل «يحتاج إجراءك»',
+    Q.prWorkspaceNeedsAction(qOnly) === true && Q.prQueueGroup(qOnly) === 'action');
+  Q.set({ username:'proc1', role:'user' }, true);
+  T('وللسائل نفسه: «بانتظار ردّ مقدّم الطلب» لا «بانتظار ردّك»',
+    (() => { const f = Q.prDiscussionFlag(qOnly);
+             return !!f && f[2] === 'waiting' && !Q.prAwaitingReply(qOnly); })());
+  {
+    Q.set({ username:'field1', role:'user' }, false);
+    const card = Q.prReplyCardHTML(qOnly);
+    T('ولوحة النداء تقتبس السؤال وتسمّي سائله — «نعرف الرد على ايش»',
+      card.includes('هل الكمية 10 أم 100؟') && card.includes('أحمد')
+      && card.includes("prSetDetailTab('discussion')"));
+    T('ولا تظهر لمن ليس مطلوباً منه الردّ',
+      (() => { Q.set({ username:'proc1', role:'user' }, true);
+               const r = Q.prReplyCardHTML(qOnly); Q.set({ username:'field1', role:'user' }, false);
+               return r === ''; })());
+  }
+  /* ⚠️ العدّاد كان `messages.length` — رقمٌ لا يزول بفعلٍ زينةٌ لا تنبيه. */
+  /* ⚠️ شارةٌ ليست موعداً لا تلبس صنف الموعد: `.pr-work-due` كان مقيساً بـ«شارتا
+     موعد فقط»، فإلحاق شارة إعادة به كسر القياس — صنفٌ مُحمَّل بمعنيين يُبطل
+     كل حارسٍ عليه. */
+  T('وشارتا المناقشة والإعادة بصنفهما المستقلّ لا بصنف شارة الموعد',
+    /<span class="pr-work-tag \$\{f\[1\]\}">💬/.test(CODE)
+    && /<span class="pr-work-tag info">↩/.test(CODE)
+    && !/class="pr-work-due[^"]*">💬/.test(CODE) && !/class="pr-work-due[^"]*">↩/.test(CODE)
+    && /\.pr-work-tag\.info\{/.test(HTML));
+  T('وعدّاد المناقشات يعُدّ ما يحتاج ردّاً لا ما فيه رسائل',
+    /const discussed=live\.filter\(p=>!!prDiscussionFlag\(p\)\)\.length/.test(CODE));
+  /* ⚠️ سلوكيّ لا نصّيّ: تعريفُ `replyTo` يبقى قائماً لو حُذف إقحامه في المُخرَج
+     — وهي إيجابيّة كاذبة أمسكها البيت-بروف. المحكّ أنّ الاقتباس **يظهر فعلاً**. */
+  T('وصندوق الكتابة يحمل اقتباس ما يُردّ عليه فوقه',
+    (() => { Q.set({ username:'field1', role:'user' }, false);
+             const th = Q.prThreadHTML(qOnly);
+             return th.includes('تردّ على استفهام') && th.includes('هل الكمية 10 أم 100؟')
+                    && th.includes('pr-reply-to') && /\.pr-reply-to\{/.test(HTML); })());
+  T('وللسائل يقول إنّ استفهامه ما زال بلا ردّ بدل اقتباسٍ يردّ عليه هو',
+    (() => { Q.set({ username:'proc1', role:'user' }, true);
+             const th = Q.prThreadHTML(qOnly);
+             Q.set({ username:'field1', role:'user' }, false);
+             return th.includes('ما زال بلا ردّ') && !th.includes('تردّ على استفهام'); })());
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
