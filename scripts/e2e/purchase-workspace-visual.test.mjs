@@ -274,7 +274,12 @@ try {
   assert.ok(!drawer.className.includes('open') && drawer.visibility==='hidden',`mobile drawer stayed open: ${JSON.stringify(drawer)}`);
   const overflow = await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
   assert.ok(overflow<=1,`mobile horizontal overflow: ${overflow}px`);
-  assert.equal(await page.locator('.pr-work-navbtn').count(),7);// +الأرشيف
+  /* ⚠️ عددٌ مجرَّد لا يقول أيّ وجهة سقطت. الخانتان الجديدتان (2026-09-17)
+     مُسمّاتان صراحةً فيسمّي الإخفاقُ الغائبَ منهما. */
+  assert.equal(await page.locator('.pr-work-navbtn').count(),9);// +الأرشيف +التنفيذ +الاستلام
+  for(const label of ['تحت التنفيذ','الاستلام والإقفال'])
+    assert.equal(await page.locator('.pr-work-navbtn',{hasText:label}).count(),1,
+      `وجهة «${label}» غائبة عن شريط تنقّل الطلبات`);
   assert.equal(await page.locator('.pr-work-summary').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2);
   /* ⚠️ العتبة السابقة (<180px) كانت تُرمّز **تصميماً مُلغى**: شريطاً أفقيّاً
      يُظهر بطاقةً واحدة من ستّ على 393px (مقيس 2026-09-16). الطابور صار قائمةً

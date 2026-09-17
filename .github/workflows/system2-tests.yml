@@ -45,6 +45,7 @@ on:
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
+      - 'scripts/e2e/pr-request-flow-buckets.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
@@ -90,6 +91,7 @@ on:
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
+      - 'scripts/e2e/pr-request-flow-buckets.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
@@ -176,6 +178,7 @@ jobs:
           node scripts/e2e/field-permissions.mjs
           node scripts/e2e/pr-attachments.mjs
           node scripts/e2e/pr-workspace-clarity.mjs
+          node scripts/e2e/pr-request-flow-buckets.mjs
           # ✅ `scoped-staff-screens.mjs` أُضيف هنا (2026-09-17) بعد **قياس** جذر
           # تقلّبه الذي بقي مجهولاً منذ 2026-09-15 (43/43 محليّاً · 31/43 ثمّ
           # 25/43 على العدّاء، بنمط «الهويّة والبيانات غائبتان»):
