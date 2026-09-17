@@ -12,6 +12,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 import { chromium } from 'playwright';
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 
 const ORIGIN = 'http://127.0.0.1:8812';
 const checks = [];
@@ -24,8 +25,10 @@ const errors = [], csp = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) csp.push(m.text()); });
 
+await blockSupabase(ctx);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
 await page.goto(`${ORIGIN}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.prRenderItems === 'function', { timeout: 15000 });
+await enterApp(page);   // إقلاع حتميّ — انظر app-boot.mjs
 
 /* شاشة إنشاء الطلب بسحابة مُقلَّدة — لا اتصال بالإنتاج. */
 await page.evaluate(() => {
@@ -58,8 +61,12 @@ await page.evaluate(() => prApplyParsed({ title:'مواد نظافة', items:[
 ok('القراءة الذكية تبدأ من الصفّ الأوّل ولا تفقد بنداً',
   (await names()) === 'أكياس نفايات 50 جالون|صابون سائل 441 لتر|منظف للزجاج 21*1', await names());
 /* لقطة الجدول نفسه لا أعلى الصفحة — أوّل صياغة قصّت فوق البنود فلم تُظهر شيئاً. */
-await page.locator('.pr-items-table').scrollIntoViewIfNeeded();
-await page.locator('.pr-items-table').screenshot({ path: '/tmp/pr-items-after-ai.png' });
+/* ⚠️ كان هنا `scrollIntoViewIfNeeded` فيتوقّف السكربت دائماً بمهلة 30 ثانية:
+   الجدول **مرئيّ فعلاً** (قِيس: 518×195 عند y=800)، لكنّ الدالّة تنتظر
+   استقرار الصندوق بين إطارين، وفي الصفحة حركةٌ دائمة فلا يستقرّ أبداً.
+   واللقطة تُمرّر بنفسها، و`animations:'disabled'` تُثبّت الإطار.
+   (عطلٌ سابق لهذه الدفعة — مُثبَت بتشغيله على `index.html` قبلها.) */
+await page.locator('.pr-items-table').screenshot({ path: '/tmp/pr-items-after-ai.png', animations: 'disabled' });
 
 /* ── ٢) حذف صفّ من الوسط يُصيبه هو ── */
 await page.evaluate(() => prRemoveDraftItem(1));

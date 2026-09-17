@@ -15,6 +15,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 
 const OUT = process.env.SHOT_DIR || '/tmp/scoped-staff';
 const URL_ = 'http://127.0.0.1:8812/index.html';
@@ -109,7 +110,13 @@ const LOGIN = `(cfg) => {
       update: () => ({ eq: async () => ({ error:null }) }),
       delete: () => ({ eq: async () => ({ error:null }) })
     }),
-    auth: { getSession: async () => ({ data:{ session:null } }) },
+    /* ⚠️ جلسة **حاضرة** لا null: \`verifyAuthSession\` تعمل لاتزامنيّاً بعد الإقلاع،
+       وإن وجدت CLOUD مُفعَّلة ومستخدماً مسجَّلاً وجلسةً غائبة **تُصفّر
+       STATE.currentUser وتُظهر بطاقة الدخول** — فتُقرأ كل الصلاحيات false
+       وتُحجب المبالغ حتى عن موظّف المكتب. مُعاد إنتاجه بالتشغيل: بعد
+       verifyAuthSession صار currentUser=null و#app-root display:none.
+       ظهر في CI وحده لأنّ العدّاء الأبطأ يُنفّذها بعد البذر لا قبله. */
+    auth: { getSession: async () => ({ data:{ session:{ access_token:'stub', user:{ id:'stub' } } } }) },
     channel: () => ({ on(){ return this; }, subscribe(){ return this; } })
   };
   STATE.currentUser = cfg.user;
@@ -214,8 +221,15 @@ async function session(viewport, tag) {
     const t = m.text();
     if (/Content Security Policy|Refused to/i.test(t)) csp.push(`[${tag}] ${t}`);
   });
+  await blockSupabase(ctx);   // انظر app-boot.mjs — شرط الحتميّة وسلامة الإنتاج
   await page.goto(URL_, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1200);
+  /* ⚠️ كان هنا `waitForTimeout(1200)` — وهو **سبب تقلّب هذا السكربت في CI**
+     (43/43 محليّاً · 31/43 ثمّ 25/43 على العدّاء، بنمط «الهويّة والبيانات
+     غائبتان»): مسارات الإقلاع اللاتزامنيّة تُعيد `showLoginScreen()` فيُنقَض
+     البذرُ وتُقاس شجرةٌ ارتفاعها صفر. `enterApp` تنتظر **الأثر** لا لحظةً
+     بعينها. انظر app-boot.mjs. */
+  await enterApp(page);
+  await page.waitForFunction(() => typeof window.startApp === 'function', { timeout: 20000 });
   await page.evaluate(SEED);
   return { ctx, page };
 }

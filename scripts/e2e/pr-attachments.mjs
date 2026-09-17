@@ -9,6 +9,7 @@
  * التشغيل: node scripts/csp-preview-server.mjs &  ثمّ  node scripts/e2e/pr-attachments.mjs
  */
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 const { chromium } = await import('../../node_modules/playwright/index.mjs');
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8812';
@@ -62,8 +63,10 @@ await page.route('**/api/reg-doc*', route => {
   route.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"مفتاح غير صالح"}' });
 });
 
+await blockSupabase(page);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
 await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.docvOpen === 'function' && typeof window.prViewAttachment === 'function');
+await enterApp(page);   // إقلاع حتميّ — انظر app-boot.mjs
 
 /* هويّة وحالة: طلب واحد بمرفقين ورسالة تشير لأحدهما. */
 await page.evaluate(() => {

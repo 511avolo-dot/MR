@@ -3522,10 +3522,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prWorkspaceVisible'), grab('prIsArchived'), grab('prArchiveCount'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
       grab('prWorkspaceQueueData'), grab('prCanCancel'),
+      // بُعد موعد التوريد — دخل الطابور مجموعةً وفرزاً لا شارةً فقط.
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
     ].join('\n\n');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
-      prQueueGroup, prQueueSeq, prQueueSort,
+      prQueueGroup, prQueueSeq, prQueueSort, prNeedDays, prDueChip,
       set:(u,scoped,perms)=>{ STATE.currentUser=u; __scoped=!!scoped; __perms=perms||{}; } };`)();
   })();
 
@@ -3847,9 +3849,12 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     const src = [
       `let __act=new Set();`,
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
+      `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
+      prNeedDays, prDueChip,
       act:(ids)=>{ __act=new Set(ids||[]); } };`)();
   })();
 
@@ -4050,6 +4055,257 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('وتحفظه عبر setProfile (بوّابة الأدمن) لا بكتابة مباشرة',
     /profilePayload\.notify_email=updates\.notifyEmail/.test(CODE)
     && !/payload\.notify_email\s*=/.test(CODE));
+}
+
+/* ═══ ٤١) كتالوج بلا أسعار + سجلّ الوحدات + إسناد مسؤول المشتريات ═══
+   القياس على قاعدة الإنتاج (2026-09-16) قبل أي كود:
+     • سياسة `cat_select` = ((NOT proc_is_scoped()) OR proc_can_view_amounts())
+       ⇒ موظّف الميدان يقرأ **صفر صنف**، وقائمة الإكمال تُبنى من `STATE.items`
+       فتصله فارغة. النتيجة: 63 وصفاً في بنود الطلبات، **صفر تطابق** مع 711 صنفاً.
+     • 39 وحدة لـ711 صنفاً، أكثرها كتابات لنفس الوحدة (حبة 475 · حبه 13 · ﺣبة 4).
+     • خمسة طلبات عند التسعير `proc_status='received'` و`proc_started_by` فارغ،
+       وزرّ الاستلام مدفون في تبويب «الارتباطات» لا على المهبط.
+   ⚠️ التأكيدات هنا **سلوكية**: تُشغّل `unitNorm`/`prCatalogUnit`/`prItemPicked`
+   على DOM مُقلَّد وتقرأ الأثر — لا تفحص وجود نصّ (الفحص النصّيّ هو ما يمرّ عليه العيب). */
+{
+  G('٤١) الكتالوج والوحدات وإسناد المشتريات');
+  const ILU = fs.readFileSync(path.join(ROOT, 'db/system2-item-lookup-and-units.sql'), 'utf8');
+  const bare = ILU.replace(/--[^\n]*/g, '');
+
+  // ── القاعدة: العرض بلا أي عمود ماليّ، ولا يُمنَح لـanon ──
+  const viewBody = (bare.match(/CREATE VIEW public\.proc_items_lookup[\s\S]*?;/) || [''])[0];
+  T('عرض الكتالوج يحمل الاسم والوحدة والفئة فقط — بلا أي عمود ماليّ',
+    /i\.name/.test(viewBody) && /proc_unit_canon\(i\.unit\)/.test(viewBody)
+    && !/price|cost|avg_|offers_count|last_/i.test(viewBody));
+  T('ولا يُمنَح لـanon (الكتالوج ليس عامّاً)',
+    /REVOKE ALL ON public\.proc_items_lookup FROM PUBLIC, anon/.test(bare)
+    && /GRANT SELECT ON public\.proc_items_lookup TO authenticated/.test(bare));
+  // امتياز المالك هو ما يجعله يتجاوز cat_select — نفس نمط portal_user_directory.
+  T('والعرض بامتياز المالك (security_invoker=false) وإلّا بقي محجوباً',
+    /security_invoker\s*=\s*false/.test(bare));
+  // التنظيف يمسّ الكتالوج وحده: بند طلبٍ مُرسَل سجلُّ قرار لا يُعاد كتابته.
+  T('وتنظيف الوحدات يمسّ الكتالوج ولا يمسّ بنود الطلبات',
+    /UPDATE public\.proc_items/.test(bare) && !/UPDATE public\.proc_pr_items/.test(bare));
+  T('وسحب تنفيذ anon عن دوال المُشغِّلات الثلاث',
+    /pr_guard_status/.test(bare) && /pr_set_due/.test(bare)
+    && /proc_pr_audit_fill_actor_name/.test(bare) && /REVOKE ALL ON FUNCTION/.test(bare));
+
+  // ── الخريطتان يجب أن تتطابقا: تطبيعٌ في الواجهة يخالف الخادم يُنتج وحدتين ──
+  const jsMap = {};
+  const jsBlock = (CODE.match(/const UNIT_CANON = \{[\s\S]*?\n\};/) || [''])[0];
+  for (const m of jsBlock.matchAll(/'([^']+)':'([^']+)'/g)) jsMap[m[1]] = m[2];
+  const sqlMap = {};
+  const sqlBlock = (bare.match(/SELECT CASE lower\(u\)[\s\S]*?ELSE u/) || [''])[0];
+  for (const m of sqlBlock.matchAll(/WHEN '([^']+)'\s*THEN '([^']+)'/g)) sqlMap[m[1].toLowerCase()] = m[2];
+  const jsKeys = Object.keys(jsMap).sort(), sqlKeys = Object.keys(sqlMap).sort();
+  T('خريطة الوحدات في الواجهة تطابق نظيرتها الخادمية مفتاحاً بمفتاح',
+    jsKeys.length > 12 && jsKeys.join('|') === sqlKeys.join('|')
+    && jsKeys.every(k => jsMap[k] === sqlMap[k]));
+
+  // ── سلوكيّ: التطبيع يوحّد الكتابات القاطعة ولا يدمج دلاليّاً ──
+  const ST = { itemLookup: [], items: [] };
+  const S = new Function('STATE',
+    grabConst('PR_UNITS') + '\n' + grabConst('UNIT_CANON') + '\n'
+    + grab('unitNorm') + '\n' + grab('arNorm') + '\n'
+    + grab('prCatalog') + '\n' + grab('prCatalogUnit') + '\n' + grab('prItemPicked') + '\n'
+    + 'return { PR_UNITS, UNIT_CANON, unitNorm, prCatalog, prCatalogUnit, prItemPicked };'
+  )(ST);
+  S.STATE = ST;
+  const decisive = [['حبه','حبة'],['ﺣبة','حبة'],['حيه','حبة'],['جبه','حبة'],['pcs','حبة'],
+                    ['كرتونة','كرتون'],['BOX','كرتون'],['قطمة','قطعة'],['وحده','وحدة'],
+                    ['لفه','لفة'],['باالة','بالة'],['دزينة','درزن'],['كجم','كيلو'],
+                    ['م مربع','متر مربع'],['M2','متر مربع'],['متر  طولي','متر طولي']];
+  T('التطبيع يوحّد كل الكتابات القاطعة المقيسة على الإنتاج',
+    decisive.every(([src, want]) => S.unitNorm(src) === want));
+  // ⚠️ «عدد»/«بالعدد» دمجٌ دلاليّ لا إملائيّ — يُعرَض ولا يُطبَّق (درس المشاريع).
+  T('ولا يُجري دمجاً دلاليّاً: عدد/بالعدد/علبة 300 مل تبقى كما هي',
+    ['عدد','بالعدد','علبة 300 مل'].every(u => S.unitNorm(u) === u));
+  T('وقائمة الوحدات المعتمدة فيها المستعمَل فعلاً ولا تكرار فيها',
+    S.PR_UNITS.includes('حبة') && S.PR_UNITS.includes('كرتون') && S.PR_UNITS.includes('شوال')
+    && new Set(S.PR_UNITS).size === S.PR_UNITS.length
+    && S.PR_UNITS.every(u => S.unitNorm(u) === u));
+
+  // ── سلوكيّ: مصدر الكتالوج يخدم الميدان والمكتب معاً ──
+  S.STATE.items = [{ name: 'صابون سائل', unit: 'حبه' }];
+  S.STATE.itemLookup = [];
+  T('موظّف المكتب يقرأ الكتالوج الذي جلبه أصلاً (بلا رحلة زائدة)',
+    S.prCatalog().length === 1 && S.prCatalogUnit('صابون سائل') === 'حبة');
+  S.STATE.items = [];                       // الحالة الحقيقية لموظّف الميدان
+  S.STATE.itemLookup = [{ name: 'صابون سائل', unit: 'حبة' }, { name: 'منظف زجاج', unit: 'لتر' }];
+  T('وموظّف الميدان — الذي تقرأ له STATE.items صفراً — يقرأ العرض بلا أسعار',
+    S.prCatalog().length === 2 && S.prCatalogUnit('منظف زجاج') === 'لتر');
+  // المطابقة بـarNorm فكتابةٌ بهمزة/ياء مختلفة تصيب الصنف نفسه.
+  T('والمطابقة مطبَّعة عربيّاً فلا تُفوّت كتابة مختلفة للاسم',
+    S.prCatalogUnit('صابون سائل') === 'حبة');
+
+  // ── سلوكيّ: اختيار الصنف يملأ وحدته ولا يدهس ما كتبه المستخدم ──
+  const mkRow = (desc, unit) => {
+    const unitEl = { value: unit, getAttribute: () => 'unit' };
+    const tr = { querySelector: (sel) => (sel.includes('unit') ? unitEl : null) };
+    return { input: { value: desc, closest: () => tr }, unitEl };
+  };
+  let r = mkRow('منظف زجاج', '');
+  S.prItemPicked(r.input);
+  T('اختيار صنف من الكتالوج يملأ وحدته تلقائياً', r.unitEl.value === 'لتر');
+  r = mkRow('منظف زجاج', 'كرتون');
+  S.prItemPicked(r.input);
+  T('ولا يدهس وحدةً كتبها المستخدم بنفسه', r.unitEl.value === 'كرتون');
+  r = mkRow('صنف غير مسجّل في الكتالوج', '');
+  S.prItemPicked(r.input);
+  T('وصنفٌ خارج الكتالوج لا يُلفَّق له وحدة', r.unitEl.value === '');
+
+  // ── الواجهة: القائمة تُبنى من prCatalog لا من STATE.items ──
+  T('قائمة الإكمال تُبنى من prCatalog (وإلّا وصلت الميدان فارغة)',
+    /datalist id="pr-item-names">\$\{\[\.\.\.new Set\(prCatalog\(\)/.test(CODE)
+    && /datalist id="pr-unit-names"/.test(CODE));
+  T('وحقل الوحدة مربوط بالسجلّ ويُطبَّع عند الخروج منه',
+    /list="pr-unit-names"/.test(CODE) && /onchange="this\.value=unitNorm\(this\.value\)"/.test(CODE));
+  T('و`loadAll` يجلب العرض للمُنطَّق بتسامح مع قاعدة قبل الهجرة',
+    /proc_items_lookup/.test(CODE) && /catch\(_\)\{ itemLookup = \[\]; \}/.test(CODE)
+    && /STATE\.itemLookup\s*=\s*data\.itemLookup/.test(CODE));
+
+  // ── إسناد مسؤول المشتريات ──
+  // ⚠️ تعريفٌ واحد للأزرار يخدم الشاشتين — لا بوّابتان تتفارقان (القاعدة 14).
+  T('أزرار المشتريات تعريفٌ واحد (prProcActionsHTML) يُستدعى من الشاشتين',
+    /function prProcActionsHTML\(pr\)\{/.test(CODE)
+    && (CODE.match(/prProcActionsHTML\(pr\)/g) || []).length >= 3
+    && !/بدأت العمل عليه<\/button>\$\{pr\.proc_status==='in_progress'/.test(CODE));
+  T('ولوحة «بانتظار من يستلمه» على النظرة العامة لا مدفونة في الارتباطات',
+    /function prClaimCardHTML\(pr\)\{/.test(CODE) && /بانتظار من يستلمه/.test(CODE)
+    && /\$\{prWorkspaceDecisionHTML\(pr\)\}\$\{prClaimCardHTML\(pr\)\}/.test(CODE));
+  // «فريق المشتريات» ليست مسؤولاً — والقياس أثبت خمسة طلبات بلا صاحب.
+  T('و«المسؤول» يُسمّى بشخصه متى استُلِم، ونداءٌ صريح متى كان بلا صاحب',
+    /بانتظار من يستلمه من فريق المشتريات/.test(CODE)
+    && /const owner=pr\.proc_started_by\?prPersonName\(pr,pr\.proc_started_by\)/.test(CODE));
+}
+
+/* ═══ ٤٢) موعد التوريد — البُعد الغائب عن الطابور ═══
+   القياس على الإنتاج (2026-09-16): أربعة طلبات «عاجل» موعد توريدها الغد وما تزال
+   عند التسعير بلا مُستلِم — **ولا إشارة واحدة إلى الموعد في الشاشة كلّها**. فطلبٌ
+   يستحقّ غداً كان يقع تحت طلبٍ يستحقّ بعد ثلاثة أشهر لأنّ رقمه أصغر.
+   ⚠️ تأكيدات سلوكية تُشغّل الفرز والتصنيف فعلاً على تواريخ محسوبة من اليوم. */
+{
+  G('٤٢) موعد التوريد في الطابور');
+  // صندوق مستقلّ — لا يرث `Q` من قسم ٣٩ (نطاقه كتلته).
+  const Q = (() => {
+    const src = [
+      `let __act=new Set();`,
+      `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
+      `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
+      grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
+    ].join('\n\n');
+    return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS,
+      prNeedDays, prDueChip, act:(ids)=>{ __act=new Set(ids||[]); } };`)();
+  })();
+  const iso = (d) => { const t = new Date(); t.setDate(t.getDate() + d);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; };
+
+  // ── الحساب بيوم التقويم لا بالساعة: موعدُ اليوم ليس «فات» ──
+  T('حساب الأيام حتى الموعد صحيح (اليوم = صفر لا سالب)',
+    Q.prNeedDays({ needed_by: iso(0) }) === 0 && Q.prNeedDays({ needed_by: iso(1) }) === 1
+    && Q.prNeedDays({ needed_by: iso(-3) }) === -3);
+  T('وبلا موعد أو بموعد مشوَّه لا يُلفَّق حكم',
+    Q.prNeedDays({}) === null && Q.prNeedDays({ needed_by: 'غداً' }) === null
+    && Q.prNeedDays({ needed_by: '' }) === null);
+
+  // ── الشارة: لغةٌ تقول ما يجب فعله، ولا تظهر على ما انتهى ──
+  const chip = (o) => { const c = Q.prDueChip(o); return c ? c[0] : null; };
+  T('الشارة تفرّق بين «فات» و«اليوم» و«غداً»',
+    /تجاوز موعد التوريد/.test(chip({ status:'approved', needed_by: iso(-2) }) || '')
+    && chip({ status:'approved', needed_by: iso(0) }) === 'موعد التوريد اليوم'
+    && chip({ status:'approved', needed_by: iso(1) }) === 'موعد التوريد غداً');
+  T('والبعيد لا يُزاحم (أكثر من أسبوع = لا شارة)',
+    Q.prDueChip({ status:'approved', needed_by: iso(30) }) === null);
+  // ⚠️ موعدُ طلبٍ مُلغى أو مُقفَل أو مؤرشَف لا معنى له — شارةٌ حمراء عليه ضجيج.
+  T('ولا شارة على ملغى أو مرفوض أو مُقفَل أو مؤرشَف',
+    ['cancelled','rejected','closed'].every(st => Q.prDueChip({ status: st, needed_by: iso(-5) }) === null)
+    && Q.prDueChip({ status:'approved', needed_by: iso(-5), archived_at: '2026-09-01' }) === null);
+
+  // ── التصنيف: مجموعة مستقلّة، وما بيدك يبقى أوّلاً ──
+  Q.act([]);
+  T('الطلب الذي فات موعده أو يستحقّ غداً يدخل مجموعة الموعد',
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'due'
+    && Q.prQueueGroup({ id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1) }) === 'due'
+    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'pricing', needed_by: iso(9) }) === 'active');
+  Q.act(['PR-1']);
+  T('وما يحتاج إجراءك يبقى قبله مهما كان موعده',
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'action');
+  Q.act([]);
+  T('والملغى يبقى منتهياً لا «فات موعده»',
+    Q.prQueueGroup({ id:'PR-4', status:'cancelled', workflow_state:'cancelled', needed_by: iso(-9) }) === 'closed');
+
+  // ── الفرز: داخل مجموعة الموعد **الأقرب استحقاقاً أوّلاً** لا الأحدث رقماً ──
+  {
+    const list = [
+      { id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1)  },  // غداً، رقم أكبر
+      { id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-4) },  // فات، رقم أصغر
+      { id:'PR-9', status:'approved', workflow_state:'pricing', needed_by: iso(40) },  // بعيد
+    ];
+    const order = Q.prQueueSort(list).map(x => x.id).join('|');
+    T('ما فات موعده يسبق ما يستحقّ غداً رغم أنّ رقمه أصغر', order === 'PR-1|PR-2|PR-9', order);
+  }
+  // ⚠️ وخارج مجموعة الموعد يبقى الفرز بالرقم عدديّاً (صفر انحدار على #112).
+  {
+    const list = [
+      { id:'PR-9',  status:'approved', workflow_state:'pricing', needed_by: iso(60) },
+      { id:'PR-10', status:'approved', workflow_state:'pricing', needed_by: iso(60) },
+    ];
+    T('وفرز الأرقام العدديّ باقٍ خارج مجموعة الموعد',
+      Q.prQueueSort(list).map(x => x.id).join('|') === 'PR-10|PR-9');
+  }
+
+  // ── الواجهة: الشارة تصل البطاقة ولوحة الطلب، ولها أنماط دلاليّة ──
+  T('الشارة تُرسَم على بطاقة الطابور وعلى تاريخ الاحتياج في اللوحة',
+    (CODE.match(/prDueChip\(pr\)/g) || []).length >= 2
+    && /class="pr-work-due \$\{c\[1\]\}"/.test(CODE));
+  T('وأنماطها من رموز اللوحة الدلاليّة لا ألوان مخترَعة',
+    /\.pr-work-due\.danger\{background:var\(--prw-red-bg\)/.test(HTML)
+    && /\.pr-work-due\.warn\{background:var\(--prw-warn-bg\)/.test(HTML));
+  T('ومجموعة الموعد معرَّفة في الطابور بعد «يحتاج إجراءك»',
+    Q.PR_QUEUE_GROUPS.findIndex(g => g.key === 'due') === 1
+    && Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
+
+  /* ── شريط «ما ينقص قبل الإرسال» ──
+     النموذج على الجوال 5756px وزرّ الإرسال في قاعه، فمن ينسى بنداً يهبط كل ذلك
+     الطول ليقرأ توستاً. ⚠️ والقائمة **مرآة حُرّاس `prSubmitNew`** لا نسخة ثانية. */
+  const F = (() => {
+    const els = {};
+    const doc = { getElementById: (id) => els[id] || null };
+    const api = new Function('document', 'num0', 'escapeHtml',
+      `let __prDraftItems = [];\n` + grab('prDraftGaps') + '\n'
+      + 'return { prDraftGaps, items:(v)=>{ __prDraftItems = v || []; } };'
+    )(doc, (x) => Number(x) || 0, (x) => String(x));
+    return { api, els };
+  })();
+  const gapsFor = (title, items, needed) => {
+    F.els['pr-title'] = { value: title };
+    F.els['pr-needed'] = { value: needed || '' };
+    F.api.items(items || []);
+    return F.api.prDraftGaps();
+  };
+  const past = (() => { const t = new Date(); t.setDate(t.getDate() - 3);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
+  T('الشريط يسمّي كل ما ينقص لا أوّل عائق فقط',
+    gapsFor('', [], '').length === 2);
+  T('وبند بلا كمية لا يُحتسب بنداً (نفس حارس الإرسال)',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 0 }], '').length === 1);
+  T('وتاريخ توريد ماضٍ يُعَدّ نقصاً',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], past).length === 1
+    && /تاريخ توريد/.test(gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], past)[0]));
+  T('والنموذج المكتمل بلا نقص',
+    gapsFor('تنظيف', [{ description: 'صابون', requested_qty: 5 }], '').length === 0);
+
+  // ⚠️ `sticky` لا يعمل داخل حاوية لا تمرّر — مقيس: الشريط بقي عند 2059px.
+  T('الشريط على الجوال ثابت لا لاصق (الحاوية لا تمرّر)',
+    /@media\(max-width:900px\)\{\s*\.pr-form-bar\{position:fixed/.test(HTML)
+    && !/\.pr-form-bar\{position:sticky/.test(HTML));
+  T('ومعه حشوٌ يمنع حجب آخر المحتوى خلفه',
+    /\.pr-work-editor:has\(\.pr-form-bar\)\{padding-bottom:/.test(HTML));
+  // كل مسار يغيّر البنود يمرّ بـ`prRenderItems` — فالتحديث عندها لا عند كل زرّ.
+  T('والجاهزية تُحدَّث من نقطة رسم البنود الوحيدة ومن مستمع مفوَّض على النموذج',
+    /try\{ prSyncFormBar\(\); \}catch\(_\)\{\}/.test(CODE)
+    && /form\.addEventListener\('input', prSyncFormBar\)/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
