@@ -11,6 +11,7 @@
  * التشغيل: node scripts/csp-preview-server.mjs &  ثمّ  node scripts/e2e/pr-workspace-clarity.mjs
  */
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 const { chromium } = await import('../../node_modules/playwright/index.mjs');
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8812';
@@ -23,18 +24,15 @@ const pageErrors = [], csp = [];
 page.on('pageerror', e => pageErrors.push(String(e)));
 page.on('console', m => { if (/Content Security Policy/i.test(m.text())) csp.push(m.text()); });
 
+await blockSupabase(page);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
 await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.prWorkspaceHTML === 'function'
   && typeof window.prAuditGroups === 'function' && typeof window.prFillProjectSelect === 'function');
 /* ⚠️ الدوالّ تُعرَّف وقت تحليل السكربت، و`bootstrap` يعمل على DOMContentLoaded
-   **بعدها** فينادي `showLoginScreen()` فيُخفي `#app-root` من جديد. فإخفاءُ بطاقة
-   الدخول قبل أن يجري الإقلاع يُنقَض بعد لحظة، والقياس يقع على شجرةٍ ارتفاعها صفر
-   (مُقاس: `#app-root` يعود `display:none` بعد ~1s). ننتظر إذن أن **يُظهِر الإقلاعُ
-   البطاقةَ فعلاً** — عندها فقط يكون قد انتهى، فيثبت إخفاؤنا. */
-await page.waitForFunction(() => {
-  const ls = document.getElementById('login-screen');
-  return ls && getComputedStyle(ls).display !== 'none';
-}, { timeout: 15000 });
+   **بعدها** فينادي `showLoginScreen()` فيُخفي `#app-root` من جديد — ومسارات
+   لاتزامنيّة أخرى قد تُعيدها لاحقاً. `enterApp` تنتظر **الأثر** (التطبيق مرئيّ
+   ويبقى) لا لحظةً بعينها. انظر app-boot.mjs. */
+await enterApp(page);
 
 /* حالة مصنوعة تحاكي لقطة المالك: معتمد وقيد اعتماد وتسعير مختلطة. */
 await page.evaluate(async () => {

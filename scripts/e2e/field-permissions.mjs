@@ -13,6 +13,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 import { chromium } from 'playwright';
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 
 const ORIGIN = 'http://127.0.0.1:8812';
 const checks = [];
@@ -47,8 +48,10 @@ const FIELD_ALL = { can_create_pr:true, can_upload_docs:true, can_comment:true,
                     can_print_followup:true, can_receive_po:true, can_view_amounts:false };
 
 /* ══════════ ١) الموظّف الممنوح كل قدرات الميدان ══════════ */
+await blockSupabase(ctx);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
 await page.goto(`${ORIGIN}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.renderPRPortal === 'function', { timeout: 15000 });
+await enterApp(page);   // إقلاع حتميّ — انظر app-boot.mjs
 await asUser(FIELD_ALL, ['الصيانة والتشغيل']);
 await page.evaluate(() => { navigate('pr'); prGoView('list'); });
 await page.waitForTimeout(400);

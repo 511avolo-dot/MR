@@ -12,6 +12,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 import { chromium } from 'playwright';
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 
 const ORIGIN = 'http://127.0.0.1:8812';
 const checks = [];
@@ -24,8 +25,10 @@ const errors = [], csp = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) csp.push(m.text()); });
 
+await blockSupabase(ctx);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
 await page.goto(`${ORIGIN}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.prRenderItems === 'function', { timeout: 15000 });
+await enterApp(page);   // إقلاع حتميّ — انظر app-boot.mjs
 
 /* شاشة إنشاء الطلب بسحابة مُقلَّدة — لا اتصال بالإنتاج. */
 await page.evaluate(() => {

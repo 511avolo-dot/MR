@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ORIGIN = process.env.PREVIEW_ORIGIN || 'http://127.0.0.1:8812';
@@ -107,8 +108,10 @@ try {
     page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{ const t=m.text(); if(/Content Security Policy|Refused to/i.test(t)) csp.push(t); });
     await page.addInitScript(init,{fixtures,profiles});
+        await blockSupabase(page);   // انظر app-boot.mjs — لا فحص يلمس الإنتاج
     await page.goto(`${ORIGIN}/index.html`,{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>typeof window.renderPRPortal==='function');
+    await enterApp(page);   // إقلاع حتميّ — انظر app-boot.mjs
     await page.evaluate(async ({fixtures})=>{
       STATE.currentUser={username:'qa.admin',displayName:'مدير المشتريات',role:'admin',permissions:{},prProfileKey:'module_admin'};
       STATE.purchaseOrders=fixtures.proc_purchase_orders;
