@@ -215,7 +215,18 @@ async function session(viewport, tag) {
     if (/Content Security Policy|Refused to/i.test(t)) csp.push(`[${tag}] ${t}`);
   });
   await page.goto(URL_, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1200);
+  /* ⚠️ كان هنا `waitForTimeout(1200)` — وهو **سبب تقلّب هذا السكربت في CI**
+     (43/43 محليّاً · 31/43 ثمّ 25/43 على العدّاء). `bootstrap` يعمل على
+     DOMContentLoaded وينادي `showLoginScreen()` فيُخفي `#app-root`؛ فإن سبقه
+     البذرُ على عدّاءٍ بطيء نُقِض `hideLoginScreen()`+`startApp()` بعد لحظة،
+     فتُقاس شجرةٌ ارتفاعها صفر — وهو بالضبط نمط «الهويّة والبيانات غائبتان».
+     الشرط الحتميّ: ننتظر أن **يُظهِر الإقلاعُ بطاقةَ الدخول فعلاً**، فعندها
+     يكون قد انتهى ولا ينقض ما بعده. (مُقاس على المحرّك نفسه لا مُفترَضاً.) */
+  await page.waitForFunction(() => {
+    const ls = document.getElementById('login-screen');
+    return ls && getComputedStyle(ls).display !== 'none'
+      && typeof window.hideLoginScreen === 'function' && typeof window.startApp === 'function';
+  }, { timeout: 20000 });
   await page.evaluate(SEED);
   return { ctx, page };
 }

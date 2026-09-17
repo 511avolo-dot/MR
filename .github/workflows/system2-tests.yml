@@ -25,6 +25,8 @@ on:
       - 'db/system2-email-token-revision.sql'
       - 'db/system2-pr-attachments-unlock.sql'
       - 'db/system2-request-workspace-clarity.sql'
+      - 'db/system2-notify-email.sql'
+      - 'db/system2-item-lookup-and-units.sql'
       - 'functions/api/pr-action.js'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
@@ -43,6 +45,7 @@ on:
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
+      - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -67,6 +70,8 @@ on:
       - 'db/system2-email-token-revision.sql'
       - 'db/system2-pr-attachments-unlock.sql'
       - 'db/system2-request-workspace-clarity.sql'
+      - 'db/system2-notify-email.sql'
+      - 'db/system2-item-lookup-and-units.sql'
       - 'functions/api/pr-action.js'
       - 'functions/api/pr-doc.js'
       - 'db/system2-staff-invite.sql'
@@ -85,6 +90,7 @@ on:
       - 'scripts/e2e/field-permissions.mjs'
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
+      - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/chromium-path.mjs'
       - 'scripts/csp-preview-server.mjs'
       - 'package.json'
@@ -170,12 +176,16 @@ jobs:
           node scripts/e2e/field-permissions.mjs
           node scripts/e2e/pr-attachments.mjs
           node scripts/e2e/pr-workspace-clarity.mjs
-          # ⚠️ `scoped-staff-screens.mjs` **ليس هنا عمداً.** حاولتُ ضمّه (2026-09-15)
-          # بعد إصلاح خمسة فحوص ساقطة فيه، فسقط في العدّاء وحده (43/43 محليّاً
-          # مقابل 31/43 ثمّ 25/43 هنا) بنمط «الهوية والبيانات غائبتان» — سباق
-          # إقلاع لم أُثبِت علاجه. وسكربتٌ متقلّب في CI أسوأ من غيابه: يُعلّم
-          # الفريق تجاهل الأحمر. يبقى أداة QA محليّة (بعد رفع خادم المعاينة)
-          # حتى يصير حتميّاً، وعندها يُضاف هنا.
+          # ✅ `scoped-staff-screens.mjs` أُضيف هنا (2026-09-17) بعد **قياس** جذر
+          # تقلّبه الذي بقي مجهولاً منذ 2026-09-15 (43/43 محليّاً · 31/43 ثمّ
+          # 25/43 على العدّاء، بنمط «الهويّة والبيانات غائبتان»):
+          # `bootstrap` يعمل على DOMContentLoaded وينادي `showLoginScreen()`
+          # فيُخفي `#app-root`؛ وكان السكربت ينتظر **مدّة ثابتة** (1200ms) ثمّ
+          # يبذر ويُظهِر الشاشة — فعلى عدّاءٍ بطيء يسبق البذرُ الإقلاعَ فينقضه
+          # بعد لحظة، فتُقاس شجرةٌ ارتفاعها صفر. استُبدل الانتظار الثابت بالشرط
+          # الحتميّ (ظهور بطاقة الدخول = انتهاء الإقلاع)، ومُتحقَّق: 3 تشغيلات
+          # متتابعة + 4 متوازية تحت مزاحمة المعالج = 43/43 في السبع كلّها.
+          node scripts/e2e/scoped-staff-screens.mjs
 
   # حزمة نطاق موظفي الصيانة (RLS). ⚠️ بلا هذه الوظيفة تبقى **الحدود الأمنية
   # نفسها** بلا تغطية آلية: تعديلٌ يُسقِط `NOT proc_is_scoped()` من سياسة

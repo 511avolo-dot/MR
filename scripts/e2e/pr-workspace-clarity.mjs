@@ -26,6 +26,15 @@ page.on('console', m => { if (/Content Security Policy/i.test(m.text())) csp.pus
 await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.prWorkspaceHTML === 'function'
   && typeof window.prAuditGroups === 'function' && typeof window.prFillProjectSelect === 'function');
+/* ⚠️ الدوالّ تُعرَّف وقت تحليل السكربت، و`bootstrap` يعمل على DOMContentLoaded
+   **بعدها** فينادي `showLoginScreen()` فيُخفي `#app-root` من جديد. فإخفاءُ بطاقة
+   الدخول قبل أن يجري الإقلاع يُنقَض بعد لحظة، والقياس يقع على شجرةٍ ارتفاعها صفر
+   (مُقاس: `#app-root` يعود `display:none` بعد ~1s). ننتظر إذن أن **يُظهِر الإقلاعُ
+   البطاقةَ فعلاً** — عندها فقط يكون قد انتهى، فيثبت إخفاؤنا. */
+await page.waitForFunction(() => {
+  const ls = document.getElementById('login-screen');
+  return ls && getComputedStyle(ls).display !== 'none';
+}, { timeout: 15000 });
 
 /* حالة مصنوعة تحاكي لقطة المالك: معتمد وقيد اعتماد وتسعير مختلطة. */
 await page.evaluate(async () => {
