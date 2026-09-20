@@ -2817,6 +2817,26 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .rep-multi-list label:hover{background:var(--surface-2)}
 .rep-multi-list input{flex:none;margin:0}
 .rep-multi-list span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ===== نافذة «متابعة المالية عبر الإيميل» ===== */
+.fin-mail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:15px 20px;border-bottom:1px solid var(--border);flex:none}
+.fin-mail-bar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:12px 20px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);flex:none}
+.fin-mail-field{display:flex;flex-direction:column;gap:4px;min-width:150px}
+.fin-mail-field label{font-size:11px;color:var(--muted)}
+.fin-mail-subject{flex:1 1 100%;display:flex;gap:7px;align-items:baseline;font-size:12px;
+  color:var(--ink-2);border-top:1px dashed var(--border);padding-top:9px}
+.fin-mail-subject span{flex:none;color:var(--muted)}
+.fin-mail-subject strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* المعاينة نسخةٌ حرفية ممّا سيُلصَق في البريد — بلا أنماط النظام فوقها */
+.fin-mail-body{flex:1;min-height:0;overflow:auto;padding:18px 20px;background:#fff}
+.fin-mail-body table{max-width:100%}
+.fin-mail-foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:13px 20px;
+  border-top:1px solid var(--border);flex:none}
+@media(max-width:900px){
+  .fin-mail-foot .btn{flex:1 1 auto}
+  .fin-mail-body{padding:14px 12px}
+}
 .po-card-proj{font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .po-drawer-proj{font-size:12.5px;color:#8a6a30;font-weight:700;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .po-linkbtn{background:transparent;border:1px dashed var(--accent);color:#8a6a30;border-radius:7px;padding:2px 9px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
@@ -15542,6 +15562,388 @@ function buildPOFinanceReport(opts){
   return printDocOpen({compactHeader:true, signature:false, eyebrow:'AL-DEYABI GROUP · FINANCE STATUS', title:'تقرير الأوامر لدى الإدارة المالية', subtitle:projDesc||'متابعة السداد والتحويلات المالية'}, body);
 }
 
+/* ============================================================
+   متابعة المالية عبر الإيميل — نصّ جاهز للإرسال بلا طباعة
+   ------------------------------------------------------------
+   طلب المالك: «تقرير يمكن تصديره ونسخه للإيميل بشكل مرتّب ومنسّق
+   للمتابعة مع قسم المالية مباشرةً دون طباعة». فهذا **ليس مستنداً
+   مطبوعاً** — لا يمرّ بـ`printDocOpen` ولا بمعجم `.print-*`، لأن
+   وجهته صندوق بريد لا ورقة: أنماطه **سطريّة** وجداوله `<table>`
+   بلا flex/grid (Outlook يُسقطها)، والأرقام في `dir="ltr"` كي لا
+   تنعكس داخل نصّ عربيّ.
+   ⚠️ كل مبلغ يمرّ بـ`fmtPrice` — البوّابة الوحيدة (القاعدة 12)؛
+   وأرقام التصدير تُشتقّ من مُخرَجها بإزالة الفواصل، فلا بوّابة ثانية.
+   ============================================================ */
+const PO_FIN_AWAIT = 'تسليم للإدارة المالية';
+const PO_FIN_DONE  = 'تم التحويل';
+
+/* منذ متى والأمر في حالته المالية الحالية — من سجلّ الحالات لا من آخر
+   تحديث أيّاً كان (فترقية غير مالية بعدها كانت ستُصفّر عمر الانتظار). */
+function poFinanceSince(o){
+  const hist = ((o&&o.status_history)||[]).filter(h=>h&&h.at).slice()
+    .sort((a,b)=>String(a.at).localeCompare(String(b.at)));
+  // آخر انتقال مسجَّل هو دخول الحالة الحالية (`changePOStatus` تُلحق صفّاً لكل
+  // تغيير)؛ وأمرٌ بلا سجلّ حالات — مستورَد أو عُدِّل من النموذج مباشرةً —
+  // يسقط لتاريخ إصداره لا لصفرٍ يقول «وصل المالية اليوم».
+  const at = hist.length ? hist[hist.length-1].at : ((o&&o.issue_date)||'');
+  const t = poParseDate(at);
+  if(!t) return {at:'', days:null};
+  /* ⚠️ ولمَ لا `poCurrentStageAge`؟ لأنها تُرجِع **صفراً** للحالات النهائية
+     وتحسب فارقاً زمنيّاً خاماً، فيتذبذب الرقم بساعة اليوم. هنا أيام تقويمية
+     كاملة كما يحسب `recomputePOderived` التأخير. */
+  const today = poParseDate(new Date());
+  return {at:poToISO(t), days:Math.max(0, Math.round((today-t)/86400000))};
+}
+
+/* مصدر واحد تقرأ منه الرسالةُ والمعاينةُ والتصدير — فلا تتفارق ثلاث نسخ */
+function poFinanceEmailData(opts){
+  opts = opts || {};
+  const set = opts.set || 'awaiting';
+  const wanted = set==='transferred' ? [PO_FIN_DONE]
+               : set==='all'         ? [PO_FIN_AWAIT, PO_FIN_DONE]
+               :                       [PO_FIN_AWAIT];
+  const list = repFilterProjects(
+      (STATE.purchaseOrders||[]).filter(o=>wanted.includes(poNormalizeStatus(o.status))),
+      opts.project)
+    .slice()
+    // الأطول انتظاراً أوّلاً — هو ما يُتابَع عليه فعلاً
+    .sort((a,b)=>((poFinanceSince(b).days||0)-(poFinanceSince(a).days||0)));
+  const rows = list.map((o,i)=>{
+    const s = poFinanceSince(o);
+    const totalText = fmtPrice(o.total), subtotalText = fmtPrice(o.subtotal);
+    return {
+      idx:i+1,
+      po:String(o.po_number||'—'),
+      supplier:String(o.supplier||'—'),
+      project:poProjectText(o),
+      payment:String(o.payment_method||'—'),
+      status:poNormalizeStatus(o.status||''),
+      issue:poFmtDate(o.issue_date),
+      expected:poFmtDate(o.expected_delivery),
+      sinceDate:s.at||'—',
+      waitDays:s.days,
+      waitText:s.days==null?'—':poDays(s.days),
+      subtotalText, totalText,
+      // ⚠️ مشتقّة من مُخرَج fmtPrice لا من الرقم الخام: بوّابة المبالغ واحدة
+      subtotalNum:poFinMoneyNum(subtotalText),
+      totalNum:poFinMoneyNum(totalText),
+    };
+  });
+  const sum = a => a.reduce((s,o)=>s+(Number(o.total)||0),0);
+  const awaiting    = list.filter(o=>poNormalizeStatus(o.status)===PO_FIN_AWAIT);
+  const transferred = list.filter(o=>poNormalizeStatus(o.status)===PO_FIN_DONE);
+  const me = STATE.currentUser || {};
+  return {
+    set, rows,
+    count:list.length,
+    awaiting:awaiting.length, transferred:transferred.length,
+    awaitingTotalText:fmtPrice(sum(awaiting)),
+    grandTotalText:fmtPrice(sum(list)),
+    awaitingWords:tafqitSAR(sum(awaiting)),
+    oldestDays: rows.length ? rows[0].waitDays : null,
+    projectDesc: repDescList('الجهة', opts.project),
+    date: todayStr(),
+    by: me.displayName || me.username || 'إدارة المشتريات',
+  };
+}
+function poFinMoneyNum(text){ return (text==null||text==='—') ? '' : String(text).replace(/,/g,''); }
+function poFinSetLabel(set){
+  return set==='transferred' ? 'الأوامر المُحوَّلة'
+       : set==='all'         ? 'كل الأوامر لدى المالية'
+       :                       'الأوامر بانتظار التحويل';
+}
+/* «4 أمر» خطأ يقرؤه المحاسب — والرسالة تخرج باسم الشركة (كما `poDays`) */
+function poFinOrders(n){
+  n=Math.abs(Number(n)||0);
+  if(n===1) return 'أمر واحد';
+  if(n===2) return 'أمران';
+  if(n>=3 && n<=10) return n+' أوامر';
+  return n+' أمراً';
+}
+
+function poFinanceEmailSubject(d){
+  const scope = d.projectDesc ? ` — ${d.projectDesc}` : '';
+  const head = d.set==='transferred'
+    ? `متابعة السداد — ${poFinOrders(d.transferred)} مُحوَّل`
+    : `متابعة السداد — ${poFinOrders(d.awaiting)} بانتظار التحويل`;
+  const val = d.set==='transferred' ? d.grandTotalText : d.awaitingTotalText;
+  const money = (val && val!=='—') ? ` بقيمة ${val} ر.س` : '';
+  return `${head}${money}${scope} · ${d.date}`;
+}
+
+/* HTML للصقه في Gmail/Outlook: جداول وأنماط سطريّة فقط */
+const PO_FIN_TD = 'padding:7px 9px;border:1px solid #e2e5ea;font-size:13px;vertical-align:top';
+const PO_FIN_TH = 'padding:8px 9px;border:1px solid #1d3557;background:#1d3557;color:#fff;font-size:12.5px;font-weight:700;text-align:right;white-space:nowrap';
+function poFinanceEmailHtml(d){
+  const ltr = v => `<span dir="ltr" style="unicode-bidi:isolate">${escapeHtml(v)}</span>`;
+  /* عمود «الحالة» لا يُعرَض إلا في الكشف المختلط: في كشف مجموعة واحدة تتكرّر
+     القيمة نفسها في كل صفّ فتُضيّق الجدول بلا أن تُضيف شيئاً. */
+  const showStatus = d.set==='all';
+  const cols = showStatus ? 9 : 8;
+  const rows = d.rows.map(r=>`      <tr>
+        <td style="${PO_FIN_TD};text-align:center;color:#6b7280">${r.idx}</td>
+        <td style="${PO_FIN_TD};white-space:nowrap"><strong>${ltr(r.po)}</strong></td>
+        <td style="${PO_FIN_TD}">${escapeHtml(r.supplier)}</td>
+        <td style="${PO_FIN_TD}">${escapeHtml(r.project)}</td>
+        <td style="${PO_FIN_TD};white-space:nowrap">${escapeHtml(r.payment)}</td>${showStatus?`
+        <td style="${PO_FIN_TD};white-space:nowrap;color:${r.status===PO_FIN_DONE?'#1f7a55':'#9A7A45'}"><strong>${escapeHtml(r.status)}</strong></td>`:''}
+        <td style="${PO_FIN_TD};text-align:center;white-space:nowrap;${(r.waitDays||0)>14?'color:#b13434;font-weight:700':''}">${escapeHtml(r.waitText)}</td>
+        <td style="${PO_FIN_TD};text-align:center;white-space:nowrap">${ltr(r.expected)}</td>
+        <td style="${PO_FIN_TD};text-align:left;white-space:nowrap"><strong>${ltr(r.totalText)}</strong></td>
+      </tr>`).join('\n')
+    || `      <tr><td colspan="${cols}" style="${PO_FIN_TD};text-align:center;color:#6b7280">لا توجد أوامر مطابقة</td></tr>`;
+
+  /* بطاقات الملخّص صفَّان × عمودان: صفّ واحد بأربع خلايا يتقلّص على شاشة
+     الهاتف حتى تختفي قيمُه (صفّ الجدول لا يلتفّ) — مقيس على 393px. */
+  const stat = (label,val,color)=>`<td width="50%" style="padding:10px 12px;border:1px solid #e2e5ea;background:#f7f8fa">
+          <div style="font-size:11.5px;color:#6b7280;margin-bottom:3px">${escapeHtml(label)}</div>
+          <div dir="ltr" style="font-size:16px;font-weight:700;color:${color};unicode-bidi:isolate">${escapeHtml(val)}</div>
+        </td>`;
+  /* ⚠️ إحصاءٌ يساوي صفراً حتماً ليس معلومة بل تضليل: «تم التحويل: 0» داخل كشف
+     «بانتظار التحويل» يُقرأ أنّ شيئاً لم يُحوَّل قطّ. فلا يُعرَض إلا في مجموعته. */
+  const cells = [];
+  if(d.set!=='transferred'){
+    cells.push(stat('بانتظار التحويل', poFinOrders(d.awaiting), '#9A7A45'));
+    cells.push(stat('قيمة المنتظر (ر.س)', d.awaitingTotalText, '#1d3557'));
+  }
+  if(d.set!=='awaiting'){
+    cells.push(stat('تم التحويل', poFinOrders(d.transferred), '#1f7a55'));
+    cells.push(stat('إجمالي الكشف (ر.س)', d.grandTotalText, '#1d3557'));
+  }
+  cells.push(stat('أطول انتظار', d.oldestDays==null?'—':poDays(d.oldestDays), d.oldestDays>14?'#b13434':'#1f2430'));
+  // عدد فرديّ ⇒ الأخيرة تمتدّ على العمودين بدل خليّة فارغة معلّقة
+  if(cells.length%2) cells[cells.length-1]=cells[cells.length-1].replace('<td width="50%"','<td colspan="2"');
+  const statRows = cells.map((c,i)=>(i%2===0?'      <tr>\n':'')+'        '+c+(i%2===1?'\n      </tr>':'')).join('\n')
+    + (cells.length%2 ? '\n      </tr>' : '');
+
+  return `<div dir="rtl" style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#1f2430;line-height:1.7;max-width:900px">
+  <p style="margin:0 0 10px">السلام عليكم ورحمة الله وبركاته،</p>
+  <p style="margin:0 0 14px">إفادةً بموقف <strong>${escapeHtml(poFinSetLabel(d.set))}</strong>${d.projectDesc?` (${escapeHtml(d.projectDesc)})`:''} كما هي بتاريخ <span dir="ltr">${escapeHtml(d.date)}</span>، نرفق لكم الكشف التالي لمتابعة إجراءات السداد.</p>
+  <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;max-width:560px;margin:0 0 16px">
+${statRows}
+  </table>
+  <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%">
+    <thead>
+      <tr>
+        <th style="${PO_FIN_TH};text-align:center">#</th>
+        <th style="${PO_FIN_TH}">رقم الأمر</th>
+        <th style="${PO_FIN_TH}">المورد</th>
+        <th style="${PO_FIN_TH}">الجهة / المشروع</th>
+        <th style="${PO_FIN_TH}">طريقة الدفع</th>${showStatus?`
+        <th style="${PO_FIN_TH}">الحالة</th>`:''}
+        <th style="${PO_FIN_TH};text-align:center">مدّة الانتظار</th>
+        <th style="${PO_FIN_TH};text-align:center">التسليم المتوقع</th>
+        <th style="${PO_FIN_TH};text-align:left">الإجمالي (ر.س)</th>
+      </tr>
+    </thead>
+    <tbody>
+${rows}
+      <tr>
+        <td colspan="${cols-1}" style="${PO_FIN_TD};background:#f7f8fa;font-weight:700">الإجمالي (${poFinOrders(d.count)}) — شامل ضريبة القيمة المضافة</td>
+        <td style="${PO_FIN_TD};background:#f7f8fa;text-align:left;font-weight:700">${ltr(d.grandTotalText)}</td>
+      </tr>
+    </tbody>
+  </table>
+  ${d.awaiting && d.awaitingTotalText!=='—' ? `<p style="margin:12px 0 0;font-size:12.5px;color:#4b5563"><strong>قيمة ما هو بانتظار التحويل كتابةً:</strong> ${escapeHtml(d.awaitingWords)}</p>` : ''}
+  <p style="margin:16px 0 4px">نأمل التكرّم بإفادتنا بموقف السداد${d.oldestDays>14?'، مع إعطاء الأولوية للأوامر المُعلّقة منذ أكثر من أسبوعين':''}.</p>
+  <p style="margin:0 0 2px">وتفضلوا بقبول فائق الاحترام،</p>
+  <p style="margin:0;font-weight:700">${escapeHtml(d.by)} — إدارة المشتريات · مجموعة الذيابي</p>
+</div>`;
+}
+
+/* نصّ بسيط: كتلة لكل أمر لا أعمدة — المحاذاة بالمسافات لا تصمد في العربية */
+function poFinanceEmailText(d){
+  const L = [];
+  L.push('السلام عليكم ورحمة الله وبركاته،');
+  L.push('');
+  L.push(`إفادةً بموقف ${poFinSetLabel(d.set)}${d.projectDesc?` (${d.projectDesc})`:''} كما هي بتاريخ ${d.date}:`);
+  L.push('');
+  L.push(`• بانتظار التحويل: ${poFinOrders(d.awaiting)} · ${d.awaitingTotalText} ر.س`);
+  L.push(`• تم التحويل: ${poFinOrders(d.transferred)}`);
+  L.push(`• الإجمالي: ${poFinOrders(d.count)} · ${d.grandTotalText} ر.س`);
+  if(d.oldestDays!=null) L.push(`• أطول انتظار: ${poDays(d.oldestDays)}`);
+  L.push('');
+  L.push('──────────────────────────────');
+  if(!d.rows.length) L.push('لا توجد أوامر مطابقة.');
+  d.rows.forEach(r=>{
+    L.push(`${r.idx}) ${r.po} · ${r.supplier}`);
+    L.push(`   الجهة: ${r.project} | الدفع: ${r.payment}`);
+    L.push(`   الحالة: ${r.status} منذ ${r.waitText} | التسليم المتوقع: ${r.expected}`);
+    L.push(`   الإجمالي: ${r.totalText} ر.س`);
+    L.push('');
+  });
+  L.push('──────────────────────────────');
+  L.push(`الإجمالي العام (${poFinOrders(d.count)}، شامل الضريبة): ${d.grandTotalText} ر.س`);
+  if(d.awaiting && d.awaitingTotalText!=='—') L.push(`قيمة ما هو بانتظار التحويل كتابةً: ${d.awaitingWords}`);
+  L.push('');
+  L.push('نأمل التكرّم بإفادتنا بموقف السداد.');
+  L.push('وتفضلوا بقبول فائق الاحترام،');
+  L.push(`${d.by} — إدارة المشتريات · مجموعة الذيابي`);
+  return L.join('\n');
+}
+
+const PO_FIN_COLS = [
+  {key:'po',          label:'رقم الأمر'},
+  {key:'supplier',    label:'المورد'},
+  {key:'project',     label:'الجهة / المشروع'},
+  {key:'payment',     label:'طريقة الدفع'},
+  {key:'status',      label:'الحالة'},
+  {key:'sinceDate',   label:'تاريخ دخول الحالة'},
+  {key:'waitDays',    label:'أيام الانتظار'},
+  {key:'issue',       label:'تاريخ الإصدار'},
+  {key:'expected',    label:'التسليم المتوقع'},
+  {key:'subtotalNum', label:'قبل الضريبة (ر.س)'},
+  {key:'totalNum',    label:'الإجمالي شامل الضريبة (ر.س)'},
+];
+
+/* ---------- نافذة المتابعة: معاينة + نسخ + تصدير (بلا طباعة) ---------- */
+const PO_FIN_TO_KEY = 'proc_finance_email';
+let __FIN_EMAIL = null;      // البيانات المبنيّة — تقرأ منها كل الأزرار
+let __FIN_EMAIL_OPTS = null; // مرشّحات البطاقة كي تُعاد البناء عند تبديل المجموعة
+
+function poFinanceEmailOpen(opts){
+  // بوّابة الزرّ = بوّابة الفعل: الكشف مالي بالكامل، ويُستدعى من بطاقة التقرير
+  // ومن لوحة المشتريات معاً — فالحارس هنا لا عند نقطة الاستدعاء.
+  if(!canViewAmounts()){ toast('error','صلاحية مرفوضة','هذا الكشف يحوي مبالغ.'); return; }
+  opts = Object.assign({set:'awaiting'}, opts||{});
+  __FIN_EMAIL_OPTS = opts;
+  __FIN_EMAIL = poFinanceEmailData(opts);
+  const old = document.getElementById('modal-finance-email');
+  if(old) old.remove();
+  let to=''; try{ to = localStorage.getItem(PO_FIN_TO_KEY) || ''; }catch(e){}
+  const m = document.createElement('div');
+  m.className='modal-overlay active'; m.id='modal-finance-email'; m.dataset.ephemeral='1';
+  m.innerHTML = `<div class="modal" style="max-width:940px;width:96vw;max-height:92vh;display:flex;flex-direction:column">
+    <div class="fin-mail-head">
+      <div>
+        <h3 style="margin:0;font-size:16px">متابعة المالية عبر الإيميل</h3>
+        <div style="font-size:12px;color:var(--muted,#777);margin-top:3px">نصّ جاهز للإرسال — انسخه ولصقه في الإيميل مباشرةً، بلا طباعة.</div>
+      </div>
+      <button class="modal-close" onclick="poFinanceEmailClose()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="fin-mail-bar">
+      <div class="fin-mail-field">
+        <label for="fin-mail-set">المجموعة</label>
+        <select id="fin-mail-set" class="select" onchange="poFinanceEmailSetChange(this.value)">
+          <option value="awaiting">بانتظار التحويل</option>
+          <option value="transferred">تم التحويل</option>
+          <option value="all">الكل لدى المالية</option>
+        </select>
+      </div>
+      <div class="fin-mail-field" style="flex:1;min-width:190px">
+        <label for="fin-mail-to">بريد المالية (اختياري — لفتح برنامج البريد)</label>
+        <input id="fin-mail-to" class="input" type="email" dir="ltr" placeholder="finance@aldeyabi.com" value="${escapeAttr(to)}">
+      </div>
+      <div class="fin-mail-subject">
+        <span>الموضوع</span>
+        <strong id="fin-mail-subject-txt">${escapeHtml(poFinanceEmailSubject(__FIN_EMAIL))}</strong>
+      </div>
+    </div>
+    <div class="fin-mail-body" id="fin-mail-preview">${poFinanceEmailHtml(__FIN_EMAIL)}</div>
+    <div class="fin-mail-foot">
+      <button class="btn btn-accent btn-sm" onclick="poFinanceEmailCopyRich()">📋 نسخ للإيميل (منسّق)</button>
+      <button class="btn btn-ghost btn-sm" onclick="poFinanceEmailCopyText()">📝 نسخ نصّاً بسيطاً</button>
+      <button class="btn btn-ghost btn-sm" onclick="poFinanceEmailExport('xlsx')">⬇️ Excel</button>
+      <button class="btn btn-ghost btn-sm" onclick="poFinanceEmailExport('csv')">⬇️ CSV</button>
+      <button class="btn btn-ghost btn-sm" onclick="poFinanceEmailMailto()">✉️ فتح في برنامج البريد</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost btn-sm" onclick="poFinanceEmailClose()">إغلاق</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  const sel = m.querySelector('#fin-mail-set'); if(sel) sel.value = opts.set;
+  syncScrollLock();
+  try{ a11yWire(m); mobileTableWrap(m); }catch(e){}
+}
+function poFinanceEmailClose(){
+  const m=document.getElementById('modal-finance-email'); if(m) m.remove(); syncScrollLock();
+}
+/* ⚠️ تُحدَّث **المعاينة والموضوع وحدهما** — لا شريط الأدوات: إعادة رسمه تمحو
+   بريد المالية الذي كُتِب للتوّ. (محروس بفحص متصفّح يقرأ قيمة الحقل بعد التبديل.) */
+function poFinanceEmailSetChange(set){
+  __FIN_EMAIL_OPTS = Object.assign({}, __FIN_EMAIL_OPTS||{}, {set});
+  __FIN_EMAIL = poFinanceEmailData(__FIN_EMAIL_OPTS);
+  const pv=document.getElementById('fin-mail-preview'); if(pv) pv.innerHTML = poFinanceEmailHtml(__FIN_EMAIL);
+  const sj=document.getElementById('fin-mail-subject-txt'); if(sj) sj.textContent = poFinanceEmailSubject(__FIN_EMAIL);
+}
+/* نسخ منسّق: الحافظة تحمل HTML ونصّاً معاً، فالبريد يأخذ الجدول
+   وواتساب/المحرّر البسيط يأخذ النصّ — من نسخة واحدة. */
+async function poFinanceEmailCopyRich(){
+  const d=__FIN_EMAIL; if(!d) return;
+  const html=poFinanceEmailHtml(d), text=poFinanceEmailText(d);
+  try{
+    if(navigator.clipboard && typeof window.ClipboardItem==='function'){
+      await navigator.clipboard.write([new window.ClipboardItem({
+        'text/html' : new Blob([html], {type:'text/html'}),
+        'text/plain': new Blob([text], {type:'text/plain'}),
+      })]);
+      toast('success','نُسِخ منسّقاً','الصقه في الإيميل — يظهر الجدول كما تراه');
+      return;
+    }
+  }catch(e){ /* سفاري القديم وبعض السياقات ترفض ClipboardItem — نسقط للتحديد */ }
+  if(poFinanceEmailCopyRichFallback(html)) toast('success','نُسِخ منسّقاً','الصقه في الإيميل');
+  else toast('error','تعذّر النسخ المنسّق','استخدم «نسخ نصّاً بسيطاً»');
+}
+function poFinanceEmailCopyRichFallback(html){
+  const host=document.createElement('div');
+  host.setAttribute('contenteditable','true');
+  host.style.cssText='position:fixed;top:0;inset-inline-start:-99999px;opacity:0;pointer-events:none';
+  host.innerHTML=html;
+  document.body.appendChild(host);
+  let ok=false;
+  try{
+    const r=document.createRange(); r.selectNodeContents(host);
+    const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    ok=document.execCommand('copy');
+    sel.removeAllRanges();
+  }catch(e){ ok=false; }
+  host.remove();
+  return ok;
+}
+function poFinanceEmailCopyText(){
+  const d=__FIN_EMAIL; if(!d) return;
+  const text=poFinanceEmailText(d);
+  const done=()=>toast('success','تم النسخ','النصّ في الحافظة — الصقه في الإيميل أو واتساب');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, ()=>{
+      if(poFinanceEmailCopyPlainFallback(text)) done(); else toast('error','تعذّر النسخ','انسخه يدوياً من المعاينة');
+    });
+  } else if(poFinanceEmailCopyPlainFallback(text)) done();
+  else toast('error','تعذّر النسخ','انسخه يدوياً من المعاينة');
+}
+function poFinanceEmailCopyPlainFallback(text){
+  const ta=document.createElement('textarea');
+  ta.value=text; ta.style.cssText='position:fixed;top:0;inset-inline-start:-99999px;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){ ok=false; }
+  ta.remove(); return ok;
+}
+function poFinanceEmailExport(kind){
+  const d=__FIN_EMAIL; if(!d) return;
+  if(!d.rows.length){ toast('warn','لا توجد بيانات','لا توجد أوامر مطابقة للتصدير'); return; }
+  const name=`أوامر-لدى-المالية-${d.set}-${d.date}`;
+  if(kind==='csv') exportCSV(d.rows, name+'.csv', PO_FIN_COLS);
+  else exportExcel(d.rows, name, PO_FIN_COLS, {sheetName:'لدى المالية'});
+}
+/* mailto: حدّ طول الرابط حقيقيّ — فما يفيض يُنسخ إلى الحافظة ويُقال ذلك صراحةً */
+const PO_FIN_MAILTO_CAP = 1500;
+function poFinanceEmailMailto(){
+  const d=__FIN_EMAIL; if(!d) return;
+  const el=document.getElementById('fin-mail-to');
+  const to=((el&&el.value)||'').trim();
+  if(to){ try{ localStorage.setItem(PO_FIN_TO_KEY, to); }catch(e){} }
+  const full=poFinanceEmailText(d);
+  let body=full;
+  if(full.length>PO_FIN_MAILTO_CAP){
+    body=full.slice(0,PO_FIN_MAILTO_CAP)+'\n\n… الكشف كامل في الحافظة — الصقه هنا (Ctrl+V).';
+    poFinanceEmailCopyText();
+  }
+  const url='mailto:'+encodeURIComponent(to)
+    +'?subject='+encodeURIComponent(poFinanceEmailSubject(d))
+    +'&body='+encodeURIComponent(body);
+  window.location.href=url;
+}
+
 function buildPOCycleReport(){
   const list=(STATE.purchaseOrders||[]).filter(o=>o.status!=='ملغى');
   if(!list.length){ toast('info','لا بيانات','لا توجد أوامر لتحليل زمن الدورة'); return; }
@@ -15979,6 +16381,16 @@ function reportsCatalog(){
       title:'الأوامر لدى الإدارة المالية', desc:'متابعة أوامر الشراء بانتظار التحويل أو المُحوّلة مع طريقة الدفع والإجماليات.',
       fields:[{type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti}],
       run:(v)=>buildPOFinanceReport({project:v.project}) },
+
+    // ✉️ متابعة المالية: **لا يمرّ بالطباعة** — وجهته صندوق بريد لا ورقة.
+    //    (بلا `noMoney`: التقرير مالي بالكامل فيبقى محجوباً عمّن لا يرى المبالغ.)
+    { group:'المشتريات', perm:null, icon:'<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+      title:'متابعة المالية عبر الإيميل', desc:'كشف منسّق جاهز للّصق في رسالة بريد للمالية — نسخ منسّق أو نصّيّ وتصدير Excel/CSV، بلا طباعة.',
+      fields:[
+        {type:'select', key:'set', label:'المجموعة', html:'<option value="awaiting">بانتظار التحويل</option><option value="transferred">تم التحويل</option><option value="all">الكل لدى المالية</option>'},
+        {type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+      ],
+      run:(v)=>poFinanceEmailOpen({set:v.set||'awaiting', project:v.project}) },
 
     { group:'المشتريات', perm:null, icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       title:'زمن الدورة والاختناقات', desc:'متوسط زمن دورة أمر الشراء وتفصيل مدة كل مرحلة لكشف نقاط التعثّر.',
@@ -20316,6 +20728,7 @@ function renderPODashboard(){
         <div class="po-card-box"><h3>🖨 تقارير مباشرة</h3>
           <p class="po-rep-note">تقارير جاهزة للطباعة والمشاركة مع الإدارة، تُحدَّث فور إدخال أي أمر.</p>
           <button class="btn btn-ghost btn-sm" onclick="printUrgentMemo()">مذكرة الطلبات العاجلة</button>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" data-requires-perm="can_view_amounts" onclick="poFinanceEmailOpen({set:'awaiting'})">✉️ متابعة المالية (نصّ للإيميل)</button>
           <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poPrintDashboard()">طباعة لوحة التحكم</button>
           <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poLoadAISummary()" data-requires-perm="can_use_ai">ملخص ذكي</button>
           <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="poGenerateAIReport()" data-requires-perm="can_use_ai">تقرير إداري ذكي</button>

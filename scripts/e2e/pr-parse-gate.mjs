@@ -1,5 +1,5 @@
-import { resolveChromiumExecutable } from '/home/user/MR/scripts/e2e/chromium-path.mjs';
-const { chromium } = await import('/home/user/MR/node_modules/playwright/index.mjs');
+import { resolveChromiumExecutable } from './chromium-path.mjs';
+const { chromium } = await import('../../node_modules/playwright/index.mjs');
 
 // موظّف ميدانيّ مُنطَّق بحزمة قالب «موظّف ميدانيّ» — كما يصل من رابط الدعوة:
 // المفاتيح الستّة فقط، و can_use_ai غائبة عمداً (هي لبّ البلاغ).
