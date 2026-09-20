@@ -8,9 +8,11 @@
  *
  * ⚠️ كل فحص يبدأ بـ`blockSupabase` — لا فحص يلمس قاعدة الإنتاج (app-boot.mjs).
  */
-import { resolveChromiumExecutable } from '/home/user/MR/scripts/e2e/chromium-path.mjs';
-import { blockSupabase, enterApp } from '/home/user/MR/scripts/e2e/app-boot.mjs';
-const { chromium } = await import('/home/user/MR/node_modules/playwright/index.mjs');
+/* ⚠️ استيراد **نسبيّ**: مسار المستودع على العدّاء `/home/runner/work/MR/MR`
+   لا مسار بيئة التطوير — ومسارٌ مطلق ينجح هنا ويسقط هناك بـERR_MODULE_NOT_FOUND. */
+import { resolveChromiumExecutable } from './chromium-path.mjs';
+import { blockSupabase, enterApp } from './app-boot.mjs';
+const { chromium } = await import('../../node_modules/playwright/index.mjs');
 
 const URL_ = 'http://127.0.0.1:8812/index.html';
 let pass = 0, fail = 0;

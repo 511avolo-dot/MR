@@ -4822,6 +4822,16 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
   T('وmailto لا يبتر الكشف صامتاً بل ينسخه ويقول ذلك',
     /PO_FIN_MAILTO_CAP/.test(CODE)
     && /body=full\.slice\(0,PO_FIN_MAILTO_CAP\)\+[\s\S]{0,120}?poFinanceEmailCopyText\(\);/.test(CODE));
+  /* ⚠️ حارس بنيويّ لكل سكربتات المتصفّح لا لهذا وحده: مسار المستودع على العدّاء
+     `/home/runner/work/MR/MR`، فاستيرادٌ مطلق ينجح في بيئة التطوير ويسقط في CI
+     بـERR_MODULE_NOT_FOUND. (وقع فعلاً في أوّل دفع لهذا السكربت.) */
+  T('ولا سكربت متصفّح يستورد بمسار مطلق يخصّ بيئة التطوير',
+    (() => {
+      const dir = path.join(ROOT, 'scripts', 'e2e');
+      const bad = fs.readdirSync(dir).filter(f => f.endsWith('.mjs'))
+        .filter(f => /(from|import\()\s*'\/home\//.test(fs.readFileSync(path.join(dir, f), 'utf8')));
+      return bad.length === 0 || bad.join(',');
+    })() === true);
   T('والنسخ المنسّق يحمل HTML ونصّاً معاً ويسقط للتحديد عند رفض ClipboardItem',
     /'text\/html'\s*: new Blob\(\[html\]/.test(CODE) && /'text\/plain': new Blob\(\[text\]/.test(CODE)
     && /poFinanceEmailCopyRichFallback\(html\)/.test(CODE)
