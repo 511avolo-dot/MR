@@ -266,6 +266,9 @@ const NEEDED_FNS = [
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
   'buildPOListReport', 'buildPOOverdueReport', 'buildPOFinanceReport', 'printUrgentMemo',
+  // متابعة المالية عبر الإيميل — دوال نقيّة تُختبَر سلوكيّاً (لا نصّاً)
+  'poFinanceSince', 'poFinanceEmailData', 'poFinMoneyNum', 'poFinSetLabel', 'poFinOrders',
+  'poFinanceEmailSubject', 'poFinanceEmailHtml', 'poFinanceEmailText',
   'buildPOCycleReport', 'poPrintDashboard', 'poStateSnapshot', 'poHealthScore',
   'poStageStats', 'poFmtDuration', 'poCurrentStageAge', 'poProjectStats', 'printPO',
   'poPriceRef', 'poPriceRefPrefix', 'poItemIndex', 'poMatchItem', 'poPriceEligible',
@@ -294,7 +297,9 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL',
   // مرفقات طلب الشراء — فضاء مفاتيح مستقلّ بنقطة خادمية أخرى
   'PRDOC_PREFIX', 'PR_DOC_TYPES', 'PR_DOC_MAX', 'PR_DOC_LIMIT', 'PR_FINAL_STATUSES',
-  'PR_DOC_KIND_LABEL', 'DOCV', 'PR_QUEUE_GROUPS', 'PR_AUDIT_LABEL'];
+  'PR_DOC_KIND_LABEL', 'DOCV', 'PR_QUEUE_GROUPS', 'PR_AUDIT_LABEL',
+  // متابعة المالية عبر الإيميل
+  'PO_FIN_AWAIT', 'PO_FIN_DONE', 'PO_FIN_TD', 'PO_FIN_TH', 'PO_FIN_COLS'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4624,6 +4629,203 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
              const th = Q.prThreadHTML(qOnly);
              Q.set({ username:'field1', role:'user' }, false);
              return th.includes('ما زال بلا ردّ') && !th.includes('تردّ على استفهام'); })());
+}
+
+/* ═══ ٤٤) متابعة المالية عبر الإيميل ═══════════════════════════
+   طلب المالك (2026-09-20): «بخصوص تقرير أوامر الشراء لدى المالية خصّص
+   تقريراً يمكن تصديره ونسخه للإيميل بشكل مرتّب ومنسّق للمتابعة مع قسم
+   المالية عبر الإيميل بشكل مباشر دون طباعة».
+   الثوابت المحروسة هنا:
+   • **لا طباعة**: بانيات الرسالة لا تمرّ بـ`printDocOpen` ولا `window.open`.
+   • **HTML يصمد في Outlook**: جداول وأنماط سطريّة — لا flex/grid ولا `<style>`.
+   • **بوّابة مبالغ واحدة**: كل رقم من `fmtPrice`، وأرقام التصدير مشتقّة من
+     مُخرَجها — فمن لا يرى المبالغ لا يتسرّب له رقم عبر التصدير.
+   • **مدّة الانتظار من دخول الحالة المالية** لا من آخر تحديث أيّاً كان. */
+{
+  G('٤٤) متابعة المالية عبر الإيميل');
+
+  const D = (n) => { const d=new Date(Date.now()-n*86400000); return d.toISOString().slice(0,10); };
+  const FIN = [
+    { po_number:'P.O-DG26-3301', supplier:'شركة الوفاء', project:'برج الشمال',
+      payment_method:'تحويل بنكي', status:'تسليم للإدارة المالية',
+      issue_date:D(60), expected_delivery:D(-5), subtotal:10000,
+      status_history:[{at:D(40)+'T09:00:00Z',to:'اعتماد مدير الشراء'},{at:D(20)+'T09:00:00Z',to:'تسليم للإدارة المالية'}] },
+    { po_number:'P.O-DG26-3302', supplier:'مؤسسة النخبة', project:'فرع الرياض 3',
+      payment_method:'شيك', status:'تسليم للإدارة المالية',
+      issue_date:D(10), expected_delivery:D(-20), subtotal:2000,
+      status_history:[{at:D(3)+'T09:00:00Z',to:'تسليم للإدارة المالية'}] },
+    { po_number:'P.O-DG26-3303', supplier:'الأفق', project:'برج الشمال',
+      payment_method:'تحويل بنكي', status:'تم التحويل',
+      issue_date:D(30), expected_delivery:D(-2), subtotal:5000,
+      status_history:[{at:D(9)+'T09:00:00Z',to:'تسليم للإدارة المالية'},{at:D(4)+'T09:00:00Z',to:'تم التحويل'}] },
+    { po_number:'P.O-DG26-3304', supplier:'خارج المالية', project:'برج الشمال',
+      payment_method:'نقدي', status:'قيد المراجعة', issue_date:D(2), subtotal:9999, status_history:[] },
+  ].map(o => { M.recomputePOderived(o); return o; });
+  M.STATE.purchaseOrders = FIN;
+
+  // ── ① مدّة الانتظار: من آخر انتقال مسجَّل، أياماً تقويمية ──
+  /* ⚠️ لا `days_delayed` (تاريخ التسليم، لا علاقة له بالمالية) ولا
+     `poCurrentStageAge` (صفرٌ للحالات النهائية وفارقٌ خام يتذبذب بساعة اليوم). */
+  T('مدّة الانتظار من آخر انتقال مسجَّل لا من تاريخ التسليم',
+    M.poFinanceSince(FIN[0]).days === 20 && M.poFinanceSince(FIN[1]).days === 3
+    && M.poFinanceSince(FIN[2]).days === 4
+    && M.poFinanceSince(FIN[0]).at === D(20));
+  /* ⚠️ أمرٌ مستورَد أو عُدِّل من النموذج مباشرةً لا سجلّ حالات له — والصفر هنا
+     يقول «وصل المالية اليوم» وهو أسوأ من تقدير. */
+  T('وبلا سجلّ حالات تسقط لتاريخ الإصدار لا لصفر مُلفَّق',
+    M.poFinanceSince({status:'تسليم للإدارة المالية', issue_date:D(7), status_history:[]}).days === 7);
+  T('وبلا تاريخ إطلاقاً تُرجِع null لا رقماً',
+    M.poFinanceSince({status:'تسليم للإدارة المالية'}).days === null
+    && M.poFinanceSince({status:'تسليم للإدارة المالية'}).at === '');
+
+  // ── ② المجموعات والتصفية والفرز ──
+  const aw = M.poFinanceEmailData({set:'awaiting'});
+  const tr = M.poFinanceEmailData({set:'transferred'});
+  const all = M.poFinanceEmailData({set:'all'});
+  T('«بانتظار التحويل» لا تشمل المُحوَّل ولا ما هو خارج المالية',
+    aw.rows.length === 2 && aw.rows.every(r=>r.status==='تسليم للإدارة المالية')
+    && !aw.rows.some(r=>r.po==='P.O-DG26-3304'));
+  T('و«تم التحويل» تشمل المُحوَّل وحده', tr.rows.length === 1 && tr.rows[0].po === 'P.O-DG26-3303');
+  T('و«الكل لدى المالية» تجمع الاثنتين ولا تتجاوزهما', all.rows.length === 3);
+  T('والأطول انتظاراً أوّلاً — هو ما يُتابَع عليه فعلاً',
+    aw.rows[0].po === 'P.O-DG26-3301' && aw.rows[0].waitDays > aw.rows[1].waitDays);
+  T('والتصفية بالجهة تُطبَّق كبقيّة التقارير',
+    M.poFinanceEmailData({set:'all', project:['فرع الرياض 3']}).rows.length === 1);
+
+  // ── ③ الأرقام: بوّابة واحدة، وأرقام التصدير مشتقّة منها ──
+  T('الإجماليات شاملة الضريبة ومحسوبة على المجموعة المعروضة',
+    aw.grandTotalText === '13,800' && tr.grandTotalText === '5,750' && all.count === 3);
+  T('ورقم التصدير مشتقّ من مُخرَج fmtPrice بلا فواصل',
+    aw.rows[0].totalNum === '11500' && M.poFinMoneyNum('—') === '' && M.poFinMoneyNum('1,234.5') === '1234.5');
+  /* ⚠️ هذا هو الحارس الذي يمنع تسرّب المبلغ عبر ملفّ التصدير: من لا يرى
+     المبالغ يُرجِع `fmtPrice` له `—`، فالعمود الرقميّ يخرج **فارغاً** لا خاماً. */
+  T('ومن لا يرى المبالغ لا يتسرّب له رقم عبر التصدير',
+    (() => {
+      const src = [`const STATE={purchaseOrders:[],currentUser:{username:'f'}};`,
+        `let __see=false;`,
+        `function canViewAmounts(){ return __see; }`,
+        `const fmtPriceRaw = n => n==null||isNaN(n) ? '—' : Number(n).toLocaleString('en-US',{maximumFractionDigits:2});`,
+        `const fmtPrice = n => canViewAmounts() ? fmtPriceRaw(n) : '—';`,
+        `const tafqitSAR = () => 'كتابةً';`,
+        `function todayStr(){ return '2026-09-20'; }`,
+        grab('poNormalizeStatus'), grab('poParseDate'), grab('poToISO'), grab('poFmtDate'),
+        grab('poDays'), grab('poProjectText'), grab('repList'), grab('repFilterProjects'),
+        grab('repDescList'), grabConst('PO_STATUS_ALIAS'),
+        grabConst('PO_FIN_AWAIT'), grabConst('PO_FIN_DONE'),
+        grab('poFinMoneyNum'), grab('poFinanceSince'), grab('poFinanceEmailData'),
+      ].join('\n\n');
+      const S = new Function(src + `; return { poFinanceEmailData,
+        seed:(l,see)=>{ STATE.purchaseOrders=l; __see=see; } };`)();
+      S.seed(FIN, false);
+      const blind = S.poFinanceEmailData({set:'all'});
+      S.seed(FIN, true);
+      const sees = S.poFinanceEmailData({set:'all'});
+      return blind.rows.every(r=>r.totalNum==='' && r.totalText==='—')
+          && blind.grandTotalText === '—'
+          && sees.rows.every(r=>r.totalNum!=='');
+    })());
+
+  // ── ④ الرسالة: HTML يصمد في البريد ونصّ يُقرأ في أي مكان ──
+  const html = M.poFinanceEmailHtml(aw), text = M.poFinanceEmailText(aw);
+  /* ⚠️ «4 أمر» خطأ عربيّ يقرؤه المحاسب في رسالة تخرج باسم الشركة. */
+  T('صيغة العدد عربية صحيحة في كل موضع',
+    M.poFinOrders(1)==='أمر واحد' && M.poFinOrders(2)==='أمران'
+    && M.poFinOrders(4)==='4 أوامر' && M.poFinOrders(15)==='15 أمراً'
+    /* ⚠️ لا `\b` بعد كلمة عربية — حدود الكلمة في JS على ASCII وحده، فالنمط
+       `/\d\s+أمر\b/` **لا يطابق شيئاً أبداً** فيمرّ الخطأ. و`(?!ا)` تستثني «أمراً». */
+    && !/\d\s+أمر(?!ا)/.test(M.poFinanceEmailText(aw))
+    && !/\d\s+أمر(?!ا)/.test(M.poFinanceEmailHtml(aw))
+    && !/\d\s+أمر(?!ا)/.test(M.poFinanceEmailSubject(aw)));
+  /* ⚠️ إحصاءٌ يساوي صفراً حتماً تضليل: «تم التحويل: 0» داخل كشف «بانتظار
+     التحويل» يُقرأ أنّ شيئاً لم يُحوَّل قطّ — وهو ليس ما يقوله الكشف. */
+  T('ولا يُعرَض إحصاءٌ يساوي صفراً بحكم المجموعة نفسها',
+    !/تم التحويل/.test(M.poFinanceEmailHtml(aw))
+    && !/بانتظار التحويل<\/div>/.test(M.poFinanceEmailHtml(tr))
+    && /تم التحويل/.test(M.poFinanceEmailHtml(all)) && /بانتظار التحويل/.test(M.poFinanceEmailHtml(all)));
+  T('الموضوع يحمل العدد والقيمة والتاريخ',
+    /^متابعة السداد — أمران بانتظار التحويل بقيمة 13,800 ر\.س · /.test(M.poFinanceEmailSubject(aw))
+    && M.poFinanceEmailSubject(aw).includes(aw.date)
+    && M.poFinanceEmailSubject(M.poFinanceEmailData({set:'all', project:['برج الشمال']}))
+        .includes('برج الشمال'));
+  /* ⚠️ Outlook يُسقِط flex/grid و`<style>` — فالتخطيط جداول وأنماط سطريّة.
+     وهذا حارس مُخرَج لا مصدر: يقرأ الـHTML المولَّد فعلاً. */
+  T('والـHTML بجداول وأنماط سطريّة — بلا flex/grid ولا كتلة أنماط',
+    /<table[^>]*style="[^"]*border-collapse/.test(html)
+    && !/display:\s*(flex|grid)/.test(html) && !/<style/i.test(html)
+    && !/class=/.test(html));
+  /* عمودٌ قيمته واحدة في كل صفّ يُضيّق الجدول بلا أن يضيف شيئاً */
+  T('وعمود الحالة يظهر في الكشف المختلط وحده',
+    !/>الحالة</.test(html) && />الحالة</.test(M.poFinanceEmailHtml(all))
+    && (M.poFinanceEmailHtml(all).match(/<th /g)||[]).length === 9
+    && (html.match(/<th /g)||[]).length === 8);
+  T('وكل صفّ من الأوامر حاضر بمورده وجهته ومدّة انتظاره',
+    aw.rows.every(r => html.includes(r.po) && html.includes(r.supplier)
+                    && html.includes(r.project) && html.includes(r.waitText)));
+  T('والأرقام في dir=ltr فلا تنعكس داخل النصّ العربيّ',
+    /<span dir="ltr"[^>]*>P\.O-DG26-3301<\/span>/.test(html));
+  T('والنصّ البسيط يحمل الكشف كاملاً بلا وسوم',
+    !/[<>]/.test(text) && aw.rows.every(r=>text.includes(r.po) && text.includes(r.supplier))
+    && text.includes('الإجمالي العام') && text.includes(aw.grandTotalText));
+  T('وقائمة فارغة تقول ذلك صراحةً بدل جدول خاوٍ',
+    (() => { M.STATE.purchaseOrders = [FIN[3]];
+             const empty = M.poFinanceEmailData({set:'awaiting'});
+             const h = M.poFinanceEmailHtml(empty), t = M.poFinanceEmailText(empty);
+             M.STATE.purchaseOrders = FIN;
+             return empty.rows.length===0 && h.includes('لا توجد أوامر مطابقة')
+                 && t.includes('لا توجد أوامر مطابقة.'); })());
+  T('والقيم مهرَّبة — اسم مورد فيه وسم لا يصير وسماً',
+    (() => { M.STATE.purchaseOrders = [Object.assign({}, FIN[0], {supplier:'<script>x</script>'})];
+             const h = M.poFinanceEmailHtml(M.poFinanceEmailData({set:'awaiting'}));
+             M.STATE.purchaseOrders = FIN;
+             return h.includes('&lt;script&gt;') && !h.includes('<script>'); })());
+
+  // ── ⑤ لا طباعة: وجهته صندوق بريد لا ورقة ──
+  const finSrc = ['poFinanceEmailHtml','poFinanceEmailText','poFinanceEmailSubject','poFinanceEmailData']
+    .map(grab).join('\n');
+  T('ولا تمرّ بانياتُ الرسالة بخطّ الطباعة إطلاقاً',
+    !/printDocOpen\(/.test(finSrc) && !/window\.open\(/.test(finSrc) && !/print-/.test(finSrc));
+
+  // ── ⑥ التصدير والنافذة والبوّابة ──
+  T('وأعمدة التصدير تغطّي ما يحتاجه المتابع مالياً',
+    M.PO_FIN_COLS.some(c=>c.key==='totalNum') && M.PO_FIN_COLS.some(c=>c.key==='waitDays')
+    && M.PO_FIN_COLS.some(c=>c.key==='status') && M.PO_FIN_COLS.some(c=>c.key==='project')
+    && M.PO_FIN_COLS.every(c=>aw.rows.length===0 || c.key in aw.rows[0]));
+  T('والتصدير بصيغتَي Excel وCSV من البيانات نفسها',
+    /function poFinanceEmailExport\(kind\)\{[\s\S]{0,600}?exportCSV\(d\.rows, name\+'\.csv', PO_FIN_COLS\)/.test(CODE)
+    && /exportExcel\(d\.rows, name, PO_FIN_COLS/.test(CODE));
+  /* ⚠️ بوّابة الزرّ = بوّابة الفعل: الكشف يُفتَح من بطاقة التقرير **ومن لوحة
+     المشتريات** معاً، فالحارس في الدالّة لا عند نقطة الاستدعاء. */
+  T('وفتح الكشف محروس بصلاحية المبالغ داخل الدالّة نفسها',
+    /function poFinanceEmailOpen\(opts\)\{[\s\S]{0,400}?if\(!canViewAmounts\(\)\)\{[^}]*return;/.test(CODE));
+  T('وزرّ لوحة المشتريات موسوم بالصلاحية نفسها',
+    /data-requires-perm="can_view_amounts"[^>]*onclick="poFinanceEmailOpen/.test(HTML));
+  T('والبطاقة في مركز التقارير بلا noMoney — فتُحجب عمّن لا يرى المبالغ',
+    (() => { const i = CODE.indexOf("title:'متابعة المالية عبر الإيميل'");
+             if(i<0) return false;
+             const card = CODE.slice(Math.max(0,i-400), i+700);
+             return /run:\(v\)=>poFinanceEmailOpen\(/.test(card) && !/noMoney/.test(card); })());
+  /* ⚠️ نافذة تُلحَق وقت التشغيل: تُزال عند الإغلاق (لا تبقى بمعرّف مكرَّر)
+     وتنادي `syncScrollLock` — وإلّا بقي التمرير مقفلاً خلفها (سابقة 2026-09-09). */
+  T('والنافذة تُلحَق بـbody وتُزال عند الإغلاق مع فكّ قفل التمرير',
+    /m\.id='modal-finance-email'; m\.dataset\.ephemeral='1'/.test(CODE)
+    && /function poFinanceEmailClose\(\)\{[\s\S]{0,200}?\.remove\(\); syncScrollLock\(\);/.test(CODE)
+    && !/id="modal-finance-email"/.test(HTML));  // لا نسخة ثابتة داخل قسم صفحة
+  /* ⚠️ تبديل المجموعة يُحدِّث المعاينة والموضوع فقط — لمس شريط الأدوات يمحو
+     بريد المالية المكتوب. (وسلامةُ ذلك تُقاس في المتصفّح لا هنا.) */
+  T('وتبديل المجموعة يُحدِّث المعاينة والموضوع ولا يمسّ شريط الأدوات',
+    (() => { const i = CODE.indexOf('function poFinanceEmailSetChange(set){');
+             if(i<0) return false;
+             const fn = CODE.slice(i, CODE.indexOf('\n}', i));
+             return /fin-mail-preview.*innerHTML/.test(fn) && /fin-mail-subject-txt.*textContent/.test(fn)
+                 && !/fin-mail-bar/.test(fn) && !/fin-mail-to/.test(fn); })());
+  /* ⚠️ حدّ طول mailto حقيقيّ — فما يفيض يُنسخ للحافظة ويُقال ذلك، لا يُبتَر صامتاً. */
+  T('وmailto لا يبتر الكشف صامتاً بل ينسخه ويقول ذلك',
+    /PO_FIN_MAILTO_CAP/.test(CODE)
+    && /body=full\.slice\(0,PO_FIN_MAILTO_CAP\)\+[\s\S]{0,120}?poFinanceEmailCopyText\(\);/.test(CODE));
+  T('والنسخ المنسّق يحمل HTML ونصّاً معاً ويسقط للتحديد عند رفض ClipboardItem',
+    /'text\/html'\s*: new Blob\(\[html\]/.test(CODE) && /'text\/plain': new Blob\(\[text\]/.test(CODE)
+    && /poFinanceEmailCopyRichFallback\(html\)/.test(CODE)
+    && /execCommand\('copy'\)/.test(CODE));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
