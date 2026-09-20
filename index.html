@@ -15274,6 +15274,20 @@ function priceAnalytics(){
 /* مرشّح التقارير يقبل قيمة واحدة أو عدّة قيم — فتقرير واحد يغطّي عدّة مشاريع/حالات
    بدل طباعة تقرير لكل واحد. الفراغ أو المصفوفة الفارغة = بلا تصفية (الكل). */
 function repList(v){ return Array.isArray(v) ? v.filter(x=>x!=='' && x!=null) : (v ? [v] : []); }
+/* وصف نطاق التقرير: الجهة والقطاع معاً — فالمستلِم يعرف ما يغطّيه الكشف
+   بالضبط، ولا يُقرأ كشفُ قطاعٍ واحد على أنّه كل الأوامر. */
+function repScopeDesc(opts){
+  return [repDescList('الجهة', (opts||{}).project), repDescList('القطاع', (opts||{}).sector)]
+    .filter(Boolean).join(' · ');
+}
+/* تصفية بالقطاع — نسخة واحدة يستعملها كل تقرير، فلا يفوت قطاعٌ تقريراً
+   لأنّ كاتبه نسخ مرشّحات تقريرٍ فاتَه هو (وقع فعلاً في عائلة تقارير المالية). */
+function repFilterSectors(list, sel){
+  const want=repList(sel);
+  if(!want.length) return list;
+  const s=new Set(want);
+  return list.filter(o=>s.has(o.sector));
+}
 /* تصفية بجهة/موقع المشروع — تدعم عدّة مشاريع و«بلا جهة محدّدة» معاً */
 function repFilterProjects(list, sel){
   const want=repList(sel);
@@ -15298,7 +15312,7 @@ function buildPOListReport(opts){
   let list=[...(STATE.purchaseOrders||[])];
   const fStatus=repList(opts.status), fSector=repList(opts.sector);
   if(fStatus.length) list=list.filter(o=>fStatus.includes(o.status));
-  if(fSector.length) list=list.filter(o=>fSector.includes(o.sector));
+  list=repFilterSectors(list, opts.sector);
   list=repFilterProjects(list, opts.project);
   if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
   if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
@@ -15399,7 +15413,7 @@ function buildPOFollowupReport(opts){
   let list=[...(STATE.purchaseOrders||[])];
   const fStatus=repList(opts.status), fSector=repList(opts.sector);
   if(fStatus.length) list=list.filter(o=>fStatus.includes(o.status));
-  if(fSector.length) list=list.filter(o=>fSector.includes(o.sector));
+  list=repFilterSectors(list, opts.sector);
   list=repFilterProjects(list, opts.project);
   if(opts.from) list=list.filter(o=>(poToISO(o.issue_date)||'')>=opts.from);
   if(opts.to)   list=list.filter(o=>(poToISO(o.issue_date)||'')<=opts.to);
@@ -15490,11 +15504,11 @@ function buildPOFollowupReport(opts){
 
 function buildPOOverdueReport(opts){
   opts=opts||{};
-  const list=repFilterProjects(
+  const list=repFilterSectors(repFilterProjects(
       (STATE.purchaseOrders||[]).filter(o=>!PO_TERMINAL.includes(o.status)&&(o.days_delayed||0)>0),
-      opts.project)
+      opts.project), opts.sector)
     .sort((a,b)=>(b.days_delayed||0)-(a.days_delayed||0));
-  const projDesc=repDescList('الجهة',opts.project);
+  const projDesc=repScopeDesc(opts);
   const esc=list.filter(o=>(o.days_delayed||0)>30);
   const totVal=list.reduce((s,o)=>s+(Number(o.total)||0),0);
   const rows=list.map(o=>`<tr class="${(o.days_delayed||0)>30?'award-row':''}">
@@ -15527,9 +15541,11 @@ function buildPOOverdueReport(opts){
 function buildPOFinanceReport(opts){
   opts=opts||{};
   const fin=['تسليم للإدارة المالية','تم التحويل'];
-  const list=repFilterProjects((STATE.purchaseOrders||[]).filter(o=>fin.includes(o.status)), opts.project)
+  const list=repFilterSectors(
+      repFilterProjects((STATE.purchaseOrders||[]).filter(o=>fin.includes(o.status)), opts.project),
+      opts.sector)
     .sort((a,b)=>(poToISO(a.expected_delivery)||'').localeCompare(poToISO(b.expected_delivery)||''));
-  const projDesc=repDescList('الجهة',opts.project);
+  const projDesc=repScopeDesc(opts);
   const awaiting=list.filter(o=>o.status==='تسليم للإدارة المالية');
   const transferred=list.filter(o=>o.status==='تم التحويل');
   const totTot=list.reduce((s,o)=>s+(Number(o.total)||0),0);
@@ -15602,9 +15618,9 @@ function poFinanceEmailData(opts){
   const wanted = set==='transferred' ? [PO_FIN_DONE]
                : set==='all'         ? [PO_FIN_AWAIT, PO_FIN_DONE]
                :                       [PO_FIN_AWAIT];
-  const list = repFilterProjects(
+  const list = repFilterSectors(repFilterProjects(
       (STATE.purchaseOrders||[]).filter(o=>wanted.includes(poNormalizeStatus(o.status))),
-      opts.project)
+      opts.project), opts.sector)
     .slice()
     // الأطول انتظاراً أوّلاً — هو ما يُتابَع عليه فعلاً
     .sort((a,b)=>((poFinanceSince(b).days||0)-(poFinanceSince(a).days||0)));
@@ -15616,6 +15632,7 @@ function poFinanceEmailData(opts){
       po:String(o.po_number||'—'),
       supplier:String(o.supplier||'—'),
       project:poProjectText(o),
+      sector:String(o.sector||'—'),
       payment:String(o.payment_method||'—'),
       status:poNormalizeStatus(o.status||''),
       issue:poFmtDate(o.issue_date),
@@ -15641,7 +15658,7 @@ function poFinanceEmailData(opts){
     grandTotalText:fmtPrice(sum(list)),
     awaitingWords:tafqitSAR(sum(awaiting)),
     oldestDays: rows.length ? rows[0].waitDays : null,
-    projectDesc: repDescList('الجهة', opts.project),
+    projectDesc: repScopeDesc(opts),
     date: todayStr(),
     by: me.displayName || me.username || 'إدارة المشتريات',
   };
@@ -15786,6 +15803,7 @@ const PO_FIN_COLS = [
   {key:'po',          label:'رقم الأمر'},
   {key:'supplier',    label:'المورد'},
   {key:'project',     label:'الجهة / المشروع'},
+  {key:'sector',      label:'القطاع'},
   {key:'payment',     label:'طريقة الدفع'},
   {key:'status',      label:'الحالة'},
   {key:'sinceDate',   label:'تاريخ دخول الحالة'},
@@ -16374,13 +16392,19 @@ function reportsCatalog(){
 
     { group:'المشتريات', perm:null, icon:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
       title:'تقرير المتأخرات والتصعيد', desc:'الأوامر المتأخرة عن موعد التسليم مرتّبة بالأكثر تأخيراً، مع إبراز ما يستوجب التصعيد.',
-      fields:[{type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti}],
-      run:(v)=>buildPOOverdueReport({project:v.project}) },
+      fields:[
+        {type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+        {type:'multiselect', key:'sector', label:'القطاع', allLabel:'كل القطاعات', opts:poSectorMulti},
+      ],
+      run:(v)=>buildPOOverdueReport({project:v.project, sector:v.sector}) },
 
     { group:'المشتريات', perm:null, icon:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
       title:'الأوامر لدى الإدارة المالية', desc:'متابعة أوامر الشراء بانتظار التحويل أو المُحوّلة مع طريقة الدفع والإجماليات.',
-      fields:[{type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti}],
-      run:(v)=>buildPOFinanceReport({project:v.project}) },
+      fields:[
+        {type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+        {type:'multiselect', key:'sector', label:'القطاع', allLabel:'كل القطاعات', opts:poSectorMulti},
+      ],
+      run:(v)=>buildPOFinanceReport({project:v.project, sector:v.sector}) },
 
     // ✉️ متابعة المالية: **لا يمرّ بالطباعة** — وجهته صندوق بريد لا ورقة.
     //    (بلا `noMoney`: التقرير مالي بالكامل فيبقى محجوباً عمّن لا يرى المبالغ.)
@@ -16389,8 +16413,9 @@ function reportsCatalog(){
       fields:[
         {type:'select', key:'set', label:'المجموعة', html:'<option value="awaiting">بانتظار التحويل</option><option value="transferred">تم التحويل</option><option value="all">الكل لدى المالية</option>'},
         {type:'multiselect', key:'project', label:'المشروع / الجهة', allLabel:'كل الجهات / المشاريع', opts:poProjectMulti},
+        {type:'multiselect', key:'sector', label:'القطاع', allLabel:'كل القطاعات', opts:poSectorMulti},
       ],
-      run:(v)=>poFinanceEmailOpen({set:v.set||'awaiting', project:v.project}) },
+      run:(v)=>poFinanceEmailOpen({set:v.set||'awaiting', project:v.project, sector:v.sector}) },
 
     { group:'المشتريات', perm:null, icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       title:'زمن الدورة والاختناقات', desc:'متوسط زمن دورة أمر الشراء وتفصيل مدة كل مرحلة لكشف نقاط التعثّر.',

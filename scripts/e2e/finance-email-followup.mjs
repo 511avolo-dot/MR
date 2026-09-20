@@ -78,10 +78,41 @@ const card = await page.evaluate(() => {
     .find((x) => (x.querySelector('.rep-card-title') || {}).textContent?.includes('متابعة المالية عبر الإيميل'));
   if (!c) return null;
   return { idx: c.getAttribute('data-rep-idx'), locked: c.classList.contains('rep-locked'),
-           hasSet: !!c.querySelector('[data-rep-field="set"]'), hasProject: !!c.querySelector('[data-rep-field="project"]') };
+           hasSet: !!c.querySelector('[data-rep-field="set"]'), hasProject: !!c.querySelector('[data-rep-field="project"]'),
+           hasSector: !!c.querySelector('[data-rep-field="sector"]') };
 });
-T('البطاقة موجودة في مركز التقارير بمرشّحَيها', !!card && card.hasSet && card.hasProject && !card.locked);
+T('البطاقة موجودة في مركز التقارير بمرشّحاتها الثلاثة (المجموعة/الجهة/القطاع)',
+  !!card && card.hasSet && card.hasProject && card.hasSector && !card.locked);
 
+/* ⚠️ نقرٌ حقيقيّ على مُنتقي القطاع — لا استدعاء مباشر لـ`poFinanceEmailData`،
+   فالمحكّ أنّ ما يختاره المستخدم بالفعل في الشاشة يصل الدالّة. */
+await page.evaluate((i) => {
+  const card = document.querySelector(`.rep-card[data-rep-idx="${i}"]`);
+  const root = card.querySelector('[data-rep-field="sector"]');
+  root.querySelector('.rep-multi-btn').click();
+  const opt = [...root.querySelectorAll('.rep-multi-list label')]
+    .find((l) => l.textContent.includes('الصيانة والتشغيل'));
+  opt.querySelector('input').click();
+  opt.querySelector('input').dispatchEvent(new Event('change', { bubbles: true }));
+}, card.idx);
+await page.evaluate((i) => document.querySelector(`.rep-card[data-rep-idx="${i}"] .rep-card-foot .btn`).click(), card.idx);
+await page.waitForSelector('#modal-finance-email', { timeout: 5000 });
+
+const sectorFiltered = await page.evaluate(() => document.getElementById('fin-mail-preview').innerText);
+T('واختيار قطاعٍ من الشاشة فعلاً يصفّي الكشف إليه وحده',
+  sectorFiltered.includes('P.O-DG26-3302') && !sectorFiltered.includes('P.O-DG26-3301')
+  && !sectorFiltered.includes('P.O-DG26-3303') && !sectorFiltered.includes('P.O-DG26-3304')
+  && sectorFiltered.includes('الصيانة والتشغيل'));
+await page.evaluate(() => poFinanceEmailClose());
+
+/* ⚠️ اختيار المُنتقي حالةٌ في DOM البطاقة لا تُمحى بإغلاق النافذة — بقيّة
+   الفحوص تفترض بلا تصفية قطاع، فيُمسَح الاختيار صراحةً قبل إعادة الفتح. */
+await page.evaluate((i) => {
+  const root = document.querySelector(`.rep-card[data-rep-idx="${i}"] [data-rep-field="sector"]`);
+  root.querySelectorAll('.rep-multi-list input').forEach((c) => { c.checked = false; });
+  root.querySelector('.rep-multi-txt').textContent = root.getAttribute('data-all-label');
+  root.classList.remove('has-sel');
+}, card.idx);
 await page.evaluate((i) => document.querySelector(`.rep-card[data-rep-idx="${i}"] .rep-card-foot .btn`).click(), card.idx);
 await page.waitForSelector('#modal-finance-email', { timeout: 5000 });
 
