@@ -252,7 +252,7 @@ const NEEDED_FNS = [
   'poPartialInfo', 'poReceivedSum', 'poDays', 'poDelayCell', 'poStatusBadgeClass',
   'poNormalizeStatus', 'poStatusStep', 'poParseDate', 'poToISO', 'poFmtDate',
   'recomputePOderived', 'poFilteredList', 'poFind',
-  'repList', 'repFilterProjects', 'repDescList',
+  'repList', 'repFilterProjects', 'repFilterSectors', 'repScopeDesc', 'repDescList',
   'arNorm', 'supKey', 'supKeyStrong', 'supVal', 'supDataGaps', 'supGapMatch', 'supGapBadge', 'supIsEmptyVal', 'supMergeRows', 'supDedupeByName', 'supSourceBreakdown',
   'supHaystack', 'supMatches', 'supDaysTo', 'supExpiryStrip', 'supPhoneKeys', 'supQueryDigits',
   'regFmtBytes', 'supDocRow', 'supDocNeedsAction', 'supDocUrgency', 'supDocSort',
@@ -4646,19 +4646,19 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
 
   const D = (n) => { const d=new Date(Date.now()-n*86400000); return d.toISOString().slice(0,10); };
   const FIN = [
-    { po_number:'P.O-DG26-3301', supplier:'شركة الوفاء', project:'برج الشمال',
+    { po_number:'P.O-DG26-3301', supplier:'شركة الوفاء', project:'برج الشمال', sector:'الإنشاءات',
       payment_method:'تحويل بنكي', status:'تسليم للإدارة المالية',
       issue_date:D(60), expected_delivery:D(-5), subtotal:10000,
       status_history:[{at:D(40)+'T09:00:00Z',to:'اعتماد مدير الشراء'},{at:D(20)+'T09:00:00Z',to:'تسليم للإدارة المالية'}] },
-    { po_number:'P.O-DG26-3302', supplier:'مؤسسة النخبة', project:'فرع الرياض 3',
+    { po_number:'P.O-DG26-3302', supplier:'مؤسسة النخبة', project:'فرع الرياض 3', sector:'الصيانة والتشغيل',
       payment_method:'شيك', status:'تسليم للإدارة المالية',
       issue_date:D(10), expected_delivery:D(-20), subtotal:2000,
       status_history:[{at:D(3)+'T09:00:00Z',to:'تسليم للإدارة المالية'}] },
-    { po_number:'P.O-DG26-3303', supplier:'الأفق', project:'برج الشمال',
+    { po_number:'P.O-DG26-3303', supplier:'الأفق', project:'برج الشمال', sector:'الإنشاءات',
       payment_method:'تحويل بنكي', status:'تم التحويل',
       issue_date:D(30), expected_delivery:D(-2), subtotal:5000,
       status_history:[{at:D(9)+'T09:00:00Z',to:'تسليم للإدارة المالية'},{at:D(4)+'T09:00:00Z',to:'تم التحويل'}] },
-    { po_number:'P.O-DG26-3304', supplier:'خارج المالية', project:'برج الشمال',
+    { po_number:'P.O-DG26-3304', supplier:'خارج المالية', project:'برج الشمال', sector:'النقليات',
       payment_method:'نقدي', status:'قيد المراجعة', issue_date:D(2), subtotal:9999, status_history:[] },
   ].map(o => { M.recomputePOderived(o); return o; });
   M.STATE.purchaseOrders = FIN;
@@ -4691,6 +4691,37 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     aw.rows[0].po === 'P.O-DG26-3301' && aw.rows[0].waitDays > aw.rows[1].waitDays);
   T('والتصفية بالجهة تُطبَّق كبقيّة التقارير',
     M.poFinanceEmailData({set:'all', project:['فرع الرياض 3']}).rows.length === 1);
+  /* ⚠️ فجوة حقيقية أبلغ عنها المالك: عائلة تقارير المالية والمتأخرات وُرِّثت مرشّح
+     «الجهة» وحده لأن كاتبها نسخ مرشّحات تقريرٍ فاتَه القطاع هو الآخر. */
+  T('والتصفية بالقطاع كذلك — لا الجهة وحدها',
+    (() => {
+      const one = M.poFinanceEmailData({set:'all', sector:['الإنشاءات']});
+      const two = M.poFinanceEmailData({set:'all', sector:['الإنشاءات','الصيانة والتشغيل']});
+      const none = M.poFinanceEmailData({set:'all', sector:['النقليات']});
+      return one.rows.length===2 && one.rows.every(r=>r.sector==='الإنشاءات')
+          && two.rows.length===3 && none.rows.length===0
+          && M.poFinanceEmailData({set:'all'}).rows.length===3;   // بلا تصفية = الكل
+    })());
+  T('والمرشّحان يجتمعان لا يلغي أحدهما الآخر',
+    M.poFinanceEmailData({set:'all', sector:['الإنشاءات'], project:['فرع الرياض 3']}).rows.length === 0
+    && M.poFinanceEmailData({set:'all', sector:['الإنشاءات'], project:['برج الشمال']}).rows.length === 2);
+  /* ⚠️ كشفٌ لقطاعٍ واحد يُقرأ «كل الأوامر» ما لم يقل نطاقَه — في متنه وفي موضوعه. */
+  T('ونطاق الكشف يسمّي الجهة والقطاع معاً في المتن والموضوع',
+    (() => {
+      const d = M.poFinanceEmailData({set:'all', sector:['الإنشاءات'], project:['برج الشمال']});
+      return d.projectDesc.includes('برج الشمال') && d.projectDesc.includes('الإنشاءات')
+          && M.poFinanceEmailHtml(d).includes('الإنشاءات')
+          && M.poFinanceEmailSubject(d).includes('الإنشاءات')
+          && M.repScopeDesc({}) === '';   // بلا تصفية = بلا نصّ نطاق مُقحَم
+    })());
+  T('والقطاع عمودٌ في التصدير لا في جدول الرسالة',
+    M.PO_FIN_COLS.some(c=>c.key==='sector') && 'sector' in aw.rows[0]
+    && !/>القطاع</.test(M.poFinanceEmailHtml(all)));
+  /* ⚠️ نسخة واحدة للمرشّح: النسختان المضمّنتان في تقريرَي السجل والمتابعة
+     وُحِّدتا عليه، فلا تقريرَ يفوته القطاع لأنّ كاتبه نسخ مرشّحات غيره. */
+  T('ومرشّح القطاع نسخة واحدة يستعملها كل تقرير',
+    (CODE.match(/repFilterSectors\(/g)||[]).length >= 5
+    && !/fSector\.includes\(o\.sector\)/.test(CODE));
 
   // ── ③ الأرقام: بوّابة واحدة، وأرقام التصدير مشتقّة منها ──
   T('الإجماليات شاملة الضريبة ومحسوبة على المجموعة المعروضة',
@@ -4710,7 +4741,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
         `function todayStr(){ return '2026-09-20'; }`,
         grab('poNormalizeStatus'), grab('poParseDate'), grab('poToISO'), grab('poFmtDate'),
         grab('poDays'), grab('poProjectText'), grab('repList'), grab('repFilterProjects'),
-        grab('repDescList'), grabConst('PO_STATUS_ALIAS'),
+        grab('repFilterSectors'), grab('repDescList'), grab('repScopeDesc'), grabConst('PO_STATUS_ALIAS'),
         grabConst('PO_FIN_AWAIT'), grabConst('PO_FIN_DONE'),
         grab('poFinMoneyNum'), grab('poFinanceSince'), grab('poFinanceEmailData'),
       ].join('\n\n');
