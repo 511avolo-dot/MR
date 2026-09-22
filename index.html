@@ -1616,7 +1616,10 @@ body.print-preview-active .print-document{display:block}
    المالك. صار سطحاً فاتحاً: القيمة هي البارزة، والتسمية هادئة فوقها. */
 .pr-work-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--prw-paper);border-bottom:1px solid var(--prw-line)}.pr-work-stat .proj{color:var(--prw-gold-3);font-weight:700}.pr-work-stat{padding:13px 18px;border-inline-start:1px solid var(--prw-line-2);min-width:0}.pr-work-stat:first-child{border-inline-start:0}.pr-work-stat small{display:block;font-size:9.5px;color:var(--prw-faint);margin-bottom:4px;letter-spacing:.02em}.pr-work-stat b{display:block;font-size:12.5px;font-weight:600;color:var(--prw-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-stat .money{font-family:'IBM Plex Mono',monospace;color:var(--prw-gold-3);font-weight:700}.pr-work-stat .id{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
 .pr-work-tabs{display:flex;align-items:center;gap:22px;padding:0 28px;background:#fff;border-bottom:1px solid var(--prw-line);overflow-x:auto}.pr-work-tab{min-height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--prw-muted);font:inherit;font-size:11.5px;white-space:nowrap;cursor:pointer}.pr-work-tab:hover{color:var(--prw-ink)}.pr-work-tab.active{color:var(--prw-ink);border-color:var(--prw-gold-dark);font-weight:700}.pr-work-tab em{font-style:normal;margin-inline-start:4px;padding:1px 6px;border-radius:8px;background:var(--prw-line-2);color:var(--prw-faint);font-size:9px}
-.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:var(--prw-sh1)}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid var(--prw-line-2)}.pr-work-meta dt{font-size:10px;color:var(--prw-faint)}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
+.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:var(--prw-sh1)}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}
+.pr-work-surface-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pr-work-surface-head h3{margin-bottom:8px}
+.pr-work-itemtools{display:flex;gap:6px;flex-wrap:wrap}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid var(--prw-line-2)}.pr-work-meta dt{font-size:10px;color:var(--prw-faint)}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
 /* لوحة «بانتظار من يستلمه» — نداءُ عملٍ لا بطاقة عرض، فتُميَّز بحافّة ذهبية
    بارزة كلوحة القرار نفسها (اللون علامةٌ لا سطح). */
 .pr-work-claim{border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5);border-inline-start:4px solid var(--prw-gold,#a8842c)}
@@ -2879,6 +2882,9 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .form-input.auto-filled{background:rgba(196,162,101,0.07);border-color:rgba(196,162,101,0.3);color:#8a6a30;font-weight:700;font-family:'IBM Plex Mono',monospace}
 .po-items-block{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin:6px 0 14px}
 .po-items-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.po-items-tools{display:flex;gap:6px;flex-wrap:wrap}
+.po-paste-box{width:100%;margin-bottom:8px;padding:9px 11px;background:var(--surface);border:1px dashed var(--accent);
+  border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;min-height:52px}
 .po-item-row{display:grid;grid-template-columns:1fr 70px 70px 90px 30px;gap:6px;margin-bottom:6px;align-items:center}
 .po-item-row input{padding:7px 9px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-family:inherit;font-size:12.5px;width:100%}
 .po-item-del{background:transparent;border:none;color:#a93226;cursor:pointer;font-size:16px;line-height:1}
@@ -4539,8 +4545,13 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
       <div class="po-items-block">
         <div class="po-items-head">
           <label class="form-label" style="margin:0">بنود الأمر <span style="font-weight:400;color:var(--muted)">(اختياري — تُجمع تلقائياً)</span></label>
-          <button type="button" class="btn btn-ghost btn-sm" id="po-add-item">+ بند</button>
+          <div class="po-items-tools">
+            <button type="button" class="btn btn-ghost btn-sm" id="po-paste-items" data-tooltip="انسخ صفوف البنود من إكسل ثمّ الصقها هنا">📋 لصق من إكسل</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="po-add-item">+ بند</button>
+          </div>
         </div>
+        <textarea id="po-paste-box" class="po-paste-box" hidden rows="2"
+          placeholder="الصق هنا (Ctrl+V) صفوف البنود المنسوخة من إكسل — الصنف والوحدة والكمية والسعر"></textarea>
         <div id="po-items-rows"></div>
       </div>
 
@@ -13649,7 +13660,114 @@ function prWorkspaceItemsHTML(pr){
   /* ⚠️ عدد الأعمدة يتبع صلاحية المبالغ: كان ثابتاً 8 فيمتدّ صفّ «لا بنود»
      عمودين زائدين لموظّف الميدان (الجدول عنده 6 أعمدة). */
   const cols=showMoney?8:6;
-  return `<div class="pr-work-surface"><h3>البنود والتغطية بأوامر الشراء</h3><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>`}</tbody></table></div></div>`;
+  const id=escapeAttr(pr.id), open=prItemsForPO(pr).length;
+  const tools=(pr.items||[]).length?`<div class="pr-work-itemtools">
+    ${hasPermission('can_create_po')?`<button class="btn btn-accent btn-sm" onclick="prCreatePOFromRequest('${id}')" data-tooltip="يفتح نموذج أمر الشراء معبّأً ببنود هذا الطلب وكمياتها">➕ أمر شراء من هذه البنود</button>`:''}
+    <button class="btn btn-ghost btn-sm" onclick="prCopyItemsForPO('${id}')" data-tooltip="انسخ البنود ثمّ الصقها في «بنود الأمر» داخل نموذج أمر الشراء">📋 نسخ البنود</button>
+    ${hasPermission('can_export')?`<button class="btn btn-ghost btn-sm" onclick="prExportItemsExcel('${id}')">⤓ إكسل</button>`:''}
+  </div>`:'';
+  const note=open?`تُنقَل <b>${open}</b> بنداً بكميّاتها <b>غير المغطّاة</b> — لا المطلوب — فلا يُعاد شراء ما غُطّي بأمرٍ سابق.`
+                 :'كل بنود هذا الطلب مغطّاة بأوامر شراء.';
+  return `<div class="pr-work-surface"><div class="pr-work-surface-head"><h3>البنود والتغطية بأوامر الشراء</h3>${tools}</div><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.${(pr.items||[]).length?' '+note:''}</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>`}</tbody></table></div></div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   جسر طلب الشراء ← أمر الشراء: بنود الطلب بكمياتها إلى نموذج الأمر
+   ────────────────────────────────────────────────────────────────────────
+   تصحيح المالك (2026-09-22): «هدفي أن أصدّر بنود طلبات الشراء ببنودها وألصقها
+   في نموذج أمر الشراء بكميتها». فالمشتريات كانت تعيد كتابة 44 بنداً يدويّاً
+   لأنّ الطلب وأمر الشراء شاشتان لا جسر بينهما.
+   ⚠️ والكمية المنقولة هي **غير المغطّى** (المطلوب ناقص ما وُزّع على أوامر
+   مرتبطة) لا المطلوب — وإلّا أُعيد شراء ما اشتُرِي عند ثاني أمر من الطلب نفسه،
+   وهو العمود الذي يحسبه الجدول أصلاً («غير مغطى»).
+   ════════════════════════════════════════════════════════════════════════ */
+function prFindRequest(id){
+  return (STATE.purchaseRequests||[]).find(p=>String(p.id)===String(id))||null;
+}
+function prItemsForPO(pr, opts){
+  const o=opts||{}, links=(pr&&pr.po_links)||[], showMoney=canViewAmounts();
+  const out=[];
+  ((pr&&pr.items)||[]).forEach(it=>{
+    const requested=Number(it.requested_qty)||0;
+    const allocated=links
+      .flatMap(l=>(l.allocations||[]).filter(a=>String(a.pr_item_id)===String(it.id)))
+      .reduce((s,a)=>s+(Number(a.allocated_qty)||0),0);
+    const remaining=Math.max(0,requested-allocated);
+    const qty=o.all?requested:remaining;
+    if(!o.all && qty<=0) return;                   // مُغطّى بالكامل — لا يُعاد طلبه
+    out.push({desc:String(it.description||''), unit:String(it.unit||''), qty,
+              price:(showMoney && it.unit_price!=null)?Number(it.unit_price):null,
+              requested, allocated, remaining});
+  });
+  return out;
+}
+/* ⚠️ صفّ الرأس ليس تجميلاً: بلا رأسٍ تصير «الصنف | الوحدة | الكمية» لصقةً
+   بعمودٍ رقميّ واحد، فيقرؤها محلّل اللصق **سعراً** (اللبس الموثّق) وتضيع الكمية. */
+function prItemsClipboardText(rows, withPrice){
+  const head=['الصنف','الوحدة','الكمية'].concat(withPrice?['السعر الإفرادي']:[]);
+  return [head.join('\t')].concat(rows.map(r=>{
+    const c=[r.desc, r.unit||'', String(r.qty)];
+    if(withPrice) c.push(r.price!=null?String(r.price):'');
+    return c.join('\t');
+  })).join('\n');
+}
+function prItemsClipboardHtml(rows, withPrice){
+  const td=v=>`<td>${escapeHtml(String(v==null?'':v))}</td>`;
+  const head=['الصنف','الوحدة','الكمية'].concat(withPrice?['السعر الإفرادي']:[]);
+  return `<table border="1"><thead><tr>${head.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>`
+    + rows.map(r=>`<tr>${td(r.desc)}${td(r.unit)}${td(r.qty)}${withPrice?td(r.price):''}</tr>`).join('')
+    + `</tbody></table>`;
+}
+async function prCopyItemsForPO(prId){
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr);
+  if(!rows.length){ toast('warn','لا بنود غير مغطّاة','كل بنود هذا الطلب مغطّاة بأوامر شراء مرتبطة'); return; }
+  const withPrice=canViewAmounts();
+  const text=prItemsClipboardText(rows,withPrice), html=prItemsClipboardHtml(rows,withPrice);
+  const done=()=>toast('success','نُسخت البنود',`${rows.length} بند بكمياتها — افتح أمر الشراء والصقها في «بنود الأمر»`);
+  try{
+    if(navigator.clipboard && window.ClipboardItem){
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html],{type:'text/html'}),
+        'text/plain': new Blob([text],{type:'text/plain'})})]);
+      done(); return;
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); done(); return; }
+    throw new Error('لا حافظة');
+  }catch(_){
+    // الحافظة قد تُرفض (سياق غير موثوق أو صلاحية) — التحديد اليدويّ آخر ملاذ
+    if(poFinanceEmailCopyRichFallback(html)) done();
+    else toast('error','تعذّر النسخ','استعمل «➕ أمر شراء من هذه البنود» أو «⤓ إكسل»');
+  }
+}
+function prExportItemsExcel(prId){
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr,{all:true});
+  if(!rows.length){ toast('warn','لا بنود','هذا الطلب بلا بنود مسجّلة'); return; }
+  const showMoney=canViewAmounts();
+  const cols=[{key:'desc',label:'الصنف'},{key:'unit',label:'الوحدة'},{key:'qty',label:'الكمية'}]
+    .concat(showMoney?[{key:'price',label:'السعر الإفرادي'}]:[])
+    .concat([{key:'requested',label:'المطلوب'},{key:'allocated',label:'مغطى بأوامر'},{key:'remaining',label:'غير مغطى'}]);
+  // العمود «الكمية» = غير المغطّى، وهو ما يُنقَل لأمر الشراء؛ والثلاثة الأخيرة للمراجعة
+  exportExcel(rows.map(r=>({...r, qty:r.remaining})), `بنود-${pr.id}`, cols, {sheetName:'بنود الطلب'});
+}
+function prCreatePOFromRequest(prId){
+  if(!requirePermission('can_create_po','إنشاء أمر شراء')) return;
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr);
+  if(!rows.length){ toast('warn','لا بنود غير مغطّاة','كل بنود هذا الطلب مغطّاة بأوامر شراء مرتبطة'); return; }
+  const drawer=document.getElementById('pr-drawer'); if(drawer) drawer.classList.remove('active');
+  openPOModal(null);
+  const g=id=>document.getElementById(id);
+  if(g('po-f-project')) poFillProjectSelect(prjCanonical(pr.project||'')||pr.project||'');
+  if(pr.sector && g('po-f-sector')) g('po-f-sector').value=pr.sector;
+  if(g('po-f-notes')) g('po-f-notes').value=`مُنشأ من طلب الشراء ${pr.id}${pr.title?' — '+pr.title:''}`;
+  const wrap=document.getElementById('po-items-rows'); if(wrap) wrap.innerHTML='';
+  rows.forEach(r=>addPOItemRow({desc:r.desc, unit:r.unit, qty:r.qty, price:r.price!=null?r.price:''}));
+  poItemsRecalc(); poFormRecompute();
+  /* ⚠️ الربط بالطلب لا يقع هنا: `pr_link_purchase_order` تتطلّب توزيع كميات
+     وتحقّقاً خادميّاً — يُعمَل من تبويب «الارتباطات» بعد حفظ الأمر، كما هو. */
+  toast('info','عُبّئت البنود',`${rows.length} بند من ${pr.id} — أكمل المورد والأسعار ثمّ احفظ، ثمّ اربطه بالطلب من «الارتباطات»`);
 }
 function prWorkspaceApprovalsHTML(pr){
   const decisionLabel={approved:'تم الاعتماد',pending:'بانتظار القرار',returned:'أعيد للاستكمال',rejected:'مرفوض'};
@@ -20439,6 +20557,7 @@ function openPODrawer(num){
       ${(canEdit && !PO_TERMINAL.includes(po.status))?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="changePOStatus('${n}','ملغى')">إلغاء</button>`:''}
       ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openPOModal('${n}')">تعديل</button>`:''}
       <button class="btn btn-ghost btn-sm" onclick="printPO('${n}')">طباعة</button>
+      ${(hasPermission('can_export')&&canViewAmounts())?`<button class="btn btn-ghost btn-sm" onclick="poExportTemplate('${n}')" data-tooltip="ملفّ إكسل بنموذج الشركة نفسه — جاهز للإرسال">⤓ نموذج إكسل</button>`:''}
       ${canDel?`<button class="btn btn-ghost btn-sm" style="color:#a93226" onclick="deletePO('${n}')">حذف</button>`:''}
     </div>`;
   document.getElementById('po-drawer').classList.add('active');
@@ -21380,12 +21499,493 @@ function exportPOExcel(){
   exportExcel(data,'سجل-أوامر-الشراء',cols,{sheetName:'سجل أوامر الشراء'});
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   بنود أمر الشراء: لصق من إكسل  +  تصدير الأمر بنموذج الشركة نفسه
+   ────────────────────────────────────────────────────────────────────────
+   طلب المالك (2026-09-22): «أسحب البنود [من] إكسل بتنسيق إكسل الـPO مباشرة
+   وألصقها ليسهل كتابة البنود في الأمر» و«لو كان هناك إمكانية أن نصدّر نموذج
+   الأمر مباشرة بنفس التنسيق أفضل — لا أريد أن يكون مقارباً، أن يكون نفسه تماماً».
+
+   ⚠️ ولهذا فالتصدير **جراحة على ملفّ النموذج نفسه** (`assets/po-template.xlsx`)
+   لا إعادة بناء له: كل جزء يحمل شكلاً — الأنماط · الثيم · شعار ترويسة الطباعة ·
+   إعداد الطابعة · رسم الترويسة — يُنسَخ ببايتاته المضغوطة كما هي، ولا يُولَّد إلا
+   ما يحمل بيانات. فالشكل ليس مُعاد بناءً بل هو ملفّ المالك حرفيّاً.
+   ولا مكتبة خارجية: قراءة/كتابة ZIP بالبايتات (نسخٌ خام + إدخالات مخزَّنة بلا
+   ضغط) فيبقى المسار كلّه داخل `script-src 'self'`.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ────────────────── ① لصق البنود من إكسل ────────────────── */
+
+/* أرقام الخلايا الملصوقة: الهندية (٠..٩) والفارسية (۰..۹) والفاصلة العربية،
+   وفواصل الآلاف، ورموز العملة، والمسافات غير القابلة للكسر التي يزرعها إكسل.
+   ⚠️ NFKC **لا** يحوّل ٠..٩ إلى 0..9 (ليست محارف توافق) فالخريطة صريحة. */
+const PO_PASTE_DIGITS={
+  '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9',
+  '۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9'
+};
+function poPasteNum(v){
+  if(v==null) return null;
+  if(typeof v==='number') return isFinite(v)?v:null;
+  const s=String(v)
+    .replace(/[٠-٩۰-۹]/g,d=>PO_PASTE_DIGITS[d])
+    .replace(/٫/g,'.')                          // الفاصلة العشرية العربية
+    .replace(/[٬،,]/g,'')                  // فواصل الآلاف (عربية ولاتينية)
+    .replace(/[  ‎‏⁦-⁩]/g,' ')
+    // ⚠️ رمز العملة يُزال **باسمه** قبل الترشيح: «ر.س» تحمل نقطةً تنجو منه
+    // فتصير «1250.50.» ⇒ NaN — وهي أكثر ما يُلصق من خليّة منسَّقة عملةً.
+    .replace(/ر\s*\.?\s*س|ريال|﷼|\bSAR\b|\bSR\b/gi,'')
+    .replace(/[^\d.+\-]/g,'')
+    .replace(/(?!^)[+\-]/g,'')                       // الإشارة في المقدّمة فقط
+    .trim();
+  if(!s||!/\d/.test(s)) return null;
+  let n=Number(s);
+  // شبكة أمان لأيّ رمز عملة غير معروف يترك نقطةً زائدة: أوّل عدد سليم في النصّ
+  if(!isFinite(n)){ const m=/-?\d+(?:\.\d+)?/.exec(s); n=m?Number(m[0]):NaN; }
+  return isFinite(n)?n:null;
+}
+/* تطبيع عنوان عمود للمطابقة: طيّ الهمزات والياء والتاء المربوطة والتشكيل والتطويل.
+   ⚠️ لا `arNorm` هنا — مرادفاتها مخصّصة لبحث الموردين، وتطويعها لعناوين الأعمدة يخلط. */
+function poPasteHeadNorm(s){
+  return String(s==null?'':s).normalize('NFKC')
+    .replace(/[ً-ْٰـ]/g,'')
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+    .replace(/[()[\]{}:.،,*\/\\-]/g,' ')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+const PO_PASTE_HEAD={
+  'م':'seq','#':'seq','ت':'seq','رقم':'seq','مسلسل':'seq','no':'seq','s n':'seq','sr':'seq',
+  'الصنف':'desc','صنف':'desc','الوصف':'desc','وصف':'desc','البيان':'desc','بيان':'desc','الماده':'desc','المنتج':'desc','item':'desc','description':'desc','desc':'desc',
+  'الوحده':'unit','وحده':'unit','unit':'unit','uom':'unit',
+  'الكميه':'qty','كميه':'qty','العدد':'qty','عدد':'qty','qty':'qty','quantity':'qty',
+  'السعر الافرادي':'price','سعر الوحده':'price','السعر':'price','سعر':'price','الفئه':'price','price':'price','unit price':'price','rate':'price',
+  'السعر الاجمالي':'total','الاجمالي':'total','المجموع':'total','total':'total','amount':'total','line total':'total',
+};
+/* صفّ الإجماليات/التفقيط/الاعتماد الذي يلي جدول الأصناف في النموذج — يوقف القراءة.
+   ⚠️ مقيَّد بقلّة الأرقام: صفّ البند الحقيقيّ يحمل كميةً وسعراً (رقمين فأكثر) فلا
+   يُبتَر بندٌ وصفه يبدأ بكلمة من كلمات الإجمالي. */
+const PO_PASTE_STOP=/^(الاجمالي|المجموع|اجمالي|ضريبه|الضريبه|الدفعه|اعتماد|فقط|الصافي|خصم)/;
+function poPasteIsStopRow(row){
+  const first=String((row||[]).find(c=>String(c==null?'':c).trim())||'');
+  if(!first) return false;
+  const nums=(row||[]).filter(c=>poPasteNum(c)!=null).length;
+  return PO_PASTE_STOP.test(poPasteHeadNorm(first)) && nums<=1;
+}
+/* الحافظة → صفوف. جدول HTML أدقّ من TSV (يحفظ الخلية متعدّدة الأسطر التي يكسرها
+   TSV إلى صفوف كاذبة) ويُوسَّع فيه colspan وإلّا انزاحت الأعمدة عند خلية مدموجة. */
+function poPasteRows(text, html){
+  if(html && /<t(able|r)\b/i.test(html) && typeof DOMParser!=='undefined'){
+    try{
+      const tbl=new DOMParser().parseFromString(html,'text/html').querySelector('table');
+      if(tbl){
+        const rows=[...tbl.querySelectorAll('tr')].map(tr=>{
+          const cells=[];
+          [...tr.children].forEach(td=>{
+            if(!/^t[dh]$/i.test(td.tagName)) return;
+            const txt=String(td.textContent||'').replace(/\s+/g,' ').trim();
+            const cs=Math.max(1,Math.min(20,parseInt(td.getAttribute('colspan')||'1',10)||1));
+            cells.push(txt);
+            for(let k=1;k<cs;k++) cells.push('');
+          });
+          return cells;
+        });
+        if(rows.length) return rows;
+      }
+    }catch(_){}
+  }
+  return String(text||'').replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t').map(c=>String(c).trim()));
+}
+/* استنتاج الأعمدة حين لا رأس للجدول.
+   ⚠️ لا يُفترض ترتيب: ترتيب نموذج الإكسل (وحدة ثمّ كمية) **عكس** ترتيب الشاشة
+   (كمية ثمّ وحدة)، فافتراض أحدهما يقلب العمودين بصمت. التمييز بالمحتوى — الوحدة
+   نصّ والكمية رقم — وهو حاسم في الترتيبين معاً. */
+function poPasteInfer(rows){
+  const width=rows.reduce((m,r)=>Math.max(m,r.length),0);
+  if(!width) return null;
+  const stat=[];
+  for(let i=0;i<width;i++){
+    let filled=0,numeric=0;
+    rows.forEach(r=>{ const v=String(r[i]==null?'':r[i]).trim(); if(!v) return; filled++; if(poPasteNum(v)!=null) numeric++; });
+    stat.push({i,filled,numeric,texty:filled-numeric});
+  }
+  const desc=stat.find(s=>s.filled && s.texty>s.numeric);
+  if(!desc) return null;
+  const after=stat.filter(s=>s.i>desc.i && s.filled);
+  const unitCol=after.find(s=>s.texty>s.numeric);
+  let nums=after.filter(s=>s.numeric>=s.texty).map(s=>s.i);
+  // ثلاثة أعمدة رقمية = كمية وسعر وإجماليّ سطر؛ الثالث يُسقَط إذا صدّقه الحساب
+  if(nums.length>=3){
+    const [a,b,c]=nums;
+    let ok=0,seen=0;
+    rows.forEach(r=>{
+      const q=poPasteNum(r[a]),p=poPasteNum(r[b]),t=poPasteNum(r[c]);
+      if(q==null||p==null||t==null) return;
+      seen++; if(Math.abs(q*p-t)<=Math.max(0.05,Math.abs(t)*0.01)) ok++;
+    });
+    if(seen && ok/seen>=0.6) nums=nums.slice(0,2);
+  }
+  // ⚠️ عمودٌ رقميّ واحد بلا رأس ملتبس (كميةً أم سعراً؟) — يُقرأ **سعراً** لأنّ
+  // الكمية لها افتراضٌ معقول (1) والسعر لا، وصفرُه يجعل السطر بلا قيمة. واللبس
+  // يُعلَن للمستخدم في التوست بدل أن يُخمَّن صامتاً.
+  if(nums.length===1) return {desc:desc.i, unit:unitCol?unitCol.i:-1, qty:-1, price:nums[0], ambiguous:true};
+  return {desc:desc.i, unit:unitCol?unitCol.i:-1, qty:nums.length>0?nums[0]:-1, price:nums.length>1?nums[1]:-1};
+}
+/* المحلّل النقيّ: لصقة إكسل → بنود جاهزة للإدخال في نافذة الأمر. */
+function poParsePastedItems(text, html){
+  const raw=poPasteRows(text,html).filter(r=>r.some(c=>String(c==null?'':c).trim()!==''));
+  const res={items:[],skipped:0,stopped:false,headerFound:false,cols:null};
+  if(!raw.length) return res;
+  // رأس الجدول إن وُجد — وما قبله يُطرَح (ترويسة النموذج فوق جدول الأصناف)
+  let map=null,start=0;
+  for(let r=0;r<Math.min(raw.length,30);r++){
+    const m={}; let hits=0;
+    raw[r].forEach((c,i)=>{ const k=PO_PASTE_HEAD[poPasteHeadNorm(c)]; if(k&&m[k]==null){ m[k]=i; hits++; } });
+    if(m.desc!=null && hits>=2){ map=m; start=r+1; res.headerFound=true; break; }
+  }
+  const body=[];
+  for(let r=start;r<raw.length;r++){
+    if(poPasteIsStopRow(raw[r])){ res.stopped=true; break; }
+    body.push(raw[r]);
+  }
+  if(!body.length) return res;
+  const cols=map ? {desc:map.desc, unit:map.unit==null?-1:map.unit, qty:map.qty==null?-1:map.qty, price:map.price==null?-1:map.price}
+                 : poPasteInfer(body);
+  if(!cols) return res;
+  res.cols=cols; res.ambiguous=!!cols.ambiguous;
+  const pick=(row,i)=> i>=0 ? String(row[i]==null?'':row[i]).trim() : '';
+  body.forEach(row=>{
+    const desc=pick(row,cols.desc);
+    if(!desc){ res.skipped++; return; }
+    const q=poPasteNum(pick(row,cols.qty)), p=poPasteNum(pick(row,cols.price));
+    res.items.push({desc, unit:pick(row,cols.unit), qty:(q!=null&&q>0)?q:1, price:(p!=null&&p>=0)?p:0});
+  });
+  return res;
+}
+/* يدرج البنود الملصوقة في نافذة الأمر: يستبدل الصفوف الفارغة ويُلحِق بعدها،
+   فلا يمحو ما كُتِب يدويّاً (نفس قاعدة القراءة الذكية في نموذج الطلب). */
+function poApplyPastedItems(text, html){
+  const res=poParsePastedItems(text,html);
+  if(!res.items.length){
+    toast('warn','لم تُقرأ بنود','انسخ من إكسل أعمدةَ الصنف والوحدة والكمية والسعر ثمّ الصق هنا');
+    return 0;
+  }
+  const wrap=document.getElementById('po-items-rows');
+  if(!wrap) return 0;
+  [...wrap.querySelectorAll('.po-item-row')].forEach(r=>{
+    const vals=[...r.querySelectorAll('input')].map(i=>i.value.trim());
+    if(!vals.some(v=>v!=='')) r.remove();
+  });
+  res.items.slice(0,300).forEach(it=>addPOItemRow(it));
+  poItemsRecalc(); poFormRecompute();
+  const extra=[];
+  if(res.skipped) extra.push(`تُخطّي ${res.skipped} صفّاً بلا صنف`);
+  if(res.items.length>300) extra.push('اكتُفي بأوّل 300');
+  if(res.ambiguous) extra.push('عمود رقميّ واحد قُرئ سعراً — صحّح الكمية إن لزم');
+  toast(res.ambiguous?'warn':'success','لُصقت البنود',
+    `${Math.min(res.items.length,300)} بند${extra.length?' · '+extra.join(' · '):''} — راجعها قبل الحفظ`);
+  return res.items.length;
+}
+function poPasteFromEvent(e){
+  const cb=e.clipboardData||window.clipboardData;
+  if(!cb) return false;
+  const text=cb.getData('text/plain')||'';
+  const html=cb.getData('text/html')||'';
+  // لصقة خلية واحدة تبقى لصقاً عاديّاً داخل الحقل — لا نخطف إلا جدولاً
+  if(!/[\t\n]/.test(text) && !/<t(able|r)\b/i.test(html)) return false;
+  e.preventDefault();
+  poApplyPastedItems(text,html);
+  return true;
+}
+
+/* ────────────────── ② تصدير الأمر بنموذج الشركة ────────────────── */
+
+const PO_TPL_URL='/assets/po-template.xlsx';
+let _poTplBytes=null;                               // يُجلَب مرّة واحدة لكل جلسة
+async function poTemplateBytes(){
+  if(_poTplBytes) return _poTplBytes;
+  const r=await fetch(PO_TPL_URL,{cache:'force-cache'});
+  if(!r.ok) throw new Error(`تعذّر تحميل نموذج أمر الشراء (${r.status})`);
+  _poTplBytes=new Uint8Array(await r.arrayBuffer());
+  return _poTplBytes;
+}
+/* CRC-32 — يلزم لكل إدخال في أرشيف ZIP */
+let _poZipCrcT=null;
+function poZipCrc32(buf){
+  if(!_poZipCrcT){
+    _poZipCrcT=new Int32Array(256);
+    for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); _poZipCrcT[n]=c; }
+  }
+  const t=_poZipCrcT;
+  let c=-1; for(let i=0;i<buf.length;i++) c=t[(c^buf[i])&0xFF]^(c>>>8);
+  return (c^-1)>>>0;
+}
+/* يقرأ دليل ZIP المركزيّ ويعيد كل إدخال ببايتاته المضغوطة **كما هي**، فالنسخ
+   لا يحتاج فكّ ضغط ولا إعادة ضغط — ومن ثمّ لا مكتبة. */
+function poZipRead(bytes){
+  const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  let eocd=-1;
+  for(let i=bytes.length-22;i>=0 && i>=bytes.length-22-65557;i--){ if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; } }
+  if(eocd<0) throw new Error('نموذج أمر الشراء غير صالح: لا دليل ZIP');
+  const count=dv.getUint16(eocd+10,true);
+  let p=dv.getUint32(eocd+16,true);
+  const out=[];
+  for(let n=0;n<count;n++){
+    if(dv.getUint32(p,true)!==0x02014b50) throw new Error('نموذج أمر الشراء غير صالح: إدخال مشوّه');
+    const flags=dv.getUint16(p+8,true), method=dv.getUint16(p+10,true);
+    const time=dv.getUint16(p+12,true), date=dv.getUint16(p+14,true);
+    const crc=dv.getUint32(p+16,true), csize=dv.getUint32(p+20,true), usize=dv.getUint32(p+24,true);
+    const nlen=dv.getUint16(p+28,true), elen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true);
+    const lho=dv.getUint32(p+42,true);
+    const name=new TextDecoder('utf-8').decode(bytes.subarray(p+46,p+46+nlen));
+    if(flags & 0x08) throw new Error('نموذج أمر الشراء غير مدعوم: واصف بيانات مؤجَّل');
+    const lnlen=dv.getUint16(lho+26,true), lelen=dv.getUint16(lho+28,true);
+    const start=lho+30+lnlen+lelen;
+    out.push({name,method,time,date,crc,csize,usize,data:bytes.subarray(start,start+csize)});
+    p+=46+nlen+elen+clen;
+  }
+  return out;
+}
+async function poZipInflate(e){
+  if(e.method===0) return e.data;
+  if(e.method!==8) throw new Error('ضغط غير مدعوم داخل النموذج');
+  if(typeof DecompressionStream==='undefined') throw new Error('متصفّحك لا يدعم فكّ الضغط — حدّثه أو استعمل الطباعة');
+  const rs=new ReadableStream({start(c){ c.enqueue(e.data); c.close(); }});
+  const buf=await new Response(rs.pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+  return new Uint8Array(buf);
+}
+/* يكتب أرشيفاً من إدخالات: المنسوخة بخامها المضغوط، والمولَّدة **مخزَّنة بلا ضغط**
+   (method 0) — إكسل يقبلها، ويسقط بذلك كل احتياج لمكتبة ضغط. */
+function poZipWrite(entries){
+  const enc=new TextEncoder();
+  const parts=[],central=[];
+  let offset=0;
+  entries.forEach(e=>{
+    const nameB=enc.encode(e.name);
+    const lh=new Uint8Array(30+nameB.length), dv=new DataView(lh.buffer);
+    dv.setUint32(0,0x04034b50,true); dv.setUint16(4,20,true); dv.setUint16(6,0,true);
+    dv.setUint16(8,e.method,true); dv.setUint16(10,e.time,true); dv.setUint16(12,e.date,true);
+    dv.setUint32(14,e.crc,true); dv.setUint32(18,e.csize,true); dv.setUint32(22,e.usize,true);
+    dv.setUint16(26,nameB.length,true); dv.setUint16(28,0,true);
+    lh.set(nameB,30);
+    parts.push(lh,e.data);
+    const cd=new Uint8Array(46+nameB.length), cv=new DataView(cd.buffer);
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true); cv.setUint16(8,0,true);
+    cv.setUint16(10,e.method,true); cv.setUint16(12,e.time,true); cv.setUint16(14,e.date,true);
+    cv.setUint32(16,e.crc,true); cv.setUint32(20,e.csize,true); cv.setUint32(24,e.usize,true);
+    cv.setUint16(28,nameB.length,true); cv.setUint32(42,offset,true);
+    cd.set(nameB,46);
+    central.push(cd);
+    offset+=lh.length+e.data.length;
+  });
+  const cdSize=central.reduce((s,c)=>s+c.length,0);
+  const eocd=new Uint8Array(22), ev=new DataView(eocd.buffer);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(8,entries.length,true); ev.setUint16(10,entries.length,true);
+  ev.setUint32(12,cdSize,true); ev.setUint32(16,offset,true);
+  const all=parts.concat(central,[eocd]);
+  const buf=new Uint8Array(all.reduce((s,a)=>s+a.length,0));
+  let at=0; all.forEach(a=>{ buf.set(a,at); at+=a.length; });
+  return buf;
+}
+function poXmlEsc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function poXmlNum(v){ const n=Number(v); return isFinite(n)?String(n):'0'; }
+/* العنصر النائب في النموذج (`_____`) — ما لا نعرفه يُكتب كما يكتبه المالك،
+   و`poTplClean` عند الاستيراد يقرؤه فراغاً فيكتمل ذهاب الملفّ وعودته. */
+function poTplPlaceholder(v){ const s=String(v==null?'':v).trim(); return s||'_____'; }
+
+/* يبني `sheet1.xml` و`sharedStrings.xml` و`calcChain.xml` لعدد بنود اختياريّ.
+   بنية النموذج ثابتة: الصفوف 1..23 ترويسةٌ وبيانات، ثمّ n بنداً، ثمّ كتلة
+   الإجماليات والتفقيط والاعتماد — وكل ما بعد البنود يُزاح بـ(n−4) ومعه الدمج
+   والصيغ ونطاق التحقّق ومنطقة الطباعة. فهارس الأنماط (`s=`) منقولة من النموذج
+   حرفيّاً، و`styles.xml` نفسه يُنسَخ بخامه — فالشكل لا يُعاد بناؤه أصلاً. */
+function poTemplateSheetXml(m){
+  const items=(m.items&&m.items.length)?m.items:[{desc:'',unit:'',qty:0,price:0}];
+  const n=items.length, T=24+n;                       // صفّ «الإجمالي قبل الضريبة»
+  const S=[],Smap=new Map();
+  const sid=v=>{ const t=String(v==null?'':v); if(Smap.has(t)) return Smap.get(t); const i=S.length; S.push(t); Smap.set(t,i); return i; };
+  const cs=(ref,st,str)=>`<c r="${ref}" s="${st}" t="s"><v>${sid(str)}</v></c>`;
+  const cn=(ref,st,val)=>`<c r="${ref}" s="${st}"><v>${poXmlNum(val)}</v></c>`;
+  const ce=(ref,st)=>`<c r="${ref}" s="${st}"/>`;
+  const cf=(ref,st,f,val)=>`<c r="${ref}" s="${st}"><f>${poXmlEsc(f)}</f><v>${poXmlNum(val)}</v></c>`;
+  const colNum=a=>{ let v=0; for(const ch of a) v=v*26+(ch.charCodeAt(0)-64); return v; };
+  const row=(r,attrs,cells)=>{
+    const refs=cells.map(c=>/r="([A-Z]+)/.exec(c)[1]).map(colNum);
+    return `<row r="${r}" spans="${Math.min(...refs)}:${Math.max(...refs)}"${attrs}>${cells.join('')}</row>`;
+  };
+  const sub=Number(m.subtotal)||0, vat=sub*0.15, half=sub*0.5;
+  const D='x14ac:dyDescent="0.25"', D3='x14ac:dyDescent="0.3"', D35='x14ac:dyDescent="0.35"';
+  const H=` ht="20.100000000000001" customHeight="1" ${D}`;
+  const R=[];
+  R.push(`<row r="1" spans="1:6" ht="22.5" customHeight="1" thickBot="1" ${D3}/>`);
+  R.push(row(2,` ht="21" customHeight="1" ${D}`,[cs('A2',19,'أمر شراء (Purchase Order)'),ce('B2',20),ce('C2',20),ce('D2',20),ce('E2',20),ce('F2',21)]));
+  R.push(row(3,` ht="33" customHeight="1" ${D}`,[ce('A3',22),ce('B3',23),ce('C3',23),ce('D3',23),ce('E3',23),ce('F3',24)]));
+  R.push(row(4,` ht="24.95" customHeight="1" ${D}`,[cs('A4',3,'رقم أمر الشراء'),cs('B4',36,m.po_number),ce('C4',37),cs('D4',4,'تاريخ الإصدار'),cs('E4',43,poTplPlaceholder(m.issue_date)),ce('F4',44)]));
+  R.push(row(5,` ht="24.95" customHeight="1" ${D}`,[cs('A5',3,'مرجع عرض السعر'),cs('B5',36,poTplPlaceholder(m.quote_ref)),ce('C5',37),cs('D5',4,'المشروع / العقد'),cs('E5',27,poTplPlaceholder(m.project)),ce('F5',28)]));
+  R.push(row(6,` ht="24.95" customHeight="1" ${D}`,[cs('A6',3,'الجهة الطالبة '),cs('B6',36,poTplPlaceholder(m.requester)),ce('C6',37),cs('D6',4,'مركز التكلفة'),cs('E6',27,poTplPlaceholder(m.cost_center)),ce('F6',28)]));
+  R.push(row(7,` ht="24.95" customHeight="1" ${D}`,[cs('A7',3,'مسؤول المشتريات'),cs('B7',36,poTplPlaceholder(m.officer)),ce('C7',37),cs('D7',4,'طريقة الدفع'),cs('E7',27,poTplPlaceholder(m.payment_method)),ce('F7',28)]));
+  R.push(row(8,` ht="24.95" customHeight="1" ${D}`,[cs('A8',3,'مدة التسليم '),cs('B8',48,poTplPlaceholder(m.delivery_period)),ce('C8',49),cs('D8',4,'موقع التسليم'),cs('E8',27,poTplPlaceholder(m.delivery_loc)),ce('F8',28)]));
+  R.push(row(9,` ht="18" customHeight="1" ${D}`,[ce('A9',5),ce('B9',6),ce('C9',6),ce('D9',6),ce('E9',6),ce('F9',7)]));
+  R.push(row(10,` ht="30" customHeight="1" ${D}`,[cs('A10',29,'بيانات العميل والمورد'),ce('B10',30),ce('C10',30),ce('D10',30),ce('E10',30),ce('F10',31)]));
+  R.push(row(11,` ${D}`,[ce('A11',8),cs('B11',52,'العميل'),ce('C11',53),cs('D11',45,'المورد'),ce('E11',46),ce('F11',47)]));
+  R.push(row(12,H,[cs('A12',3,'الاسم'),cs('B12',27,m.client.name),ce('C12',40),cs('D12',4,'اسم المورد'),cs('E12',27,poTplPlaceholder(m.supplier)),ce('F12',28)]));
+  R.push(row(13,H,[cs('A13',3,'العنوان'),cs('B13',36,m.client.address),ce('C13',37),cs('D13',4,'العنوان'),cs('E13',27,poTplPlaceholder(m.sup.address)),ce('F13',28)]));
+  R.push(row(14,H,[cs('A14',3,'الهاتف'),cn('B14',27,m.client.phone),ce('C14',40),cs('D14',4,'الهاتف'),cs('E14',32,poTplPlaceholder(m.sup.phone)),ce('F14',84)]));
+  R.push(row(15,H,[cs('A15',3,'بريد المشتريات'),cs('B15',27,m.client.email),ce('C15',40),cs('D15',4,'البريد'),cs('E15',32,poTplPlaceholder(m.sup.email)),ce('F15',84)]));
+  R.push(row(16,H,[cs('A16',3,'السجل التجاري'),cn('B16',27,m.client.cr),ce('C16',40),cs('D16',4,'السجل التجاري'),cs('E16',32,poTplPlaceholder(m.sup.cr)),ce('F16',84)]));
+  R.push(row(17,H,[cs('A17',3,'الرقم الضريبي'),cn('B17',63,m.client.vat),ce('C17',64),cs('D17',4,'الرقم الضريبي'),cs('E17',32,poTplPlaceholder(m.sup.vat)),ce('F17',84)]));
+  R.push(row(18,H,[cs('A18',3,'اسم جهة الاتصال'),cs('B18',27,m.client.contact),ce('C18',40),cs('D18',4,'اسم جهة الاتصال'),cs('E18',27,poTplPlaceholder(m.sup.contact)),ce('F18',28)]));
+  R.push(row(19,H,[cs('A19',3,'الجوال'),cs('B19',32,m.client.mobile),ce('C19',33),cs('D19',4,'الجوال'),cs('E19',32,poTplPlaceholder(m.sup.mobile)),ce('F19',84)]));
+  R.push(row(20,` ht="1.5" customHeight="1" ${D}`,[ce('A20',54),ce('B20',55),ce('C20',55),ce('D20',55),ce('E20',55),ce('F20',56)]));
+  R.push(row(21,` ht="14.25" customHeight="1" thickBot="1" ${D3}`,[ce('A21',57),ce('B21',58),ce('C21',58),ce('D21',58),ce('E21',58),ce('F21',59)]));
+  R.push(row(22,` ht="30" customHeight="1" ${D}`,[cs('A22',60,'تفاصيل الأصناف'),ce('B22',61),ce('C22',61),ce('D22',61),ce('E22',61),ce('F22',62)]));
+  R.push(row(23,` ht="30" customHeight="1" thickBot="1" ${D3}`,[cs('A23',9,'م'),cs('B23',10,'الصنف'),cs('C23',10,'الوحدة'),cs('D23',10,'الكمية'),cs('E23',11,'السعر الإفرادي'),cs('F23',12,'السعر الإجمالي')]));
+  items.forEach((it,i)=>{
+    const r=24+i, f=(i===0), q=Number(it.qty)||0, p=Number(it.price)||0;
+    R.push(row(r,` ht="46.5" customHeight="1" ${D}`,[
+      cn(`A${r}`,f?85:90,i+1),
+      cs(`B${r}`,f?86:91,String(it.desc==null?'':it.desc)),
+      cs(`C${r}`,f?87:92,poTplPlaceholder(it.unit)),
+      cn(`D${r}`,f?88:16,q), cn(`E${r}`,f?88:16,p),
+      cf(`F${r}`,f?89:93,`E${r}*D${r}`,q*p)]));
+  });
+  R.push(row(T,` ht="21" customHeight="1" ${D3}`,[cs(`A${T}`,38,'الإجمالي (قبل الضريبة)'),ce(`B${T}`,39),ce(`C${T}`,39),ce(`D${T}`,39),ce(`E${T}`,39),cf(`F${T}`,13,`SUM(F24:F${23+n})`,sub),ce(`H${T}`,2)]));
+  R.push(row(T+1,` ht="18" customHeight="1" ${D3}`,[cs(`A${T+1}`,50,'ضريبة القيمة المضافة (15%)'),ce(`B${T+1}`,51),ce(`C${T+1}`,51),ce(`D${T+1}`,51),ce(`E${T+1}`,51),cf(`F${T+1}`,14,`F${T}*0.15`,vat),ce(`I${T+1}`,2),ce(`K${T+1}`,2)]));
+  R.push(row(T+2,` ht="21" customHeight="1" thickBot="1" ${D35}`,[cs(`A${T+2}`,71,'الإجمالي شامل الضريبة'),ce(`B${T+2}`,72),ce(`C${T+2}`,72),ce(`D${T+2}`,72),ce(`E${T+2}`,72),cf(`F${T+2}`,15,`F${T}+F${T+1}`,sub+vat)]));
+  R.push(row(T+3,` ht="10.5" hidden="1" customHeight="1" ${D}`,[ce(`A${T+3}`,68),ce(`B${T+3}`,69),ce(`C${T+3}`,69),ce(`D${T+3}`,69),ce(`E${T+3}`,69),ce(`F${T+3}`,70)]));
+  R.push(row(T+4,` ht="18.75" hidden="1" customHeight="1" ${D}`,[cs(`A${T+4}`,65,'الدفعة المستحقة قبل الضريبة (50%)'),ce(`B${T+4}`,66),ce(`C${T+4}`,66),ce(`D${T+4}`,66),ce(`E${T+4}`,67),cf(`F${T+4}`,1,`F${T}*0.5`,half)]));
+  R.push(row(T+5,` ht="18.75" hidden="1" customHeight="1" ${D}`,[cs(`A${T+5}`,82,'ضريبة القيمة المضافة (15%)'),ce(`B${T+5}`,83),ce(`C${T+5}`,83),ce(`D${T+5}`,83),ce(`E${T+5}`,83),cf(`F${T+5}`,1,`F${T+4}*0.15`,half*0.15)]));
+  R.push(row(T+6,` ht="18.75" hidden="1" customHeight="1" ${D}`,[cs(`A${T+6}`,65,'الدفعة المستحقة شامل الضريبة '),ce(`B${T+6}`,66),ce(`C${T+6}`,66),ce(`D${T+6}`,66),ce(`E${T+6}`,66),cf(`F${T+6}`,1,`F${T+4}+F${T+5}`,half*1.15)]));
+  R.push(row(T+7,` ht="15" customHeight="1" ${D}`,[cs(`A${T+7}`,76,m.words),ce(`B${T+7}`,77),ce(`C${T+7}`,77),ce(`D${T+7}`,77),ce(`E${T+7}`,77),ce(`F${T+7}`,78),ce(`I${T+7}`,2)]));
+  R.push(row(T+8,` ht="11.25" customHeight="1" ${D}`,[ce(`A${T+8}`,79),ce(`B${T+8}`,80),ce(`C${T+8}`,80),ce(`D${T+8}`,80),ce(`E${T+8}`,80),ce(`F${T+8}`,81)]));
+  R.push(row(T+9,` ${D}`,[cs(`A${T+9}`,34,'اعتماد'),ce(`B${T+9}`,35),ce(`C${T+9}`,35),ce(`D${T+9}`,35),ce(`E${T+9}`,35),ce(`F${T+9}`,75)]));
+  R.push(row(T+10,` ${D}`,[cs(`A${T+10}`,34,'الاسم'),ce(`B${T+10}`,35),cs(`C${T+10}`,42,'الوظيفة'),ce(`D${T+10}`,35),cs(`E${T+10}`,73,'التوقيع/التاريخ'),ce(`F${T+10}`,74)]));
+  R.push(row(T+11,` ht="38.25" customHeight="1" thickBot="1" ${D3}`,[cs(`A${T+11}`,41,m.approver.name),ce(`B${T+11}`,26),cs(`C${T+11}`,25,m.approver.title),ce(`D${T+11}`,26),ce(`E${T+11}`,17),ce(`F${T+11}`,18)]));
+
+  const last=T+11;
+  // الدمج: ما قبل البنود ثابت، وما بعدها يُزاح مع صفوفه — وإلّا تفكّكت خلايا
+  // الإجماليات والتواقيع عن عناوينها عند أي عدد بنود غير أربعة.
+  const FIXED=['B18:C18','E17:F17','B11:C11','A20:F21','B12:C12','A22:F22','E18:F18','E19:F19','B17:C17','B16:C16',
+               'B5:C5','B4:C4','E5:F5','E14:F14','B7:C7','E8:F8','E12:F12','D11:F11','B14:C14','E13:F13','B8:C8',
+               'B13:C13','A2:F3','E6:F6','A10:F10','E15:F15','B19:C19','B6:C6','B15:C15','E16:F16','E7:F7','E4:F4'];
+  const TAIL=[[4,'A','E'],[3,'A','F'],[6,'A','E'],[2,'A','E'],[10,'E','F'],[9,'A','F'],[7,'A','F',8],[5,'A','E'],
+              [1,'A','E'],[11,'E','F'],[11,'C','D'],[10,'A','B'],[0,'A','E'],[11,'A','B'],[10,'C','D']];
+  const merges=TAIL.map(([o,c1,c2,o2])=>`${c1}${T+o}:${c2}${T+(o2==null?o:o2)}`).concat(FIXED);
+  const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+  const sheet=head+
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x14ac xr xr2 xr3" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision" xmlns:xr2="http://schemas.microsoft.com/office/spreadsheetml/2015/revision2" xmlns:xr3="http://schemas.microsoft.com/office/spreadsheetml/2016/revision3" xr:uid="{00000000-0001-0000-0000-000000000000}">`+
+    `<dimension ref="A1:K${last}"/>`+
+    `<sheetViews><sheetView rightToLeft="1" tabSelected="1" view="pageBreakPreview" zoomScaleNormal="100" zoomScaleSheetLayoutView="100" workbookViewId="0"><selection activeCell="B8" sqref="B8:C8"/></sheetView></sheetViews>`+
+    `<sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.25"/>`+
+    `<cols><col min="1" max="1" width="15.42578125" customWidth="1"/><col min="2" max="2" width="45.7109375" customWidth="1"/><col min="3" max="3" width="8" customWidth="1"/><col min="4" max="4" width="14.5703125" customWidth="1"/><col min="5" max="5" width="11.42578125" customWidth="1"/><col min="6" max="6" width="19.140625" bestFit="1" customWidth="1"/></cols>`+
+    `<sheetData>${R.join('')}</sheetData>`+
+    `<mergeCells count="${merges.length}">${merges.map(r=>`<mergeCell ref="${r}"/>`).join('')}</mergeCells>`+
+    `<dataValidations count="1"><dataValidation type="decimal" operator="greaterThanOrEqual" allowBlank="1" sqref="D24:D${23+n}" xr:uid="{00000000-0002-0000-0000-000000000000}"><formula1>0</formula1></dataValidation></dataValidations>`+
+    `<hyperlinks><hyperlink ref="B15" r:id="rId1" xr:uid="{00000000-0004-0000-0000-000000000000}"/></hyperlinks>`+
+    `<printOptions horizontalCentered="1" verticalCentered="1"/>`+
+    `<pageMargins left="0" right="0" top="0.19685039370078741" bottom="0.59055118110236227" header="0" footer="0"/>`+
+    `<pageSetup paperSize="9" scale="82" fitToHeight="0" orientation="portrait" r:id="rId2"/>`+
+    `<headerFooter><oddHeader>&amp;C&amp;9&amp;G</oddHeader></headerFooter>`+
+    `<legacyDrawingHF r:id="rId3"/></worksheet>`;
+  const sst=head+`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${S.length}" uniqueCount="${S.length}">`+
+    S.map(t=>`<si><t${/^\s|\s$/.test(t)?' xml:space="preserve"':''}>${poXmlEsc(t)}</t></si>`).join('')+`</sst>`;
+  // سلسلة الحساب تُولَّد لخلايا الصيغ الفعلية: إبقاء سلسلة النموذج القديمة على
+  // عدد بنود مختلف يجعل إكسل يطلب «إصلاح الملف».
+  const chain=[]; for(let i=0;i<n;i++) chain.push('F'+(24+i));
+  chain.push('F'+T,'F'+(T+1),'F'+(T+2),'F'+(T+4),'F'+(T+5),'F'+(T+6));
+  const calc=head+`<calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`+
+    chain.map(r=>`<c r="${r}" i="1"/>`).join('')+`</calcChain>`;
+  return {sheet,sst,calc,lastRow:last};
+}
+/* يجمع ملفّ الإكسل النهائيّ: أجزاء النموذج بخامها + ما يحمل بيانات مولَّداً.
+   ⚠️ و`workbook.xml` يُعاد كتابته **لمنطقة الطباعة وحدها** (`$A$1:$F$39`) —
+   ولولاها بُتِرت صفحة أمرٍ بنوده أكثر من أربعة عند الطباعة، وهو بالضبط الفرق
+   بين «نفسه تماماً» و«مقارب». وتعذّر مطابقتها يُفشِل التصدير ولا يمرّ صامتاً. */
+async function poBuildTemplateWorkbook(tplBytes, model){
+  const {sheet,sst,calc,lastRow}=poTemplateSheetXml(model);
+  const src=poZipRead(tplBytes);
+  const wbEntry=src.find(e=>e.name==='xl/workbook.xml');
+  if(!wbEntry || !src.find(e=>e.name==='xl/styles.xml') || !src.find(e=>e.name==='xl/worksheets/sheet1.xml'))
+    throw new Error('نموذج أمر الشراء غير صالح');
+  const wbXml=new TextDecoder('utf-8').decode(await poZipInflate(wbEntry));
+  const areaRe=/(_xlnm\.Print_Area[^<]*>[^<]*\$A\$1:\$F\$)(\d+)/;
+  if(!areaRe.test(wbXml)) throw new Error('تعذّر ضبط منطقة الطباعة في النموذج');
+  const wbOut=wbXml.replace(areaRe,(_,a)=>a+lastRow);
+  const enc=new TextEncoder(), now=new Date();
+  const time=((now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1))&0xFFFF;
+  const date=(((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate())&0xFFFF;
+  const mk=(name,text)=>{ const b=enc.encode(text); return {name,method:0,time,date,crc:poZipCrc32(b),csize:b.length,usize:b.length,data:b}; };
+  const gen={'xl/worksheets/sheet1.xml':sheet,'xl/sharedStrings.xml':sst,'xl/calcChain.xml':calc,'xl/workbook.xml':wbOut};
+  return poZipWrite(src.map(e=> gen[e.name]!=null ? mk(e.name,gen[e.name]) : e));
+}
+
+/* بيانات العميل والمعتمِد ثوابت النموذج نفسه — لا تُشتقّ من إعدادات قد تكون
+   فارغة فيخرج المستند الرسميّ بترويسة ناقصة. */
+const PO_TPL_CLIENT={
+  name:'مجموعة الذيابي للمقاولات', address:'الرياض طريق الملك عبد العزيز، حي المروج',
+  phone:920000194, email:'abdullah@aldeyabi.com', cr:7001929160, vat:311486953200003,
+  contact:'عبدالله الذيابي', mobile:'0563897666'
+};
+const PO_TPL_APPROVER={name:'عبدالله ماجد الذيابي ', title:'مدير إدارة سلاسل الامداد'};
+/* بيانات المورد من دليل الموردين — و`supVal` يُسقِط النائب («—» و«ـــ») فلا
+   يُطبَع خطٌّ مكان رقم ضريبيّ. */
+function poTplSupplier(name){
+  const key=supKey(name||'');
+  const s=(STATE.suppliers||[]).find(x=>supKey(x.name)===key)||{};
+  return {address:supVal(s.address)||supVal(s.city), phone:supVal(s.phone), email:supVal(s.email),
+          cr:supVal(s.commercial_reg), vat:supVal(s.tax_id), contact:supVal(s.contact), mobile:supVal(s.mobile)};
+}
+function poTemplateModel(po){
+  const items=(Array.isArray(po.items)?po.items:[]).map(it=>({
+    desc:String(it.desc||''), unit:String(it.unit||''), qty:Number(it.qty)||0, price:Number(it.price)||0}));
+  const sub=items.length ? items.reduce((s,it)=>s+it.qty*it.price,0) : (Number(po.subtotal)||0);
+  const d1=poParseDate(po.issue_date), d2=poParseDate(po.expected_delivery);
+  const days=(d1&&d2)?Math.round((d2-d1)/86400000):null;
+  return {
+    po_number:String(po.po_number||''), issue_date:poToISO(po.issue_date)||'',
+    quote_ref:'', project:String(po.project||''), requester:String(po.sector||''), cost_center:String(po.project||''),
+    officer:String(po.officer||''), payment_method:String(po.payment_method||''),
+    delivery_period:(days!=null&&days>=0)?poDays(days):'', delivery_loc:String(po.project||''),
+    supplier:String(po.supplier||''), sup:poTplSupplier(po.supplier),
+    client:PO_TPL_CLIENT, approver:PO_TPL_APPROVER,
+    // ⚠️ `tafqitSAR` المحروسة لا `tafqitSARRaw`: التفقيط مبلغٌ **حروفاً**، فلو
+    // نُودي هذا النموذج يوماً من مسارٍ غير محروس لخرج المبلغ نصّاً. (حارسٌ قائم
+    // في الحزمة أمسك النداء الخام فعلاً عند أوّل تشغيل.)
+    items, subtotal:sub, words:'فقط '+tafqitSAR(sub*1.15)
+  };
+}
+async function poExportTemplate(num){
+  const po=poFind(num); if(!po) return;
+  if(!requirePermission('can_export','تصدير أمر الشراء')) return;
+  // النموذج مستندٌ مسعَّر بطبيعته — فبوّابة المبالغ هي بوّابته، لا العرض وحده.
+  if(!canViewAmounts()){ toast('error','صلاحية مرفوضة','نموذج أمر الشراء يحوي الأسعار.'); return; }
+  try{
+    toast('info','جارٍ التصدير','يُبنى الملفّ بنموذج الشركة…');
+    const bytes=await poBuildTemplateWorkbook(await poTemplateBytes(), poTemplateModel(po));
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    const a=Object.assign(document.createElement('a'),{href:url,download:`${po.po_number}.xlsx`});
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    logAudit('export','po',po.po_number,{format:'نموذج الشركة xlsx',items:(po.items||[]).length});
+    toast('success','تم التصدير',`${po.po_number}.xlsx — بنموذج الشركة نفسه`);
+  }catch(e){ reportError('poExportTemplate',e,{num},'تعذّر تصدير نموذج أمر الشراء: '+(e.message||'')); }
+}
+
 /* ============================================================
    EVENT WIRING
    ============================================================ */
 function setupPOEvents(){
   document.querySelectorAll('.po-view-btn').forEach(b=>b.addEventListener('click',()=>{ STATE.poView=b.dataset.poview; renderPurchaseOrders(); }));
   const add=document.getElementById('po-add-btn'); if(add) add.addEventListener('click',()=>openPOModal(null));
+  // لصق البنود من إكسل: صندوقٌ مخصّص للزرّ، ولصقٌ مباشر داخل صفوف البنود نفسها.
+  const pbox=document.getElementById('po-paste-box'), pbtn=document.getElementById('po-paste-items');
+  if(pbtn&&pbox) pbtn.addEventListener('click',()=>{ pbox.hidden=false; pbox.value=''; pbox.focus(); });
+  if(pbox){
+    pbox.addEventListener('paste',e=>{ if(poPasteFromEvent(e)){ pbox.value=''; pbox.hidden=true; } });
+    pbox.addEventListener('blur',()=>{ if(!pbox.value.trim()) pbox.hidden=true; });
+  }
+  const prows=document.getElementById('po-items-rows');
+  if(prows) prows.addEventListener('paste',poPasteFromEvent);
   const imp=document.getElementById('po-import-btn'); if(imp) imp.addEventListener('click',()=>{ if(!requirePermission('can_import','الاستيراد'))return; document.getElementById('po-import-preview').innerHTML=''; document.getElementById('po-import-confirm').style.display='none'; openModal('modal-po-import'); });
   const exp=document.getElementById('po-export-btn'); if(exp) exp.addEventListener('click',exportPOExcel);
   const prjb=document.getElementById('po-projects-btn'); if(prjb) prjb.addEventListener('click',()=>openProjectsModal('list'));

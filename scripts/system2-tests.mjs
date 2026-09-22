@@ -281,9 +281,16 @@ const NEEDED_FNS = [
   'prjAdd', 'prjAddAlias', 'prjRemoveAlias', 'prjRename', 'prjRewriteOrders', 'prjSetActive',
   'prjOrderCount', 'prjStats', 'prjDelete', 'prjPendingUnify', 'prjApplyUnify', 'prjMergeProjects',
   'prjDuplicatePairs', 'prjAutoUnify', 'poImportResolveProjects',
+  // لصق بنود الأمر من إكسل + تصدير الأمر بنموذج الشركة نفسه
+  'poPasteNum', 'poPasteHeadNorm', 'poPasteIsStopRow', 'poPasteRows', 'poPasteInfer', 'poParsePastedItems',
+  'poXmlEsc', 'poXmlNum', 'poTplPlaceholder', 'poTemplateSheetXml',
+  'poZipCrc32', 'poZipRead', 'poZipInflate', 'poZipWrite', 'poBuildTemplateWorkbook',
+  'poTplSupplier', 'poTemplateModel',
+  // جسر طلب الشراء ← أمر الشراء
+  'canViewAmounts', 'prFindRequest', 'prItemsForPO', 'prItemsClipboardText', 'prItemsClipboardHtml',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
-const NEEDED_LETS = ['__poItemIdx', '_prjIdx'];
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
@@ -299,7 +306,9 @@ const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LI
   'PRDOC_PREFIX', 'PR_DOC_TYPES', 'PR_DOC_MAX', 'PR_DOC_LIMIT', 'PR_FINAL_STATUSES',
   'PR_DOC_KIND_LABEL', 'DOCV', 'PR_QUEUE_GROUPS', 'PR_AUDIT_LABEL',
   // متابعة المالية عبر الإيميل
-  'PO_FIN_AWAIT', 'PO_FIN_DONE', 'PO_FIN_TD', 'PO_FIN_TH', 'PO_FIN_COLS'];
+  'PO_FIN_AWAIT', 'PO_FIN_DONE', 'PO_FIN_TD', 'PO_FIN_TH', 'PO_FIN_COLS',
+  // لصق البنود من إكسل + نموذج أمر الشراء
+  'PO_PASTE_DIGITS', 'PO_PASTE_HEAD', 'PO_PASTE_STOP', 'PO_TPL_URL', 'PO_TPL_CLIENT', 'PO_TPL_APPROVER'];
 
 const stubs = `
 const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4867,6 +4876,285 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     /'text\/html'\s*: new Blob\(\[html\]/.test(CODE) && /'text\/plain': new Blob\(\[text\]/.test(CODE)
     && /poFinanceEmailCopyRichFallback\(html\)/.test(CODE)
     && /execCommand\('copy'\)/.test(CODE));
+}
+
+/* ── ٤٥) لصق بنود الأمر من إكسل + تصدير الأمر بنموذج الشركة ──────
+   طلب المالك (2026-09-22): «أسحب البنود [من] إكسل بتنسيق إكسل الـPO مباشرة
+   وألصقها» و«نصدّر نموذج الأمر بنفس التنسيق — لا مقارباً بل نفسه تماماً». */
+{
+  G('٤٥) لصق بنود الأمر من إكسل + تصدير نموذج الشركة');
+
+  /* (أ) المحلّل — سلوكيّ على أشكال الحافظة الحقيقية */
+  const TPL_PASTE = [
+    'أمر شراء (Purchase Order)\t\t\t\t\t',
+    'رقم أمر الشراء\tP.O-DG26-3221\t\tتاريخ الإصدار\t2026-09-16\t',
+    'م\tالصنف\tالوحدة\tالكمية\tالسعر الإفرادي\tالسعر الإجمالي',
+    '1\tمطهر ديتول ( 1 لتر الأصلي )\tكرتون\t1\t250\t250',
+    '2\tممسحة رطبة ( موب باكستاني )\tحبه\t15\t17\t255',
+    '3\tمعطر جو ( كوتاج )\tكرتون\t3\t190\t570',
+    '4\tفرشاه سجاد \tحبه\t4\t3.5\t14',
+    'الإجمالي (قبل الضريبة)\t\t\t\t\t1089',
+    'ضريبة القيمة المضافة (15%)\t\t\t\t\t163.35',
+    'الإجمالي شامل الضريبة\t\t\t\t\t1252.35',
+  ].join('\n');
+  const tpl = M.poParsePastedItems(TPL_PASTE);
+  T('لصقة نموذج الإكسل كاملاً تُقرأ أربعة بنود بحقولها',
+    tpl.headerFound && tpl.items.length === 4 && tpl.stopped
+    && tpl.items[0].desc === 'مطهر ديتول ( 1 لتر الأصلي )' && tpl.items[0].unit === 'كرتون'
+    && tpl.items[0].qty === 1 && tpl.items[0].price === 250
+    && tpl.items[3].qty === 4 && tpl.items[3].price === 3.5,
+    JSON.stringify(tpl.items));
+  T('وترويسة النموذج فوق الجدول لا تُقرأ بنداً',
+    !tpl.items.some(i => /رقم أمر الشراء|Purchase Order/.test(i.desc)));
+  T('وصفوف الإجماليات والضريبة توقف القراءة ولا تصير بنوداً',
+    !tpl.items.some(i => /الإجمالي|ضريبة/.test(i.desc)));
+
+  /* ⚠️ الكاسر الحقيقيّ: ترتيب نموذج الإكسل (وحدة ثمّ كمية) **عكس** ترتيب الشاشة
+     (كمية ثمّ وحدة). افتراض ترتيبٍ يقلب العمودين بصمت، فالتمييز بالمحتوى. */
+  const xlOrder = M.poParsePastedItems('1\tمطهر\tكرتون\t2\t250\t500\n2\tممسحة\tحبه\t15\t17\t255');
+  const uiOrder = M.poParsePastedItems('مطهر\t2\tكرتون\t250\nممسحة\t15\tحبه\t17');
+  T('بلا رأس: ترتيب الإكسل (وحدة ثمّ كمية) يُقرأ صحيحاً',
+    xlOrder.items.length === 2 && xlOrder.items[0].unit === 'كرتون'
+    && xlOrder.items[0].qty === 2 && xlOrder.items[0].price === 250, JSON.stringify(xlOrder.items));
+  T('وترتيب الشاشة (كمية ثمّ وحدة) يُقرأ صحيحاً كذلك — لا انقلاب',
+    uiOrder.items.length === 2 && uiOrder.items[0].unit === 'كرتون'
+    && uiOrder.items[0].qty === 2 && uiOrder.items[0].price === 250, JSON.stringify(uiOrder.items));
+  T('وعمود «السعر الإجمالي» يُسقَط حين يصدّقه الحساب (كمية×سعر)',
+    xlOrder.cols && xlOrder.cols.price === 4 && xlOrder.items[0].price !== 500);
+
+  /* ⚠️ «ر.س» تحمل نقطةً تنجو من ترشيح المحارف فتصير «1250.50.» ⇒ NaN —
+     وهي أكثر ما يُلصق من خليّة منسَّقة عملةً. (عيبٌ حقيقيّ أُمسِك بالتشغيل.) */
+  /* ⚠️ والرمز **قبل** الرقم أخطر: نقطة «ر.س» تصير الفاصلة العشرية فيُقرأ
+     «ر.س 1250» رقماً 0.125 — خطأ صامت بعشرة آلاف ضعف في سعر بند. */
+  T('رمز العملة «ر.س» لا يُفسد السعر — قبل الرقم وبعده',
+    M.poPasteNum('١٬٢٥٠٫٥٠ ر.س') === 1250.5 && M.poPasteNum('ر.س 1250') === 1250
+    && M.poPasteNum('ريال 45') === 45 && M.poPasteNum('﷼ 12.5') === 12.5
+    && M.poPasteNum('SAR 990') === 990,
+    `ر.س 1250 → ${M.poPasteNum('ر.س 1250')}`);
+  T('والأرقام الهندية وفواصل الآلاف والفاصلة العربية تُقرأ',
+    M.poPasteNum('١٢٣٤٥') === 12345 && M.poPasteNum('١٬٢٥٠٫٥٠') === 1250.5
+    && M.poPasteNum('12,340.75 SAR') === 12340.75 && M.poPasteNum('٣') === 3);
+  T('ونصٌّ بلا رقم لا يصير صفراً', M.poPasteNum('ر.س') === null && M.poPasteNum('') === null
+    && M.poPasteNum('—') === null);
+  T('وصفّ بلا صنف يُتخطّى ويُعَدّ',
+    (() => { const r = M.poParsePastedItems('الصنف\tالكمية\tالسعر\nمصباح\t10\t25\n\t5\t9\nمفتاح\t4\t12');
+             return r.items.length === 2 && r.skipped === 1; })());
+  /* ⚠️ صفّ بندٍ حقيقيّ يبدأ وصفه بكلمة من كلمات الإجمالي يجب ألّا يبتر الجدول —
+     ولهذا شرط «رقمٌ واحد على الأكثر» في كاشف صفّ الإجماليات. */
+  T('وبندٌ وصفه يبدأ بكلمة إجمالٍ لا يبتر الجدول (رقمان فأكثر = بند)',
+    (() => { const r = M.poParsePastedItems('الصنف\tالكمية\tالسعر\nإجمالي كابلات نحاس\t5\t120\nمفتاح\t4\t12');
+             return r.items.length === 2 && !r.stopped; })());
+  T('وعمود رقميّ واحد بلا رأس يُقرأ سعراً ويُعلَن اللبس لا يُخمَّن صامتاً',
+    (() => { const r = M.poParsePastedItems('طاولة\t1500\nكرسي\t420');
+             return r.ambiguous === true && r.items[0].price === 1500 && r.items[0].qty === 1; })());
+
+  /* (ب) التصدير — الشكل مُنسوخ لا مُعاد بناؤه.
+     ⚠️ المقارنة تجري على **ملفّ المالك نفسه** في المستودع، فأيّ انحراف في
+     المولّد يُفشِل البناء بدل أن يُكتشَف على مكتب المحاسب. */
+  const TPL_PATH = path.join(ROOT, 'assets', 'po-template.xlsx');
+  T('نموذج المالك محفوظ أصلاً في المستودع', fs.existsSync(TPL_PATH));
+
+  const REF = {
+    po_number:'P.O-DG26-3221', issue_date:'2026-09-16', quote_ref:'_____',
+    project:'المركز الوطني لقياس الأداء', requester:'قطاع الصيانة والتشغيل',
+    cost_center:'المركز الوطني لقياس الأداء', officer:'مصطفى خليل احمد',
+    payment_method:'اجل ( 45 يوم )', delivery_period:'2 يوم',
+    delivery_loc:'المركز الوطني لقياس الأداء', supplier:'شركة الاعمال الذهبية التجارية',
+    sup:{address:'الرياض', phone:'ـــــــــــــ', email:'', cr:'', vat:'310298126400003',
+         contact:'علي الزينى', mobile:'0554772274'},
+    client:M.PO_TPL_CLIENT, approver:M.PO_TPL_APPROVER,
+    items:[{desc:'مطهر ديتول ( 1 لتر الأصلي )', unit:'كرتون', qty:1,  price:250},
+           {desc:'ممسحة رطبة ( موب باكستاني )', unit:'حبه',   qty:15, price:17},
+           {desc:'معطر جو ( كوتاج )',           unit:'كرتون', qty:3,  price:190},
+           {desc:'فرشاه سجاد ',                 unit:'حبه',   qty:4,  price:3.5}],
+    subtotal:1089,
+    words:'فقط الف ومائتان واثنان وخمسون ريال وخمسة وثلاثون هلله  لاغير'
+  };
+
+  /* قارئ XML صغير: يفكّ الصيغ المشتركة ويقارن القيم عدديّاً — فالقيمة المخبّأة
+     `1252.3499999999999` و`1252.35` العددُ نفسه، والفرق تمثيلٌ لا قيمة. */
+  const cellsOf = (sheetXml, sst) => {
+    const out = {}, shared = {};
+    for (const rm of sheetXml.matchAll(/<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
+      for (const cm of rm[2].matchAll(/<c r="([A-Z]+\d+)"(?: s="(\d+)")?(?: t="(\w+)")?(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const [, ref, s, t, inner] = cm;
+        let val = null, f = null;
+        if (inner) {
+          const fm = /<f([^>]*)>([\s\S]*?)<\/f>|<f([^>]*)\/>/.exec(inner);
+          if (fm) {
+            const attrs = fm[1] || fm[3] || '', body = fm[2] || '';
+            const si = /si="(\d+)"/.exec(attrs);
+            if (/t="shared"/.test(attrs) && si) {
+              const rowN = +ref.replace(/\D/g, '');
+              if (body) { shared[si[1]] = [rowN, body]; f = body; }
+              else { const [b, txt] = shared[si[1]];
+                     f = txt.replace(/([A-Z]+)(\d+)/g, (_, c, n) => c + (+n + rowN - b)); }
+            } else f = body;
+          }
+          const vm = /<v>([\s\S]*?)<\/v>/.exec(inner);
+          if (vm) { const raw = vm[1];
+                    val = t === 's' ? sst[+raw] : (isNaN(Number(raw)) ? raw : Math.round(Number(raw) * 1e9) / 1e9); }
+        }
+        out[ref] = [s || null, val, f];
+      }
+    }
+    return out;
+  };
+  const sstOf = xml => [...xml.matchAll(/<si>([\s\S]*?)<\/si>/g)]
+    .map(m => [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join('')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  const pull = (entries, name) => entries.find(e => e.name === name);
+  const dec = new TextDecoder('utf-8');
+
+  const tplBytes = new Uint8Array(fs.readFileSync(TPL_PATH));
+  const srcEntries = M.poZipRead(tplBytes);
+  const gen4 = await M.poBuildTemplateWorkbook(tplBytes, REF);
+  const many = { ...REF, items: [...REF.items, ...REF.items, ...REF.items.slice(0, 3)] };
+  many.subtotal = many.items.reduce((s, i) => s + i.qty * i.price, 0);
+  const gen11 = await M.poBuildTemplateWorkbook(tplBytes, many);
+  const outEntries = M.poZipRead(gen4);
+
+  /* ⚠️ الحارس الجوهريّ: الأجزاء الحاملة للشكل تُنسَخ ببايتاتها المضغوطة — لا
+     تُولَّد. أيّ إعادة بناء لها تجعل المُخرَج «مقارباً» لا «نفسه». */
+  const COPIED = ['xl/styles.xml', 'xl/theme/theme1.xml', 'xl/media/image1.jpeg',
+                  'xl/printerSettings/printerSettings1.bin', 'xl/drawings/vmlDrawing1.vml',
+                  'xl/drawings/_rels/vmlDrawing1.vml.rels', 'xl/worksheets/_rels/sheet1.xml.rels',
+                  '[Content_Types].xml', 'xl/_rels/workbook.xml.rels', '_rels/.rels',
+                  'docProps/core.xml', 'docProps/app.xml'];
+  T('الأنماط والثيم والشعار وإعداد الطابعة تُنسَخ ببايتاتها لا تُعاد صياغتها',
+    COPIED.every(n => { const a = pull(srcEntries, n), b = pull(outEntries, n);
+                        return a && b && a.crc === b.crc && a.csize === b.csize
+                               && Buffer.compare(Buffer.from(a.data), Buffer.from(b.data)) === 0; }),
+    COPIED.filter(n => { const a = pull(srcEntries, n), b = pull(outEntries, n);
+                         return !(a && b && a.crc === b.crc); }).join(','));
+  T('وقائمة أجزاء الملفّ كما هي — لا جزء يسقط ولا يُستحدَث',
+    srcEntries.map(e => e.name).sort().join('|') === outEntries.map(e => e.name).sort().join('|'));
+
+  const tplSheet = dec.decode(await M.poZipInflate(pull(srcEntries, 'xl/worksheets/sheet1.xml')));
+  const tplSst = sstOf(dec.decode(await M.poZipInflate(pull(srcEntries, 'xl/sharedStrings.xml'))));
+  const outSheet = dec.decode(pull(outEntries, 'xl/worksheets/sheet1.xml').data);
+  const outSst = sstOf(dec.decode(pull(outEntries, 'xl/sharedStrings.xml').data));
+  const A = cellsOf(tplSheet, tplSst), B = cellsOf(outSheet, outSst);
+  const keys = [...new Set([...Object.keys(A), ...Object.keys(B)])];
+  const diff = keys.filter(k => JSON.stringify(A[k]) !== JSON.stringify(B[k]));
+  T(`المُخرَج ببيانات النموذج نفسها يطابقه خليةً بخلية (نمط + قيمة + صيغة) — ${keys.length} خلية`,
+    diff.length === 0, diff.slice(0, 6).map(k => `${k}: أصل=${JSON.stringify(A[k])} مولَّد=${JSON.stringify(B[k])}`).join(' | '));
+
+  const attrEq = (name, re) => T(name, (re.exec(tplSheet) || [])[0] === (re.exec(outSheet) || [])[0],
+    `أصل=${(re.exec(tplSheet) || [])[0]} مولَّد=${(re.exec(outSheet) || [])[0]}`);
+  attrEq('وعرض الأعمدة كما هو', /<cols>[\s\S]*?<\/cols>/);
+  attrEq('وإعداد الصفحة والمقياس', /<pageSetup [^>]*\/>/);
+  attrEq('وهوامش الطباعة', /<pageMargins [^>]*\/>/);
+  attrEq('وتوسيط الطباعة', /<printOptions [^>]*\/>/);
+  attrEq('وترويسة الطباعة الحاملة للشعار', /<headerFooter>[\s\S]*?<\/headerFooter>/);
+  attrEq('واتجاه الورقة من اليمين', /<sheetView [^>]*>/);
+  T('والخلايا المدموجة السبع والأربعون كما هي',
+    [...tplSheet.matchAll(/<mergeCell ref="([^"]+)"/g)].map(m => m[1]).sort().join('|')
+    === [...outSheet.matchAll(/<mergeCell ref="([^"]+)"/g)].map(m => m[1]).sort().join('|'));
+  T('وارتفاعات الصفوف وإخفاء كتلة الدفعات كما هي',
+    [...tplSheet.matchAll(/<row r="(\d+)"([^>]*)>/g)].map(m => m[1] + (/ht="[\d.]+"/.exec(m[2]) || '') + (/hidden="1"/.test(m[2]) ? 'H' : '')).join('|')
+    === [...outSheet.matchAll(/<row r="(\d+)"([^>]*)>/g)].map(m => m[1] + (/ht="[\d.]+"/.exec(m[2]) || '') + (/hidden="1"/.test(m[2]) ? 'H' : '')).join('|'));
+
+  /* ⚠️ الفرق بين «نفسه» و«مقارب»: عند عدد بنود غير أربعة يجب أن تُزاح
+     الإجماليات والتواقيع والدمج ونطاق التحقّق **ومنطقة الطباعة** معاً —
+     ومنطقة طباعة ثابتة تبتر صفحة أمرٍ بنوده أكثر. */
+  const s11 = dec.decode(pull(M.poZipRead(gen11), 'xl/worksheets/sheet1.xml').data);
+  const wb11 = dec.decode(await M.poZipInflate(pull(M.poZipRead(gen11), 'xl/workbook.xml')));
+  const wb4 = dec.decode(await M.poZipInflate(pull(outEntries, 'xl/workbook.xml')));
+  const c11 = cellsOf(s11, sstOf(dec.decode(pull(M.poZipRead(gen11), 'xl/sharedStrings.xml').data)));
+  T('أحد عشر بنداً: الإجماليات والتواقيع والدمج تُزاح مع الصفوف',
+    c11['B34'][1] === many.items[10].desc                 // آخر بند في صفّه الجديد
+    && c11['A35'][1] === 'الإجمالي (قبل الضريبة)' && c11['F35'][2] === 'SUM(F24:F34)'
+    && c11['F36'][2] === 'F35*0.15' && c11['F37'][2] === 'F35+F36'
+    && c11['A44'][1] === 'اعتماد' && c11['E45'][1] === 'التوقيع/التاريخ'
+    && c11['A46'][1] === M.PO_TPL_APPROVER.name
+    && /<mergeCell ref="A46:B46"\/>/.test(s11) && /<mergeCell ref="A42:F43"\/>/.test(s11)
+    && !/<row r="47"/.test(s11),
+    JSON.stringify([c11['A35'] && c11['A35'][1], c11['F35'] && c11['F35'][2], c11['A46'] && c11['A46'][1]]));
+  T('ومنطقة الطباعة تتبع عدد البنود (39 لأربعة · 46 لأحد عشر)',
+    /\$A\$1:\$F\$39/.test(wb4) && /\$A\$1:\$F\$46/.test(wb11),
+    `wb4=${(/\$A\$1:\$F\$\d+/.exec(wb4) || [])[0]} wb11=${(/\$A\$1:\$F\$\d+/.exec(wb11) || [])[0]}`);
+  T('ونطاق التحقّق من الكمية يغطّي كل البنود',
+    /sqref="D24:D27"/.test(outSheet) && /sqref="D24:D34"/.test(s11));
+  T('وأبعاد الورقة تتبع آخر صفّ', /ref="A1:K39"/.test(outSheet) && /ref="A1:K46"/.test(s11));
+  T('وسلسلة الحساب تُولَّد لخلايا الصيغ الفعلية لا تبقى سلسلة النموذج',
+    (() => { const c = dec.decode(pull(M.poZipRead(gen11), 'xl/calcChain.xml').data);
+             const refs = [...c.matchAll(/r="(F\d+)"/g)].map(m => m[1]);
+             return refs.length === 17 && refs[0] === 'F24' && refs.includes('F34')
+                    && refs.includes('F35') && !refs.includes('F23'); })());
+  T('والملفّ المولَّد أرشيفٌ صالح يُقرأ دليله المركزيّ',
+    M.poZipRead(gen11).length === srcEntries.length && gen4.length > 200000);
+
+  /* (ج) الربط والحوكمة */
+  T('زرّ التصدير في الدرج ببوّابة الفعل نفسها (تصدير + رؤية مبالغ)',
+    /hasPermission\('can_export'\)&&canViewAmounts\(\)\)\?`<button[^`]*poExportTemplate/.test(CODE));
+  T('والتصدير نفسه يرفض بلا صلاحية المبالغ — النموذج مستندٌ مسعَّر',
+    (() => { const fn = CODE.slice(CODE.indexOf('async function poExportTemplate('));
+             return /requirePermission\('can_export'/.test(fn.slice(0, 900))
+                 && /if\(!canViewAmounts\(\)\)\{\s*toast\('error'/.test(fn.slice(0, 900)); })());
+  T('واللصق مربوط بنقطتين: صندوق الزرّ وصفوف البنود نفسها',
+    /getElementById\('po-paste-items'\)/.test(CODE)
+    && /pbox\.addEventListener\('paste',/.test(CODE)
+    && /prows\.addEventListener\('paste',poPasteFromEvent\)/.test(CODE)
+    && /id="po-paste-box"/.test(HTML) && /id="po-paste-items"/.test(HTML));
+  T('ولصقة خليّة واحدة تبقى لصقاً عاديّاً — لا يُخطَف إلا جدول',
+    /if\(!\/\[\\t\\n\]\/\.test\(text\) && !\/<t\(able\|r\)\\b\/i\.test\(html\)\) return false;/.test(CODE));
+  /* (د) الجسر: بنود طلب الشراء بكمياتها → نموذج أمر الشراء.
+     تصحيح المالك: «هدفي أن أصدّر بنود طلبات الشراء ببنودها وألصقها في نموذج
+     أمر الشراء بكميتها». */
+  const PRQ = { id: 'PR-DG2026-0003', title: 'مواد نظافة ومبيدات', project: 'جامعة الملك سعود',
+    items: [{ id: 'i1', description: 'ورق تنشيف رول 300 متر 6*1 - فاين', unit: 'كرتون', requested_qty: 18, unit_price: 40 },
+            { id: 'i2', description: 'أكياس نفايات 50 جالون', unit: 'شوال', requested_qty: 60, unit_price: null },
+            { id: 'i3', description: 'صابون سائل 4*1 لتر', unit: 'حبة', requested_qty: 25, unit_price: null }],
+    po_links: [{ po_number: 'P.O-DG26-3300',
+                 allocations: [{ pr_item_id: 'i1', allocated_qty: 5 }, { pr_item_id: 'i3', allocated_qty: 25 }] }] };
+  /* ⚠️ الكمية المنقولة هي **غير المغطّى** لا المطلوب — وإلّا أُعيد شراء ما
+     اشتُرِي عند ثاني أمرٍ من الطلب نفسه. والمُغطّى بالكامل يسقط من القائمة. */
+  const bridge = M.prItemsForPO(PRQ);
+  T('بنود الطلب تُنقَل بكميّاتها **غير المغطّاة** لا المطلوبة',
+    bridge.length === 2 && bridge[0].qty === 13 && bridge[0].requested === 18
+    && bridge[1].qty === 60 && !bridge.some((r) => r.desc.includes('صابون')),
+    JSON.stringify(bridge.map((r) => [r.desc.slice(0, 12), r.qty])));
+  T('و{all:true} يُرجِع كل البنود بالكمية المطلوبة (للتصدير والمراجعة)',
+    (() => { const a = M.prItemsForPO(PRQ, { all: true });
+             return a.length === 3 && a[0].qty === 18 && a[2].qty === 25 && a[2].remaining === 0; })());
+
+  /* ⚠️ المحكّ الحقيقيّ للجسر: ما يُنسَخ يُقرأ بالكميّات نفسها. وصفّ الرأس هو
+     ما يمنع «الصنف|الوحدة|الكمية» من أن تُقرأ بعمودٍ رقميّ واحد ⇒ **سعراً**. */
+  const clip = M.prItemsClipboardText(bridge, true);
+  const back = M.poParsePastedItems(clip);
+  T('والمنسوخ يُقرأ في نموذج الأمر بالكميّات نفسها (نسخ ← لصق بلا فقد)',
+    back.headerFound && back.items.length === 2
+    && back.items[0].desc === bridge[0].desc && back.items[0].unit === 'كرتون' && back.items[0].qty === 13
+    && back.items[1].qty === 60, JSON.stringify(back.items));
+  /* ⚠️ مقيس: الرأس حاملٌ في حالة **بلا عمود سعر** (من لا يرى المبالغ) — ثلاثة
+     أعمدة بعمودٍ رقميّ واحد. بلا رأسٍ تصير الكمية 13 **سعراً** والكمية 1. */
+  T('وبلا صفّ الرأس كانت الكمية ستُقرأ سعراً — فالرأس شرطُ صحّة لا تجميل',
+    (() => { const noPrice = M.prItemsClipboardText(bridge, false);
+             const withH = M.poParsePastedItems(noPrice);
+             const noH = M.poParsePastedItems(noPrice.split('\n').slice(1).join('\n'));
+             return noPrice.split('\n')[0] === 'الصنف\tالوحدة\tالكمية'
+                 && withH.items[0].qty === 13 && withH.items[0].price === 0
+                 && noH.items[0].qty === 1 && noH.items[0].price === 13 && noH.ambiguous === true; })());
+  T('وبلا صلاحية المبالغ لا يخرج عمود سعر في المنسوخ',
+    !/السعر/.test(M.prItemsClipboardText(bridge, false))
+    && !/السعر/.test(M.prItemsClipboardHtml(bridge, false)));
+  T('وأزرار الجسر ببوّابات أفعالها (إنشاء أمر · تصدير)',
+    /hasPermission\('can_create_po'\)\?`<button[^`]*prCreatePOFromRequest/.test(CODE)
+    && /hasPermission\('can_export'\)\?`<button[^`]*prExportItemsExcel/.test(CODE)
+    && /requirePermission\('can_create_po'/.test(CODE.slice(CODE.indexOf('function prCreatePOFromRequest('))
+       .slice(0, 400)));
+  T('وإنشاء الأمر من الطلب يُفرِغ البنود ثمّ يملؤها ولا يربط الطلب تلقائياً',
+    (() => { const fn = CODE.slice(CODE.indexOf('function prCreatePOFromRequest('));
+             return /wrap\.innerHTML=''/.test(fn.slice(0, 1400))
+                 && /rows\.forEach\(r=>addPOItemRow\(/.test(fn.slice(0, 1400))
+                 && !/pr_link_purchase_order/.test(fn.slice(0, 1400)); })());
+
+  T('واللصق لا يمحو بنداً كُتِب يدويّاً — يُزيل الفارغ ويُلحِق بعده',
+    (() => { const fn = CODE.slice(CODE.indexOf('function poApplyPastedItems('),
+                                   CODE.indexOf('function poPasteFromEvent('));
+             return /if\(!vals\.some\(v=>v!==''\)\) r\.remove\(\)/.test(fn)
+                 && /res\.items\.slice\(0,300\)\.forEach\(it=>addPOItemRow\(it\)\)/.test(fn); })());
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
