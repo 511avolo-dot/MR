@@ -243,6 +243,77 @@ const gated = await page.evaluate(async (n) => {
 T('الزرّ محجوب عمّن لا يرى المبالغ', !gated.shown);
 T('والاستدعاء المباشر مرفوض لا مكشوف — النموذج مستندٌ مسعَّر', gated.denied, JSON.stringify(gated));
 
+console.log('\n⑤ الجسر: بنود طلب الشراء بكمياتها → نموذج أمر الشراء');
+/* تصحيح المالك: الهدف نقل بنود الطلب لا اللصق من ملفّ خارجيّ. والكمية المنقولة
+   **غير المغطّى** — ولهذا للبند الأوّل تخصيصٌ سابق 5 من 18. */
+const PRQ = { id: 'PR-DG2026-0003', title: 'مواد نظافة ومبيدات', project: 'برج الشمال',
+  department: 'الصيانة والتشغيل', requester: 'proc.mgr', requester_name: 'محمود العامودي',
+  status: 'approved', proc_status: 'in_progress', revision: 1, current_seq: 1,
+  created_at: '2026-09-15T08:00:00Z', submitted_at: '2026-09-15T08:00:00Z',
+  items: [{ id: 'i1', description: 'ورق تنشيف رول 300 متر 6*1 - فاين', unit: 'كرتون', requested_qty: 18 },
+          { id: 'i2', description: 'أكياس نفايات 50 جالون 125 كيلو - سابك', unit: 'شوال', requested_qty: 60 },
+          { id: 'i3', description: 'صابون سائل 4*1 لتر - موبي', unit: 'حبة', requested_qty: 25 }],
+  po_links: [{ po_number: 'P.O-DG26-3300', allocations: [{ pr_item_id: 'i1', allocated_qty: 5 },
+                                                          { pr_item_id: 'i3', allocated_qty: 25 }] }],
+  approvals: [], messages: [] };
+await seed(FULL);
+/* ⚠️ `renderPRPortal` لاتزامنيّة وتفتح ببوّابة `prCloudReady()` — كعبٌ يكفيها،
+   و`__prLoaded=true` يمنع `prLoadAll` من أي جلب (لا شبكة في الفحوص). */
+await page.evaluate(async (pr) => {
+  CLOUD = window.CLOUD = { enabled: true, client: {
+    auth: { getSession: async () => ({ data: { session: { access_token: 'jwt' } } }) },
+    from: () => ({ select: () => ({ order: () => ({ range: async () => ({ data: [], error: null }) }) }) }),
+  } };
+  STATE.purchaseRequests = [pr];
+  /* ⚠️ الوضع «جميع الطلبات» لا «قيد العمل»: الطلب هنا `proc_status:'in_progress'`
+     أي **تحت التنفيذ**، وخانة «قيد العمل» تستثنيه بالتصميم (خانات متنافية). */
+  STATE.prWorkspaceMode = 'all'; STATE.prWorkspaceFilter = 'all'; STATE.prWorkspaceSearch = '';
+  STATE.prView = 'track'; STATE.prTrackId = pr.id; STATE.prDetailTab = 'items';
+  __prLoaded = true;
+  navigate('pr');
+  await renderPRPortal();
+}, PRQ);
+await page.waitForSelector('.pr-work-itemtools', { timeout: 15000 });
+const tools = await page.evaluate(() => {
+  const t = document.querySelector('.pr-work-itemtools');
+  return t ? [...t.querySelectorAll('button')].map((b) => b.textContent.trim()) : null;
+});
+T('أزرار الجسر ظاهرة في تبويب بنود الطلب',
+  !!tools && tools.some((x) => /أمر شراء من هذه البنود/.test(x))
+  && tools.some((x) => /نسخ البنود/.test(x)) && tools.some((x) => /إكسل/.test(x)), JSON.stringify(tools));
+
+const [, filled] = await Promise.all([
+  page.waitForSelector('#modal-po', { timeout: 5000 }),
+  page.evaluate(() => { [...document.querySelectorAll('.pr-work-itemtools button')]
+    .find((b) => /أمر شراء من هذه البنود/.test(b.textContent)).click();
+    return true; }),
+]);
+await page.waitForTimeout(250);
+const poRows = await rows();
+T('والنقر يفتح نموذج أمر الشراء معبّأً بالبنود **غير المغطّاة** بكمياتها',
+  filled && poRows.length === 2
+  && poRows[0].desc === PRQ.items[0].description && poRows[0].unit === 'كرتون' && poRows[0].qty === '13'
+  && poRows[1].qty === '60' && !poRows.some((r) => /صابون/.test(r.desc)), JSON.stringify(poRows));
+const ctxFill = await page.evaluate(() => ({
+  project: document.getElementById('po-f-project').value,
+  notes: document.getElementById('po-f-notes').value,
+}));
+T('ويحمل جهة الطلب وإشارةً إليه في الملاحظات',
+  /برج الشمال/.test(ctxFill.project) && /PR-DG2026-0003/.test(ctxFill.notes), JSON.stringify(ctxFill));
+await page.evaluate(() => closeModal('modal-po'));
+
+/* ⚠️ النسخ يمرّ بالحافظة الحقيقية — والهدف أنّ ما يخرج يُقرأ بالكميّات نفسها. */
+await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:8812' });
+await page.evaluate(async () => { STATE.prView = 'track'; STATE.prDetailTab = 'items'; await renderPRPortal(); });
+await page.waitForSelector('.pr-work-itemtools', { timeout: 10000 });
+await page.evaluate(() => [...document.querySelectorAll('.pr-work-itemtools button')]
+  .find((b) => /نسخ البنود/.test(b.textContent)).click());
+await page.waitForTimeout(400);
+const clipText = await page.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+T('و«نسخ البنود» يضع في الحافظة جدولاً برأسٍ وكمياتٍ غير مغطّاة',
+  /^الصنف\tالوحدة\tالكمية/.test(clipText) && /\t13$|\t13\t/m.test(clipText) && /\t60/.test(clipText)
+  && !/صابون/.test(clipText), JSON.stringify(clipText.slice(0, 120)));
+
 T('صفر خطأ صفحة', errs.length === 0, errs.join(' | '));
 T('صفر انتهاك CSP', csp.length === 0, csp.join(' | '));
 

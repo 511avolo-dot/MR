@@ -1616,7 +1616,10 @@ body.print-preview-active .print-document{display:block}
    المالك. صار سطحاً فاتحاً: القيمة هي البارزة، والتسمية هادئة فوقها. */
 .pr-work-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--prw-paper);border-bottom:1px solid var(--prw-line)}.pr-work-stat .proj{color:var(--prw-gold-3);font-weight:700}.pr-work-stat{padding:13px 18px;border-inline-start:1px solid var(--prw-line-2);min-width:0}.pr-work-stat:first-child{border-inline-start:0}.pr-work-stat small{display:block;font-size:9.5px;color:var(--prw-faint);margin-bottom:4px;letter-spacing:.02em}.pr-work-stat b{display:block;font-size:12.5px;font-weight:600;color:var(--prw-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-work-stat .money{font-family:'IBM Plex Mono',monospace;color:var(--prw-gold-3);font-weight:700}.pr-work-stat .id{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
 .pr-work-tabs{display:flex;align-items:center;gap:22px;padding:0 28px;background:#fff;border-bottom:1px solid var(--prw-line);overflow-x:auto}.pr-work-tab{min-height:48px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--prw-muted);font:inherit;font-size:11.5px;white-space:nowrap;cursor:pointer}.pr-work-tab:hover{color:var(--prw-ink)}.pr-work-tab.active{color:var(--prw-ink);border-color:var(--prw-gold-dark);font-weight:700}.pr-work-tab em{font-style:normal;margin-inline-start:4px;padding:1px 6px;border-radius:8px;background:var(--prw-line-2);color:var(--prw-faint);font-size:9px}
-.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:var(--prw-sh1)}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid var(--prw-line-2)}.pr-work-meta dt{font-size:10px;color:var(--prw-faint)}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
+.pr-work-canvas{padding:18px 28px 34px;background:var(--prw-canvas);min-height:440px;max-height:calc(100vh - 400px);overflow:auto}.pr-work-surface{background:var(--prw-paper);border:1px solid var(--prw-line);border-radius:14px;padding:18px;margin-bottom:12px;box-shadow:var(--prw-sh1)}.pr-work-surface h3{font-family:'Fraunces',serif;font-size:16px;margin:0 0 12px;color:var(--prw-ink)}
+.pr-work-surface-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pr-work-surface-head h3{margin-bottom:8px}
+.pr-work-itemtools{display:flex;gap:6px;flex-wrap:wrap}.pr-work-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px;margin:0}.pr-work-meta div{padding-bottom:9px;border-bottom:1px solid var(--prw-line-2)}.pr-work-meta dt{font-size:10px;color:var(--prw-faint)}.pr-work-meta dd{margin:3px 0 0;font-size:12.5px;color:var(--prw-ink)}
 /* لوحة «بانتظار من يستلمه» — نداءُ عملٍ لا بطاقة عرض، فتُميَّز بحافّة ذهبية
    بارزة كلوحة القرار نفسها (اللون علامةٌ لا سطح). */
 .pr-work-claim{border-color:var(--prw-gold-soft);background:linear-gradient(180deg,#fffdf7,#fbf4e5);border-inline-start:4px solid var(--prw-gold,#a8842c)}
@@ -13657,7 +13660,114 @@ function prWorkspaceItemsHTML(pr){
   /* ⚠️ عدد الأعمدة يتبع صلاحية المبالغ: كان ثابتاً 8 فيمتدّ صفّ «لا بنود»
      عمودين زائدين لموظّف الميدان (الجدول عنده 6 أعمدة). */
   const cols=showMoney?8:6;
-  return `<div class="pr-work-surface"><h3>البنود والتغطية بأوامر الشراء</h3><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>`}</tbody></table></div></div>`;
+  const id=escapeAttr(pr.id), open=prItemsForPO(pr).length;
+  const tools=(pr.items||[]).length?`<div class="pr-work-itemtools">
+    ${hasPermission('can_create_po')?`<button class="btn btn-accent btn-sm" onclick="prCreatePOFromRequest('${id}')" data-tooltip="يفتح نموذج أمر الشراء معبّأً ببنود هذا الطلب وكمياتها">➕ أمر شراء من هذه البنود</button>`:''}
+    <button class="btn btn-ghost btn-sm" onclick="prCopyItemsForPO('${id}')" data-tooltip="انسخ البنود ثمّ الصقها في «بنود الأمر» داخل نموذج أمر الشراء">📋 نسخ البنود</button>
+    ${hasPermission('can_export')?`<button class="btn btn-ghost btn-sm" onclick="prExportItemsExcel('${id}')">⤓ إكسل</button>`:''}
+  </div>`:'';
+  const note=open?`تُنقَل <b>${open}</b> بنداً بكميّاتها <b>غير المغطّاة</b> — لا المطلوب — فلا يُعاد شراء ما غُطّي بأمرٍ سابق.`
+                 :'كل بنود هذا الطلب مغطّاة بأوامر شراء.';
+  return `<div class="pr-work-surface"><div class="pr-work-surface-head"><h3>البنود والتغطية بأوامر الشراء</h3>${tools}</div><div class="pr-work-sub" style="margin-bottom:12px">المتبقي للتغطية = الكمية المطلوبة ناقص مجموع الكميات الموزّعة على أوامر الشراء المرتبطة.${(pr.items||[]).length?' '+note:''}</div><div class="pr-work-tablewrap"><table class="pr-work-table"><thead><tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>المطلوب</th><th>مغطى بأوامر</th><th>غير مغطى</th>${showMoney?'<th>سعر الوحدة</th><th>الإجمالي</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${cols}" class="pr-work-empty">لا توجد بنود مسجّلة.</td></tr>`}</tbody></table></div></div>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   جسر طلب الشراء ← أمر الشراء: بنود الطلب بكمياتها إلى نموذج الأمر
+   ────────────────────────────────────────────────────────────────────────
+   تصحيح المالك (2026-09-22): «هدفي أن أصدّر بنود طلبات الشراء ببنودها وألصقها
+   في نموذج أمر الشراء بكميتها». فالمشتريات كانت تعيد كتابة 44 بنداً يدويّاً
+   لأنّ الطلب وأمر الشراء شاشتان لا جسر بينهما.
+   ⚠️ والكمية المنقولة هي **غير المغطّى** (المطلوب ناقص ما وُزّع على أوامر
+   مرتبطة) لا المطلوب — وإلّا أُعيد شراء ما اشتُرِي عند ثاني أمر من الطلب نفسه،
+   وهو العمود الذي يحسبه الجدول أصلاً («غير مغطى»).
+   ════════════════════════════════════════════════════════════════════════ */
+function prFindRequest(id){
+  return (STATE.purchaseRequests||[]).find(p=>String(p.id)===String(id))||null;
+}
+function prItemsForPO(pr, opts){
+  const o=opts||{}, links=(pr&&pr.po_links)||[], showMoney=canViewAmounts();
+  const out=[];
+  ((pr&&pr.items)||[]).forEach(it=>{
+    const requested=Number(it.requested_qty)||0;
+    const allocated=links
+      .flatMap(l=>(l.allocations||[]).filter(a=>String(a.pr_item_id)===String(it.id)))
+      .reduce((s,a)=>s+(Number(a.allocated_qty)||0),0);
+    const remaining=Math.max(0,requested-allocated);
+    const qty=o.all?requested:remaining;
+    if(!o.all && qty<=0) return;                   // مُغطّى بالكامل — لا يُعاد طلبه
+    out.push({desc:String(it.description||''), unit:String(it.unit||''), qty,
+              price:(showMoney && it.unit_price!=null)?Number(it.unit_price):null,
+              requested, allocated, remaining});
+  });
+  return out;
+}
+/* ⚠️ صفّ الرأس ليس تجميلاً: بلا رأسٍ تصير «الصنف | الوحدة | الكمية» لصقةً
+   بعمودٍ رقميّ واحد، فيقرؤها محلّل اللصق **سعراً** (اللبس الموثّق) وتضيع الكمية. */
+function prItemsClipboardText(rows, withPrice){
+  const head=['الصنف','الوحدة','الكمية'].concat(withPrice?['السعر الإفرادي']:[]);
+  return [head.join('\t')].concat(rows.map(r=>{
+    const c=[r.desc, r.unit||'', String(r.qty)];
+    if(withPrice) c.push(r.price!=null?String(r.price):'');
+    return c.join('\t');
+  })).join('\n');
+}
+function prItemsClipboardHtml(rows, withPrice){
+  const td=v=>`<td>${escapeHtml(String(v==null?'':v))}</td>`;
+  const head=['الصنف','الوحدة','الكمية'].concat(withPrice?['السعر الإفرادي']:[]);
+  return `<table border="1"><thead><tr>${head.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>`
+    + rows.map(r=>`<tr>${td(r.desc)}${td(r.unit)}${td(r.qty)}${withPrice?td(r.price):''}</tr>`).join('')
+    + `</tbody></table>`;
+}
+async function prCopyItemsForPO(prId){
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr);
+  if(!rows.length){ toast('warn','لا بنود غير مغطّاة','كل بنود هذا الطلب مغطّاة بأوامر شراء مرتبطة'); return; }
+  const withPrice=canViewAmounts();
+  const text=prItemsClipboardText(rows,withPrice), html=prItemsClipboardHtml(rows,withPrice);
+  const done=()=>toast('success','نُسخت البنود',`${rows.length} بند بكمياتها — افتح أمر الشراء والصقها في «بنود الأمر»`);
+  try{
+    if(navigator.clipboard && window.ClipboardItem){
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html],{type:'text/html'}),
+        'text/plain': new Blob([text],{type:'text/plain'})})]);
+      done(); return;
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); done(); return; }
+    throw new Error('لا حافظة');
+  }catch(_){
+    // الحافظة قد تُرفض (سياق غير موثوق أو صلاحية) — التحديد اليدويّ آخر ملاذ
+    if(poFinanceEmailCopyRichFallback(html)) done();
+    else toast('error','تعذّر النسخ','استعمل «➕ أمر شراء من هذه البنود» أو «⤓ إكسل»');
+  }
+}
+function prExportItemsExcel(prId){
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr,{all:true});
+  if(!rows.length){ toast('warn','لا بنود','هذا الطلب بلا بنود مسجّلة'); return; }
+  const showMoney=canViewAmounts();
+  const cols=[{key:'desc',label:'الصنف'},{key:'unit',label:'الوحدة'},{key:'qty',label:'الكمية'}]
+    .concat(showMoney?[{key:'price',label:'السعر الإفرادي'}]:[])
+    .concat([{key:'requested',label:'المطلوب'},{key:'allocated',label:'مغطى بأوامر'},{key:'remaining',label:'غير مغطى'}]);
+  // العمود «الكمية» = غير المغطّى، وهو ما يُنقَل لأمر الشراء؛ والثلاثة الأخيرة للمراجعة
+  exportExcel(rows.map(r=>({...r, qty:r.remaining})), `بنود-${pr.id}`, cols, {sheetName:'بنود الطلب'});
+}
+function prCreatePOFromRequest(prId){
+  if(!requirePermission('can_create_po','إنشاء أمر شراء')) return;
+  const pr=prFindRequest(prId); if(!pr) return;
+  const rows=prItemsForPO(pr);
+  if(!rows.length){ toast('warn','لا بنود غير مغطّاة','كل بنود هذا الطلب مغطّاة بأوامر شراء مرتبطة'); return; }
+  const drawer=document.getElementById('pr-drawer'); if(drawer) drawer.classList.remove('active');
+  openPOModal(null);
+  const g=id=>document.getElementById(id);
+  if(g('po-f-project')) poFillProjectSelect(prjCanonical(pr.project||'')||pr.project||'');
+  if(pr.sector && g('po-f-sector')) g('po-f-sector').value=pr.sector;
+  if(g('po-f-notes')) g('po-f-notes').value=`مُنشأ من طلب الشراء ${pr.id}${pr.title?' — '+pr.title:''}`;
+  const wrap=document.getElementById('po-items-rows'); if(wrap) wrap.innerHTML='';
+  rows.forEach(r=>addPOItemRow({desc:r.desc, unit:r.unit, qty:r.qty, price:r.price!=null?r.price:''}));
+  poItemsRecalc(); poFormRecompute();
+  /* ⚠️ الربط بالطلب لا يقع هنا: `pr_link_purchase_order` تتطلّب توزيع كميات
+     وتحقّقاً خادميّاً — يُعمَل من تبويب «الارتباطات» بعد حفظ الأمر، كما هو. */
+  toast('info','عُبّئت البنود',`${rows.length} بند من ${pr.id} — أكمل المورد والأسعار ثمّ احفظ، ثمّ اربطه بالطلب من «الارتباطات»`);
 }
 function prWorkspaceApprovalsHTML(pr){
   const decisionLabel={approved:'تم الاعتماد',pending:'بانتظار القرار',returned:'أعيد للاستكمال',rejected:'مرفوض'};

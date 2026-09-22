@@ -286,6 +286,8 @@ const NEEDED_FNS = [
   'poXmlEsc', 'poXmlNum', 'poTplPlaceholder', 'poTemplateSheetXml',
   'poZipCrc32', 'poZipRead', 'poZipInflate', 'poZipWrite', 'poBuildTemplateWorkbook',
   'poTplSupplier', 'poTemplateModel',
+  // جسر طلب الشراء ← أمر الشراء
+  'canViewAmounts', 'prFindRequest', 'prItemsForPO', 'prItemsClipboardText', 'prItemsClipboardHtml',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT'];
@@ -5097,6 +5099,57 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     && /id="po-paste-box"/.test(HTML) && /id="po-paste-items"/.test(HTML));
   T('ولصقة خليّة واحدة تبقى لصقاً عاديّاً — لا يُخطَف إلا جدول',
     /if\(!\/\[\\t\\n\]\/\.test\(text\) && !\/<t\(able\|r\)\\b\/i\.test\(html\)\) return false;/.test(CODE));
+  /* (د) الجسر: بنود طلب الشراء بكمياتها → نموذج أمر الشراء.
+     تصحيح المالك: «هدفي أن أصدّر بنود طلبات الشراء ببنودها وألصقها في نموذج
+     أمر الشراء بكميتها». */
+  const PRQ = { id: 'PR-DG2026-0003', title: 'مواد نظافة ومبيدات', project: 'جامعة الملك سعود',
+    items: [{ id: 'i1', description: 'ورق تنشيف رول 300 متر 6*1 - فاين', unit: 'كرتون', requested_qty: 18, unit_price: 40 },
+            { id: 'i2', description: 'أكياس نفايات 50 جالون', unit: 'شوال', requested_qty: 60, unit_price: null },
+            { id: 'i3', description: 'صابون سائل 4*1 لتر', unit: 'حبة', requested_qty: 25, unit_price: null }],
+    po_links: [{ po_number: 'P.O-DG26-3300',
+                 allocations: [{ pr_item_id: 'i1', allocated_qty: 5 }, { pr_item_id: 'i3', allocated_qty: 25 }] }] };
+  /* ⚠️ الكمية المنقولة هي **غير المغطّى** لا المطلوب — وإلّا أُعيد شراء ما
+     اشتُرِي عند ثاني أمرٍ من الطلب نفسه. والمُغطّى بالكامل يسقط من القائمة. */
+  const bridge = M.prItemsForPO(PRQ);
+  T('بنود الطلب تُنقَل بكميّاتها **غير المغطّاة** لا المطلوبة',
+    bridge.length === 2 && bridge[0].qty === 13 && bridge[0].requested === 18
+    && bridge[1].qty === 60 && !bridge.some((r) => r.desc.includes('صابون')),
+    JSON.stringify(bridge.map((r) => [r.desc.slice(0, 12), r.qty])));
+  T('و{all:true} يُرجِع كل البنود بالكمية المطلوبة (للتصدير والمراجعة)',
+    (() => { const a = M.prItemsForPO(PRQ, { all: true });
+             return a.length === 3 && a[0].qty === 18 && a[2].qty === 25 && a[2].remaining === 0; })());
+
+  /* ⚠️ المحكّ الحقيقيّ للجسر: ما يُنسَخ يُقرأ بالكميّات نفسها. وصفّ الرأس هو
+     ما يمنع «الصنف|الوحدة|الكمية» من أن تُقرأ بعمودٍ رقميّ واحد ⇒ **سعراً**. */
+  const clip = M.prItemsClipboardText(bridge, true);
+  const back = M.poParsePastedItems(clip);
+  T('والمنسوخ يُقرأ في نموذج الأمر بالكميّات نفسها (نسخ ← لصق بلا فقد)',
+    back.headerFound && back.items.length === 2
+    && back.items[0].desc === bridge[0].desc && back.items[0].unit === 'كرتون' && back.items[0].qty === 13
+    && back.items[1].qty === 60, JSON.stringify(back.items));
+  /* ⚠️ مقيس: الرأس حاملٌ في حالة **بلا عمود سعر** (من لا يرى المبالغ) — ثلاثة
+     أعمدة بعمودٍ رقميّ واحد. بلا رأسٍ تصير الكمية 13 **سعراً** والكمية 1. */
+  T('وبلا صفّ الرأس كانت الكمية ستُقرأ سعراً — فالرأس شرطُ صحّة لا تجميل',
+    (() => { const noPrice = M.prItemsClipboardText(bridge, false);
+             const withH = M.poParsePastedItems(noPrice);
+             const noH = M.poParsePastedItems(noPrice.split('\n').slice(1).join('\n'));
+             return noPrice.split('\n')[0] === 'الصنف\tالوحدة\tالكمية'
+                 && withH.items[0].qty === 13 && withH.items[0].price === 0
+                 && noH.items[0].qty === 1 && noH.items[0].price === 13 && noH.ambiguous === true; })());
+  T('وبلا صلاحية المبالغ لا يخرج عمود سعر في المنسوخ',
+    !/السعر/.test(M.prItemsClipboardText(bridge, false))
+    && !/السعر/.test(M.prItemsClipboardHtml(bridge, false)));
+  T('وأزرار الجسر ببوّابات أفعالها (إنشاء أمر · تصدير)',
+    /hasPermission\('can_create_po'\)\?`<button[^`]*prCreatePOFromRequest/.test(CODE)
+    && /hasPermission\('can_export'\)\?`<button[^`]*prExportItemsExcel/.test(CODE)
+    && /requirePermission\('can_create_po'/.test(CODE.slice(CODE.indexOf('function prCreatePOFromRequest('))
+       .slice(0, 400)));
+  T('وإنشاء الأمر من الطلب يُفرِغ البنود ثمّ يملؤها ولا يربط الطلب تلقائياً',
+    (() => { const fn = CODE.slice(CODE.indexOf('function prCreatePOFromRequest('));
+             return /wrap\.innerHTML=''/.test(fn.slice(0, 1400))
+                 && /rows\.forEach\(r=>addPOItemRow\(/.test(fn.slice(0, 1400))
+                 && !/pr_link_purchase_order/.test(fn.slice(0, 1400)); })());
+
   T('واللصق لا يمحو بنداً كُتِب يدويّاً — يُزيل الفارغ ويُلحِق بعده',
     (() => { const fn = CODE.slice(CODE.indexOf('function poApplyPastedItems('),
                                    CODE.indexOf('function poPasteFromEvent('));
