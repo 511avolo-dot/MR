@@ -49,6 +49,7 @@ on:
       - 'scripts/e2e/finance-email-followup.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/po-excel-paste-export.mjs'
+      - 'scripts/e2e/pr-print-one-page.mjs'
       - 'scripts/e2e/app-boot.mjs'
       - 'assets/po-template.xlsx'
       - 'scripts/e2e/chromium-path.mjs'
@@ -99,6 +100,7 @@ on:
       - 'scripts/e2e/finance-email-followup.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/po-excel-paste-export.mjs'
+      - 'scripts/e2e/pr-print-one-page.mjs'
       - 'scripts/e2e/app-boot.mjs'
       - 'assets/po-template.xlsx'
       - 'scripts/e2e/chromium-path.mjs'
@@ -189,6 +191,7 @@ jobs:
           node scripts/e2e/pr-request-flow-buckets.mjs
           node scripts/e2e/finance-email-followup.mjs
           node scripts/e2e/po-excel-paste-export.mjs
+          node scripts/e2e/pr-print-one-page.mjs
           # ✅ `scoped-staff-screens.mjs` أُضيف هنا (2026-09-17) بعد **قياس** جذر
           # تقلّبه الذي بقي مجهولاً منذ 2026-09-15 (43/43 محليّاً · 31/43 ثمّ
           # 25/43 على العدّاء، بنمط «الهويّة والبيانات غائبتان»):

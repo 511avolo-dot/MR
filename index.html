@@ -1386,6 +1386,49 @@ body.print-preview-active .print-document{display:block}
 /* 8) فواصل أعمدة رأس الجدول الداكن مرئية — كان لون حدّها = لون خلفيتها (#231F20) فتختفي */
 .print-table thead th{ border-color:rgba(255,247,232,0.30); }
 
+/* ═══ مستند مضغوط — «صفحة واحدة شاملة كل شيء» (بلاغ المالك 2026-09-22) ═════
+   البلاغ: «عند طباعة محضر طلب الشراء التواقيع والمعلومات غالباً تُطبع في صفحة
+   ثانية — **حتى في البنود الصغيرة**». القياس (توليد PDF بمقاس A4 من نفس مسار
+   `executePrint` وعدّ صفحاته): محضرٌ بثلاثة بنود = 1242px مقابل صفحة = 1123px.
+   ⇒ الفائض **ليس في البنود** بل في الحشو الثابت (حشو الورقة 18مم × 2 · الترويسة ·
+   العنوان · الأطراف · فراغ التواقيع · التذييل).
+   هذه الكتلة تضغط **الحشو والهوامش وحدها ولا تمسّ حجم النصّ المقروء**، وتُطبَّق
+   **بالاختيار** (`fitPage:true` في `printDocOpen`) فلا تنحدر بقيّة المطبوعات.
+   ⚠️ المُحدِّد مضاعَف (`.print-document.print-tight`) عن قصد: إطار الطباعة يُعيد
+   تعريف `.print-document{padding:18mm 16mm}` **بعد** كل الأنماط، فمُحدِّد بصنف
+   واحد يخسر أمامه. */
+.print-document.print-tight{ padding:12mm 14mm; }
+.print-tight .print-header{ padding:10px 14px 11px; margin-bottom:11px; }
+.print-tight .print-header.compact{ padding:8px 14px 9px; margin-bottom:10px; }
+.print-tight .print-logo{ min-height:54px; }
+.print-tight .print-logo img{ max-height:62px; }
+.print-tight .print-company-name{ font-size:18px; margin-bottom:2px; }
+.print-tight .print-company-name-en{ margin-bottom:4px; }
+.print-tight .print-company-meta{ line-height:1.5; }
+.print-tight .print-doc-title{ padding:5px 20px; margin:9px auto; }
+.print-tight .print-doc-subtitle{ margin-top:-6px; margin-bottom:9px; }
+.print-tight .print-parties{ gap:10px; margin-bottom:10px; }
+.print-tight .print-party{ padding:8px 11px; }
+.print-tight .print-party-label{ margin-bottom:3px; }
+.print-tight .print-party-meta{ line-height:1.55; }
+.print-tight .print-party-proj{ padding:4px 8px; margin-bottom:4px; line-height:1.4; }
+.print-tight .print-section{ margin-bottom:10px; }
+.print-tight .print-section-title{ padding-bottom:3px; margin-bottom:6px; }
+.print-tight .print-table thead th{ padding:5px 8px; }
+.print-tight .print-table tbody td{ padding:3px 8px; }
+.print-tight .print-table tfoot td{ padding:5px 8px; }
+.print-tight .print-note-box{ padding:7px 11px; line-height:1.55; margin-bottom:9px; }
+.print-tight .print-total-words{ padding:6px 11px; margin-top:6px; line-height:1.5; }
+/* فراغ التوقيع: المحضر يحمل «اعتُمد إلكترونياً» بتاريخه، فلا يحتاج 36px خانةً بيضاء */
+.print-tight .print-signatures{ margin-top:16px; gap:18px; }
+/* واسم مرحلةٍ يلتفّ سطرين كان يُنزِل خطّ توقيعه وحده فتتعرّج الخطوط الثلاثة —
+   عمودٌ مرن يجعل اسم المرحلة يتمدّد فتستوي خطوط التواقيع على سطر واحد. */
+.print-tight .print-sign{ display:flex; flex-direction:column; }
+.print-tight .print-sign .who{ margin-bottom:18px; flex:1 1 auto; }
+/* شارة قرارٍ من كلمتين كانت تنكسر داخل عمودها الضيّق عند التصغير */
+.print-tight .print-badge{ white-space:nowrap; }
+.print-tight .print-footer{ margin-top:10px; padding-top:9px; }
+
 /* Print preview modal */
 .print-preview-overlay{
   position:fixed;inset:0;background:#3a352d;z-index:1000;
@@ -1412,6 +1455,11 @@ body.print-preview-active .print-document{display:block}
 }
 .print-preview-content .print-document{
   display:block;
+  /* ⚠️ `flex-shrink:0` ليس تجميلاً: الحاوية `flex-direction:column`، فبدونه
+     يتقلّص المستند إلى `min-height` ويفيض محتواه خارج الورقة البيضاء —
+     فتكذب المعاينة **وتكذب معها كل قياسٍ لارتفاعها** (مقيس: مستند ارتفاعه
+     الحقيقيّ 2271px كان يُقاس 1058px). وملاءمة الصفحة تقرأ هذا الارتفاع. */
+  flex-shrink:0;
   background:white;width:210mm;max-width:100%;
   min-height:280mm;
   box-shadow:0 12px 40px rgba(0,0,0,0.5);
@@ -11504,8 +11552,12 @@ function buildPrintDoc(company, opts, bodyHtml){
   const title = opts.title ? `<div class="print-doc-title">${escapeHtml(opts.title)}</div>` : '';
   const subtitle = opts.subtitle ? `<div class="print-doc-subtitle">${escapeHtml(opts.subtitle)}</div>` : '';
   const watermark = opts.watermark ? `<div class="print-watermark">${escapeHtml(opts.watermark)}</div>` : '';
+  /* `fitPage`: مستند يُراد له أن يخرج في **صفحة واحدة شاملة كل شيء** —
+     يضغط حشوه (`print-tight`) ويُوسَم كي تلتقطه `printFitOnePage` فتُلائمه. */
+  const cls = 'print-document' + (opts.fitPage ? ' print-tight' : '');
+  const fitAttr = opts.fitPage ? ' data-fit-page="1"' : '';
   return `
-    <div class="print-document">
+    <div class="${cls}"${fitAttr}>
       ${watermark}
       ${buildPrintHeader(company, opts)}
       ${eyebrow}${title}${subtitle}
@@ -11514,11 +11566,65 @@ function buildPrintDoc(company, opts, bodyHtml){
     </div>`;
 }
 
+/* ═══ ملاءمة صفحة واحدة ═══════════════════════════════════════════════════
+   الطبقة الثانية بعد `print-tight`: ما بقي فائضاً بعد ضغط الحشو يُصغَّر
+   **بمقياس واحد** حتى يسع صفحة A4 — تماماً كـ«ملاءمة صفحة واحدة» في إكسل،
+   ونموذج أمر الشراء عند المالك نفسه مضبوط على 82%.
+   ⚠️ `zoom` لا `transform: scale`: الأخير لا يُعيد حساب التخطيط، فيبقى عرض
+   الورقة 210مم ويُطبَع مصغَّراً وسط هوامش بيضاء عريضة. و`zoom` يُعيد التخطيط،
+   ولهذا يرافقه ضبط العرض على `210mm / s` كي يملأ المطبوعُ عرضَ الورقة كاملاً
+   بعد التصغير.
+   ⚠️ وحدّ أدنى مُعلَن: ورقةٌ لا تُقرأ أسوأ من ورقتين. فما لا يسع صفحةً عند
+   `PRINT_FIT_MIN` يُطبَع على صفحتين بذلك الحدّ، وكتل التواقيع والحجّية محميّة
+   بـ`break-inside:avoid` (البند 4 من تحسينات الطباعة) فلا تتيتّم وحدها. */
+const PRINT_PAGE_H_MM = 297, PRINT_FIT_MIN = 0.60;
+function printFitOnePage(doc){
+  doc = doc || document.querySelector('#pp-content .print-document[data-fit-page="1"]');
+  if(!doc || !doc.parentNode) return 1;
+  doc.style.zoom = ''; doc.style.width = '';           // قِس بلا أثر قياسٍ سابق
+  /* المليمتر بالبكسل يُقاس لا يُفترَض (96dpi ليس عقداً على كل جهاز) */
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:100mm;width:0';
+  doc.parentNode.appendChild(probe);
+  const mm = probe.getBoundingClientRect().height / 100;
+  probe.remove();
+  const h0 = doc.getBoundingClientRect().height;
+  /* هامش أمان 1%: محرّك الطباعة يقرّب الأطوال، وصفحةٌ تفيض ببكسل واحد صفحتان. */
+  const safe = PRINT_PAGE_H_MM * mm * 0.99;
+  if(!(mm > 0) || h0 <= safe) return 1;
+  const at = (s)=>{
+    if(s >= 1){ doc.style.zoom = ''; doc.style.width = ''; }
+    else { doc.style.zoom = String(s); doc.style.width = `calc(210mm / ${s})`; }
+    return doc.getBoundingClientRect().height;
+  };
+  /* التقدير الأوّل نسبةٌ بسيطة ثمّ **يُتحقَّق بالقياس**: التصغير يُعيد حساب
+     التخطيط (سطورٌ تلتفّ أقلّ) فيقصر المستند أكثر ممّا تتنبّأ النسبة — والتحقّق
+     يستردّ ما يمكن من الحجم بدل قبول تصغيرٍ أشدّ ممّا تحتاجه الورقة. */
+  let s = Math.max(PRINT_FIT_MIN, Math.min(0.99, Math.floor((safe / h0) * 100) / 100));
+  for(let i = 0; i < 12 && s > PRINT_FIT_MIN && at(s) > safe; i++)
+    s = Math.max(PRINT_FIT_MIN, +(s - 0.02).toFixed(2));
+  for(let i = 0; i < 12 && s < 0.99; i++){
+    const n = +(s + 0.02).toFixed(2);
+    if(at(n) > safe) break;
+    s = n;
+  }
+  at(s);
+  return s;
+}
+
 // يبني المستند ويعرضه في معاينة الطباعة دفعةً واحدة (نقطة الدخول الموحّدة)
 async function printDocOpen(opts, bodyHtml){
   try{
     const company = await loadCompanyInfo();
-    await showPrintPreview(buildPrintDoc(company, opts || {}, bodyHtml || ''));
+    opts = opts || {};
+    await showPrintPreview(buildPrintDoc(company, opts, bodyHtml || ''));
+    if(opts.fitPage){
+      /* الخطوط تُغيّر الارتفاع، فالقياس قبل جاهزيتها يُلائم مستنداً غير الذي
+         سيُطبَع. `fonts.ready` ثمّ إطار رسم واحد قبل القياس. */
+      try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
+      await new Promise(r=>requestAnimationFrame(()=>r()));
+      printFitOnePage();
+    }
   }catch(e){
     console.error('[printDocOpen]', e);
     toast('error','تعذّر تجهيز المستند', e.message || 'حدث خطأ غير متوقع');
@@ -14360,7 +14466,9 @@ async function prPrint(id){
     subtitle:`${pr.title||'طلب شراء'} · الإصدار ${pr.revision||1}`,
     docNumber:pr.id,
     date:String(pr.request_date||pr.created_at||'').slice(0,10)||undefined,
-    signature:false
+    signature:false,
+    /* «صفحة واحدة شاملة كل شيء» — بلاغ المالك 2026-09-22 */
+    fitPage:true
   }, body);
 }
 
@@ -14446,7 +14554,11 @@ async function prPrintSupplier(id){
     subtitle:`${pr.title||'طلب توريد'} · ${pr.project||'—'}`,
     docNumber:pr.id,
     date:String(pr.request_date||pr.created_at||'').slice(0,10)||undefined,
-    signature:false
+    signature:false,
+    /* نفس علّة المحضر ومقيسة عليه: نسخة المورّد كانت تفيض إلى صفحة ثانية
+       **بثلاثة بنود** (1130px مقابل 1123px) — وهي المستند الذي يُرسَل PDF
+       للمورّد فعلاً، فصفحةٌ ثانية فيها سطرُ تعليمات وتوقيعٌ يتيم. */
+    fitPage:true
   }, body);
 }
 

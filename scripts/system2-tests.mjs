@@ -5157,6 +5157,65 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
                  && /res\.items\.slice\(0,300\)\.forEach\(it=>addPOItemRow\(it\)\)/.test(fn); })());
 }
 
+/* ── ٤٦) الطباعة في صفحة واحدة شاملة كل شيء ──────────────────────
+   بلاغ المالك (2026-09-22): «عند طباعة محضر طلب الشراء التواقيع والمعلومات
+   غالباً تُطبع في صفحة ثانية — **حتى في البنود الصغيرة**».
+   ⚠️ عدّ الصفحات الفعليّ يقع في `scripts/e2e/pr-print-one-page.mjs` (توليد PDF
+   بمقاس A4). هذه الكتلة تحرس **بنية الحلّ** فلا ينحلّ بتعديل لاحق. */
+{
+  G('٤٦) الطباعة في صفحة واحدة شاملة كل شيء');
+
+  const optsOf = (fn) => { const i = CODE.indexOf(`async function ${fn}(`);
+                           const j = CODE.indexOf('printDocOpen({', i);
+                           return j < 0 ? '' : CODE.slice(j, CODE.indexOf('}, body)', j)); };
+  T('المحضر ونسخة المورّد يطلبان ملاءمة الصفحة الواحدة',
+    /fitPage\s*:\s*true/.test(optsOf('prPrint')) && /fitPage\s*:\s*true/.test(optsOf('prPrintSupplier')));
+
+  const builder = CODE.slice(CODE.indexOf('function buildPrintDoc('),
+                             CODE.indexOf('const PRINT_PAGE_H_MM'));
+  T('والملاءمة بالاختيار: الصنف والوسم من `opts.fitPage` لا دائماً',
+    /opts\.fitPage\s*\?\s*' print-tight'\s*:\s*''/.test(builder)
+    && /opts\.fitPage\s*\?\s*' data-fit-page="1"'\s*:\s*''/.test(builder));
+
+  const fit = CODE.slice(CODE.indexOf('function printFitOnePage('),
+                         CODE.indexOf('async function printDocOpen('));
+  /* ⚠️ `transform: scale` لا يُعيد التدفّق فيُطبَع المستند مصغَّراً وسط هوامش
+     بيضاء بعرض الورقة الأصليّ — و`zoom` يُعيد التخطيط فيملأ العرض. */
+  T('التصغير بـ`zoom` لا بـ`transform`، ومعه العرض `210mm / s` فيملأ الورقة',
+    /style\.zoom\s*=/.test(fit) && !/transform\s*[:=]/.test(fit)
+    && /calc\(210mm \/ \$\{s\}\)/.test(fit));
+  T('والحدّ الأدنى ثابت مُعلَن بين 0.5 و1 (ورقةٌ لا تُقرأ أسوأ من ورقتين)',
+    (() => { const m = CODE.match(/PRINT_FIT_MIN\s*=\s*([\d.]+)/);
+             return !!m && Number(m[1]) > 0.5 && Number(m[1]) < 1; })());
+  /* التقدير نسبةٌ، والنسبة تكذب لأن التصغير يُعيد التدفّق — فيُتحقَّق بالقياس. */
+  T('والمقياس يُتحقَّق بالقياس بعد تطبيقه لا يُقبَل تقديراً',
+    /at\(s\)\s*>\s*safe/.test(fit) && /at\(n\)\s*>\s*safe/.test(fit));
+
+  const open = CODE.slice(CODE.indexOf('async function printDocOpen('),
+                          CODE.indexOf('function tafqitSAR('));
+  T('والقياس بعد جاهزية الخطوط (وإلّا لُوئِم مستندٌ غير الذي يُطبَع)',
+    /fonts\.ready/.test(open) && open.indexOf('fonts.ready') < open.indexOf('printFitOnePage()'));
+
+  /* ⚠️ تعليقات CSS تُنزَع قبل الفحص: تعليقٌ يشرح قاعدةً يذكر نصّها، فحارسٌ
+     يفحص الملفّ كما هو **يرضى بالتعليق ويمرّ بعد حذف القاعدة نفسها** (وقع
+     فعلاً في البيت-بروف هنا — انظر «تأكيدٌ لا يمكنه الفشل»). */
+  const CSS = HTML.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*\n\s*/g, '');
+  /* ⚠️ إطار الطباعة يُعيد تعريف `.print-document{padding:18mm 16mm}` **بعد** كل
+     الأنماط، فمُحدِّد بصنف واحد يخسر أمامه ويعود الحشو كما كان بصمت. */
+  T('وحشو الورقة المضغوط بمُحدِّد مضاعَف كي لا يغلبه إطار الطباعة',
+    /\.print-document\.print-tight\{[^}]*padding:/.test(CSS));
+  /* الضغط حشوٌ لا تصغير نصّ — التصغير له طبقته الواحدة في `printFitOnePage`. */
+  T('والضغط لا يمسّ حجم نصّ الجدول المقروء',
+    !/\.print-tight \.print-table[^{]*\{[^}]*font-size/.test(CSS));
+  T('وخطوط التواقيع تستوي ولو التفّ اسم مرحلة سطرين',
+    /\.print-tight \.print-sign\{[^}]*flex-direction:column/.test(CSS)
+    && /\.print-tight \.print-sign \.who\{[^}]*flex:1/.test(CSS));
+  /* ⚠️ حاوية المعاينة `flex-direction:column`، فبلا هذا يتقلّص المستند إلى
+     `min-height` ويفيض محتواه — فيكذب كلُّ قياسٍ لارتفاعه (مقيس: 2271→1058). */
+  T('ومعاينة الطباعة لا تتقلّص فتكذب على القياس',
+    /\.print-preview-content \.print-document\{[^}]*flex-shrink:0/.test(CSS));
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
