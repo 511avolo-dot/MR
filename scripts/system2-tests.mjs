@@ -5437,6 +5437,22 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
   api.SI_LEARNED_ALIASES[siNormalizeLegacy('مطهر 3.78 لتر')] = 'C-1';
   T('ومرادف مخزَّن بالتطبيع القديم لا يُفقَد', (siAliasLookup('مطهر 3.78 لتر','') || {}).code === 'C-1');
 
+  /* ⚠️ مرادف يشير إلى صنف **محذوف من الكتالوج** — حالة قائمة على الإنتاج فعلاً
+     (مقيس 2026-10-13: 4 مرادفات تشير إلى CIV-001/CIV-003/CIV-005/HVAC-Q0012 ولا صفّ
+     لها في proc_items؛ والجدول بلا مفتاح أجنبيّ فلا شيء يمنعها). فالمرتبة الثانية
+     تبحث عن الصنف بالكود قبل الحكم: بلا ذلك تُرجِع `ok` و`item:null` فيسقط كل
+     مستدعٍ يقرأ `res.item.code` أو يُربَط العرض بلا صنف. السقوط للمراتب التالية
+     هو السلوك الصحيح — وهذان يحرسانه. */
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_LEARNED_ALIASES[siAliasKey(siNormalize('مكنسة كهربائية رطب/جاف، CRS1625'), '')] = 'DELETED-9';
+  {
+    const r = siResolveItem('مكنسة كهربائية رطب/جاف، CRS1625', {});
+    T('⚠️ مرادف لصنف محذوف يسقط للمراتب التالية ولا يُرجِع صنفاً معدوماً',
+      r.item && r.item.code === 'B-1' && r.state === 'ok', r.state + '/' + (r.item && r.item.code));
+    const r2 = siResolveItem('زززز لا شبيه له إطلاقاً', {});
+    T('ولا حالة ok بصنف null في أي مسار', !(r2.state === 'ok' && !r2.item) && r2.item === null, r2.state);
+  }
+
   /* (ك) البحث اليدويّ: تطبيع + مرادفات (كان substring خامّاً) */
   api.SI_LEARNED_ALIASES = {};
   api.SI_ALIASES_BY_CODE = { 'C-1': ['hand wash soap 4l'] };
