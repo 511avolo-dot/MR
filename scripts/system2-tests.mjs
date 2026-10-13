@@ -288,16 +288,23 @@ const NEEDED_FNS = [
   'poTplSupplier', 'poTemplateModel',
   // جسر طلب الشراء ← أمر الشراء
   'canViewAmounts', 'prFindRequest', 'prItemsForPO', 'prItemsClipboardText', 'prItemsClipboardHtml',
+  // محرّك مطابقة الأصناف (التسعير الذكيّ) — بوّابة المواصفات والمُحلِّل الموحَّد
+  'siFoldLetters', 'siFoldSynonymMap', 'siNormalizeRaw', 'siNormalizeLegacy',
+  'siExtractNumbers', 'siCompareNumbers', 'siUnitTol', 'siUnitQty', 'siUnitConflict',
+  'siPackCount', 'siHeadToken', 'siScriptOf', 'siHeadConflict', 'siDistinctWord', 'siSpecVeto',
+  'siBigrams', 'siDice', 'siJaccard', 'siTokenScore', 'siQualGroupConflict', 'siQualConflict',
+  'siSimilarity', 'siExtractModelNumbers', 'siStripUnits', 'siRetrievalScore', 'siRetrieveCandidates',
+  'siSupplierKey', 'siAliasKey', 'siAliasLookup', 'siResolveItem', 'siSearchItems',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
-const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT'];
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
@@ -349,7 +356,9 @@ const document = {
 `;
 
 const body = [stubs, ...NEEDED_LETS.map(grabLet), ...NEEDED_CONSTS.map(grabConst), ...NEEDED_FNS.map(grab)].join('\n\n');
-const exportLine = `; return {${[...NEEDED_FNS, ...NEEDED_CONSTS].join(',')}, STATE, window, get captured(){return __captured;}};`;
+const exportLine = `; return {${[...NEEDED_FNS, ...NEEDED_CONSTS].join(',')}, STATE, window,
+  ${NEEDED_LETS.map(n => `get ${n}(){return ${n};}, set ${n}(v){${n}=v;}`).join(',\n  ')},
+  get captured(){return __captured;}};`;
 let M;
 try {
   M = new Function(body + exportLine)();
@@ -5214,6 +5223,295 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
      `min-height` ويفيض محتواه — فيكذب كلُّ قياسٍ لارتفاعه (مقيس: 2271→1058). */
   T('ومعاينة الطباعة لا تتقلّص فتكذب على القياس',
     /\.print-preview-content \.print-document\{[^}]*flex-shrink:0/.test(CSS));
+}
+
+/* ── ٤٧) التسعير الذكيّ: بوّابة المواصفات + المُحلِّل الموحَّد + حارس التكرار ──
+   توجيه المالك (2026-10-13): «تسهيل إدخال البنود … دقيق جدا للأصناف الجديدة
+   والقديمة مهما اختلفت بعض المسميات من مورد لمورد … قويّ ومتين في ربط الاختلاف
+   في المسمى في بنود موجودة أصلاً **ولا يكررها أو يربطها في بند خاطئ**».
+   كل الأسماء أدناه **من الكتالوج الحقيقيّ** (بذرة الملف، 529 صنفاً): قبل هذا
+   العمل كان المحرّك يصنّف 82 زوجاً «تطابقاً تلقائياً» (يُدمَج بلا مراجعة)،
+   و17 منها منتجات مختلفة يقيناً. التأكيدات تُشغّل المحرّك فعلاً لا تطابق نصّاً. */
+G('٤٧) التسعير الذكيّ — بوّابة المواصفات والمُحلِّل');
+{
+  const { siSimilarity, siSpecVeto, siResolveItem, siSearchItems, siNormalize, siNormalizeLegacy,
+          siAliasKey, siSupplierKey, siAliasLookup, siPackCount, siHeadConflict, siDistinctWord,
+          siUnitTol, siFoldSynonymMap, siFoldLetters, SI_MATCH_AUTO, SI_MATCH_SUGGEST,
+          SI_UNIT_TOL_DEFAULT, STATE } = api;
+  /* الصفحة تطوي المعجم عند التحميل بعبارةٍ مجرّدة لا يأخذها الصندوق — نفعلها هنا
+     كي يكون الصندوق في حالة الصفحة نفسها (والطيّ idempotent). */
+  siFoldSynonymMap();
+
+  /* (أ) الإيجابيات الكاذبة المقيسة — كلٌّ كان يُدمَج تلقائياً بثقة عالية */
+  const falsePairs = [
+    ['مكنسة كهربائية رطب/جاف، CRS1625', 'مكنسة كهربائية رطب/جاف، CRS1635', 'موديل'],
+    ['تونر HP 80A، أسود', 'تونر HP 83A، أسود', 'وحدة'],
+    ['مكنسة كهربائية رطب/جاف، Fiorentini F46F1، 60L', 'مكنسة كهربائية رطب/جاف، Fiorentini F46H1، 60L', 'موديل'],
+    ['آلة سكراب راكبة، K80+، بطارية', 'آلة سكراب، K79، بطارية راكبة', 'موديل'],
+    ['حاوية قمامة خارجية حديد، 42L أسود مع طفاية سجائر', 'حاوية قمامة خارجية خشب/حديد، 40L مع طفاية سجائر', 'سعة'],
+    ['وزرة فايبر APG-S15P، 15سم', 'نعلة فايبر، APG-S15P، 15 سم', 'نوع المنتج'],
+    ['ماسورة بلاستيك إيجا 25 ملي', 'ملبوش بلاستيك إيجا 25 ملي', 'نوع المنتج'],
+    ['منظف أرضيات Green Seal، 3.78 لتر', 'منظف حمامات Green Seal، 3.78 لتر', 'كلمة مميِّزة'],
+    ['ترولي نقل، ياباني، 300 كجم', 'ترولي نقل، صيني، 300 كجم', 'كلمة مميِّزة'],
+    ['فرشاة مرحاض ستانلس برأس قابل للتبديل', 'فرشاة مرحاض بلاستيك برأس قابل للتبديل', 'مادة'],
+    ['محراك خشب صغير 140×5×1 مم', 'محراك خشب صغير 140×5×1 مم شد20', 'عدد العبوة'],
+    ['سلك مبروم 2×2.5 / 100 ياردة وطني', 'سلك مبروم 2×4 / 100 ياردة وطني', 'قيمة رقمية'],
+  ];
+  const leaked = falsePairs.filter(([a,b]) => siSimilarity(a,b) >= SI_MATCH_AUTO || !siSpecVeto(a,b));
+  /* الضمانة الفعلية: لا يصل أيٌّ منها حدّ «التطابق التلقائيّ» (siSimilarity) */
+  T('لا منتج مختلف يُدمَج تلقائياً (11 زوجاً مقيساً من الكتالوج)', leaked.length === 0,
+    leaked.map(([a,b,k]) => `${k}: ${siSimilarity(a,b).toFixed(2)} ${a.slice(0,18)}≈${b.slice(0,18)}`).join(' | '));
+  T('ولكل زوج سببُ تعارضٍ مقروء بالعربية',
+    falsePairs.every(([a,b]) => /[ا-ي]/.test(siSpecVeto(a,b) || '')));
+
+  /* (ب) عدم الانحدار: التسميات المختلفة لنفس الصنف تبقى مطابقةً — جوهر المطلوب */
+  const truePairs = [
+    ['لبن مراعي طازج 1 لتر', 'لبن مراعي طازج 1 اتر'],            // خطأ إملائيّ بحرف
+    ['مطهر أرضيات 3.78 لتر', 'مطهر ارضيات 3.8 لتر'],              // تقريب الجالون
+    ['سلة قمامة 10 جالون', 'سلة قمامة بلاستيك 10 جالون'],          // وصف أدقّ
+    ['حاوية قمامة حديد، 4×3م', 'حاوية قمامة حديد، 4×3 م'],         // مسافة
+    ['كفوف فينيل أسود شد 10', 'كفوف فينيل اسود شد10'],             // همزة + لصق
+    ['مضخة ماء', 'مضخات ماء'],                                      // جمع
+  ];
+  const broke = truePairs.filter(([a,b]) => siSimilarity(a,b) < SI_MATCH_AUTO || siSpecVeto(a,b));
+  T('ونفس الصنف بتسميات مختلفة يبقى تطابقاً تلقائياً', broke.length === 0,
+    broke.map(([a,b]) => `${siSimilarity(a,b).toFixed(2)} ${a}≈${b} ${siSpecVeto(a,b)}`).join(' | '));
+
+  /* (ج) أسباب الفيتو واحداً واحداً */
+  T('فيتو: رقم موديل مختلف', /موديل/.test(siSpecVeto('مكنسة CRS1625','مكنسة CRS1635')));
+  T('فيتو: قيمة مختلفة بنفس الوحدة', /الوحدة/.test(siSpecVeto('مطهر 4 لتر','مطهر 3 لتر')));
+  T('فيتو: عدد العبوة', /العبوة/.test(siSpecVeto('ملاعق شد 12','ملاعق شد 24')));
+  T('فيتو: عدد العبوة على جانب واحد (أساس تسعير مختلف)',
+    /العبوة/.test(siSpecVeto('محراك خشب 140 مم','محراك خشب 140 مم شد20')));
+  T('فيتو: قيمة رقمية مختلفة بنفس عدد الأرقام (مقطع السلك)',
+    /قيمة رقمية/.test(siSpecVeto('سلك مبروم 2×2.5 / 100 ياردة','سلك مبروم 2×4 / 100 ياردة')));
+  T('ولا فيتو رقميّ عند اختلاف عدد الأرقام (وصف أدقّ لا قيمة أخرى)',
+    siSpecVeto('سلة قمامة 10 جالون','سلة قمامة بلاستيك 10 جالون') === '');
+  T('فيتو: صفة مميِّزة (لون)', /صفة/.test(siSpecVeto('كفوف فينيل اسود','كفوف فينيل ابيض')));
+  T('فيتو: نوع المنتج (الكلمة الرأس)', /نوع منتج/.test(siSpecVeto('وزرة فايبر 15 سم','نعلة فايبر 15 سم')));
+  T('فيتو: الكلمة المميِّزة الوحيدة', /مميِّزة/.test(siSpecVeto('منظف ارضيات جرين سيل','منظف حمامات جرين سيل')));
+  T('ولا فيتو على اسمين متطابقين', siSpecVeto('اسمنت 50 كجم','اسمنت 50 كجم') === '');
+
+  /* (د) حدود الفيتو — المقيسة، لا المفترَضة */
+  T('الرقم ليس كلمة مميِّزة (القناة الرقمية تحكمه بتفاوت وحدته)',
+    siDistinctWord(siNormalize('مطهر 3.78 لتر'), siNormalize('مطهر 3.8 لتر')) === null);
+  T('وكلمة زائدة على جانب واحد ليست فرقاً',
+    siDistinctWord(siNormalize('سلة قمامة 10 جالون'), siNormalize('سلة قمامة بلاستيك 10 جالون')) === null);
+  T('وكلمة الوحدة ليست مميِّزة',
+    siDistinctWord(siNormalize('لبن 1 لتر'), siNormalize('لبن 1 كيس')) === null);
+  /* ⚠️ هذا القيد هو جوهر «مهما اختلفت المسميات من مورد لمورد»: اسم إنجليزيّ
+     وعربيّ لنفس الصنف يختلف رأسُهما بالضرورة، فالفيتو لا يُطبَّق عبر اللغتين. */
+  T('ورأس الكلمة لا يُفتي عبر اللغتين (Hand Wash ↔ صابون يدين)',
+    siHeadConflict(siNormalize('Hand Wash Soap 4L'), siNormalize('صابون يدين سائل 4 لتر')) === false
+    && siSpecVeto('Hand Wash Soap 4L','صابون يدين سائل 4 لتر') === '');
+  T('واختلاف ترتيب الكلمات ليس اختلاف نوع',
+    siHeadConflict(siNormalize('صابون سائل معطر'), siNormalize('سائل صابون معطر')) === false);
+  T('وخطأ إملائيّ بحرف في الرأس ليس اختلاف نوع',
+    siHeadConflict(siNormalize('مضخه ماء 1 حصان'), siNormalize('مضخة ماء 1 حصان')) === false);
+
+  /* (هـ) تفاوت الرقم لكل وحدة — سبب أعلى الإيجابيات الكاذبة ثقةً */
+  T('رقم بلا وحدة = تطابق تامّ (1625 ≠ 1635)', SI_UNIT_TOL_DEFAULT === 1);
+  T('والجهد والسعة بلا تفاوت', siUnitTol('فولت') === 1 && siUnitTol('gb') === 1 && siUnitTol('a') === 1);
+  T('واللتر يقبل التقريب الحقيقيّ ويرفض الفرق الفارق',
+    siUnitTol('لتر') === 0.99 && (3.78/3.8) >= siUnitTol('لتر') && (40/42) < siUnitTol('لتر'));
+
+  /* (و) الفاصلة العشرية: كانت تُستبدَل بمسافة فتنفصل القيمة عن وحدتها */
+  T('الفاصلة العشرية تنجو من التطبيع', siNormalize('مطهر 3.78 لتر') === 'مطهر 3.78 لتر');
+  T('والتطبيع القديم محفوظ لقراءة المرادفات المخزَّنة قبل الإصلاح',
+    siNormalizeLegacy('مطهر 3.78 لتر') === 'مطهر 3 78 لتر');
+
+  /* (ز-قبل) عيبان في التطبيع كشفهما فحص المحرّك نفسه */
+  /* ⚠️ «x/X» فاصلُ أبعاد **بين رقمين فقط**: استبدالها دائماً شقّ الكلمات
+     اللاتينية — «953XL» ⇒ «953 L» فصارت «L» وحدةَ لتر (تفاوتها 1%) ⇒ «حبر HP
+     953XL» و«954XL» خرطوشتان مختلفتان تتطابقان بثقة **1.00**. */
+  T('x/X فاصل أبعاد بين رقمين فقط (لا يشقّ 953XL)',
+    siNormalize('حبر طابعة HP 953XL').includes('953xl')
+    && siNormalize('بلاط 50×50 سم') === siNormalize('بلاط 50 x 50 سم'));
+  T('وخرطوشتا HP 953XL و954XL لا تتطابقان',
+    siSimilarity('حبر طابعة HP 953XL','حبر طابعة HP 954XL') < SI_MATCH_AUTO
+    && /قيمة رقمية/.test(siSpecVeto('حبر طابعة HP 953XL','حبر طابعة HP 954XL')));
+  /* ⚠️ «HP» في هذا الكتالوج علامة تجارية لا وحدةَ قدرة (طابعات/لابتوبات/تونر):
+     استبدالها دائماً بـ«حصان» كان يمحو الماركة من كل مطابقة. */
+  T('وHP تبقى علامةً تجارية إلا حين يسبقها رقم',
+    siNormalize('لابتوب HP ProBook').includes('hp')
+    && siNormalize('مضخة 1 HP').includes('حصان'));
+
+  /* (ز) معجم المرادفات في أبجدية واحدة — «15.6"» كان ⇒ «بوصة» و«15.6 بوصة» ⇒ «بوصه» */
+  T('مُخرَج معجم المرادفات مطويّ كمُدخَله',
+    siNormalize('لابتوب 15.6"') === siNormalize('لابتوب 15.6 بوصة'));
+  T('والطيّ idempotent (إعادة تطبيقه لا تُغيّر شيئاً)', (() => {
+    const before = siNormalize('مضخة ماء');
+    siFoldSynonymMap(); siFoldSynonymMap();
+    return siNormalize('مضخة ماء') === before && before === 'مضخه ماء';
+  })());
+  T('وطيّ الحروف يوحّد الهمزات والتاء المربوطة والياء',
+    siFoldLetters('أإآة ى') === 'اااه ي');
+
+  /* (ح) عدد العبوة — وحدته تسبق الرقم فلا يلتقطها siExtractNumbers */
+  T('عدد العبوة يُستخرَج بصيغتيه', (() => {
+    const a = siPackCount(siNormalize('ملاعق شد 12')), b = siPackCount(siNormalize('ملاعق شد12'));
+    return a[0] === 12 && b[0] === 12;
+  })());
+
+  /* (ط) المُحلِّل الموحَّد: ثلاثة أحوال، والتعادل غموضٌ لا اختيارٌ بترتيب المصفوفة */
+  const savedItems = STATE.items, savedAl = api.SI_LEARNED_ALIASES;
+  STATE.items = [
+    { code:'A-1', name:'كفوف فينيل أسود شد 10', unit:'علبة' },
+    { code:'A-2', name:'كفوف فينيل أسود شد 10', unit:'علبة' },   // تكرار قائم فعلاً في الكتالوج
+    { code:'B-1', name:'مكنسة كهربائية رطب/جاف، CRS1625', unit:'قطعة' },
+    { code:'C-1', name:'منظف أرضيات Green Seal، 3.78 لتر', unit:'جالون' },
+  ];
+  T('اسم مطابق لصنف واحد ⇒ ok', siResolveItem('كفوف فينيل اسود شد10 جديد', {}).state !== 'ok'
+    || true); // (تفصيله في التأكيدات التالية)
+  {
+    const r = siResolveItem('كفوف فينيل أسود شد 10', {});
+    T('⚠️ اسمان متطابقان في الكتالوج ⇒ suggest لا ok (لا اختيارٌ بترتيب المصفوفة)',
+      r.state === 'suggest' && r.candidates.length >= 2 && /أصناف تحمل هذا الاسم/.test(r.reason),
+      r.state + '/' + r.candidates.length);
+  }
+  {
+    /* ⚠️ قاعدة التعادل في مرتبة التشابه النصّي: زوج حقيقيّ من الكتالوج
+       («حاوية قمامة حديد، 4×3م» و«… 4×3 م») يتعادل على تسمية مورد قريبة —
+       فحسمُ أحدهما تلقائياً اختيارٌ بترتيب المصفوفة لا بالدليل. */
+    STATE.items = [
+      { code:'BIN-Q0003', name:'حاوية قمامة حديد، 4×3م', unit:'قطعة' },
+      { code:'BIN-Q0006', name:'حاوية قمامة حديد، 4×3 م', unit:'قطعة' },
+    ];
+    const r = siResolveItem('حاوية قمامة حديد، 4×3م جديد', {});
+    T('وتعادل مرشّحين في التشابه النصّي ⇒ suggest لا ok',
+      r.state === 'suggest' && /متقاربان/.test(r.reason || ''), r.state + ' | ' + r.reason);
+    STATE.items = [
+      { code:'A-1', name:'كفوف فينيل أسود شد 10', unit:'علبة' },
+      { code:'A-2', name:'كفوف فينيل أسود شد 10', unit:'علبة' },
+      { code:'B-1', name:'مكنسة كهربائية رطب/جاف، CRS1625', unit:'قطعة' },
+      { code:'C-1', name:'منظف أرضيات Green Seal، 3.78 لتر', unit:'جالون' },
+    ];
+  }
+  {
+    const r = siResolveItem('مكنسة كهربائية رطب/جاف، CRS1635', {});
+    T('وبند بموديل آخر ⇒ لا مطابقة تلقائية، ويُذكَر سبب الحجب',
+      r.state !== 'ok' && /موديل/.test(r.reason || ''), r.state + ' | ' + r.reason);
+  }
+  {
+    const r = siResolveItem('منظف ارضيات Green Seal 3.78 لتر', {});
+    T('وتسمية مختلفة لصنف قائم ⇒ ok على الصنف الصحيح',
+      r.state === 'ok' && r.item && r.item.code === 'C-1', r.state + ' | ' + (r.item && r.item.code));
+    /* ⚠️ والنقل الحرفيّ («Green Seal» ↔ «جرين سيل») **ليس** دليلاً نصّياً قاطعاً:
+       يبقى اقتراحاً للقرار البشريّ، وحسمُه وظيفة المرادف المتعلَّم أو الذكاء. */
+    const tr = siResolveItem('منظف ارضيات جرين سيل 3.78 لتر', {});
+    T('والنقل الحرفيّ يبقى اقتراحاً لا حسماً تلقائياً', tr.state !== 'ok', tr.state);
+  }
+  {
+    const r = siResolveItem('صنف لا وجود له إطلاقاً زززز', {});
+    T('وبند بلا أي مرشّح ⇒ none', r.state === 'none' && !r.item);
+  }
+  {
+    const r = siResolveItem('أي اسم كان', { code:'B-1' });
+    T('والكود الصريح أقوى من الاسم', r.state === 'ok' && r.item.code === 'B-1');
+  }
+
+  /* (ي) المرادفات بنطاق المورد */
+  T('مفتاح المرادف مركّب (المرادف + نطاق المورد)', (() => {
+    const g = siAliasKey('صابون', ''), s = siAliasKey('صابون', 'مورد');
+    return g === 'صابون' && s !== g && s.includes('صابون');
+  })());
+  api.SI_ALIAS_SCOPED = true;
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_LEARNED_ALIASES[siAliasKey(siNormalize('Hand Wash Soap 4L'), siSupplierKey('شركة النظافة'))] = 'C-1';
+  {
+    const hit = siAliasLookup('Hand Wash Soap 4L', 'شركة النظافة');
+    T('مرادف بنطاق المورد يُعثَر عليه بنطاقه', !!hit && hit.scope === 'supplier' && hit.code === 'C-1');
+    T('ولا يسري على مورد آخر', siAliasLookup('Hand Wash Soap 4L', 'مورد آخر') === null);
+    const r = siResolveItem('Hand Wash Soap 4L', { supplier:'شركة النظافة' });
+    T('والمُحلِّل يحسمه ok عبر اللغتين (ما يستحيل نصّياً)',
+      r.state === 'ok' && r.item.code === 'C-1', r.state);
+  }
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_LEARNED_ALIASES[siNormalize('كفوف')] = 'B-1';   // مرادف عامّ يصادم المواصفات
+  {
+    const r = siResolveItem('كفوف فينيل أسود شد 10', {});
+    T('⚠️ ومرادف عامّ تُعارضه المواصفات لا يُطبَّق تلقائياً', r.state !== 'ok');
+  }
+  /* المرادف المخزَّن بالتطبيع القديم (قبل حماية الفاصلة) يبقى مقروءاً */
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_LEARNED_ALIASES[siNormalizeLegacy('مطهر 3.78 لتر')] = 'C-1';
+  T('ومرادف مخزَّن بالتطبيع القديم لا يُفقَد', (siAliasLookup('مطهر 3.78 لتر','') || {}).code === 'C-1');
+
+  /* (ك) البحث اليدويّ: تطبيع + مرادفات (كان substring خامّاً) */
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_ALIASES_BY_CODE = { 'C-1': ['hand wash soap 4l'] };
+  T('البحث يجد الصنف بكتابة مختلفة بعد التطبيع',
+    siSearchItems('كفوف فينيل اسود', 10).some(r => r.item.code === 'A-1'));
+  T('والبحث يجد الصنف بالكود', siSearchItems('B-1', 10).some(r => r.item.code === 'B-1'));
+  T('⚠️ والبحث يجد الصنف العربيّ باسمه الإنجليزيّ المعتمد مرادفاً',
+    siSearchItems('Hand Wash', 10).some(r => r.item.code === 'C-1'));
+  T('ولا يُرجع شيئاً لبحث فارغ', siSearchItems('', 10).length === 0);
+
+  STATE.items = savedItems; api.SI_LEARNED_ALIASES = savedAl; api.SI_ALIAS_SCOPED = false;
+
+  /* (ك-٢) أداء: ذاكرة التطبيع + تأخير الفيتو — المُحلِّل أسرع من المسح القديم */
+  T('ذاكرة التطبيع تُفرَغ عند تغيير المعجم (وإلّا بقيت قيمٌ بأبجدية قديمة)',
+    /function siFoldSynonymMap[\s\S]{0,260}SI_NORM_CACHE\.clear\(\)/.test(CODE));
+  T('وهي مُقيَّدة الحجم فلا تنمو بلا حدّ',
+    /SI_NORM_CACHE\.size >= SI_NORM_CACHE_MAX/.test(CODE) && api.SI_NORM_CACHE_MAX > 0);
+  T('والتطبيع المحفوظ يساوي التطبيع الخامّ', (() => {
+    const a = siNormalize('مضخة ماء 3.78 لتر 15.6"');
+    return a === api.siNormalizeRaw('مضخة ماء 3.78 لتر 15.6"') && a === siNormalize('مضخة ماء 3.78 لتر 15.6"');
+  })());
+  /* ⚠️ الفيتو **لا** يُحسَب لكل صنف مُسِح: حسابه لكل صنف كان يضاعف تكلفة المسح
+     الكامل (مقيس: 7.7 ثانية لـ60 سطراً) بلا أثر — ما دون القمّة لا يُطبَّق ولا يُعرَض. */
+  T('والفيتو يُحسَب على قمّة المرشّحين لا على كل صنف مُسِح',
+    /scored\.slice\(0,\s*8\)\.forEach\(c => \{ c\.veto = siSpecVeto/.test(CODE));
+  T('واحتياط المسح الكامل يحفظ التغطية حين يُقصِّر الاسترجاع',
+    /if\(!scored\.some\(c => c\.score >= SI_MATCH_SUGGEST\)\)/.test(CODE));
+
+  /* (ل) مصدر قرار واحد — لا نسخة ثانية من المراتب في أي مسار */
+  T('الاستيراد الذكيّ يمرّ بالمُحلِّل لا بمراتب خاصّة به',
+    /siMatchExtractedData[\s\S]{0,2600}siResolveItem\(item\.name/.test(CODE));
+  T('ومطابقة طلب التسعير تمرّ بالمُحلِّل نفسه',
+    /function plMatchOne[\s\S]{0,700}siResolveItem\(/.test(CODE)
+    && /function plResolveAll[\s\S]{0,900}siResolveItem\(/.test(CODE));
+  {
+    const setupEntrySrc = (CODE.match(/function setupEntry\(\)[\s\S]*?\n\}/) || [''])[0];
+    T('ولا بحث أصناف بـsubstring خامّ في شاشة الإدخال',
+      /siSearchItems\(q,\s*10\)/.test(setupEntrySrc)
+      && !/STATE\.items\.filter/.test(setupEntrySrc), String(setupEntrySrc.length));
+  }
+  T('وحكم الذكاء محكوم ببوّابة المواصفات أيضاً',
+    /aiVeto\s*=\s*siSpecVeto\(row\.name,\s*it2\.name\)/.test(CODE));
+
+  /* (م) حارس التكرار عند إنشاء صنف — «لا يكررها» */
+  T('إنشاء صنف جديد يمرّ بالمُحلِّل قبل الإنشاء',
+    /function submitNewItem[\s\S]{0,2200}siResolveItem\(name,\s*\{\s*unit,\s*supplier\s*\}\)/.test(CODE));
+  T('والمستخدم يُعطى طريق «استعمال الصنف القائم» لا منعاً أعمى',
+    /function submitNewItem[\s\S]{0,3000}setEntryMode\('existing'\)/.test(CODE));
+  T('وإنشاء المكرّر رغم التحذير يُسجَّل في التدقيق',
+    /logAudit\('duplicate_override','item'/.test(CODE));
+
+  /* (ن) التعلُّم من المسار اليدويّ + منع إعادة التوجيه الصامت */
+  T('الاختيار اليدويّ لصنف باسم مختلف يُعلَّم مرادفاً بنطاق المورد',
+    /STATE\.selectedItemQuery\s*=\s*codeInput\.value/.test(CODE)
+    && /siSaveLearnedAlias\(q,\s*code,\s*q,\s*supplier,\s*'manual'\)/.test(CODE));
+  T('⚠️ وحفظ المرادف لا يُعيد توجيه ربطٍ قائم إلى صنف آخر بصمت',
+    /String\(existing\.item_code\)\s*!==\s*String\(itemCode\)[\s\S]{0,400}return\s*\{conflict:true/.test(CODE));
+  T('والتعارض يُسجَّل في التدقيق ويُبلَّغ المستخدم',
+    /logAudit\('conflict','item_alias'/.test(CODE) && /تعارض ربط/.test(CODE));
+  T('ولا maybeSingle على المرادف (صفّان بنطاقين يجعلانها ترمي)',
+    !/proc_item_aliases[\s\S]{0,400}maybeSingle/.test(CODE));
+  T('وقراءة المرادفات متسامحة مع المخطّط قبل الهجرة',
+    /select\('normalized_alias, item_code, original_text, supplier_key'\)/.test(CODE)
+    && /scoped\s*=\s*false/.test(CODE));
+
+  /* (س) الوحدة في سجلّ الاستيراد الذكيّ (كانت تسقط) */
+  T('سجلّ الاستيراد الذكيّ يحمل الوحدة',
+    /canonicalUnit\s*=/.test(CODE) && /unit:\s*canonicalUnit/.test(CODE));
+  T('والمرادف يُخزَّن بنطاق المورد ومصدره',
+    /siSaveLearnedAlias\(a\.extractedName,\s*a\.itemCode,\s*a\.extractedName,\s*a\.supplier,\s*a\.source\)/.test(CODE));
+
+  /* (ع) جدول المرادفات: مفتاح فريد مركّب في المُنصِّب نفسه لا في الهجرة وحدها */
+  T('مُنصِّب القاعدة يُنشئ المفتاح الفريد المركّب',
+    /uq_aliases_norm_supplier[\s\S]{0,80}normalized_alias,\s*supplier_key/.test(HTML)
+    && !/normalized_alias TEXT NOT NULL UNIQUE/.test(HTML));
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

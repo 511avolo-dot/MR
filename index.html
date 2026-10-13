@@ -7763,6 +7763,7 @@ function clearForm(){
   document.getElementById('f-date').value = todayStr();
   clearPreview();
   STATE.selectedItem = null;
+  STATE.selectedItemQuery = '';
 }
 
 function setupEntry(){
@@ -7770,18 +7771,18 @@ function setupEntry(){
   const box = document.getElementById('suggest-box');
   
   codeInput.addEventListener('input',()=>{
-    const q = codeInput.value.trim().toLowerCase();
-    if(q.length<1){box.classList.remove('active');clearPreview();return}
-    const matches = STATE.items.filter(i=>
-      (i.code||'').toLowerCase().includes(q) || (i.name||'').toLowerCase().includes(q)
-    ).slice(0,10);
-    if(matches.length===0){box.classList.remove('active');return}
+    const q = codeInput.value.trim();
+    /* ⚠️ تُمحى نتائج البحث السابقة لا تُخفى فقط: كانت تبقى في الـDOM فيقرؤها
+       أي قياس لاحق (ويُظهرها الصنف `active` لو أُعيد لأي سبب). */
+    if(q.length<1){box.classList.remove('active');box.innerHTML='';clearPreview();return}
+    const matches = siSearchItems(q, 10);
+    if(matches.length===0){box.classList.remove('active');box.innerHTML='';return}
     suggestIndex = -1;
     box.innerHTML = matches.map((m,idx)=>`
-      <div class="suggest-item" data-code="${m.code}" data-idx="${idx}">
-        <div class="suggest-code">${m.code}</div>
-        <div class="suggest-name">${escapeHtml(m.name||'')}</div>
-        <div class="suggest-meta">${escapeHtml(m.category||'')} · ${fmtPrice(m.last_price)} ر.س</div>
+      <div class="suggest-item" data-code="${escapeAttr(m.item.code)}" data-idx="${idx}">
+        <div class="suggest-code">${escapeHtml(m.item.code)}</div>
+        <div class="suggest-name">${escapeHtml(m.item.name||'')}</div>
+        <div class="suggest-meta">${escapeHtml(m.item.category||'')} · ${fmtPrice(m.item.last_price)} ر.س${m.why?' · '+escapeHtml(m.why):''}</div>
       </div>
     `).join('');
     box.classList.add('active');
@@ -7809,6 +7810,9 @@ function setupEntry(){
   function selectSuggest(code){
     const item = STATE.items.find(i=>i.code===code);
     if(!item)return;
+    /* نحفظ **نصّ البحث** الذي أوصل المستخدم إلى هذا الصنف: إن كان مختلفاً عن
+       اسمه فهو تسمية مورد لم يعرفها النظام — تُتعلَّم مرادفاً عند الحفظ. */
+    STATE.selectedItemQuery = codeInput.value.trim();
     codeInput.value = item.code;
     fillFromItem(item);
     box.classList.remove('active');
@@ -7905,6 +7909,23 @@ function submitEntry(){
     CLOUD.history.insert(entry).catch(e=>toast('error','فشل المزامنة',e.message));
   }
   
+  /* تعلُّم من المسار اليدويّ: بحث المستخدم بتسمية المورد ثم اختار هذا الصنف ⇒
+     ذلك **قرار بشريّ مؤكَّد** لا يقلّ عن تأكيد الاستيراد الذكيّ. كان يُهدَر
+     تماماً، فيُعاد السؤال نفسه في كل عرض قادم.
+     ⚠️ بنطاق المورد، وبلا إعادة توجيه صامتة (siSaveLearnedAlias يرفض التعارض). */
+  try{
+    const q = (STATE.selectedItemQuery || '').trim();
+    if(q && siNormalize(q) && siNormalize(q) !== siNormalize(name) && !/^[A-Za-z0-9\-_]+$/.test(q)){
+      Promise.resolve(siSaveLearnedAlias(q, code, q, supplier, 'manual')).then(r => {
+        if(r && r.conflict){
+          const other = (STATE.items||[]).find(i => String(i.code) === String(r.existingCode));
+          toast('warn','تعارض ربط','«'+q+'» مربوط سابقاً بـ«'+((other&&other.name)||r.existingCode)+'» — لم يُغيَّر الربط المحفوظ');
+        }
+      });
+    }
+  }catch(e){ reportError('submitEntry/alias', e); }
+  STATE.selectedItemQuery = '';
+
   toast('success','تم الحفظ','أضيف السجل #'+entry.num+' للسجل التاريخي');
   updateCounts();
   clearForm();
@@ -7936,6 +7957,40 @@ function submitNewItem(){
     toast('error','كود مكرر','الكود "'+code+'" مستخدم بالفعل. اختر كوداً مختلفاً.');
     return;
   }
+
+  /* ⚠️ حارس التكرار — «لا يكررها» (توجيه المالك):
+     كان الفحص على **الكود وحده**، فكتابة تسمية أخرى لصنف قائم تُنشئ صنفاً
+     مكرّراً بصمت فيتشقّ سجلّه السعريّ بين بطاقتين. المقيس على الكتالوج: 15
+     مجموعة أسماء متطابقة على 32 صنفاً — وهذا الباب هو من أنتجها.
+     المُحلِّل نفسه الذي يحكم الاستيراد الذكيّ يحكم هذا الباب (بوّابة واحدة)،
+     ونعرض للمستخدم **الطريقين في نقرة واحدة** بدل منعٍ أعمى:
+     موافق ⇒ استعمل الصنف القائم · إلغاء ⇒ أنشئ الجديد (بأثر تدقيق صريح). */
+  try{
+    const dup = siResolveItem(name, { unit, supplier });
+    if(dup.item && (dup.state === 'ok' || dup.state === 'suggest')){
+      const certain = dup.state === 'ok';
+      const msg = (certain ? '⚠ يوجد صنف مطابق مسجّل بالفعل:' : '⚠ قد يكون هذا الصنف مسجّلاً بالفعل:')
+        + `\n\n[${dup.item.code}] ${dup.item.name||''}`
+        + (dup.item.unit ? `\nالوحدة: ${dup.item.unit}` : '')
+        + (dup.reason ? `\nالسبب: ${dup.reason}` : '')
+        + '\n\nموافق = استعمال الصنف القائم (يُسجَّل السعر في سجلّه)'
+        + '\nإلغاء = إنشاء صنف جديد مستقلّ';
+      if(confirm(msg)){
+        setEntryMode('existing');
+        document.getElementById('f-code').value = dup.item.code;
+        STATE.selectedItemQuery = name;
+        fillFromItem(dup.item);
+        document.getElementById('f-price').value = String(price);
+        document.getElementById('f-supplier').value = supplier;
+        document.getElementById('f-date').value = date;
+        if(reference) document.getElementById('f-reference').value = reference;
+        if(note) document.getElementById('f-note').value = note;
+        toast('info','استُعمل الصنف القائم','راجع البيانات ثم اضغط «نقل إلى السجل»');
+        return;
+      }
+      try{ logAudit('duplicate_override','item',code,{name, nearest:dup.item.code, score:Number(dup.score.toFixed(2)), state:dup.state}); }catch(_){}
+    }
+  }catch(e){ reportError('submitNewItem/dupCheck', e); }
 
   // Create new item
   const newItem = {
@@ -17764,18 +17819,27 @@ CREATE POLICY "Enable insert for all" ON proc_ai_usage FOR INSERT WITH CHECK (tr
 -- جدول مطابقات البنود المتعلَّمة (Learned Item Aliases)
 -- كلما أكد المستخدم "نعم، هذا البند = البند الموجود"، نخزّن الربط هنا.
 -- في عرض السعر التالي، يتذكر النظام فوراً بدون مطابقة نصية.
+-- ⚠️ المفتاح الفريد **مركّب** (المرادف + نطاق المورد): نفس التسمية العامية عند
+-- موردين مختلفين قد تعني منتجين مختلفين. supplier_key='' = مرادف عامّ.
+-- (للقواعد القائمة: db/system2-item-alias-scope.sql)
 CREATE TABLE IF NOT EXISTS proc_item_aliases (
   id BIGSERIAL PRIMARY KEY,
-  normalized_alias TEXT NOT NULL UNIQUE, -- اسم البند المستخرج بعد تطبيعه
+  normalized_alias TEXT NOT NULL,        -- اسم البند المستخرج بعد تطبيعه
+  supplier_key TEXT NOT NULL DEFAULT '', -- نطاق المورد ('' = عامّ)
   item_code TEXT NOT NULL,               -- كود البند الكنوني في proc_items
   original_text TEXT,                    -- النص الأصلي قبل التطبيع (للتوثيق)
   confirmed_by TEXT,                     -- من أكّد هذا الربط
   confirmed_count INTEGER DEFAULT 1,     -- كم مرة استُخدم هذا الربط
+  source TEXT,                           -- confirm | manual | ai
+  conflict_count INTEGER NOT NULL DEFAULT 0,
+  last_conflict JSONB,
   created_at TIMESTAMPTZ DEFAULT now(),
   last_used_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_aliases_norm ON proc_item_aliases(normalized_alias);
 CREATE INDEX IF NOT EXISTS idx_aliases_code ON proc_item_aliases(item_code);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_aliases_norm_supplier ON proc_item_aliases(normalized_alias, supplier_key);
+CREATE INDEX IF NOT EXISTS idx_aliases_supplier ON proc_item_aliases(supplier_key);
 ALTER TABLE proc_item_aliases ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable read for all"    ON proc_item_aliases;
 DROP POLICY IF EXISTS "Enable insert for all"  ON proc_item_aliases;
@@ -25063,38 +25127,13 @@ async function siHandleFile(file){
    لكن بالاسم فقط (دون أسعار)، ويعرض التاريخ السعري لكل بند.
    ════════════════════════════════════════════════════════════ */
 async function plMatchOne(name, unit){
-  const aliases = SI_LEARNED_ALIASES || {};
-  let bestItem = null, bestScore = 0, reason = '', candidates = [];
-
-  // طبقة 1: رقم الموديل (محايد اللغة)
-  const modelNums = siExtractModelNumbers(name || '');
-  if(modelNums.length){
-    outerPL: for(const mn of modelNums){
-      for(const i of STATE.items){
-        if((i.code && siExtractModelNumbers(i.code).includes(mn)) || siExtractModelNumbers(i.name||'').includes(mn)){
-          bestItem = i; bestScore = 0.95; reason = `رقم موديل: ${mn}`; break outerPL;
-        }
-      }
-    }
-  }
-  // طبقة 2: ربط معتمد مسبقاً
-  if(!bestItem){
-    const code = aliases[siNormalize(name||'')];
-    if(code){ const a = STATE.items.find(i => i.code === code); if(a){ bestItem = a; bestScore = 0.99; reason = 'ربط معتمد مسبقاً'; } }
-  }
-  // طبقة 3: تشابه الاسم (+ مطابقة الوحدة)
-  if(!bestItem){
-    const scored = STATE.items.map(i => {
-      let s = siSimilarity(i.name, name);
-      if(unit && i.unit){
-        const ua = siNormalize(unit), ub = siNormalize(i.unit);
-        if(ua === ub) s *= 1.0; else if(siSimilarity(ua, ub) > 0.7) s *= 0.95; else s *= 0.85;
-      }
-      return { item: i, score: s };
-    }).filter(c => c.score > 0.3).sort((a, b) => b.score - a.score);
-    candidates = scored.slice(0, 3);
-    if(candidates.length){ bestItem = candidates[0].item; bestScore = candidates[0].score; reason = `تشابه ${(bestScore*100).toFixed(0)}%`; }
-  }
+  /* ⚠️ مصدر القرار واحد: `siResolveItem` (كود → مرادف بنطاق المورد → مرادف عامّ
+     → تطابق الاسم → موديل → تشابه)، وكلّه محكوم ببوّابة المواصفات وقاعدة
+     التعادل. كانت هنا نسخة ثالثة من المراتب **بلا فيتو**، فمرشّح رقم الموديل
+     يُعطى 0.95 حتى لمنتجين مختلفين يتشاركان الرمز (وزرة/نعلة APG-S15P). */
+  const res = siResolveItem(name, { unit });
+  let bestItem = res.item, bestScore = res.score, reason = res.reason;
+  let candidates = (res.candidates || []).slice(0, 3);
   // طبقة 4: تطابق دلالي بالذكاء (عربي↔إنجليزي، تعبير قصير↔طويل)
   if(bestScore < SI_MATCH_SUGGEST && candidates.length){
     try{
@@ -25126,21 +25165,15 @@ function plStringFallback(name, unit){
    بالذكاء على كامل الكتالوج (نداء واحد)، مع احتياط نصّي عند تعذّر الذكاء. */
 async function plResolveAll(items){
   const out = items.map(() => ({item:null, score:0, reason:'', candidates:[]}));
-  const aliases = SI_LEARNED_ALIASES || {};
   const needAI = [];
   items.forEach((it, idx) => {
-    const name = it.name || '';
-    const modelNums = siExtractModelNumbers(name);
-    if(modelNums.length){
-      outerR: for(const mn of modelNums){ for(const i of STATE.items){
-        if((i.code && siExtractModelNumbers(i.code).includes(mn)) || siExtractModelNumbers(i.name||'').includes(mn)){
-          out[idx] = {item:i, score:0.95, reason:`رقم موديل: ${mn}`, candidates:[]}; break outerR; } } }
-    }
-    if(!out[idx].item){
-      const code = aliases[siNormalize(name)];
-      if(code){ const a = STATE.items.find(i => i.code === code); if(a) out[idx] = {item:a, score:0.99, reason:'ربط معتمد مسبقاً', candidates:[]}; }
-    }
-    if(!out[idx].item) needAI.push(idx);
+    /* ⚠️ المسار السريع يمرّ بالمُحلِّل نفسه (بالفيتو وقاعدة التعادل)، لا بنسخة
+       رابعة من المراتب. والحالة `ok` وحدها تُعتبَر محسومة؛ `suggest` تُعرَض
+       للمراجعة ويُستفتى الذكاء عليها أيضاً فلا يُحسم المتقارب بلا دليل. */
+    const r = siResolveItem(it.name || '', { unit: it.unit });
+    if(r.state === 'ok'){ out[idx] = {item:r.item, score:r.score, reason:r.reason, candidates:[]}; return; }
+    if(r.state === 'suggest'){ out[idx] = {item:r.item, score:Math.min(r.score, 0.72), reason:r.reason, candidates:(r.candidates||[]).slice(0,3)}; }
+    needAI.push(idx);
   });
   if(needAI.length){
     siShowProcessing('مطابقة دلالية شاملة بالذكاء...', `${needAI.length} بند على كامل الكتالوج (${(STATE.items||[]).length} صنف)`);
@@ -25157,8 +25190,10 @@ async function plResolveAll(items){
           if(score){ out[idx] = {item:it2, score, reason: r.reason ? ('ذكاء: '+r.reason) : 'تطابق دلالي (ذكاء)', candidates:[]}; return; }
         }
       }
-      const fb = plStringFallback(items[idx].name, items[idx].unit);
-      if(fb.item) out[idx] = fb;
+      if(!out[idx].item){
+        const fb = plStringFallback(items[idx].name, items[idx].unit);
+        if(fb.item) out[idx] = fb;
+      }
     });
   }
   return out;
@@ -25370,17 +25405,30 @@ function siItemPickerResults(query){
       const hay = siNormalize((i.name||'') + ' ' + (i.code||''));
       return toks.every(t => hay.includes(t));
     });
-    if(sub.length) pool = sub; // تضييق سريع بالتطابق النصّي؛ وإلا نرتّب الكل بالتشابه
+    /* ⚠️ ووسِّع بالمرادفات المعتمدة: من بحث بتسمية المورد (أو بالإنجليزية) كان
+       لا يجد الصنف العربيّ ولو كان البشر قد ربطوا الاسمين من قبل. */
+    const low = q.toLowerCase();
+    const aliasHits = [];
+    Object.keys(SI_ALIASES_BY_CODE || {}).forEach(code => {
+      if((SI_ALIASES_BY_CODE[code] || []).some(t => t.includes(low))){
+        const it = pool.find(i => String(i.code) === String(code));
+        if(it && !sub.includes(it)) aliasHits.push(it);
+      }
+    });
+    if(sub.length || aliasHits.length) pool = aliasHits.concat(sub); // تضييق سريع؛ وإلا نرتّب الكل بالتشابه
   }
   const scored = pool.map(i => ({ i, s: q ? siSimilarity(i.name||'', q) : 0 }))
     .sort((a,b) => b.s - a.s).slice(0, 40);
   if(!scored.length) return '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">لا نتائج — جرّب كلمة مختلفة</div>';
   return scored.map(({i}) => {
     const price = (i.last_price!=null) ? plFmt(i.last_price) : '—';
-    return `<button type="button" class="si-pick-item" data-code="${escapeHtml(String(i.code||''))}"
+    /* سبب التعارض يُعرَض ولا يُحجَب المرشّح: الربط اليدويّ قرار بشريّ، لكن
+       البشر يحتاجون أن يعرفوا أنّ المواصفة مختلفة قبل أن يقرّروا. */
+    const veto = q ? siSpecVeto(q, i.name||'') : '';
+    return `<button type="button" class="si-pick-item" data-code="${escapeHtml(String(i.code||''))}" title="${escapeAttr(veto||'')}"
       style="display:flex;justify-content:space-between;gap:10px;width:100%;text-align:right;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--surface,#faf9f6);color:inherit;cursor:pointer">
       <span style="flex:1;min-width:0"><span style="font-weight:600;font-size:13px;overflow-wrap:anywhere">${escapeHtml(i.name||'')}</span>
-      <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">${i.code?`<span style="font-family:monospace">${escapeHtml(String(i.code))}</span> · `:''}${escapeHtml(i.unit||'')}${(Number(i.offers)||0)>0?` · ${i.offers} عرض`:''}</span></span>
+      <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px">${i.code?`<span style="font-family:monospace">${escapeHtml(String(i.code))}</span> · `:''}${escapeHtml(i.unit||'')}${(Number(i.offers)||0)>0?` · ${i.offers} عرض`:''}${veto?`<span style="color:var(--danger,#b91c1c);font-weight:600"> · ⚠ ${escapeHtml(veto)}</span>`:''}</span></span>
       <span style="font-size:12px;font-weight:700;white-space:nowrap">${price}</span>
     </button>`;
   }).join('');
@@ -25412,7 +25460,7 @@ function plLinkRow(idx, code){
     hasHistory, manual: true, selected: row.selected
   });
   // تعليم الربط كي يتعرّف عليه النظام تلقائياً في المرات القادمة
-  try{ siSaveLearnedAlias(row.req, it.code, row.req); }catch(_){}
+  try{ siSaveLearnedAlias(row.req, it.code, row.req, '', 'manual'); }catch(_){}
   plRenderReport();
   const nm = row.req.length > 34 ? row.req.slice(0,34)+'…' : row.req;
   toast('success','تم الربط', 'رُبط «'+nm+'» بـ«'+(it.name||it.code)+'» وسيُتعرَّف عليه تلقائياً لاحقاً');
@@ -25438,7 +25486,7 @@ async function plAddSelectedToSystem(){
     try{ logAudit('add','item',code,{name: row.req, source:'pricing_add'}); }catch(_){}
     if(window.CLOUD && CLOUD.enabled){ try{ await CLOUD.items.upsert(newItem); }catch(e){ fails++; console.warn('[pricing-add] cloud upsert:', e && e.message); } }
     Object.assign(row, { status:'matched', reason:'أُضيف للنظام', code, matchName: row.req, hasHistory:false, manual:true });
-    try{ siSaveLearnedAlias(row.req, code, row.req); }catch(_){}
+    try{ siSaveLearnedAlias(row.req, code, row.req, '', 'manual'); }catch(_){}
     added++;
   }
   plRenderReport();
@@ -26121,9 +26169,25 @@ async function siAIExtractFromImage(base64, mimeType){
    The cache is loaded once at startup (after cloud connect) and kept in
    sync after each user confirmation.
 */
-let SI_LEARNED_ALIASES = {};     // normalized_alias → item_code (for matching)
+let SI_LEARNED_ALIASES = {};     // مفتاح المرادف (باسمه ونطاق مورده) → item_code
 let SI_ALIASES_BY_CODE = {};     // item_code → [original_text, ...] (for bilingual search)
 let SI_ALIASES_LOADED_AT = 0;
+let SI_ALIAS_SCOPED = false;     // هل تحمل القاعدة عمود supplier_key؟ (تسامح قبل الهجرة)
+
+/* === نطاق المورد في المرادفات ===
+   توجيه المالك: «مهما اختلفت بعض المسميات من مورد لمورد». فالمرادف المتعلَّم من
+   مورد بعينه **دليل أقوى** من مرادف عامّ: نفس التسمية العامية قد تعني منتجين
+   مختلفين عند موردين مختلفين. فنخزّن النطاق ونجعل مرادف المورد قاطعاً، والعامّ
+   محكوماً ببوّابة المواصفات.
+   ⚠️ المفتاح المركّب يُبنى هنا وحده — لا تُركّبه يدويّاً في موضع آخر. */
+function siSupplierKey(name){
+  if(!name) return '';
+  try { if(typeof arNorm === 'function') return arNorm(name); } catch(_){}
+  return siNormalize(name);
+}
+function siAliasKey(norm, supplierKey){
+  return supplierKey ? (norm + '\u0001' + supplierKey) : norm;
+}
 
 async function siLoadLearnedAliases(force){
   if(!window.CLOUD || !CLOUD.enabled || !CLOUD.client) return {};
@@ -26132,18 +26196,28 @@ async function siLoadLearnedAliases(force){
     return SI_LEARNED_ALIASES;
   }
   try {
-    const {data, error} = await CLOUD.client
+    /* متسامح مع المخطّط قبل الهجرة: قاعدة بلا `supplier_key` ترفض الاختيار
+       بـ400، فنعيد المحاولة بالأعمدة القديمة — فالنظام يعمل قبل الهجرة وبعدها. */
+    let data = null, scoped = true;
+    let res = await CLOUD.client
       .from('proc_item_aliases')
-      .select('normalized_alias, item_code, original_text');
-    if(error){
+      .select('normalized_alias, item_code, original_text, supplier_key');
+    if(res.error){
+      scoped = false;
+      res = await CLOUD.client
+        .from('proc_item_aliases')
+        .select('normalized_alias, item_code, original_text');
+    }
+    if(res.error){
       // Table may not exist yet — gracefully degrade, system still works
-      console.warn('[aliases] table not ready:', error.message);
+      console.warn('[aliases] table not ready:', res.error.message);
       return SI_LEARNED_ALIASES;
     }
+    data = res.data;
     const map = {};
     const byCode = {};
     (data || []).forEach(r => {
-      map[r.normalized_alias] = r.item_code;
+      map[siAliasKey(r.normalized_alias, scoped ? (r.supplier_key || '') : '')] = r.item_code;
       // Build reverse index: code → list of original texts (for search)
       if(r.original_text){
         if(!byCode[r.item_code]) byCode[r.item_code] = [];
@@ -26152,6 +26226,7 @@ async function siLoadLearnedAliases(force){
     });
     SI_LEARNED_ALIASES = map;
     SI_ALIASES_BY_CODE = byCode;
+    SI_ALIAS_SCOPED = scoped;
     SI_ALIASES_LOADED_AT = Date.now();
     return map;
   } catch(e) {
@@ -26160,17 +26235,34 @@ async function siLoadLearnedAliases(force){
   }
 }
 
+/* siAliasLookup(name, supplier) → {code, scope:'supplier'|'global'} أو null.
+   يجرّب نطاق المورد أوّلاً ثم العامّ، وفي كلٍّ يجرّب التطبيع الحاليّ ثم
+   **القديم** (مرادفات خُزِّنت قبل حماية الفاصلة العشرية). */
+function siAliasLookup(name, supplier){
+  const map = SI_LEARNED_ALIASES || {};
+  const norms = [siNormalize(name)];
+  const legacy = siNormalizeLegacy(name);
+  if(legacy && legacy !== norms[0]) norms.push(legacy);
+  const sk = siSupplierKey(supplier);
+  if(sk){
+    for(const n of norms){ const c = map[siAliasKey(n, sk)]; if(c) return {code:c, scope:'supplier'}; }
+  }
+  for(const n of norms){ const c = map[siAliasKey(n, '')]; if(c) return {code:c, scope:'global'}; }
+  return null;
+}
+
 /* Save a confirmed alias: "this extracted name = this canonical item code".
    If the alias already exists, bumps the confirmed_count and last_used_at.
    Returns true on success, false on failure (system continues working). */
-async function siSaveLearnedAlias(extractedName, itemCode, originalText){
+async function siSaveLearnedAlias(extractedName, itemCode, originalText, supplierName, source){
   if(!window.CLOUD || !CLOUD.enabled || !CLOUD.client) return false;
   if(!extractedName || !itemCode) return false;
   const norm = siNormalize(extractedName);
   if(!norm) return false;
+  const sk = SI_ALIAS_SCOPED ? siSupplierKey(supplierName) : '';
 
   // Update in-memory caches immediately so the current session benefits
-  SI_LEARNED_ALIASES[norm] = itemCode;
+  SI_LEARNED_ALIASES[siAliasKey(norm, sk)] = itemCode;
   if(extractedName){
     if(!SI_ALIASES_BY_CODE[itemCode]) SI_ALIASES_BY_CODE[itemCode] = [];
     const orig = (originalText || extractedName).toLowerCase();
@@ -26178,33 +26270,47 @@ async function siSaveLearnedAlias(extractedName, itemCode, originalText){
   }
 
   try {
-    // Upsert: if alias exists, bump count; otherwise insert
     const username = STATE.currentUser ? STATE.currentUser.username : 'unknown';
-    const {data: existing, error: selErr} = await CLOUD.client
-      .from('proc_item_aliases')
-      .select('id, confirmed_count')
-      .eq('normalized_alias', norm)
-      .maybeSingle();
+    /* ⚠️ لا `maybeSingle`: صفّان بنفس المرادف (نطاقان مختلفان، أو بقايا قبل
+       الهجرة) يجعلانها ترمي فيُفقَد التعلُّم صامتاً. نقرأ القائمة ونختار. */
+    let q = CLOUD.client.from('proc_item_aliases')
+      .select('id, item_code, confirmed_count' + (SI_ALIAS_SCOPED ? ', supplier_key' : ''))
+      .eq('normalized_alias', norm);
+    const {data: rows, error: selErr} = await q;
     if(selErr) throw selErr;
+    const existing = (rows || []).find(r => (SI_ALIAS_SCOPED ? (r.supplier_key || '') : '') === sk);
 
     if(existing){
+      /* ⚠️ لا إعادة توجيه صامتة: كان الحفظ ينفّذ `update({item_code})` فيُحوِّل
+         مرادفاً اعتمده بشريٌّ سابقاً إلى صنف آخر بلا أثر ولا سؤال — ثم تُدمَج
+         **كل** العروض التالية بذلك الاسم في الصنف الجديد بثقة 0.99. هذا بعينه
+         «يربطها في بند خاطئ» بأثر متضاعف. التعارض يُسجَّل ويُترك للقرار. */
+      if(String(existing.item_code) !== String(itemCode)){
+        SI_LEARNED_ALIASES[siAliasKey(norm, sk)] = existing.item_code; // أعِد الذاكرة للمخزَّن
+        try{ logAudit('conflict','item_alias', norm, {kept:existing.item_code, rejected:itemCode, supplier:supplierName||''}); }catch(_){}
+        return {conflict:true, existingCode:existing.item_code};
+      }
       await CLOUD.client
         .from('proc_item_aliases')
         .update({
-          item_code: itemCode,
           confirmed_count: (existing.confirmed_count || 1) + 1,
           last_used_at: new Date().toISOString()
         })
         .eq('id', existing.id);
     } else {
-      await CLOUD.client
-        .from('proc_item_aliases')
-        .insert({
-          normalized_alias: norm,
-          item_code: itemCode,
-          original_text: originalText || extractedName,
-          confirmed_by: username
-        });
+      const row = {
+        normalized_alias: norm,
+        item_code: itemCode,
+        original_text: originalText || extractedName,
+        confirmed_by: username
+      };
+      if(SI_ALIAS_SCOPED){ row.supplier_key = sk; row.source = source || 'confirm'; }
+      const ins = await CLOUD.client.from('proc_item_aliases').insert(row);
+      /* القاعدة قبل الهجرة ترفض الأعمدة الجديدة — أعِد المحاولة بالأعمدة القديمة. */
+      if(ins.error && SI_ALIAS_SCOPED){
+        delete row.supplier_key; delete row.source;
+        await CLOUD.client.from('proc_item_aliases').insert(row);
+      }
     }
     return true;
   } catch(e) {
@@ -26329,14 +26435,52 @@ const SI_SYNONYM_MAP = [
   [/\bwater\b/gi, 'ماء'],
   [/\belectric(al)?\b/gi, 'كهرباء'],
   [/(كهربائي|كهربائية|كهرباء)/g, 'كهرباء'],
-  [/\bhp\b|horse\s*power/gi, 'حصان'],
+  /* ⚠️ «HP» في هذا الكتالوج علامة تجارية (طابعات · لابتوبات · تونر) أكثر منها
+     وحدةَ قدرة؛ استبدالها دائماً كان يمحو هوية الماركة من المطابقة. تُستبدَل
+     وحدةَ قدرة **فقط حين يسبقها رقم** («1 HP»). */
+  [/(\d)\s*hp\b/gi, '$1 حصان'],
+  [/horse\s*power/gi, 'حصان'],
   [/\bsheet(s)?\b|\bpanel(s)?\b|\bboard(s)?\b/gi, 'لوح'],
   [/\bceiling\b/gi, 'سقف'],
   [/\bwall(s)?\b/gi, 'جدار'],
   [/\bfloor(ing)?\b/gi, 'ارضية'],
 ];
 
+/* === طيّ الحروف — أبجدية واحدة للمعجم ومُخرَجه ===
+   ⚠️ عيب مقيس: `siNormalize` يطوي ة→ه و ى→ي والهمزات **قبل** تطبيق المعجم،
+   ثم يُخرِج المعجم بدائل تحمل «ة» و«أ» (بوصة · مضخة · نافذة · بطارية · لمبة ·
+   أرضية …) فتخرج من التطبيع رموزٌ خارج أبجديته: «15.6"» ⇒ «بوصة» بينما
+   «15.6 بوصة» ⇒ «بوصه» — فلا يتطابق الاسمان أبداً وهما نفس الشيء.
+   نطوي **جانب البديل** بنفس الطيّات مرّة واحدة عند التحميل، فيبقى المعجم في
+   أبجدية واحدة مهما أُضيف إليه لاحقاً (بلا تحرير مئة سطر يدويّاً). */
+function siFoldLetters(s){
+  return String(s).replace(/[إأآا]/g,'ا').replace(/[ىي]/g,'ي').replace(/[ةه]/g,'ه');
+}
+/* idempotent — الطيّ مرّتين كالطيّ مرّة.
+   ⚠️ ويُفرِغ ذاكرة التطبيع: تغيير المعجم يُبطِل كل قيمة محفوظة. */
+function siFoldSynonymMap(){
+  SI_SYNONYM_MAP.forEach(p => { p[1] = siFoldLetters(p[1]); });
+  try { SI_NORM_CACHE.clear(); } catch(_){}
+}
+siFoldSynonymMap();
+
+/* ذاكرة تطبيع — التطبيع يُمرِّر ~110 تعبيراً نمطيّاً على كل نداء، ويُنادى
+   لنفس اسم الصنف عشرات المرّات في المسح الواحد. مقيس: المُحلِّل على 60 سطراً
+   كان 7.7 ثانية (واجهة تبدو متجمّدة)؛ بالذاكرة + تأخير الفيتو ⇒ أجزاء من الثانية.
+   مُقيَّدة الحجم كي لا تنمو بلا حدّ، ومفتاحها النصّ الخامّ. */
+const SI_NORM_CACHE = new Map();
+const SI_NORM_CACHE_MAX = 6000;
 function siNormalize(s){
+  if(!s) return '';
+  const key = typeof s === 'string' ? s : String(s);
+  const hit = SI_NORM_CACHE.get(key);
+  if(hit !== undefined) return hit;
+  const val = siNormalizeRaw(key);
+  if(SI_NORM_CACHE.size >= SI_NORM_CACHE_MAX) SI_NORM_CACHE.clear();
+  SI_NORM_CACHE.set(key, val);
+  return val;
+}
+function siNormalizeRaw(s){
   if(!s) return '';
   let n = s.toString().toLowerCase()
     // Convert Eastern-Arabic and Persian digits to Western (so the
@@ -26348,8 +26492,19 @@ function siNormalize(s){
     .replace(/[إأآا]/g, 'ا')
     .replace(/[ىي]/g, 'ي')
     .replace(/[ةه]/g, 'ه')
-    .replace(/[×*xX]/g, ' ') // dimension separators all become space ("50×50" → "50 50")
+    /* فواصل الأبعاد: «×» و«*» دائماً، أمّا «x/X» فـ**بين رقمين فقط**.
+       ⚠️ مقيس: استبدال كل x/X كان يشقّ الكلمات اللاتينية — «953XL» ⇒ «953 L»
+       فتصير «L» وحدةَ لتر ويُقرأ الرقم سعةً بتفاوت 1% ⇒ «حبر HP 953XL» و«954XL»
+       (خرطوشتان مختلفتان) يتطابقان بثقة 1.00. */
+    .replace(/[×*]/g, ' ')
+    .replace(/(\d)\s*[xX]\s*(\d)/g, '$1 $2')
+    /* ⚠️ حماية الفاصلة العشرية: كانت «.» داخل صنف الفواصل أدناه فتُستبدل بمسافة،
+       فيصير «3.78 لتر» ⇒ «3 78 لتر» — أي تنفصل القيمة عن وحدتها وتُقرأ رقمين.
+       فكان دعم العشريّات في `siExtractNumbers` شيفرةً ميتة، وتكافؤ «3.78 لتر =
+       1 جالون» (وهو مثال في موجّه الذكاء نفسه) لا يُقاس أصلاً. */
+    .replace(/(\d)[.,](\d)/g, '$1\u0001$2')
     .replace(/[\s\-_،,.()]+/g, ' ')
+    .replace(/\u0001/g, '.')
     .trim();
   // Apply synonym map after basic normalization
   for(const [pattern, replacement] of SI_SYNONYM_MAP){
@@ -26357,6 +26512,13 @@ function siNormalize(s){
   }
   // Final cleanup
   return n.replace(/\s+/g, ' ').trim();
+}
+
+/* التطبيع كما كان **قبل** حماية الفاصلة العشرية — لا يُستعمل للمقارنة إطلاقاً،
+   بل لقراءة المرادفات المخزَّنة قبل الإصلاح (مفتاحها محسوب بالسلوك القديم)،
+   فلا يفقد المستخدم ربطاً اعتمده سابقاً لاسم يحمل عشريّاً. */
+function siNormalizeLegacy(s){
+  return siNormalize(String(s == null ? '' : s).replace(/(\d)[.,](\d)/g, '$1 $2'));
 }
 
 /* Extract numeric tokens (with optional unit) from a normalized string.
@@ -26389,9 +26551,13 @@ function siCompareNumbers(numsA, numsB){
   for(const na of sa){
     for(let j = 0; j < sb.length; j++){
       if(usedB.has(j)) continue;
-      // Numbers within 5% are "close enough" (typo / rounding)
+      /* ⚠️ التفاوت **لكل وحدة** لا 5% عامّ: التفاوت العامّ كان يقرأ 1625↔1635
+         (0.6%) و80A↔83A (3.75%) و40L↔42L (4.8%) «خطأ مطبعيّ» فيدمج موديلات
+         ومنتجات مختلفة بثقة كاملة. الوحدة المجهولة (رقم بلا وحدة = غالباً جزء
+         من رقم موديل) تأخذ التفاوت الأضيق. */
       const ratio = Math.min(na.value, sb[j].value) / Math.max(na.value, sb[j].value);
-      if(ratio >= 0.95){
+      const tol = Math.max(siUnitTol(na.unit), siUnitTol(sb[j].unit));
+      if(ratio >= tol){
         matched++;
         usedB.add(j);
         break;
@@ -26401,12 +26567,46 @@ function siCompareNumbers(numsA, numsB){
   return matched / Math.max(sa.length, sb.length);
 }
 
-/* === تعارض كمّي بنفس الوحدة (شبكة أمان حتمية ضد الإيجابي الكاذب) ===
-   يستخرج أزواج (قيمة، وحدة) للوحدات الفارقة فقط (لتر/مل/جالون/كجم/سم…)، ويتجاهل
-   أعداد العبوة/التغليف (شد/عبوة) التي لا وحدة لها. يعيد true إن اشتركت وحدةٌ لكن
-   اختلفت قيمتها بوضوح — مثل «مطهر 4 لتر» ↔ «مطهر 3 لتر». آمن لغوياً (نفس الوحدة
-   فقط) ولا يمسّ تكافؤ الوحدات المختلفة (جالون↔لتر يعيد النموذج فحصه). */
-const SI_SPEC_UNITS = new Set(['لتر','مل','جالون','كجم','جم','جرام','كيلو','سم','مم','متر','بوصه','بوصة','واط','فولت','امبير','طن']);
+/* ════════════════════════════════════════════════════════════════════
+   بوّابة المواصفات الفارقة (spec veto) — العلاج الجذريّ لـ«يربطها في بند خاطئ»
+   ────────────────────────────────────────────────────────────────────
+   مقيس على الكتالوج الحقيقيّ (529 صنفاً في بذرة الملف): من **82 زوجاً** يصنّفها
+   المحرّك «تطابق تلقائيّ» (‏≥0.85 فيُدمَج بلا مراجعة بشريّة) كان **17 زوجاً
+   منتجات مختلفة يقيناً**، أشدّها:
+     · «تونر HP 80A» ↔ «تونر HP 83A»            = 1.00  (موديل)
+     · «مكنسة … CRS1625» ↔ «… CRS1635»           = 1.00  (موديل)
+     · «… Fiorentini F46F1» ↔ «… F46H1»          = 0.96  (موديل)
+     · «آلة سكراب K80+» ↔ «آلة سكراب K79»        = 0.93  (موديل)
+     · «حاوية … 42L» ↔ «حاوية … 40L»             = 0.92  (سعة)
+     · «وزرة فايبر APG-S15P» ↔ «نعلة فايبر APG-S15P» = 0.87 (نوع المنتج)
+     · «ماسورة … إيجا 25 ملي» ↔ «ملبوش … إيجا 25 ملي» = 0.88 (نوع المنتج)
+   سببان مقيسان: (أ) قناة النصّ في `siSimilarity` تُسقِط الأرقام فيصير «CRS1625»
+   و«CRS1635» كلاهما «crs» ⇒ تشابه نصّي 1.00؛ (ب) تفاوت 5% العامّ
+   يمحو الفروق الفارقة الصغيرة (1625↔1635 = 0.6% · 80A↔83A = 3.75% ·
+   40L↔42L = 4.8%) فتُقرأ «خطأ مطبعيّ».
+   العلاج: استخراج المواصفات بنيويّاً · تفاوت **لكل وحدة** · وفيتو يمنع الترقية
+   إلى «تطابق تلقائيّ» مهما علا التشابه النصّي.
+   ⚠️ الفيتو يمنع التلقائيّ **ولا يُخفي المرشّح**: يبقى معروضاً مع سبب التعارض
+   كي يبقى القرار البشريّ ممكناً — الصمت هو العيب، لا الاقتراح.
+   ════════════════════════════════════════════════════════════════════ */
+// تشمل وحدات لاتينية ترد كما هي في أسماء الكتالوج (42L · 8GB · 220V · 1500W)
+const SI_SPEC_UNITS = new Set(['لتر','مل','جالون','كجم','جم','جرام','كيلو','سم','مم','متر','بوصه','بوصة','واط','فولت','امبير','طن','l','ml','kg','g','gb','tb','mb','v','w','a','mah','cm','mm','m','hp','rpm','بار','هرتز','حصان','انش']);
+/* تفاوت مقبول لكل وحدة = أدنى نسبة (الأصغر/الأكبر) تُعَدّ «نفس القيمة».
+   1 = لا تفاوت إطلاقاً (قيم معيارية: جهد · سعة ذاكرة · أمبير · عدد عبوة).
+   ⚠️ لا تُعِد التفاوت العامّ إلى 5%: هو ما كان يدمج 40L مع 42L و80A مع 83A. */
+const SI_UNIT_TOL = {
+  'فولت':1,'v':1,'واط':1,'w':1,'امبير':1,'a':1,'gb':1,'tb':1,'mb':1,'mah':1,'حصان':1,'hp':1,'rpm':1,'هرتز':1,
+  /* 0.99 يقبل التقريب الحقيقيّ (3.78 لتر ↔ 3.8 لتر = 0.995) ويرفض الفرق
+     الفارق (40 ↔ 42 لتر = 0.952 · 25 ↔ 50 كجم = 0.5). */
+  'لتر':0.99,'l':0.99,'مل':0.99,'ml':0.99,'جالون':0.99,
+  'كجم':0.99,'kg':0.99,'جم':0.99,'g':0.99,'جرام':0.99,'كيلو':0.99,'طن':0.99,
+};
+/* رقم بلا وحدة في اسم صنف = رقم موديل أو مقاس، لا خطأ مطبعيّ ⇒ تطابق تامّ.
+   (1625 ↔ 1635 = 0.994 كان يمرّ بأي تفاوت نسبيّ معقول.) */
+const SI_UNIT_TOL_DEFAULT = 1;
+function siUnitTol(u){
+  return Object.prototype.hasOwnProperty.call(SI_UNIT_TOL, u) ? SI_UNIT_TOL[u] : SI_UNIT_TOL_DEFAULT;
+}
 function siUnitQty(name){
   const out = {};
   for(const {value, unit} of siExtractNumbers(siNormalize(name||''))){
@@ -26418,11 +26618,125 @@ function siUnitConflict(a, b){
   const ua = siUnitQty(a), ub = siUnitQty(b);
   for(const u in ua){
     if(ub[u]){
-      const agree = ua[u].some(x => ub[u].some(y => Math.min(x,y)/Math.max(x,y) >= 0.92));
+      const tol = siUnitTol(u);
+      const agree = ua[u].some(x => ub[u].some(y => Math.min(x,y)/Math.max(x,y) >= tol));
       if(!agree) return true; // نفس الوحدة، لا قيمة متقاربة ⇒ تعارض
     }
   }
   return false;
+}
+
+/* عدد العبوة («شد 10» · «شد10» · «عبوة 12»): عدد صحيح فارق — «شد 12» ≠ «شد 24».
+   ⚠️ لا يلتقطه `siExtractNumbers` لأنّ وحدته تسبق الرقم لا تتبعه. */
+function siPackCount(norm){
+  const out = [];
+  const re = /(?:شد|عبوه|باكت|باكيت|درزن)\s*(\d+)|(\d+)\s*(?:شد|عبوه)/g;
+  let m; while((m = re.exec(norm)) !== null){ out.push(parseInt(m[1] || m[2], 10)); }
+  return out;
+}
+
+/* الكلمة الرأس (نوع المنتج) — أقوى مميِّز متاح بلا اتصال.
+   ⚠️ مقيس على الكتالوج: من 82 زوجاً «تلقائيّ» اختلف الرأس في 8 أزواج،
+   و**ثمانيتها منتجات مختلفة فعلاً** (وزرة/نعلة · ماسورة/ملبوش/جلبة ·
+   باك بوكس/فلور بوكس/فيس بوكس) — صفر إيجابية كاذبة. */
+function siHeadToken(norm){ return (String(norm||'').split(' ')[0] || ''); }
+function siScriptOf(t){ return /[ا-ي]/.test(t) ? 'ar' : (/[a-z]/.test(t) ? 'la' : '?'); }
+function siHeadConflict(na, nb){
+  const ha = siHeadToken(na), hb = siHeadToken(nb);
+  if(!ha || !hb || ha === hb) return false;
+  /* ⚠️ لا يُطبَّق عبر اللغتين: «Hand Wash Soap» و«صابون يدين» رأساهما مختلفان
+     بالضرورة وهما نفس المنتج — وهذا جوهر المطلوب (التسمية تختلف من مورد لمورد).
+     الحكم هناك للذكاء الدلاليّ وبقيّة الفيتوهات. */
+  if(siScriptOf(ha) !== siScriptOf(hb)) return false;
+  if(ha.includes(hb) || hb.includes(ha)) return false;      // تصريف/لاحقة
+  if(siDice(ha, hb) >= 0.6) return false;                    // خطأ إملائيّ بحرف
+  const ta = (' '+na+' '), tb = (' '+nb+' ');
+  if(tb.includes(' '+ha+' ') || ta.includes(' '+hb+' ')) return false; // اختلاف ترتيب لا نوع
+  return true;
+}
+
+/* === الكلمة المميِّزة — الكاسر المُثبَت على أسماء المشاريع، مُطبَّقاً على الأصناف ===
+   اسمان يتفقان في **كل** كلماتهما عدا واحدة، والكلمتان الفارقتان غير متشابهتين
+   ⇒ كيانان مختلفان. المقيس على الكتالوج: «منظف أرضيات Green Seal 3.78 لتر» ↔
+   «منظف حمامات …» (0.90) و«ترولي نقل ياباني 300 كجم» ↔ «… صيني …» (0.88) —
+   كلاهما كان يُدمَج تلقائياً.
+   ⚠️ ثلاثة قيود تمنع الإيجابية الكاذبة:
+     · كلمة **زائدة** على جانب واحد ليست فرقاً («سلة قمامة 10 جالون» ↔ «سلة
+       قمامة بلاستيك 10 جالون» نفس الصنف بوصف أدقّ) ⇒ يُشترط عددٌ متساوٍ وفرقٌ
+       بكلمة واحدة فقط على كل جانب.
+     · كلمتان متشابهتان حرفيّاً = خطأ إملائيّ لا فرق («لتر» ↔ «اتر»).
+     · كلمة وحدة/عبوة (SI_UNIT_STOP) ليست مميِّزة إطلاقاً.
+   ⚠️ ولا يُطبَّق عبر اللغتين (نفس سبب رأس الكلمة: اسم إنجليزيّ وعربيّ لنفس
+   الصنف يختلفان في كل كلمة). */
+function siDistinctWord(na, nb){
+  const ta = na.split(' ').filter(Boolean), tb = nb.split(' ').filter(Boolean);
+  if(ta.length !== tb.length) return null;
+  const onlyA = ta.filter(t => !tb.includes(t));
+  const onlyB = tb.filter(t => !ta.includes(t));
+  if(onlyA.length !== 1 || onlyB.length !== 1) return null;
+  const x = onlyA[0], y = onlyB[0];
+  if(SI_UNIT_STOP.has(x) || SI_UNIT_STOP.has(y)) return null;
+  /* ⚠️ الرقم ليس «كلمة مميِّزة»: القناة الرقمية تحكمه بتفاوت وحدته، وبدون هذا
+     القيد يُفتى على «3.78 لتر» ↔ «3.8 لتر» (نفس الجالون) بأنّهما مختلفان. */
+  if(/\d/.test(x) || /\d/.test(y)) return null;
+  if(siScriptOf(x) !== siScriptOf(y)) return null;
+  if(x.includes(y) || y.includes(x)) return null;
+  if(siDice(x, y) >= 0.6) return null;                      // خطأ إملائيّ
+  return [x, y];
+}
+
+/* siSpecVeto(a,b) → سبب التعارض بالعربية، أو '' إن لا تعارض قاطع.
+   أي سبب غير فارغ يمنع «التطابق التلقائيّ» مهما علا التشابه. */
+function siSpecVeto(a, b){
+  const na = siNormalize(a), nb = siNormalize(b);
+  if(!na || !nb || na === nb) return '';
+  // (١) رقم الموديل: أقوى دليل على اختلاف المنتج
+  const mA = siExtractModelNumbers(a || ''), mB = siExtractModelNumbers(b || '');
+  if(mA.length && mB.length && !mA.some(x => mB.includes(x))){
+    return `رقم موديل مختلف (${mA[0]} ≠ ${mB[0]})`;
+  }
+  // (٢) وحدة فارقة مشتركة بقيمة مختلفة
+  const ua = siUnitQty(a), ub = siUnitQty(b);
+  for(const u in ua){
+    if(!ub[u]) continue;
+    const tol = siUnitTol(u);
+    if(!ua[u].some(x => ub[u].some(y => Math.min(x,y)/Math.max(x,y) >= tol))){
+      return `قيمة مختلفة بنفس الوحدة (${ua[u][0]} ≠ ${ub[u][0]} ${u})`;
+    }
+  }
+  /* (٣) عدد العبوة — ويكفي وجوده على **جانب واحد**: «محراك … مم» يُسعَّر للقطعة
+     و«محراك … مم شد20» يُسعَّر للعبوة، فدمجهما يخلط أساسَي تسعير مختلفين. */
+  const pa = siPackCount(na), pb = siPackCount(nb);
+  if((pa.length || pb.length) && !pa.some(x => pb.includes(x))){
+    return `عدد العبوة مختلف (${pa.length?('شد '+pa[0]):'بلا عبوة'} ≠ ${pb.length?('شد '+pb[0]):'بلا عبوة'})`;
+  }
+  /* (٣.٥) نفس عدد الأرقام وقيمة مختلفة ⇒ مواصفة فارقة.
+     ⚠️ مقيس: «سلك مبروم 2×2.5 / 100 ياردة» ↔ «2×4 / 100 ياردة» (مقطعان
+     مختلفان) كان يُدمَج تلقائياً بـ0.88، لأنّ `siCompareNumbers` يُرجِع نسبة
+     (2 من 3 = 0.67) لا تبلغ سقف الـ0.5 الصارم، والرقم مستثنى من «الكلمة
+     المميِّزة». وتساوي العدد شرطٌ لازم: اختلاف العدد = وصفٌ أدقّ لا قيمةٌ أخرى. */
+  const nA = siExtractNumbers(na), nB = siExtractNumbers(nb);
+  if(nA.length && nA.length === nB.length){
+    const sa = nA.map(x => x.value).sort((x,y) => x-y);
+    const sb = nB.map(x => x.value).sort((x,y) => x-y);
+    for(let i = 0; i < sa.length; i++){
+      const tol = Math.max(siUnitTol(nA[i].unit), siUnitTol(nB[i].unit));
+      if(Math.min(sa[i], sb[i]) / Math.max(sa[i], sb[i]) < tol){
+        return `قيمة رقمية مختلفة (${sa[i]} ≠ ${sb[i]})`;
+      }
+    }
+  }
+  // (٤) صفة مميِّزة متعارضة (لون/حجم/حالة/مادة)
+  const q = siQualGroupConflict(na, nb);
+  if(q) return `صفة مميِّزة مختلفة (${q[0]} ≠ ${q[1]})`;
+  // (٥) نوع المنتج (الكلمة الرأس)
+  if(siHeadConflict(na, nb)){
+    return `نوع منتج مختلف (${siHeadToken(na)} ≠ ${siHeadToken(nb)})`;
+  }
+  // (٦) الكلمة المميِّزة الوحيدة
+  const d = siDistinctWord(na, nb);
+  if(d) return `كلمة مميِّزة مختلفة (${d[0]} ≠ ${d[1]})`;
+  return '';
 }
 
 /* === تشابه حرفي (Sørensen–Dice على الثنائيات) — يعالج التصريف والأخطاء الإملائية ===
@@ -26442,17 +26756,28 @@ function siTokenScore(a,b){
 }
 /* === تعارض الصفات المميِّزة — يمنع دمج صنفين يختلفان في لون/درجة فاصلة ===
    "دهان ابيض" مقابل "دهان اسود": النص متقارب لكنهما صنفان مختلفان. */
+/* مجموعات الصفات المميِّزة: قيمتان من **نفس** المجموعة على الطرفين = منتجان
+   مختلفان. كلمات مفردة فقط (المطابقة على الكلمة كاملةً، فالعبارات لا تُطابَق).
+   ⚠️ غياب الصفة في أحد الطرفين ليس تعارضاً — «سلة قمامة 10 جالون» ↔ «سلة قمامة
+   بلاستيك 10 جالون» نفس الصنف بوصف أدقّ. */
 const SI_QUAL_GROUPS = [
-  ['ابيض','اسود','احمر','ازرق','اخضر','رمادي','اصفر','بني','ذهبي','فضي'],
+  ['ابيض','اسود','احمر','ازرق','اخضر','رمادي','اصفر','بني','ذهبي','فضي','شفاف','بيج','وردي','برتقالي','بنفسجي','كحلي'],
+  ['صغير','وسط','متوسط','كبير'],
+  ['سائل','بودره','مسحوق','جل','رغوه','سبراي','حبوب','كريم'],
+  ['خشب','حديد','بلاستيك','الومنيوم','استانلس','ستانلس','معدن','نحاس','زجاج','مطاط','سيراميك','بورسلين','فايبر','قماش','ورق'],
+  ['رجالي','نسائي','اطفال'],
+  ['يدوي','كهرباء','هوائي','هيدروليك'],
 ];
-function siQualConflict(na, nb){
+/* يعيد [قيمة الطرف الأوّل، قيمة الطرف الثاني] عند التعارض، أو null. */
+function siQualGroupConflict(na, nb){
   for(const g of SI_QUAL_GROUPS){
     const a = g.filter(q => (' '+na+' ').includes(' '+q+' '));
     const b = g.filter(q => (' '+nb+' ').includes(' '+q+' '));
-    if(a.length && b.length && !a.some(x => b.includes(x))) return true;
+    if(a.length && b.length && !a.some(x => b.includes(x))) return [a[0], b[0]];
   }
-  return false;
+  return null;
 }
+function siQualConflict(na, nb){ return siQualGroupConflict(na, nb) !== null; }
 function siSimilarity(a, b){
   const na = siNormalize(a);
   const nb = siNormalize(b);
@@ -26464,8 +26789,13 @@ function siSimilarity(a, b){
   const numsB = siExtractNumbers(nb);
   const numScore = siCompareNumbers(numsA, numsB);
 
-  // Compute text similarity on the NON-numeric portion of each string
-  // so dimensions don't dominate the Jaccard score
+  /* قناة النصّ تُسقِط الأرقام كي لا تهيمن الأبعاد على التشابه.
+     ⚠️ ونتيجتها أنّ «crs1625» و«crs1635» كلاهما «crs» ⇒ تشابه نصّي 1.00
+     لمكنستين مختلفتين. العلاج **ليس** هنا: جُرِّب إبقاء الكلمات المختلطة
+     (حرف+رقم) كاملةً فلم يُغيِّر حكم «التطابق التلقائيّ» لأيّ زوج في الكتالوج
+     (مقيس: صفر زوج)، ويُضعِف كشف **التعادل** في المُحلِّل (اسمان يختلفان في رقم
+     الموديل وحده كانا يتعادلان فيُعرَضان للقرار). العلاج هو بوّابة المواصفات
+     أدناه — فأُبقيت القناة كما هي بدل تعقيدٍ لا يُبرِّره قياس. */
   const textA = na.replace(/\d+(?:\.\d+)?/g, '').replace(/\s+/g, ' ').trim();
   const textB = nb.replace(/\d+(?:\.\d+)?/g, '').replace(/\s+/g, ' ').trim();
 
@@ -26490,7 +26820,11 @@ function siSimilarity(a, b){
   const noNums = (numsA.length === 0 && numsB.length === 0);
   const combined = noNums ? textScore : (textScore * 0.65 + numScore * 0.35);
   if(!noNums && numScore < 0.5) return Math.min(combined, 0.5); // hard cap for dimension mismatch
-  if(siQualConflict(na, nb)) return Math.min(combined, 0.5); // تعارض صفة مميِّزة (لون/درجة)
+  /* ⚠️ بوّابة المواصفات الفارقة: أي تعارض قاطع (موديل · قيمة بنفس الوحدة · عدد
+     العبوة · صفة مميِّزة · نوع المنتج) يُنزل الدرجة **دون عتبة الاقتراح** فلا
+     تُدمَج تلقائياً مهما علا التشابه النصّي. المرشّح يبقى معروضاً بسببه في
+     المُحلِّل (siResolveItem) — المنع للتلقائيّ لا للقرار البشريّ. */
+  if(siSpecVeto(a, b)) return Math.min(combined, 0.5);
   return combined;
 }
 
@@ -26532,9 +26866,7 @@ function siExtractModelNumbers(text){
 /* كلمات الوحدات/العبوات تُتجاهَل في الاسترجاع — لأنّها تصنع «جيراناً كاذبين»:
    «شامبو سجاد 3 لتر» كان يُطابِق «مبيد حشرات لتر» لمجرّد اشتراك كلمة «لتر».
    نزعها يجعل اسم المنتج نفسه هو المهيمن (الأرقام والوحدات يعيد النموذج فحصها في التحقّق). */
-const SI_UNIT_STOP = new Set(['لتر','مل','كجم','جم','كيلو','غرام','جالون','علبه','علبة','عبوه','عبوة',
-  'كرتون','حبه','حبة','عدد','شد','كيس','رول','ربطه','ربطة','شوال','قطعه','قطعة','سم','مم','بوصه','بوصة',
-  'لفه','لفة','متر','اونز','ورقه','ورقة','شده','شدة']);
+const SI_UNIT_STOP = new Set(['لتر','مل','كجم','جم','كيلو','غرام','جالون','علبه','علبة','عبوه','عبوة','كرتون','حبه','حبة','عدد','شد','كيس','رول','ربطه','ربطة','شوال','قطعه','قطعة','سم','مم','بوصه','بوصة','لفه','لفة','متر','اونز','ورقه','ورقة','شده','شدة']);
 function siStripUnits(norm){ return norm.split(' ').filter(t => t && !SI_UNIT_STOP.has(t)).join(' '); }
 
 /* استرجاع نصّي عالي التغطية — يتجاهل الأرقام وكلمات الوحدات كي تتجمّع المتغيّرات معاً
@@ -26564,6 +26896,172 @@ function siRetrieveCandidates(name, K){
   }
   scored.sort((a,b)=>b.s-a.s);
   return scored.slice(0, K).map(x=>x.it);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   siResolveItem — مُحلِّل الأصناف: **مصدر قرار واحد** لكل مسار
+   ────────────────────────────────────────────────────────────────────
+   يستعمله الاستيراد الذكيّ، والإدخال اليدويّ، وحارس إنشاء صنف جديد — فلا
+   تتفارق ثلاث نسخ من المنطق (سابقة مثبَّتة في هذا المستودع: بوّابة الزرّ يجب
+   أن تكون بوّابة الفعل حرفيّاً).
+   ثلاثة أحوال كشكل `prjResolve` المُثبَت على أسماء المشاريع:
+     · ok      = دليل قاطع ⇒ يُطبَّق تلقائياً.
+     · suggest = مرشّح معقول ⇒ **قرار بشريّ**، لا يُطبَّق أبداً بلا تأكيد.
+     · none    = لا مرشّح ⇒ صنف جديد.
+   ترتيب الأدلّة من الأقوى:
+     ١ كود صريح · ٢ مرادف بنطاق المورد · ٣ مرادف عامّ · ٤ تطابق الاسم بعد
+     التطبيع · ٥ رقم الموديل · ٦ التشابه النصّي.
+   ⚠️ قاعدتان تمنعان الربط الخاطئ في كل الأحوال:
+     (أ) **بوّابة المواصفات** (siSpecVeto) تمنع الترقية إلى ok في المراتب ٣–٦
+         (لا في ١ و٢: الكود الصريح وتأكيد البشر لهذا المورد أقوى من أي استنباط).
+     (ب) **التعادل = غموض**: مرشّحان متقاربان في القمّة لا يُحسم أحدهما تلقائياً.
+         المقيس على الكتالوج: 15 مجموعة أسماء متطابقة على 32 صنفاً — فاختيار
+         `candidates[0]` كان اختياراً **بترتيب المصفوفة** لا بالدليل.
+   ويعيد `candidates` كاملةً (ومنها المحجوبة بالفيتو مع سببها) فيبقى القرار
+   البشريّ ممكناً — المنع للتلقائيّ لا للإنسان.
+   ════════════════════════════════════════════════════════════════════ */
+const SI_TIE_EPSILON = 0.02;   // فرق أقلّ من هذا بين أوّل مرشّحين = تعادل ⇒ غموض
+
+/* ════════════════════════════════════════════════════════════════════
+   siSearchItems — بحث الأصناف الذكيّ (يخدم مربّع الإدخال وأي مُنتقي أصناف)
+   ────────────────────────────────────────────────────────────────────
+   ⚠️ كان بحث الإدخال `(code||name).toLowerCase().includes(q)` — مطابقة نصّية
+   خامّة بلا تطبيع ولا مرادفات، فلا يجد:
+     · «احمد» ما خُزِّن «أحمد» · «حبه» ما خُزِّن «حبة» · الأرقام الهندية
+     · «3.78 لتر» ما خُزِّن «3.78 لتر» بفواصل مختلفة
+     · الاسم الإنجليزيّ لصنف عربيّ (ولو كان **مرادفاً اعتمده البشر** من عرض سعر)
+   فالذكاء المتعلَّم في الاستيراد كان لا ينفع من يبحث يدويّاً إطلاقاً.
+   الترتيب: الكود حرفيّاً · المرادف المعتمد · الاسم بعد التطبيع · ثم الاسترجاع.
+   ════════════════════════════════════════════════════════════════════ */
+function siSearchItems(query, limit){
+  const items = STATE.items || [];
+  const raw = String(query || '').trim();
+  if(!raw) return [];
+  const lim = limit || 10;
+  const low = raw.toLowerCase();
+  const qn = siNormalize(raw);
+  const out = [];
+  const seen = new Set();
+  const push = (item, score, why) => {
+    if(!item || !item.code || seen.has(item.code)) return;
+    seen.add(item.code); out.push({item, score, why});
+  };
+
+  // ① الكود حرفيّاً (المستخدم يكتب كوداً ⇒ يتوقّعه أوّلاً)
+  items.forEach(i => { if((i.code||'').toLowerCase().includes(low)) push(i, 1, ''); });
+
+  // ② مرادف معتمد (نصّ المورد الأصليّ كما أكّده البشر — يخدم البحث ثنائيّ اللغة)
+  Object.keys(SI_ALIASES_BY_CODE || {}).forEach(code => {
+    if((SI_ALIASES_BY_CODE[code] || []).some(t => t.includes(low))){
+      push(items.find(i => String(i.code) === String(code)), 0.98, 'مرادف معتمد');
+    }
+  });
+
+  // ③ الاسم: احتواء بعد التطبيع (يعالج الهمزات والتاء المربوطة والأرقام الهندية)
+  if(qn) items.forEach(i => { if(siNormalize(i.name||'').includes(qn)) push(i, 0.95, ''); });
+
+  // ④ الاسترجاع النصّي (ترتيب ذكيّ لما لم يُطابَق احتواءً)
+  if(out.length < lim){
+    const scored = [];
+    items.forEach(i => {
+      if(seen.has(i.code)) return;
+      const s = siRetrievalScore(qn, siNormalize(i.name||''));
+      if(s > 0.3) scored.push({i, s});
+    });
+    scored.sort((a,b) => b.s - a.s);
+    scored.slice(0, lim).forEach(x => push(x.i, x.s, `تشابه ${Math.round(x.s*100)}%`));
+  }
+  return out.slice(0, lim);
+}
+
+function siResolveItem(name, opts){
+  const o = opts || {};
+  const items = STATE.items || [];
+  const out = { state:'none', item:null, score:0, reason:'', candidates:[] };
+  if(!name || !items.length) return out;
+
+  // ① كود صريح
+  if(o.code){
+    const exact = items.find(i => i.code && String(i.code).toLowerCase() === String(o.code).toLowerCase());
+    if(exact) return { state:'ok', item:exact, score:1, reason:`تطابق الكود: ${o.code}`, candidates:[{item:exact, score:1, veto:''}] };
+  }
+
+  // ②/③ المرادفات المتعلَّمة
+  const al = siAliasLookup(name, o.supplier);
+  if(al){
+    const it = items.find(i => String(i.code) === String(al.code));
+    if(it){
+      if(al.scope === 'supplier'){
+        return { state:'ok', item:it, score:0.99, reason:`ربط معتمد لهذا المورد`, candidates:[{item:it, score:0.99, veto:''}] };
+      }
+      const veto = siSpecVeto(name, it.name);
+      return veto
+        ? { state:'suggest', item:it, score:0.7, reason:`ربط معتمد سابقاً — لكن ${veto}`, candidates:[{item:it, score:0.7, veto}] }
+        : { state:'ok', item:it, score:0.99, reason:'ربط معتمد مسبقاً', candidates:[{item:it, score:0.99, veto:''}] };
+    }
+  }
+
+  // ④ تطابق الاسم بعد التطبيع (قاطع — إلا إن كان أكثر من صنف يحمله)
+  const qn = siNormalize(name);
+  const sameName = items.filter(i => siNormalize(i.name||'') === qn);
+  if(sameName.length === 1){
+    return { state:'ok', item:sameName[0], score:1, reason:'تطابق الاسم', candidates:[{item:sameName[0], score:1, veto:''}] };
+  }
+  if(sameName.length > 1){
+    return { state:'suggest', item:sameName[0], score:1,
+      reason:`${sameName.length} أصناف تحمل هذا الاسم — اختر الصحيح`,
+      candidates: sameName.slice(0,5).map(i => ({item:i, score:1, veto:''})) };
+  }
+
+  // ⑤/⑥ الموديل والتشابه النصّي — على قائمة مرشّحين مسترجَعة (تغطية عالية)
+  const qModels = siExtractModelNumbers(name);
+  const score1 = (it) => {
+    let s = siSimilarity(it.name, name);
+    let why = `تشابه النص: ${Math.round(s*100)}%`;
+    if(qModels.length){
+      const im = siExtractModelNumbers((it.code||'') + ' ' + (it.name||''));
+      if(qModels.some(m => im.includes(m))){ s = Math.max(s, 0.95); why = `تطابق رقم الموديل: ${qModels.find(m => im.includes(m))}`; }
+    }
+    if(o.unit && it.unit){
+      const uA = siNormalize(o.unit), uB = siNormalize(it.unit);
+      if(uA !== uB && siSimilarity(uA, uB) <= 0.7) s *= 0.8;   // وحدة مختلفة ⇒ خصم
+    }
+    return { item: it, score: s, veto: '', reason: why };
+  };
+  let scored = siRetrieveCandidates(name, 12).map(score1).sort((a,b) => b.score - a.score);
+  /* ⚠️ احتياط التغطية: الاسترجاع يُسقِط كلمات الوحدات بعتبة 0.22، فقد يفوته
+     صنفٌ يبلغه التشابه الكامل. المسار القديم كان **مسحاً كاملاً** للكتالوج،
+     فبلا هذا الاحتياط تنخفض نسبة العثور (وهو عكس المطلوب: «لا يكررها»).
+     يُجرى المسح الكامل فقط حين لا يأتي الاسترجاع بمرشّح معقول — وهي الأقلّية. */
+  if(!scored.some(c => c.score >= SI_MATCH_SUGGEST)){
+    const seen = new Set(scored.map(c => c.item.code));
+    const full = items.filter(i => i.code && !seen.has(i.code)).map(score1).filter(c => c.score > 0.3);
+    if(full.length) scored = scored.concat(full).sort((a,b) => b.score - a.score);
+  }
+  /* الفيتو يُحسَب على القمّة فقط لا على كل صنف مُسِح: حسابه لكل صنف كان يضاعف
+     تكلفة المسح الكامل بلا أثر (ما دون القمّة لا يُطبَّق ولا يُعرَض). */
+  scored.slice(0, 8).forEach(c => { c.veto = siSpecVeto(name, c.item.name); });
+
+  out.candidates = scored.filter(c => c.score > 0.3).slice(0, 5);
+  const clean = scored.slice(0, 8).filter(c => !c.veto);
+  const top = clean[0];
+  if(!top || top.score < SI_MATCH_SUGGEST){
+    /* لا مرشّح نظيف معقول. إن كان الأعلى محجوباً بالفيتو فذلك **خبر مفيد**:
+       نعرضه بسببه بدل الصمت، لكن الحالة تبقى «جديد» فلا يُدمَج تلقائياً. */
+    const vetoed = scored.find(c => c.veto && c.score > 0.3);
+    if(vetoed) out.reason = `أقرب صنف: ${vetoed.item.name} — ${vetoed.veto}`;
+    return out;
+  }
+
+  const second = clean[1];
+  const tie = second && (top.score - second.score) < SI_TIE_EPSILON;
+  out.item = top.item; out.score = top.score; out.reason = top.reason;
+  if(top.score >= SI_MATCH_AUTO && !tie) out.state = 'ok';
+  else {
+    out.state = 'suggest';
+    if(tie) out.reason = `مرشّحان متقاربان (${Math.round(top.score*100)}% و${Math.round(second.score*100)}%) — اختر الصحيح`;
+  }
+  return out;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -26752,90 +27250,27 @@ async function siMatchExtractedData(extracted){
   for(const item of (extracted.items || [])){
     if(!item.name || !item.price) continue;
 
-    let bestItem = null;
-    let bestScore = 0;
-    let candidates = [];
-    let matchReason = '';
+    /* ⚠️ مسار واحد: المُحلِّل `siResolveItem` هو مصدر القرار — لا نسخة ثانية من
+       المراتب هنا. فبوّابة المواصفات وقاعدة التعادل تسريان على الاستيراد الذكيّ
+       والإدخال اليدويّ وحارس الإنشاء بالقوّة نفسها. */
+    const res = siResolveItem(item.name, { code: item.code, unit: item.unit, supplier: result.supplier.name });
+    const bestItem = res.item;
+    const bestScore = res.score;
+    const matchReason = res.reason;
 
-    // ── Tier 1: Exact code match ──────────────────────────
-    if(item.code){
-      const exact = STATE.items.find(i => i.code && i.code.toString().toLowerCase() === item.code.toString().toLowerCase());
-      if(exact){ bestItem = exact; bestScore = 1; matchReason = `تطابق الكود: ${item.code}`; }
-    }
+    // ── Tier 4 (المطابقة الدلالية الشاملة بالذكاء): بعد الحلقة ──
+    // تُجمَع البنود غير المحسومة وتُطابَق دفعةً واحدة (نداء واحد) — بدل نداء لكل
+    // بند، فلا يُستنزَف الحدّ اليومي ولا تُهدَر المطابقة حين تختلف التسمية/اللغة.
 
-    // ── Tier 1.5: Model number extraction (language-neutral) ──
-    // Extracts alphanumeric codes like "H-FCM001" from item name,
-    // then searches existing items' names AND codes for the same token.
-    // Works even when the quote is English and DB items are Arabic.
-    if(!bestItem){
-      const modelNums = siExtractModelNumbers(item.name);
-      if(modelNums.length > 0){
-        outer15: for(const mn of modelNums){
-          for(const i of STATE.items){
-            const inCode = i.code && siExtractModelNumbers(i.code).includes(mn);
-            const inName = siExtractModelNumbers(i.name || '').includes(mn);
-            if(inCode || inName){
-              bestItem = i; bestScore = 0.95;
-              matchReason = `تطابق رقم الموديل: ${mn}`;
-              break outer15;
-            }
-          }
-        }
-      }
-    }
-
-    // ── Tier 2: Learned alias match (highest priority after code) ──
-    if(!bestItem){
-      const normName = siNormalize(item.name);
-      const aliasCode = aliases[normName];
-      if(aliasCode){
-        const aliased = STATE.items.find(i => i.code === aliasCode);
-        if(aliased){ bestItem = aliased; bestScore = 0.99; matchReason = 'ربط معتمد مسبقاً'; }
-      }
-    }
-
-    // ── Tier 3: Name + dimension similarity ────────────────
-    if(!bestItem){
-      const scored = STATE.items.map(i => {
-        let score = siSimilarity(i.name, item.name);
-        // Unit match bonus / penalty
-        if(item.unit && i.unit){
-          const uA = siNormalize(item.unit);
-          const uB = siNormalize(i.unit);
-          if(uA === uB) score *= 1.0; // exact unit → no change
-          else if(siSimilarity(uA, uB) > 0.7) score *= 0.95; // similar
-          else score *= 0.8; // different units → 20% penalty
-        }
-        return { item: i, score };
-      }).filter(c => c.score > 0.3).sort((a, b) => b.score - a.score);
-
-      candidates = scored.slice(0, 3); // top 3 alternatives for the suggestion UI
-      if(candidates.length){
-        bestItem = candidates[0].item;
-        bestScore = candidates[0].score;
-        matchReason = `تشابه النص: ${(candidates[0].score*100).toFixed(0)}%`;
-      }
-    }
-
-    // ── Tier 4 (المطابقة الدلالية الشاملة بالذكاء): نُقلت إلى ما بعد الحلقة ──
-    // تُجمَع البنود غير المحسومة وتُطابَق دفعةً واحدة على كامل الكتالوج (نداء واحد،
-    // بلا بوّابة نصّية) — بدل نداء لكل بند، فلا يُستنزَف الحدّ اليومي ولا تُهدَر المطابقة
-    // حين تختلف التسمية/اللغة (كان يُضاف البند كجديد خطأً).
-
-    // Determine action based on four thresholds
     let action, matchedItem, suggestions;
-    if(bestScore >= SI_MATCH_AUTO){
+    if(res.state === 'ok'){
       action = 'update';                 // auto-merge into existing item's history
       matchedItem = bestItem;
       suggestions = null;
-    } else if(bestScore >= SI_MATCH_SUGGEST){
+    } else if(res.state === 'suggest'){
       action = 'suggest';                // SHOW user the proposal, they decide
       matchedItem = bestItem;
-      // Provide top 3 alternatives so user can pick the right one
-      suggestions = candidates.slice(0, 3).map(c => ({
-        item: c.item,
-        score: c.score
-      }));
+      suggestions = res.candidates.slice(0, 3).map(c => ({ item: c.item, score: c.score, veto: c.veto }));
     } else {
       action = 'add';                    // truly new — no plausible match
       matchedItem = null;
@@ -26872,6 +27307,16 @@ async function siMatchExtractedData(extracted){
         const r = aiRes[k]; if(!r || !r.code) return;
         const it2 = STATE.items.find(i => String(i.code) === String(r.code)); if(!it2) return;
         const conf = Number(r.confidence)||0; const row = result.rows[p.idx];
+        /* ⚠️ بوّابة المواصفات تحكم حكم الذكاء أيضاً: النموذج قد يقبل تشابهاً
+           دلالياً عالياً مع اختلاف مواصفة فارقة. التعارض القاطع ⇒ لا دمج تلقائيّ
+           مهما بلغت ثقته — يُعرَض اقتراحاً بسببه. */
+        const aiVeto = siSpecVeto(row.name, it2.name);
+        if(aiVeto){
+          row.matchedItem = it2; row.action = 'suggest'; row.matchScore = 0.6;
+          row.matchReason = `ذكاء: مرشّح — لكن ${aiVeto}`;
+          row.suggestions = [{item:it2, score:0.6, veto:aiVeto}];
+          return;
+        }
         // معايرة متحفّظة: دمج تلقائي فقط عند ثقة عالية؛ المتوسطة تُعرَض «اقتراح» ليقرّر المستخدم.
         if(conf >= 0.85){
           row.matchedItem = it2; row.action = 'update'; row.matchScore = 0.9;
@@ -27135,7 +27580,15 @@ function siShowReview(){
           row.userDecision = 'merge';
           row.matchedItem = it;
           row.matchReason = 'ربط يدوي بالبحث';
-          try{ siSaveLearnedAlias(row.name, it.code, row.name); }catch(_){}
+          const sup = (SI_STATE.matched && SI_STATE.matched.supplier) ? SI_STATE.matched.supplier.name : '';
+          try{
+            Promise.resolve(siSaveLearnedAlias(row.name, it.code, row.name, sup, 'manual')).then(r => {
+              if(r && r.conflict){
+                const other = (STATE.items||[]).find(i => String(i.code) === String(r.existingCode));
+                toast('warn','تعارض ربط', 'هذا الاسم مربوط سابقاً بـ«'+((other&&other.name)||r.existingCode)+'» — رُبط هذا العرض فقط ولم يُغيَّر الربط المحفوظ');
+              }
+            });
+          }catch(_){}
           siShowReview();
           toast('success','تم الربط', 'رُبط البند بـ«'+(it.name||it.code)+'» وسيُتعرَّف عليه تلقائياً لاحقاً');
         }
@@ -27203,10 +27656,16 @@ async function siCommitImport(){
       // so the next quote with the same name auto-matches without asking.
       // We only learn aliases that were UNCERTAIN — not auto-matches (those
       // were already obvious) and not "new" decisions (no canonical to map to).
-      if(row.action === 'suggest' && row.userDecision === 'merge' && row.matchedItem){
+      /* ⚠️ المرادف يُخزَّن **بنطاق المورد**: نفس التسمية العامية عند مورد آخر قد
+         تعني منتجاً آخر. والتعلُّم يقع على القرار البشريّ وعلى حكم الذكاء معاً —
+         نداء الذكاء مكلِف وغير مضمون التكرار، فعدم تخزين نتيجته يعني استهلاك
+         الحدّ اليوميّ على نفس الاسم في كل عرض قادم. */
+      if(willMerge && row.matchedItem && (row.action === 'suggest' || /^ذكاء:/.test(row.matchReason || ''))){
         learnedAliases.push({
           extractedName: row.name,
-          itemCode: row.matchedItem.code
+          itemCode: row.matchedItem.code,
+          supplier: supplierName,
+          source: row.action === 'suggest' ? 'confirm' : 'ai'
         });
       }
 
@@ -27238,6 +27697,9 @@ async function siCommitImport(){
       // Add history entry — use matched item's canonical name/category if merging
       const canonicalName = willMerge && row.matchedItem ? row.matchedItem.name : row.name;
       const canonicalCategory = willMerge && row.matchedItem ? (row.matchedItem.category || 'مستورد') : 'مستورد';
+      /* ⚠️ الوحدة كانت تسقط من سجلّ الاستيراد الذكيّ (المسار اليدويّ يحفظها)،
+         فيخرج السجل السعريّ بصفوف بلا وحدة فلا تُقارَن أسعار على أساس واحد. */
+      const canonicalUnit = (willMerge && row.matchedItem ? row.matchedItem.unit : row.unit) || row.unit || '';
 
       const newNum = (STATE.history.length > 0 ? Math.max(...STATE.history.map(h=>h.num||0)) : 0) + 1;
       const entry = {
@@ -27245,6 +27707,7 @@ async function siCommitImport(){
         code: itemCode,
         name: canonicalName,
         category: canonicalCategory,
+        unit: canonicalUnit,
         price: price,
         supplier: supplierName,
         date: m.date || today,
@@ -27265,7 +27728,7 @@ async function siCommitImport(){
       // Run sequentially to avoid hammering Supabase, but don't await
       (async () => {
         for(const a of learnedAliases){
-          try { await siSaveLearnedAlias(a.extractedName, a.itemCode, a.extractedName); }
+          try { await siSaveLearnedAlias(a.extractedName, a.itemCode, a.extractedName, a.supplier, a.source); }
           catch(e) {}
         }
       })();
