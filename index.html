@@ -368,6 +368,10 @@ tbody tr:hover{background:var(--surface-2)}
 /* كهرمانيّ التنبيه — نفس لون شارات النقص في دليل الموردين (rgba(180,83,9)) لا لوناً مخترَعاً. */
 .badge.warn{background:rgba(180,83,9,0.10);color:#b45309;border-color:rgba(180,83,9,0.22)}
 /* صفّ سعره أقدم من سنة: تمييزٌ هادئ — 8% من الصفوف، فلو صرخ صار ضجيجاً. */
+.hist-note{font-size:12.5px;margin:-4px 0 12px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.hist-note a{color:#b45309;text-decoration:none;border-bottom:1px dashed rgba(180,83,9,0.45)}
+.hist-note a:hover{border-bottom-style:solid}
+.hist-note a.on{font-weight:600;border-bottom-style:solid}
 .row-stale-price td{background:rgba(180,83,9,0.045)}
 .row-stale-price:hover td{background:rgba(180,83,9,0.09)}
 /* آخر الأسعار المسجَّلة في معاينة الإدخال */
@@ -3636,7 +3640,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
           <select class="select" id="items-flag" title="تصفية بما يحتاج عملاً: إعادة تسعير · سعر غير مُقارَن · بلا سعر">
             <option value="">كل الحالات</option>
             <option value="stale">⏳ أسعار قديمة (أكثر من سنة)</option>
-            <option value="single">سعر غير مُقارَن (عرض واحد)</option>
+            <option value="single">سعر غير مُقارَن (بلا فرق سعريّ)</option>
             <option value="noprice">بلا سعر</option>
           </select>
           <select class="select" id="items-sort">
@@ -3955,6 +3959,11 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
           </select>
           <input type="date" class="input" id="hist-date-from" title="من تاريخ" dir="ltr">
           <input type="date" class="input" id="hist-date-to" title="إلى تاريخ" dir="ltr">
+          <select class="select" id="hist-flag" title="تصفية بما يحتاج مراجعة: سجلّات مكرّرة · سجلّات بلا صنف مرتبط">
+            <option value="">كل السجلّات</option>
+            <option value="dup">سجلّات مكرّرة</option>
+            <option value="orphan">بلا صنف مرتبط</option>
+          </select>
           <div style="margin-inline-start:auto;display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" id="print-hist-btn" title="طباعة تقرير سجل المشتريات">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
@@ -3966,6 +3975,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             </button>
           </div>
         </div>
+        <div id="hist-flag-note" class="hist-note" style="display:none"></div>
         <div class="table-wrap">
           <div class="table-scroll">
             <table id="hist-table">
@@ -6111,7 +6121,7 @@ const STATE = {
   suppliers:DATA.suppliers||[],
   history:[...(DATA.history||[])],
   itemsFilter:{q:'',category:'',flag:'',sort:'code'},
-  histFilter:{q:'',category:'',supplier:'',from:'',to:'',sort:'num',dir:'desc'},
+  histFilter:{q:'',category:'',supplier:'',from:'',to:'',flag:'',sort:'num',dir:'desc'},
   itemsPage:1,
   histPage:1,
   perPage:25,
@@ -7556,7 +7566,9 @@ function itemsVisibleList(){
   /* مرشّح الحالات: ما يحتاج عملاً فعلاً (إعادة تسعير · سعر غير مُقارَن · بلا سعر). */
   const flag = STATE.itemsFilter.flag || '';
   if(flag === 'stale') list = list.filter(i => priceAgeInfo(i.last_date).stale);
-  else if(flag === 'single') list = list.filter(i => i.last_price != null && !((i.offers||0) >= 2));
+  /* «غير مُقارَن» = لا فرق سعريّ يُقارَن (عرضٌ واحد **أو** عروضٌ بنفس السعر) —
+     بوّابة واحدة مع الجدول عبر `priceSpreadInfo`، لا نسخة ثانية. */
+  else if(flag === 'single') list = list.filter(i => i.last_price != null && !priceSpreadInfo(i).spread);
   else if(flag === 'noprice') list = list.filter(i => i.last_price == null);
 
   const {col,dir} = STATE.itemsSort;
@@ -7616,14 +7628,22 @@ function renderItems(){
          «متوسط/أدنى/أعلى» تحمل فيه رقم «آخر سعر» نفسه ثلاث مرّات = ضجيج مقيس
          بلا معلومة. تُعرَض عند عرضين فأكثر فقط، فتبرز الصفوف التي فيها مقارنة
          فعلاً. (الأعمدة والفرز لم تُمَسّ — إسكاتُ ضجيج لا حذفُ قدرة.) */
-      const cmp = (i.offers||0) >= 2;
+      /* ⚠️ البوّابة **تمايز السعر لا عدّ العروض**: عدُّ العروض كان يُمرِّر 115 صنفاً
+         من 129 تحمل أرقاماً ثلاثاً **متطابقة** (min==max) — أي نفس الضجيج الذي
+         أُسكِت، وبشارة «مُقارَن» كاذبة فوقه. بعد إسقاط المكرّر في الحساب صار
+         التمايز الفعليّ 14 صنفاً، و«أسعار متطابقة» تُقال صراحةً لا تُخفى. */
+      const sp = priceSpreadInfo(i);
+      const cmp = sp.spread;
       const dash = '<span class="muted">—</span>';
+      const dupNote = sp.collapsed ? ` — و${priceRecWord(sp.collapsed)} مكرّر لم يُحتسَب` : '';
       /* وأنّ السعر **غير مُقارَن** معلومة حوكمية غائبة تماماً اليوم. */
-      const offersCell = cmp
-        ? `<span class="badge">${i.offers}</span>`
-        : (i.last_price != null
-            ? `<span class="badge" title="سعر من مصدر واحد — لم يُقارَن بعرض آخر">${i.offers||1} · غير مُقارَن</span>`
-            : `<span class="badge">0</span>`);
+      const offersCell = i.last_price == null
+        ? `<span class="badge">0</span>`
+        : sp.spread
+          ? `<span class="badge" title="ملاحظات سعرية متمايزة: ${i.offers}${escapeAttr(dupNote)}">${i.offers}</span>`
+          : sp.equal
+            ? `<span class="badge" title="${priceObsWord(i.offers)} بنفس السعر — لا فرق يُقارَن${escapeAttr(dupNote)}">${i.offers} · أسعار متطابقة</span>`
+            : `<span class="badge" title="سعر من مصدر واحد — لم يُقارَن بعرض آخر${escapeAttr(dupNote)}">1 · غير مُقارَن</span>`;
       const age = priceAgeInfo(i.last_date);
       const staleChip = age.stale
         ? ` <span class="badge warn" title="آخر سعر مسجَّل عمره ${age.days} يوماً — يستحقّ إعادة تسعير">⏳ ${escapeHtml(age.label)}</span>`
@@ -8148,6 +8168,59 @@ function submitNewItem(){
 }
 
 /* ========== HISTORY ========== */
+/* ⚠️ ما يحتاج مراجعة في السجل السعريّ — حسابٌ واحد لكل رسم:
+   • «مكرّر» = يتشارك `priceObsKey` مع صفٍّ آخر. **تُعرَض كل صفوف المجموعة** لا
+     الزائد وحده، فالمراجعة تحتاج رؤية الطرفين ومرجعَيهما (`PO-101` مقابل
+     `P.O-DG26-3101` — دفعةٌ استُورِدت مرّتين).
+   • «بلا صنف مرتبط» = كودٌ ليس في الكتالوج، فسعرٌ دُفِع فعلاً **ولا يصل أيّ صنف**
+     لأنّ `recomputeItemStats` تُطابِق بالكود. القياس: 86 صفّاً من 808 (79 منها
+     كودها الحرفيّ `NEW` و7 `PO-ONLY` — بقايا استخراج الإكسل، لا كود صنف). */
+function histFlagInfo(){
+  const rows = STATE.history || [];
+  const groups = new Map();
+  for(const h of rows){
+    if(!h || !h.code || h.price==null || isNaN(Number(h.price))) continue;
+    const k = priceObsKey(h);
+    if(!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(h.num);
+  }
+  const dupNums = new Set();
+  let dupGroups = 0, dupExtra = 0;
+  for(const nums of groups.values()){
+    if(nums.length < 2) continue;
+    dupGroups++; dupExtra += nums.length - 1;
+    nums.forEach(n => dupNums.add(n));
+  }
+  const codes = new Set((STATE.items || []).map(i => i.code));
+  const orphanNums = new Set();
+  for(const h of rows){ if(h && !codes.has(h.code)) orphanNums.add(h.num); }
+  return { dupNums, orphanNums, dupGroups, dupExtra };
+}
+
+/* سطر «ما يحتاج مراجعة» — كل رقم فيه رابط يضبط المرشّح. يُخفى حين لا شيء
+   يحتاج مراجعة (سطرٌ صفريّ ضجيج). */
+function renderHistFlagNote(fi, active){
+  const box = document.getElementById('hist-flag-note');
+  if(!box) return;
+  const parts = [];
+  if(fi.dupGroups) parts.push(`<a href="#" data-hist-flag="dup" class="${active==='dup'?'on':''}">${priceGroupWord(fi.dupGroups)} مكرّرة — ${priceRecWord(fi.dupExtra)} لم يُحتسَب في العروض</a>`);
+  if(fi.orphanNums.size) parts.push(`<a href="#" data-hist-flag="orphan" class="${active==='orphan'?'on':''}">${priceRecWord(fi.orphanNums.size)} بلا صنف مرتبط</a>`);
+  if(!parts.length){ box.style.display='none'; box.innerHTML=''; return; }
+  if(active) parts.push(`<a href="#" data-hist-flag="">إلغاء التصفية</a>`);
+  box.style.display = '';
+  box.innerHTML = `<span class="muted">يحتاج مراجعة:</span> ${parts.join('<span class="muted"> · </span>')}`;
+  box.querySelectorAll('[data-hist-flag]').forEach(a=>{
+    a.addEventListener('click', e=>{
+      e.preventDefault();
+      STATE.histFilter.flag = a.getAttribute('data-hist-flag') || '';
+      const sel = document.getElementById('hist-flag');
+      if(sel) sel.value = STATE.histFilter.flag;
+      STATE.histPage = 1;
+      renderHistory();
+    });
+  });
+}
+
 function renderHistory(){
   const catSel = document.getElementById('hist-category');
   if(catSel.options.length<=1){
@@ -8170,7 +8243,12 @@ function renderHistory(){
   if(f.supplier) list = list.filter(h=>h.supplier===f.supplier);
   if(f.from) list = list.filter(h=>(h.date||'')>=f.from);
   if(f.to) list = list.filter(h=>(h.date||'')<=f.to);
-  
+
+  const fi = histFlagInfo();
+  if(f.flag === 'dup') list = list.filter(h => fi.dupNums.has(h.num));
+  else if(f.flag === 'orphan') list = list.filter(h => fi.orphanNums.has(h.num));
+  renderHistFlagNote(fi, f.flag);
+
   const {col,dir} = STATE.histSort;
   list.sort((a,b)=>{
     let va=a[col], vb=b[col];
@@ -8933,9 +9011,17 @@ function escapeAttr(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'
 function recomputeItemStats(){
   // Build map of code -> stats from history
   const map = {};
+  /* ⚠️ الصفّ المكرّر حرفيّاً (نفس الصنف والمورد والسعر والتاريخ) **ملاحظةٌ واحدة
+     لا عرضان** — يُحتسَب مرّة واحدة في العروض والمتوسط والأدنى والأعلى، ويبقى
+     في السجل كما هو (لا حذف ولا تعديل). المفتاح في `priceObsKey`. */
+  const seenObs = new Set();
   STATE.history.forEach(h=>{
     if(!h.code || h.price==null || isNaN(Number(h.price))) return;
-    if(!map[h.code]) map[h.code] = {prices:[], dates:[], suppliers:[]};
+    if(!map[h.code]) map[h.code] = {prices:[], dates:[], suppliers:[], records:0};
+    map[h.code].records++;
+    const obsKey = priceObsKey(h);
+    if(seenObs.has(obsKey)) return;
+    seenObs.add(obsKey);
     map[h.code].prices.push(Number(h.price));
     map[h.code].dates.push(h.date||'');
     map[h.code].suppliers.push({s:h.supplier, d:h.date});
@@ -8944,10 +9030,13 @@ function recomputeItemStats(){
     const m = map[it.code];
     if(!m){
       it.last_price = null; it.avg_price = null; it.min_price = null; it.max_price = null;
-      it.offers = '—'; it.last_supplier = it.last_supplier||''; it.last_date = it.last_date||'—';
+      it.offers = '—'; it.records = 0; it.last_supplier = it.last_supplier||''; it.last_date = it.last_date||'—';
       return;
     }
     it.offers = m.prices.length;
+    /* عدد صفوف السجل الخام (قبل إسقاط المكرّر) — للتلميح وحده. حقلٌ مشتقّ في
+       الذاكرة: حمولات الرفع السحابيّ قوائم حقول صريحة فلا يُرفَع. */
+    it.records = m.records;
     it.avg_price = +(m.prices.reduce((s,n)=>s+n,0)/m.prices.length).toFixed(2);
     it.min_price = Math.min(...m.prices);
     it.max_price = Math.max(...m.prices);
@@ -22460,6 +22549,7 @@ function init(){
   document.getElementById('hist-supplier').addEventListener('change',e=>{STATE.histFilter.supplier=e.target.value;STATE.histPage=1;renderHistory()});
   document.getElementById('hist-date-from').addEventListener('change',e=>{STATE.histFilter.from=e.target.value;STATE.histPage=1;renderHistory()});
   document.getElementById('hist-date-to').addEventListener('change',e=>{STATE.histFilter.to=e.target.value;STATE.histPage=1;renderHistory()});
+  document.getElementById('hist-flag').addEventListener('change',e=>{STATE.histFilter.flag=e.target.value;STATE.histPage=1;renderHistory()});
   document.querySelectorAll('#hist-table th[data-sort]').forEach(th=>{
     th.addEventListener('click',()=>{
       const col = th.dataset.sort; if(!col)return;
@@ -27099,6 +27189,49 @@ function priceAgeInfo(dateStr){
     }
   }
   return { known:true, days, stale, label };
+}
+
+/* ⚠️ مفتاح «الملاحظة السعرية الواحدة»: صنف + مورد (بـ`arNorm`) + سعر + تاريخ.
+   مرجعان مختلفان لنفس هذه الأربعة **ليسا عرضين**، والقياس على بذرة الملف قاطع:
+   123 من 132 صفّاً مرجعه `PO-<n>` له توأمٌ مرجعه `P.O-DG26-<n>` (دفعة أوامر
+   استُورِدت مرّتين بصيغتَي ترقيم)، و158 صفّاً من 808 مكرّرة حرفيّاً — فكان
+   عدّاد العروض منتفخاً لـ**112 من 525 صنفاً**.
+   **حساباً فقط: لا صفّ يُحذف ولا يُعدَّل** — يبقى في السجل بمرجعه، ويُحتسَب مرّة. */
+/* ⚠️ صيغة العدد العربية — «1 سجلّاً» و«2 ملاحظات» خطأٌ يقرؤه من يراجع الأسعار
+   (نفس قاعدة `poDays`/`poFinOrders`). */
+function arCountWord(n, one, two, few, many){
+  n = Math.abs(Number(n) || 0);
+  if(n === 1) return one;
+  if(n === 2) return two;
+  if(n >= 3 && n <= 10) return n + ' ' + few;
+  return n + ' ' + many;
+}
+const priceRecWord   = (n) => arCountWord(n, 'سجلّ واحد', 'سجلّان', 'سجلّات', 'سجلّاً');
+const priceObsWord   = (n) => arCountWord(n, 'ملاحظة واحدة', 'ملاحظتان', 'ملاحظات', 'ملاحظة');
+const priceGroupWord = (n) => arCountWord(n, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة');
+
+function priceObsKey(h){
+  const sup = (typeof arNorm === 'function') ? arNorm((h && h.supplier) || '')
+    : String((h && h.supplier) || '').trim().toLowerCase();
+  return [String((h && h.code) || ''), sup, Number(h && h.price), String((h && h.date) || '')].join('|');
+}
+
+/* هل للصنف فرقٌ سعريّ يُقارَن فعلاً؟ ⚠️ البوّابة **تمايز السعر لا عدّ العروض**:
+   بعدّ العروض كان 115 صنفاً من 129 «مُقارَناً» وهو يعرض رقماً واحداً مكرّراً
+   ثلاثاً (min==max) — والشارة تقول «مُقارَن» وهي كاذبة. مصدرٌ واحد يستعمله
+   الجدولُ والمرشّحُ معاً (لا نسخة ثانية من البوّابة). */
+function priceSpreadInfo(item){
+  const n = Number(item && item.offers);
+  const obs = isFinite(n) ? n : 0;
+  const mn = Number(item && item.min_price), mx = Number(item && item.max_price);
+  const spread = isFinite(mn) && isFinite(mx) && mx > mn;
+  const rec = Number(item && item.records);
+  return {
+    obs, spread,
+    equal: obs >= 2 && !spread,
+    single: obs <= 1,
+    collapsed: isFinite(rec) && rec > obs ? rec - obs : 0
+  };
 }
 
 function siSearchItems(query, limit){

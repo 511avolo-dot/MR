@@ -186,7 +186,99 @@ const clearedForm = await page.evaluate(() => { showPreview(STATE.items.find(i =
   return { hint: document.getElementById('f-price-hint').textContent.trim(), sel: STATE.selectedItem, price: document.getElementById('f-price').value }; });
 ok('وتفريغ النموذج كذلك', !clearedForm.hint && clearedForm.sel === null && !clearedForm.price, JSON.stringify(clearedForm).slice(0, 80));
 
-/* ── ٨) الجوال والسلامة ── */
+/* ── ٨) دقّة السجل: الملاحظة الواحدة · التمايز · ما يحتاج مراجعة ──
+   ⚠️ النمط الحقيقيّ من بيانات الإنتاج: مرجعان مختلفان لنفس أمر الشراء
+   (`PO-101` / `P.O-DG26-3101`) — 116 من 127 مجموعة مكرّرة على هذا الشكل. */
+await page.evaluate((d) => {
+  STATE.items = [
+    { code:'A-1', name:'عربة قمامة، Baiyun، بعجلات', category:'أدوات', unit:'قطعة' },
+    { code:'B-1', name:'كفوف فينيل أسود شد 10', category:'مواد نظافة', unit:'علبة' },
+    { code:'D-1', name:'صابون سائل معطّر 4 لتر', category:'مواد نظافة', unit:'جالون' },
+  ];
+  const row = (o) => Object.assign({ name:'صنف', category:'أدوات', unit:'حبة', supplier:'شركة النظافة المتقدمة', price:50, date:d.fresh, reference:'' }, o);
+  STATE.history = [
+    row({ num:1, code:'A-1', name:'عربة قمامة، Baiyun، بعجلات', reference:'PO-101' }),
+    row({ num:2, code:'A-1', name:'عربة قمامة، Baiyun، بعجلات', reference:'P.O-DG26-3101' }),
+    row({ num:3, code:'B-1', name:'كفوف فينيل أسود شد 10', price:40 }),
+    row({ num:4, code:'B-1', name:'كفوف فينيل أسود شد 10', price:80, supplier:'مؤسسة الرياض' }),
+    row({ num:5, code:'D-1', name:'صابون سائل معطّر 4 لتر', price:30 }),
+    row({ num:6, code:'D-1', name:'صابون سائل معطّر 4 لتر', price:30, supplier:'مؤسسة الرياض' }),
+    row({ num:7, code:'NEW', name:'بند غير مُكوَّد من الإكسل', price:17 }),
+  ];
+  STATE.itemsFilter = { q:'', category:'', flag:'', sort:'code' };
+  STATE.histFilter = { q:'', category:'', supplier:'', from:'', to:'', flag:'', sort:'num', dir:'desc' };
+  recomputeItemStats();
+  navigate('items');
+}, { fresh: days(10) });
+await page.waitForSelector('#items-tbody tr[data-code]', { timeout: 8000 });
+const cells = await page.evaluate(() => {
+  const out = {};
+  for (const tr of document.querySelectorAll('#items-tbody tr[data-code]')) {
+    const td = tr.querySelectorAll('td');
+    out[tr.dataset.code] = {
+      avg: td[5].textContent.trim(), min: td[6].textContent.trim(), max: td[7].textContent.trim(),
+      offers: td[8].textContent.trim(), title: (td[8].querySelector('[title]') || {}).title || '',
+    };
+  }
+  return out;
+});
+ok('⚠️ مرجعان لنفس أمر الشراء ⇒ «غير مُقارَن» لا «عرضان» (كان يُقرأ مُقارَناً)',
+  /غير مُقارَن/.test(cells['A-1'].offers), JSON.stringify(cells['A-1']));
+ok('وأرقامه الثلاث مُسكَتة',
+  cells['A-1'].avg === '—' && cells['A-1'].min === '—' && cells['A-1'].max === '—', JSON.stringify(cells['A-1']));
+ok('والتلميح يقول إنّ سجلّاً مكرّراً لم يُحتسَب — بصيغة عدد عربية صحيحة',
+  /سجلّ واحد مكرّر لم يُحتسَب/.test(cells['A-1'].title) && !/^1 سجلّاً/.test(cells['A-1'].title), cells['A-1'].title);
+ok('وسعران متمايزان: الأرقام تظهر والعدّاد عددٌ مجرّد',
+  cells['B-1'].avg !== '—' && cells['B-1'].min !== '—' && /^2$/.test(cells['B-1'].offers) && /ملاحظات سعرية متمايزة: 2/.test(cells['B-1'].title), JSON.stringify(cells['B-1']));
+ok('⚠️ وعرضان بنفس السعر من موردين: «أسعار متطابقة» لا رقمٌ مكرّر ثلاثاً',
+  /أسعار متطابقة/.test(cells['D-1'].offers) && cells['D-1'].avg === '—'
+  && /ملاحظتان بنفس السعر/.test(cells['D-1'].title), JSON.stringify(cells['D-1']));
+const flagCount = await page.evaluate(() => {
+  STATE.itemsFilter.flag = 'single';
+  document.getElementById('items-flag').value = 'single';
+  renderItems();
+  return [...document.querySelectorAll('#items-tbody tr[data-code]')].map(t => t.dataset.code);
+});
+ok('ومرشّح «غير مُقارَن» يشمل العروض المتطابقة لا العرض الواحد وحده',
+  flagCount.includes('A-1') && flagCount.includes('D-1') && !flagCount.includes('B-1'), JSON.stringify(flagCount));
+await page.evaluate(() => { STATE.itemsFilter.flag = ''; document.getElementById('items-flag').value = ''; renderItems(); navigate('history'); });
+await page.waitForSelector('#hist-tbody tr', { timeout: 8000 });
+const note = await page.evaluate(() => {
+  const box = document.getElementById('hist-flag-note');
+  return { shown: box.style.display !== 'none', text: box.textContent.replace(/\s+/g, ' ').trim(),
+    links: [...box.querySelectorAll('[data-hist-flag]')].map(a => a.getAttribute('data-hist-flag')) };
+});
+ok('⚠️ سطر «يحتاج مراجعة» يُعلِن المكرّر والمنفصل بالأرقام',
+  note.shown && /مجموعة واحدة مكرّرة/.test(note.text) && /سجلّ واحد لم يُحتسَب/.test(note.text)
+  && /سجلّ واحد بلا صنف مرتبط/.test(note.text), note.text);
+/* ⚠️ الرابطان يُتحقَّق من وجودهما **قبل** النقر: بلا ذلك يسقط الفحص باستثناء
+   خامّ (`null.click`) فلا يقول أيّ ثابت انكسر — أمسكه البيت-بروف على رصد المنفصل. */
+ok('ورابطا التصفية موجودان فعلاً في السطر',
+  note.links.includes('dup') && note.links.includes('orphan'), JSON.stringify(note.links));
+const clickFlag = (f) => page.evaluate(async (flag) => {
+  const a = document.querySelector(`#hist-flag-note [data-hist-flag="${flag}"]`);
+  if (!a) return { missing: true, nums: [], sel: '' };
+  a.click();
+  await new Promise(r => setTimeout(r, 60));
+  return { missing: false, nums: [...document.querySelectorAll('#hist-tbody tr[data-num]')].map(t => +t.dataset.num), sel: document.getElementById('hist-flag').value };
+}, f);
+const dupRows = await clickFlag('dup');
+ok('ونقر الرقم يُصفّي إلى **طرفَي** المجموعة معاً (المراجعة تحتاجهما)',
+  !dupRows.missing && dupRows.nums.length === 2 && dupRows.nums.includes(1) && dupRows.nums.includes(2) && dupRows.sel === 'dup',
+  JSON.stringify(dupRows));
+const orphanRows = await clickFlag('orphan');
+ok('و«بلا صنف مرتبط» يُصفّي إلى الصفّ الذي لا يصل أيّ صنف',
+  !orphanRows.missing && orphanRows.nums.length === 1 && orphanRows.nums[0] === 7, JSON.stringify(orphanRows));
+const cleanState = await page.evaluate(async () => {
+  STATE.history = STATE.history.filter(h => h.num === 3 || h.num === 4);
+  STATE.histFilter.flag = ''; document.getElementById('hist-flag').value = '';
+  renderHistory(); await new Promise(r => setTimeout(r, 40));
+  const box = document.getElementById('hist-flag-note');
+  return { shown: box.style.display !== 'none', html: box.innerHTML };
+});
+ok('وسجلٌّ نظيف يُخفي السطر (سطرٌ صفريّ ضجيج)', !cleanState.shown && !cleanState.html, JSON.stringify(cleanState));
+
+/* ── ٩) الجوال والسلامة ── */
 await page.setViewportSize({ width: 393, height: 852 });
 const mob = await page.evaluate(async () => {
   const r = {};
