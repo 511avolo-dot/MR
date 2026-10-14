@@ -295,6 +295,9 @@ const NEEDED_FNS = [
   'siBigrams', 'siDice', 'siJaccard', 'siTokenScore', 'siQualGroupConflict', 'siQualConflict',
   'siSimilarity', 'siExtractModelNumbers', 'siStripUnits', 'siRetrievalScore', 'siRetrieveCandidates',
   'siSupplierKey', 'siAliasKey', 'siAliasLookup', 'siResolveItem', 'siSearchItems',
+  'siItemMatches', 'histRowMatches', 'priceAgeInfo', 'priceDeviationHint',
+  // دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
+  'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'itemsVisibleList',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
@@ -304,7 +307,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
@@ -5528,6 +5531,254 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
   T('مُنصِّب القاعدة يُنشئ المفتاح الفريد المركّب',
     /uq_aliases_norm_supplier[\s\S]{0,80}normalized_alias,\s*supplier_key/.test(HTML)
     && !/normalized_alias TEXT NOT NULL UNIQUE/.test(HTML));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ٤٨) وجهات الكتالوج: بحث مُطبَّع · سنّ السعر · إسكات الأرقام المكرّرة
+   ----------------------------------------------------------------------
+   القياس على بذرة الملف (529 صنفاً · 808 سجلات) هو ما قاد كل بند هنا:
+     · «أسود»⇒4 و«اسود»⇒**صفر** · «عربة»⇒13 و«عربه»⇒**صفر** (الأصناف والتسعير)
+     · «شركة»⇒25 و«شركه»⇒**صفر** (السجل السعريّ)
+     · 520 من 525 صنفاً سعره أقدم من 180 يوماً (الوسيط 212) ⇒ عتبة 180 ضجيج،
+       و>365 = 42 صنفاً (8%) إشارة
+     · 396 من 529 (75%) له عرض واحد ⇒ «متوسط/أدنى/أعلى» الرقم نفسه ثلاث مرّات
+   ═══════════════════════════════════════════════════════════════════════ */
+{
+  const { siItemMatches, histRowMatches, priceAgeInfo, priceDeviationHint,
+          PRICE_STALE_DAYS, PRICE_DEVIATION_WARN } = api;
+  const savedItems = STATE.items, savedAl = api.SI_ALIASES_BY_CODE;
+  STATE.items = [
+    { code:'A-1', name:'سلة فرز نفايات 3 أقسام، حديد أسود MAX-SN206', unit:'حبة', last_price:100, avg_price:100, min_price:100, max_price:100, offers:1, last_date:'2026-10-01' },
+    { code:'B-1', name:'عربة قمامة، Baiyun، بعجلات', unit:'قطعة', last_price:50, avg_price:60, min_price:40, max_price:80, offers:3, last_date:'2026-09-20' },
+    { code:'C-1', name:'كفوف فينيل أسود شد 10', unit:'علبة', last_price:12, avg_price:12, min_price:12, max_price:12, offers:1, last_date:'2024-01-01' },
+  ];
+  api.SI_ALIASES_BY_CODE = { 'B-1': ['garbage trolley with wheels'] };
+
+  /* (أ) مطابقة الكتالوج: التطبيع هو جوهر البند */
+  T('⚠️ «اسود» تجد ما كُتِب «أسود» (كانت صفراً)', siItemMatches(STATE.items[0], 'اسود'));
+  T('و«عربه» تجد ما كُتِب «عربة» (كانت صفراً)', siItemMatches(STATE.items[1], 'عربه'));
+  T('والكتابة الأصلية تبقى تعمل', siItemMatches(STATE.items[0], 'أسود') && siItemMatches(STATE.items[1], 'عربة'));
+  T('ورموز البحث بأي ترتيب: «كفوف اسود» تجد «كفوف فينيل أسود شد 10»',
+    siItemMatches(STATE.items[2], 'كفوف اسود') && siItemMatches(STATE.items[2], 'اسود كفوف'));
+  T('والكود حرفيّاً', siItemMatches(STATE.items[1], 'B-1') && siItemMatches(STATE.items[1], 'b-1'));
+  T('والمرادف المعتمد يخدم البحث ثنائيّ اللغة', siItemMatches(STATE.items[1], 'trolley wheels'));
+  T('وبحث فارغ يُمرّر الكل', siItemMatches(STATE.items[0], '') && siItemMatches(STATE.items[0], '   '));
+  T('ولا تُطابِق ما ليس فيه', !siItemMatches(STATE.items[0], 'زززز') && !siItemMatches(STATE.items[0], 'كفوف'));
+  T('ورمزٌ واحد غير موجود يُسقِط المطابقة كلّها (every لا some)',
+    !siItemMatches(STATE.items[2], 'كفوف زززز'));
+
+  /* (ب) السجل السعريّ: كل حقل بمُطبِّعه الخاص */
+  const h1 = { code:'B-1', name:'عربة قمامة، Baiyun، بعجلات', supplier:'شركة النظافة المتقدمة', reference:'PO:3101#2', price:50, date:'2026-09-20' };
+  T('⚠️ «شركه» تجد مورداً كُتِب «شركة» (كانت صفراً)', histRowMatches(h1, 'شركه'));
+  T('واسم الصنف يُطبَّع كذلك', histRowMatches(h1, 'عربه قمامه'));
+  T('والمرجع والكود حرفيّاً', histRowMatches(h1, 'PO:3101') && histRowMatches(h1, 'b-1'));
+  T('ورموز مختلطة من حقول مختلفة تُطابِق معاً (بأي ترتيب)',
+    histRowMatches(h1, 'شركه عربه') && histRowMatches(h1, 'عربه شركه'));
+  T('ولا تُطابِق ما ليس في أي حقل', !histRowMatches(h1, 'زززز'));
+  T('وبحث فارغ يُمرّر الصفّ', histRowMatches(h1, '') && histRowMatches(h1, null));
+
+  /* (ج) سنّ السعر: العتبة 365 — مقيسة لا مُختارة بالذوق */
+  const daysAgo = (n) => new Date(Date.now() - n*86400000).toISOString().slice(0,10);
+  T('⚠️ 200 يوماً **ليست** قديمة (وإلّا لُوّن 520 من 525 صفّاً = ضجيج)',
+    priceAgeInfo(daysAgo(200)).stale === false);
+  T('و400 يوماً قديمة', priceAgeInfo(daysAgo(400)).stale === true);
+  T('والعتبة 365 بالضبط', PRICE_STALE_DAYS === 365
+    && priceAgeInfo(daysAgo(364)).stale === false && priceAgeInfo(daysAgo(366)).stale === true);
+  T('وصيغة الأشهر عربية صحيحة', /^منذ \d+ شهراً$/.test(priceAgeInfo(daysAgo(400)).label), priceAgeInfo(daysAgo(400)).label);
+  T('و«سنتين» لا «2 سنوات»', priceAgeInfo(daysAgo(760)).label === 'منذ سنتين', priceAgeInfo(daysAgo(760)).label);
+  T('و3 سنوات بصيغة الجمع', priceAgeInfo(daysAgo(1200)).label === 'منذ 3 سنوات', priceAgeInfo(daysAgo(1200)).label);
+  T('وتاريخ مجهول لا يُدَّعى قِدَمه', priceAgeInfo(null).known === false && priceAgeInfo('').stale === false
+    && priceAgeInfo('ليس تاريخاً').known === false);
+  T('وتاريخ مستقبليّ لا يُنتج عمراً سالباً', priceAgeInfo(new Date(Date.now()+86400000*5).toISOString()).days === 0);
+
+  /* (د) تنبيه انحراف السعر عند الكتابة — تنبيه لا منع */
+  const it = STATE.items[1]; // آخر سعر 50
+  T('انحراف 100% يُنبَّه', (priceDeviationHint(it, 100) || {}).pct === 100);
+  T('وأقلّ من العتبة لا يُنبَّه', priceDeviationHint(it, 60) === null, String(PRICE_DEVIATION_WARN));
+  T('والعتبة 30%', PRICE_DEVIATION_WARN === 0.30
+    && priceDeviationHint(it, 50*1.29) === null && priceDeviationHint(it, 50*1.31) !== null);
+  T('والانخفاض يُنبَّه باتجاهه', (priceDeviationHint(it, 10) || {}).up === false);
+  T('وصنف بلا سعر مرجعيّ لا يُنتج تنبيهاً كاذباً',
+    priceDeviationHint({ code:'X', last_price:null }, 999) === null);
+  T('وقيمة غير صالحة لا تُنبَّه', priceDeviationHint(it, 0) === null && priceDeviationHint(it, '') === null
+    && priceDeviationHint(it, 'abc') === null && priceDeviationHint(null, 100) === null);
+
+  /* (هـ) حرّاس بنيوية: الشاشات الثلاث تمرّ بالمطابقة ولا تعود لـincludes الخامّ */
+  T('شاشة الأصناف تمرّ بـsiItemMatches', /list\.filter\(i => siItemMatches\(i, q\)\)/.test(CODE));
+  T('والسجل السعريّ بـhistRowMatches', /list\.filter\(h => histRowMatches\(h, q\)\)/.test(CODE));
+  T('والتسعير الذكيّ بـsiItemMatches', /list\.filter\(i => siItemMatches\(i, q\)\)[\s\S]{0,400}matched = list\.length/.test(CODE));
+  T('⚠️ ولا بحث اسمٍ بـincludes خامّ في الشاشات الثلاث',
+    !/\(i\.name\|\|''\)\.toLowerCase\(\)\.includes\(q\)/.test(CODE)
+    && !/\(h\.name\|\|''\)\.toLowerCase\(\)\.includes\(q\)/.test(CODE));
+  /* ⚠️ صُحِّح هذا الحارس للثابت الحقيقيّ: كان يشترط `(i.offers||0) >= 2` — وهو
+     **ترميزٌ لبوّابة مُلغاة** مرّرت 115 صنفاً تحمل ثلاثة أرقام متطابقة. الثابت
+     هو أنّ البوّابة **تمايز السعر** عبر `priceSpreadInfo`، لا عدّ العروض. */
+  T('والأرقام المكرّرة تُسكَت حين لا فرق سعريّ (متوسط/أدنى/أعلى)',
+    /const sp = priceSpreadInfo\(i\)/.test(CODE)
+    && /const cmp = sp\.spread/.test(CODE)
+    && /\$\{cmp\?fmtPrice\(i\.avg_price\):dash\}/.test(CODE)
+    && /\$\{cmp\?fmtPrice\(i\.min_price\):dash\}/.test(CODE)
+    && /\$\{cmp\?fmtPrice\(i\.max_price\):dash\}/.test(CODE));
+  T('وسعرٌ من مصدر واحد يُعلَن «غير مُقارَن»', /غير مُقارَن/.test(CODE));
+  T('والأعمدة والفرز لم تُحذَف (إسكات ضجيج لا حذف قدرة)',
+    (HTML.match(/data-sort="avg_price"/g)||[]).length === 1
+    && (HTML.match(/data-sort="min_price"/g)||[]).length === 1
+    && (HTML.match(/data-sort="max_price"/g)||[]).length === 1);
+  T('ومرشّح الحالات الثلاث مربوط بالحالة', /id="items-flag"/.test(HTML)
+    && /STATE\.itemsFilter\.flag = e\.target\.value/.test(CODE)
+    && /flag === 'stale'/.test(CODE) && /flag === 'single'/.test(CODE) && /flag === 'noprice'/.test(CODE));
+  T('⚠️ وبتر التسعير يُعلَن لا يقع صامتاً', /matched > list\.length/.test(CODE) && /عرض أول \$\{list\.length\} من/.test(CODE));
+  T('وتلميح الانحراف مربوط بالكتابة لا بالحفظ',
+    /priceInput\.addEventListener\('input', updatePriceDeviationHint\)/.test(CODE));
+  T('وتفريغ المعاينة يُصفّر التلميح والصنف المختار',
+    /function clearPreview\(\)[\s\S]{0,420}STATE\.selectedItem = null[\s\S]{0,200}f-price-hint/.test(CODE));
+  T('وآخر الأسعار تُعرَض من السجل الفعليّ في المعاينة',
+    /function renderRecentPrices/.test(CODE) && /renderRecentPrices\(item\)/.test(CODE)
+    && /\.slice\(0, 3\)/.test(CODE));
+  /* ⚠️ هذا الحارس هو ما كشف العيب: «تحديد الكل» كان يُعيد بناء المرشّح بنسخة
+     ثانية (بحثٌ خامّ وبلا مرشّح الحالات) فيُحدِّد مجموعةً **مختلفة** عن المعروضة.
+     المصدر الواحد `itemsVisibleList()` هو الثابت المحروس — لا عدد الأسطر. */
+  T('قائمة الأصناف المرئية مصدرها واحد',
+    /function itemsVisibleList\(\)/.test(CODE)
+    && (CODE.match(/itemsVisibleList\(\)/g)||[]).length >= 3
+    && /selAllCb\.addEventListener[\s\S]{0,300}itemsVisibleList\(\)/.test(CODE));
+  T('ولا نسخة ثانية تُصفّي الأصناف بنفسها',
+    (CODE.match(/STATE\.itemsFilter\.category\) list = list\.filter/g)||[]).length === 1);
+  T('وأداة الذكاء تبحث بنفس المطابقة المُطبَّعة لا بـincludes',
+    /items\.filter\(i=>siItemMatches\(i,q\)/.test(CODE));
+  T('وكل صنف CSS جديد له قاعدة فعلية',
+    ['badge warn','row-stale-price','pv-recent','price-dev'].every(c =>
+      new RegExp('\\.' + c.split(' ').join('.') + '[,{ ]').test(HTML)));
+
+  STATE.items = savedItems; api.SI_ALIASES_BY_CODE = savedAl;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ٤٩) دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
+   ----------------------------------------------------------------------
+   القياس على بذرة الملف (808 سجلات · 529 صنفاً) هو ما قاد كل بند هنا:
+     · **158 صفّاً من 808 مكرّرة حرفيّاً** (نفس الصنف والمورد والسعر والتاريخ)
+       في 127 مجموعة — و**116 من الـ127 مرجعاها مختلفان لنفس أمر الشراء**
+       (`PO-101` مقابل `P.O-DG26-3101`: دفعةٌ استُورِدت مرّتين بصيغتَي ترقيم).
+       فكان عدّاد العروض منتفخاً لـ**112 من 525 صنفاً**.
+     · ولذلك مرّرت بوّابة «عرضان فأكثر» **115 صنفاً من 129** تحمل «متوسط/أدنى/
+       أعلى» = رقماً واحداً مكرّراً ثلاثاً (min==max) **وبلا شارة «غير مُقارَن»**
+       أي بادّعاء مقارنة كاذب. التمايز الفعليّ بعد إسقاط المكرّر = **14 صنفاً**.
+     · و**86 صفّاً كوده ليس في الكتالوج** (79 منها `NEW` و7 `PO-ONLY` — بقايا
+       استخراج الإكسل) ⇒ أسعارٌ دُفِعت ولا تصل أيّ صنف، وكانت بلا أي إشارة.
+   ═══════════════════════════════════════════════════════════════════════ */
+{
+  const { priceObsKey, priceSpreadInfo, histFlagInfo, recomputeItemStats } = api;
+  const savedItems = STATE.items, savedHist = STATE.history;
+  const R = (o) => Object.assign({ num:0, code:'A-1', name:'صنف', supplier:'شركة النظافة', price:50, date:'2026-03-01', reference:'' }, o);
+
+  /* (أ) الملاحظة السعرية الواحدة — المكرّر لا يُحتسَب عرضاً ثانياً */
+  STATE.items = [{ code:'A-1', name:'صنف أ', unit:'حبة' }, { code:'B-1', name:'صنف ب', unit:'حبة' }];
+  /* ⚠️ النمط الحقيقيّ من الإنتاج: مرجعان مختلفان لنفس أمر الشراء. */
+  STATE.history = [R({num:1, reference:'PO-101'}), R({num:2, reference:'P.O-DG26-3101'})];
+  recomputeItemStats();
+  let a = STATE.items[0];
+  T('⚠️ مرجعان مختلفان لنفس (الصنف/المورد/السعر/التاريخ) = عرضٌ واحد (كان اثنين)',
+    a.offers === 1, `offers=${a.offers}`);
+  T('وعدد صفوف السجل الخام محفوظ للتلميح', a.records === 2, `records=${a.records}`);
+  T('والمتوسط والأدنى والأعلى سعرٌ واحد لا ثلاثة',
+    a.avg_price === 50 && a.min_price === 50 && a.max_price === 50);
+  T('⚠️ ولا صفّ يُحذف من السجل (حسابٌ فقط)', STATE.history.length === 2);
+
+  STATE.history = [R({num:1, price:50}), R({num:2, price:80})];
+  recomputeItemStats(); a = STATE.items[0];
+  T('وسعران متمايزان لنفس المورد والتاريخ = عرضان', a.offers === 2 && a.min_price === 50 && a.max_price === 80);
+
+  STATE.history = [R({num:1}), R({num:2, supplier:'مؤسسة الرياض'})];
+  recomputeItemStats(); a = STATE.items[0];
+  T('ونفس السعر من موردين مختلفين = عرضان (مورد مختلف ملاحظة مستقلّة)', a.offers === 2);
+
+  STATE.history = [R({num:1}), R({num:2, date:'2026-07-01'})];
+  recomputeItemStats(); a = STATE.items[0];
+  T('ونفس السعر ونفس المورد بتاريخين = عرضان', a.offers === 2);
+
+  /* ⚠️ كتابة اسم المورد تختلف في الإنتاج («شركه»/«شركة») — المفتاح يمرّ بـarNorm
+     وإلّا عُدَّ نفسُ المورد موردين فبقي العدّاد منتفخاً. */
+  STATE.history = [R({num:1, supplier:'شركة النظافة'}), R({num:2, supplier:'شركه النظافه'})];
+  recomputeItemStats(); a = STATE.items[0];
+  T('⚠️ واختلاف كتابة اسم المورد لا يُنتج عرضاً ثانياً', a.offers === 1, `offers=${a.offers}`);
+
+  STATE.history = [R({num:1, price:50}), R({num:2, price:50, reference:'x'}), R({num:3, price:80})];
+  recomputeItemStats(); a = STATE.items[0];
+  T('والمتوسط على الملاحظات المتمايزة: [50,50,80] ⇒ 65 لا 60', a.avg_price === 65, String(a.avg_price));
+
+  T('ومفتاح الملاحظة لا يخلط صنفين',
+    priceObsKey(R({code:'A-1'})) !== priceObsKey(R({code:'B-1'})));
+  T('ويخلط مرجعين مختلفين عن قصد (المرجع ليس جزءاً من الهويّة)',
+    priceObsKey(R({reference:'PO-101'})) === priceObsKey(R({reference:'P.O-DG26-3101'})));
+
+  /* (ب) التمايز الفعليّ هو بوّابة العرض — لا عدّ العروض */
+  T('⚠️ عرضان بنفس السعر: لا تمايز (البوّابة القديمة كانت تمرّره «مُقارَناً»)',
+    priceSpreadInfo({ offers:2, min_price:50, max_price:50 }).spread === false
+    && priceSpreadInfo({ offers:2, min_price:50, max_price:50 }).equal === true);
+  T('وعرضان بسعرين: تمايز', priceSpreadInfo({ offers:2, min_price:40, max_price:80 }).spread === true);
+  T('وعرضٌ واحد: غير مُقارَن', priceSpreadInfo({ offers:1, min_price:50, max_price:50 }).single === true);
+  T('والمكرّر المُسقَط يُعَدّ للتلميح', priceSpreadInfo({ offers:1, records:3, min_price:50, max_price:50 }).collapsed === 2);
+  T('و«—» لا تُنتج NaN', priceSpreadInfo({ offers:'—' }).obs === 0 && priceSpreadInfo(null).single === true);
+
+  /* (ج) ما يحتاج مراجعة في شاشة السجل */
+  STATE.items = [{ code:'A-1', name:'صنف أ' }];
+  STATE.history = [
+    R({num:1, reference:'PO-101'}), R({num:2, reference:'P.O-DG26-3101'}),   // مجموعة مكرّرة
+    R({num:3, price:80}),                                                     // سليم
+    R({num:4, code:'NEW', name:'صنف غير مُكوَّد'}),                            // بلا صنف مرتبط
+    R({num:5, code:'PO-ONLY', price:12}),                                     // بلا صنف مرتبط
+  ];
+  const fi = histFlagInfo();
+  T('⚠️ المجموعة المكرّرة تُعرَض **بكل صفوفها** لا الزائد وحده (المراجعة تحتاج الطرفين)',
+    fi.dupNums.has(1) && fi.dupNums.has(2) && fi.dupNums.size === 2);
+  T('والزائد يُعَدّ بدقّة', fi.dupGroups === 1 && fi.dupExtra === 1);
+  T('والصفّ السليم ليس مكرّراً ولا منفصلاً', !fi.dupNums.has(3) && !fi.orphanNums.has(3));
+  T('⚠️ والكود الذي ليس في الكتالوج يُرصَد (سعرٌ دُفِع ولا يصل أيّ صنف)',
+    fi.orphanNums.has(4) && fi.orphanNums.has(5) && fi.orphanNums.size === 2);
+  STATE.history = [R({num:1, price:null}), R({num:2, price:null})];
+  T('وصفٌّ بسعر غير صالح لا يُحسَب مكرّراً', histFlagInfo().dupGroups === 0);
+
+  /* (د) حرّاس بنيوية */
+  T('إسقاط المكرّر داخل recomputeItemStats نفسها (مصدر الأرقام كلّها)',
+    /function recomputeItemStats\(\)[\s\S]{0,900}priceObsKey\(h\)[\s\S]{0,200}seenObs\.has\(obsKey\)\) return/.test(CODE));
+  T('⚠️ ولا حذف ولا تعديل لصفّ سجلّ داخلها',
+    !/function recomputeItemStats\(\)[\s\S]{0,1200}STATE\.history\.(splice|pop|shift)/.test(CODE));
+  T('ومرشّح «ما يحتاج مراجعة» مربوط بالحالة', /id="hist-flag"/.test(HTML)
+    && /STATE\.histFilter\.flag=e\.target\.value/.test(CODE)
+    && /flag === 'dup'/.test(CODE) && /flag === 'orphan'/.test(CODE));
+  T('وسطر الملاحظة يُخفى حين لا شيء يحتاج مراجعة (سطرٌ صفريّ ضجيج)',
+    /if\(!parts\.length\)\{ box\.style\.display='none'/.test(CODE));
+  T('وأرقامه روابط تضبط المرشّح', /data-hist-flag="dup"/.test(CODE) && /data-hist-flag="orphan"/.test(CODE));
+  /* ⚠️ بوّابةٌ واحدة للجدول والمرشّح: أوّل بيت-بروف لم يعضّ حين أُعيد المرشّح إلى
+     عدّ العروض، فالثابت المحروس هو **أنّ المرشّح يُرجع ما يَسِمه الجدول نفسه** —
+     بوّابتان تتفارقان هي علّةٌ قائمة بذاتها (الجدول يقول «أسعار متطابقة» والمرشّح
+     يستبعده). يُقاس سلوكيّاً على `itemsVisibleList`. */
+  {
+    const si = STATE.items, sf = STATE.itemsFilter, ss = STATE.itemsSort;
+    STATE.items = [
+      { code:'EQ', name:'عروض متطابقة', last_price:50, avg_price:50, min_price:50, max_price:50, offers:2 },
+      { code:'SP', name:'فرق سعريّ',    last_price:50, avg_price:60, min_price:40, max_price:80, offers:2 },
+      { code:'ON', name:'عرض واحد',     last_price:50, avg_price:50, min_price:50, max_price:50, offers:1 },
+    ];
+    STATE.itemsFilter = { q:'', category:'', flag:'single' };
+    STATE.itemsSort = { col:'code', dir:'asc' };
+    const got = api.itemsVisibleList().map(i => i.code).sort().join(',');
+    T('⚠️ ومرشّح «غير مُقارَن» يُرجع ما يَسِمه الجدول: المتطابق والواحد لا المتمايز',
+      got === 'EQ,ON', got);
+    STATE.items = si; STATE.itemsFilter = sf; STATE.itemsSort = ss;
+  }
+  T('و«أسعار متطابقة» تُقال صراحةً لا تُخفى', /أسعار متطابقة/.test(CODE));
+  T('وصنف CSS الجديد له قاعدة فعلية', /\.hist-note[,{ ]/.test(HTML.replace(/\/\*[\s\S]*?\*\//g, '')));
+  /* ⚠️ صيغة العدد العربية (قاعدة `poDays`/`poFinOrders`): «1 سجلّاً» و«2 ملاحظات»
+     خطأٌ يقرؤه من يراجع الأسعار. */
+  T('وصيغة العدد العربية صحيحة في عدّ السجلّات والملاحظات والمجموعات',
+    api.priceRecWord(1) === 'سجلّ واحد' && api.priceRecWord(2) === 'سجلّان'
+    && api.priceRecWord(5) === '5 سجلّات' && api.priceRecWord(158) === '158 سجلّاً'
+    && api.priceObsWord(2) === 'ملاحظتان' && api.priceGroupWord(1) === 'مجموعة واحدة'
+    && api.priceGroupWord(127) === '127 مجموعة');
+
+  STATE.items = savedItems; STATE.history = savedHist;
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
