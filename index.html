@@ -8182,14 +8182,19 @@ function histFlagInfo(){
     if(!h || !h.code || h.price==null || isNaN(Number(h.price))) continue;
     const k = priceObsKey(h);
     if(!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(h.num);
+    groups.get(k).push({ num:h.num, ref:h.reference });
   }
+  /* ⚠️ اختلاف المرجع لا يُميّز شيئاً هنا: جُرِّب قصرُ الرصد على «نفس المرجع»
+     فأسقط النمط الأكبر في الإنتاج — `PO-101` و`P.O-DG26-3101` **مرجعان لمستندٍ
+     واحد** (123 من 132 صفّاً)، بينما 2109 و2114 مستندان مختلفان؛ والنصّ وحده لا
+     يفرّقهما. فالرصد يبقى على هويّة الملاحظة، والمراجعة بشريّة — والسطر لا يحذف
+     شيئاً، إنما يعرض **كل صفوف المجموعة** بمراجعها ليقرّر صاحب القرار. */
   const dupNums = new Set();
   let dupGroups = 0, dupExtra = 0;
-  for(const nums of groups.values()){
-    if(nums.length < 2) continue;
-    dupGroups++; dupExtra += nums.length - 1;
-    nums.forEach(n => dupNums.add(n));
+  for(const rows of groups.values()){
+    if(rows.length < 2) continue;
+    dupGroups++; dupExtra += rows.length - 1;
+    rows.forEach(r => dupNums.add(r.num));
   }
   const codes = new Set((STATE.items || []).map(i => i.code));
   const orphanNums = new Set();
@@ -8220,6 +8225,147 @@ function renderHistFlagNote(fi, active){
     });
   });
 }
+
+/* ═══ ربط سجلّ سعريّ بصنف ═══════════════════════════════════════════════
+   ⚠️ «بلا صنف مرتبط» كان عدّاداً يُشير إلى مشكلة **بلا علاج في النظام كلّه**:
+   الصفّ يحمل اسماً وسعراً ومورداً حقيقيّين، لكن رمزه نائب (`NEW`/`PO-ONLY`)
+   فلا يصل أيّ صنف ولا يُغذّي سعره؛ و`openEditEntry` يعرض الصنف **نصّاً للقراءة
+   فقط** فلا سبيل لتصحيحه. القياس: 85 صفّاً على 71 اسماً، **كلّها إرثُ استيراد
+   الإكسل — صفر صفّ جديد منذ الاستيراد الذكيّ**، فهذه دفعةٌ تُصفّى لا تسرّبٌ مستمرّ.
+   الربط يمرّ بـ`siResolveItem` نفسه (ببوّابة المواصفات الفارقة) فلا يُخمَّن:
+   القاطع يُقترَح محدَّداً مسبقاً، والمحتمل يُعرَض للقرار، والمجهول يُترك للبحث
+   أو لإنشاء صنف جديد. والاختيار يُحفَظ مرادفاً فلا يتكرّر السؤال. */
+function histIsOrphan(h){
+  if(!h) return false;
+  if(!h.code) return true;
+  return !(STATE.items || []).some(i => i.code === h.code);
+}
+
+function openLinkEntry(num){
+  const h = (STATE.history || []).find(x => x.num === num);
+  if(!h){ toast('error','تعذّر','لم يُعثر على السجلّ'); return }
+  if(!h._user){ toast('error','غير مسموح','سجلّات البذرة غير قابلة للتعديل'); return }
+  const m = document.createElement('div');
+  m.className = 'modal-overlay active'; m.id = 'modal-link-entry'; m.dataset.ephemeral = '1';
+  m.innerHTML = `<div class="modal" style="max-width:720px;width:96vw">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
+      <h3 style="margin:0;font-size:16px">ربط السجلّ بصنف</h3>
+      <button class="modal-close" onclick="closeLinkEntry()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:16px 20px;max-height:66vh;overflow:auto">
+      <div style="background:var(--surface-2,#f7f7f8);border:1px solid var(--border,#eee);border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:600;margin-bottom:6px">${escapeHtml(h.name || '—')}</div>
+        <div class="muted" style="font-size:12.5px">
+          ${escapeHtml(h.supplier || '—')} · ${fmtDate(h.date)} ·
+          <span class="price">${fmtPrice(h.price)}<span class="sar">ر.س</span></span>
+          ${h.reference ? ' · ' + escapeHtml(h.reference) : ''}
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:6px">الرمز الحاليّ: <span class="mono">${escapeHtml(h.code || '—')}</span> — لا يطابق أيّ صنف في الكتالوج.</div>
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label class="form-label" for="le-q">ابحث عن الصنف</label>
+        <input type="text" class="form-input" id="le-q" placeholder="اسم الصنف أو رمزه…">
+      </div>
+      <div id="le-results"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--border,#eee);flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="linkEntryCreateItem(${num})">➕ إنشاء صنف جديد من هذا السجلّ</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeLinkEntry()">إغلاق</button>
+    </div></div>`;
+  document.body.appendChild(m); syncScrollLock();
+  const q = m.querySelector('#le-q');
+  /* ⚠️ الخانق 180ms كخانق مربّع التسعير — لا تقِس قبله. */
+  let t = null;
+  q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => linkEntryRender(num, q.value), 180); });
+  linkEntryRender(num, '');
+  try{ a11yWire(m); }catch(e){}
+  setTimeout(()=>{ try{ q.focus(); }catch(e){} }, 50);
+}
+
+function linkEntryRender(num, query){
+  const box = document.getElementById('le-results');
+  if(!box) return;
+  const h = (STATE.history || []).find(x => x.num === num);
+  if(!h) return;
+  const q = String(query || '').trim();
+  let list, head;
+  if(q){
+    list = (typeof siSearchItems === 'function' ? siSearchItems(q, 12) : []).map(i => ({item:i, why:''}));
+    head = list.length ? `نتائج البحث (${list.length})` : 'لا نتائج لهذا البحث';
+  }else{
+    const res = (typeof siResolveItem === 'function') ? siResolveItem(h.name, {supplier:h.supplier}) : {state:'none'};
+    if(res.state === 'ok' && res.item){
+      list = [{item:res.item, why:'مطابقة قاطعة — ' + (res.reason || '')}];
+      head = '✅ مطابقة قاطعة';
+    }else if(res.state === 'suggest' && (res.candidates || []).length){
+      list = res.candidates.slice(0, 8).map(c => ({item:c.item || c, why:c.veto ? ('⚠ تعارض: ' + c.veto) : (c.score ? 'تشابه ' + Math.round(c.score*100) + '%' : '')}));
+      head = '🔎 مرشّحون — القرار لك';
+    }else{
+      list = []; head = 'لا مرشّح مقنع — ابحث يدويّاً أو أنشئ صنفاً جديداً';
+    }
+  }
+  const rows = list.map(e => `<tr>
+      <td class="mono" style="font-size:12px">${escapeHtml(e.item.code || '')}</td>
+      <td>${escapeHtml(e.item.name || '')}</td>
+      <td class="muted" style="font-size:12px">${escapeHtml(e.why || '')}</td>
+      <td style="text-align:end"><button class="btn btn-sm" data-link-code="${escapeAttr(e.item.code || '')}">ربط</button></td>
+    </tr>`).join('');
+  box.innerHTML = `<div class="muted" style="font-size:12.5px;margin-bottom:8px">${escapeHtml(head)}</div>` +
+    (rows ? `<table class="data-table" style="width:100%"><thead><tr class="thead-navy"><th>الرمز</th><th>الصنف</th><th>السبب</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : '');
+  box.querySelectorAll('[data-link-code]').forEach(b => {
+    b.addEventListener('click', () => linkEntryApply(num, b.getAttribute('data-link-code')));
+  });
+  try{ mobileTableWrap(box); }catch(e){}
+}
+
+async function linkEntryApply(num, code){
+  const h = (STATE.history || []).find(x => x.num === num);
+  const it = (STATE.items || []).find(i => i.code === code);
+  if(!h || !it) return;
+  if(!h._user){ toast('error','غير مسموح','سجلّات البذرة غير قابلة للتعديل'); return }
+  const oldCode = h.code;
+  /* ⚠️ الاسم **لا يُستبدَل** باسم الكتالوج: وصفُ المورّد جزءٌ من السجلّ
+     (ومنه نعرف أنّ «سيان» غير «ماجنتا»). الرمز وحده هو ما يربط. */
+  h.code = it.code;
+  if(!h.category || h.category === '—') h.category = it.category || h.category;
+  try{ updateUserEntry(num, h); }catch(e){}
+  recomputeItemStats();
+  try{ logAudit('link','entry',num,{old_code:oldCode, new_code:it.code, name:h.name||'', supplier:h.supplier||''}); }catch(e){}
+  if(window.CLOUD && CLOUD.enabled){
+    try{ await CLOUD.history.upsert(h); }
+    catch(e){ reportError('linkEntryApply', e, {num}, 'تعذّرت مزامنة الربط مع السحابة'); }
+  }
+  /* يتعلّمها المُحلِّل فلا يتكرّر السؤال على الاسم نفسه من المورّد نفسه. */
+  try{ if(typeof siSaveLearnedAlias === 'function') await siSaveLearnedAlias(h.name, it.code, h.name, h.supplier, 'link'); }catch(e){}
+  closeLinkEntry();
+  toast('success','تمّ الربط', `${h.name||''} → ${it.code}`);
+  renderHistory();
+}
+
+function linkEntryCreateItem(num){
+  const h = (STATE.history || []).find(x => x.num === num);
+  if(!h) return;
+  closeLinkEntry();
+  /* يفتح شاشة الإدخال في وضع «صنف جديد» مُعبّأةً من السجلّ — والحارس القائم في
+     `submitNewItem` يمرّ بالمُحلِّل فيكشف الصنف المشابه قبل الإنشاء، فلا تُولَد
+     بطاقة مكرّرة. ⚠️ الحقول هي حقول شاشة الإدخال نفسها (`f-*`) لا نموذجاً ثانياً. */
+  navigate('entry');
+  setTimeout(() => {
+    try{
+      setEntryMode('new');
+      const set = (id, v) => { const el = document.getElementById(id); if(el && v != null && v !== '—') el.value = v; };
+      set('f-name', h.name || '');
+      set('f-category-select', h.category || '');
+      set('f-unit', h.unit || '');
+      set('f-price', h.price != null ? h.price : '');
+      set('f-supplier', h.supplier || '');
+      set('f-date', h.date || '');
+      set('f-reference', h.reference || '');
+      toast('info','أكمل بيانات الصنف','بعد حفظ الصنف، ارجع للسجل واربط السجلّ به من زرّ 🔗');
+    }catch(e){ reportError('linkEntryCreateItem', e, {num}, 'تعذّر فتح نموذج الصنف الجديد'); }
+  }, 60);
+}
+function closeLinkEntry(){ const m = document.getElementById('modal-link-entry'); if(m) m.remove(); syncScrollLock(); }
 
 function renderHistory(){
   const catSel = document.getElementById('hist-category');
@@ -8283,6 +8429,7 @@ function renderHistory(){
         <td class="muted mono" style="font-size:12px">${escapeHtml(h.reference||'—')}</td>
         <td>
           <div style="display:flex;gap:4px;justify-content:flex-end">
+            ${h._user && fi.orphanNums.has(h.num)?`<button class="icon-btn" data-action="link-entry" data-num="${h.num}" title="ربط بصنف">🔗</button>`:''}
             ${h._user?`<button class="icon-btn" data-action="edit-entry" data-num="${h.num}" title="تعديل"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
             <button class="icon-btn danger" data-action="delete-entry" data-num="${h.num}" title="حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg></button>`:''}
           </div>
@@ -8295,6 +8442,9 @@ function renderHistory(){
     });
     document.querySelectorAll('#hist-tbody [data-action="open-supplier"]').forEach(a=>{
       a.addEventListener('click',e=>{e.preventDefault();openSupplierDetail(a.dataset.supplier)});
+    });
+    document.querySelectorAll('#hist-tbody [data-action="link-entry"]').forEach(b=>{
+      b.addEventListener('click',e=>{e.stopPropagation();openLinkEntry(Number(b.dataset.num))});
     });
     document.querySelectorAll('#hist-tbody [data-action="edit-entry"]').forEach(b=>{
       b.addEventListener('click',e=>{e.stopPropagation();openEditEntry(Number(b.dataset.num))});
@@ -27210,10 +27360,21 @@ const priceRecWord   = (n) => arCountWord(n, 'سجلّ واحد', 'سجلّان'
 const priceObsWord   = (n) => arCountWord(n, 'ملاحظة واحدة', 'ملاحظتان', 'ملاحظات', 'ملاحظة');
 const priceGroupWord = (n) => arCountWord(n, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة');
 
+/* ⚠️ الاسم جزءٌ من الهويّة لا تزيين — عيبٌ حقيقيّ كلّف حذف ثلاثة سجلات (2026-10-14):
+   الرمز وحده ليس هويّة صنف، لأنّ **`NEW` و`PO-ONLY` رمزان نائبان** يتقاسمهما 85 صفّاً
+   لأصناف لا تجمعها صلة. فبالرمز وحده صار بندان على الفاتورة نفسها «نسخة واحدة»:
+   حبر HP 953XL **سيان** ⇄ **ماجنتا** · **جلبة** إيقا ⇄ **ملبوس** إيقا ·
+   وحافلتان مختلفتان (2011 بيج AKR3986 ⇄ 2012 أبيض ALА3231) بـ76,000 لكلٍّ.
+   ومرجعٌ واحد لا يعني نسخة: **المستند متعدّد البنود** يحمل مرجعه لكل بنوده.
+   الاسم يُطبَّع بـ`siNormalize` (مُطبِّع الأصناف، لا `arNorm` مُطبِّع الموردين).
+   الاتجاه الآمن مقصود: اسمان مختلفان لصنفٍ واحد يُعَدّان ملاحظتين (عدٌّ زائد ظاهر
+   يُراجَع) بدل أن يُمحى سعرٌ حقيقيّ (فقدٌ صامت لا يُسترجَع). */
 function priceObsKey(h){
   const sup = (typeof arNorm === 'function') ? arNorm((h && h.supplier) || '')
     : String((h && h.supplier) || '').trim().toLowerCase();
-  return [String((h && h.code) || ''), sup, Number(h && h.price), String((h && h.date) || '')].join('|');
+  const nm = (typeof siNormalize === 'function') ? siNormalize((h && h.name) || '')
+    : String((h && h.name) || '').trim().toLowerCase();
+  return [String((h && h.code) || ''), nm, sup, Number(h && h.price), String((h && h.date) || '')].join('|');
 }
 
 /* هل للصنف فرقٌ سعريّ يُقارَن فعلاً؟ ⚠️ البوّابة **تمايز السعر لا عدّ العروض**:

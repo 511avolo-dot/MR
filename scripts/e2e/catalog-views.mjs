@@ -278,6 +278,65 @@ const cleanState = await page.evaluate(async () => {
 });
 ok('وسجلٌّ نظيف يُخفي السطر (سطرٌ صفريّ ضجيج)', !cleanState.shown && !cleanState.html, JSON.stringify(cleanState));
 
+/* ── ١٠) ربط صفٍّ منفصل بصنف — نقرٌ حقيقيّ على الزرّ الحقيقيّ ──
+   ⚠️ العلّة التي استدعت هذا: الرمز النائب `NEW` كان يدمج صنفين مختلفين في
+   «نسخة واحدة»، و«بلا صنف مرتبط» كان عدّاداً بلا علاج في النظام كلّه. */
+await page.setViewportSize({ width: 1440, height: 950 });
+await page.evaluate(async () => {
+  STATE.items = [
+    { code:'IT-050', name:'حبر طابعة HP 953XL، سيان', category:'تقنية', unit:'حبة' },
+    { code:'IT-051', name:'حبر طابعة HP 953XL، ماجنتا', category:'تقنية', unit:'حبة' }
+  ];
+  /* الحالة الحقيقية من الإنتاج: بندان على الفاتورة 2538 نفسها بنفس السعر. */
+  STATE.history = [
+    { num:670, code:'NEW', name:'حبر طابعة HP 953XL، سيان',   supplier:'مؤسسة ارتباط التكنولوجيا', price:139.13, date:'2025-11-19', reference:'2538', unit:'حبة', _user:true, _cloud:true },
+    { num:671, code:'NEW', name:'حبر طابعة HP 953XL، ماجنتا', supplier:'مؤسسة ارتباط التكنولوجيا', price:139.13, date:'2025-11-19', reference:'2538', unit:'حبة', _user:true, _cloud:true }
+  ];
+  STATE.histFilter = { q:'', category:'', supplier:'', from:'', to:'', sort:'date-desc', flag:'' };
+  STATE.histPage = 1;
+  navigate('history'); recomputeItemStats(); renderHistory();
+  await new Promise(r => setTimeout(r, 120));
+});
+
+const banner = await page.evaluate(() => {
+  const b = document.getElementById('hist-flag-note');
+  return { shown: b.style.display !== 'none', text: b.textContent || '' };
+});
+ok('⚠️ صنفان مختلفان برمز نائب لا يُبلَّغان مكرّرَين',
+  banner.shown && !/مكرّرة/.test(banner.text), JSON.stringify(banner));
+ok('ويُبلَّغان «بلا صنف مرتبط»', /بلا صنف مرتبط/.test(banner.text), banner.text);
+
+const btns = await page.evaluate(() =>
+  [...document.querySelectorAll('#hist-tbody [data-action="link-entry"]')].map(b => +b.dataset.num));
+ok('وزرّ الربط معروضٌ لكلا الصفّين المنفصلَين', btns.length === 2 && btns.includes(670) && btns.includes(671), JSON.stringify(btns));
+
+await page.click('#hist-tbody [data-action="link-entry"][data-num="671"]');
+await page.waitForSelector('#modal-link-entry', { timeout: 4000 });
+const proposal = await page.evaluate(() => {
+  const m = document.getElementById('modal-link-entry');
+  const rows = [...m.querySelectorAll('#le-results tbody tr')].map(tr => tr.querySelector('.mono')?.textContent?.trim());
+  return { head: m.querySelector('#le-results .muted')?.textContent || '', rows, open: !!m };
+});
+ok('⚠️ والمُحلِّل يقترح الصنف الصحيح (ماجنتا لا سيان)',
+  proposal.rows[0] === 'IT-051', JSON.stringify(proposal));
+
+await page.click('#modal-link-entry [data-link-code="IT-051"]');
+await page.waitForTimeout(260);
+const after = await page.evaluate(() => {
+  const h = STATE.history.find(x => x.num === 671);
+  const other = STATE.history.find(x => x.num === 670);
+  const b = document.getElementById('hist-flag-note');
+  return { code: h.code, name: h.name, otherCode: other.code,
+           modal: !!document.getElementById('modal-link-entry'),
+           lock: document.body.style.overflow || '',
+           banner: b.textContent || '' };
+});
+ok('والربط يضبط الرمز', after.code === 'IT-051', after.code);
+ok('⚠️ ولا يستبدل وصف المورّد', after.name === 'حبر طابعة HP 953XL، ماجنتا', after.name);
+ok('ولا يمسّ الصفّ الآخر', after.otherCode === 'NEW', after.otherCode);
+ok('والنافذة تُزال ويُفَكّ قفل التمرير', !after.modal && after.lock === '', JSON.stringify(after));
+ok('والعدّاد ينقص بعد الربط', /سجلّ واحد بلا صنف مرتبط/.test(after.banner), after.banner);
+
 /* ── ٩) الجوال والسلامة ── */
 await page.setViewportSize({ width: 393, height: 852 });
 const mob = await page.evaluate(async () => {
