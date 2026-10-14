@@ -297,7 +297,7 @@ const NEEDED_FNS = [
   'siSupplierKey', 'siAliasKey', 'siAliasLookup', 'siResolveItem', 'siSearchItems',
   'siItemMatches', 'histRowMatches', 'priceAgeInfo', 'priceDeviationHint',
   // دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
-  'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'itemsVisibleList',
+  'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'itemsVisibleList', 'histIsOrphan',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
@@ -5777,6 +5777,87 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
     && api.priceRecWord(5) === '5 سجلّات' && api.priceRecWord(158) === '158 سجلّاً'
     && api.priceObsWord(2) === 'ملاحظتان' && api.priceGroupWord(1) === 'مجموعة واحدة'
     && api.priceGroupWord(127) === '127 مجموعة');
+
+  STATE.items = savedItems; STATE.history = savedHist;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ٥٠) الرمز النائب لا يدمج أصنافاً مختلفة + ربط الصفّ المنفصل بصنف
+   ⚠️ عيبٌ حقيقيّ كلّف حذف ثلاثة سجلات من الإنتاج (2026-10-14): هويّة
+   الملاحظة كانت `code` وحده، و`NEW`/`PO-ONLY` رمزان نائبان يتقاسمهما
+   85 صفّاً لأصناف لا تجمعها صلة — فصار بندان على الفاتورة نفسها «نسخة».
+   ═══════════════════════════════════════════════════════════════ */
+{
+  const savedItems = STATE.items, savedHist = STATE.history;
+
+  const row = (num, code, name, sup, price, date, ref) =>
+    ({num, code, name, supplier:sup, price, date, reference:ref, _user:true, _cloud:true});
+
+  /* الحالة الحقيقية من الإنتاج: بندان على الفاتورة 2538 نفسها بنفس السعر. */
+  const cyan    = row(670,'NEW','حبر طابعة HP 953XL، سيان','مؤسسة ارتباط التكنولوجيا',139.13,'2025-11-19','2538');
+  const magenta = row(671,'NEW','حبر طابعة HP 953XL، ماجنتا','مؤسسة ارتباط التكنولوجيا',139.13,'2025-11-19','2538');
+  T('⚠️ صنفان مختلفان برمز نائب واحد ليسا ملاحظة واحدة (حبر سيان ≠ ماجنتا)',
+    api.priceObsKey(cyan) !== api.priceObsKey(magenta),
+    api.priceObsKey(cyan) + '  ==  ' + api.priceObsKey(magenta));
+
+  const bus2011 = row(752,'PO-ONLY','حافلة Hyundai 2011، بيج، AKR3986','معرض القيادة للسيارات',76000,'2026-01-26','P.O-DG26-394');
+  const bus2012 = row(751,'PO-ONLY','حافلة Hyundai 2012، أبيض، ALА3231','معرض القيادة للسيارات',76000,'2026-01-26','P.O-DG26-394');
+  T('⚠️ وحافلتان مختلفتان على أمر الشراء نفسه ليستا نسخةً (مرجعٌ واحد = مستند متعدّد البنود)',
+    api.priceObsKey(bus2011) !== api.priceObsKey(bus2012));
+
+  /* والاتجاه الآخر محروس بالقوّة نفسها: النسخة الحقيقية تبقى مكشوفة. */
+  const a = row(1,'CIV-001','دهان داخلي Jotun، أبيض 02','مؤسسة البنايات',125,'2026-02-10','PO-101');
+  const b = row(2,'CIV-001','دهان داخلي Jotun، أبيض 02','مؤسسة البنايات',125,'2026-02-10','P.O-DG26-3101');
+  T('والنسخة الحقيقية (اسم ومورد وسعر وتاريخ متطابقة) تبقى ملاحظةً واحدة مهما اختلف المرجع',
+    api.priceObsKey(a) === api.priceObsKey(b));
+  T('والمورد يُطبَّع فلا تُفرّقه كتابة الهمزة', api.priceObsKey(
+      row(3,'CIV-001','دهان داخلي Jotun، أبيض 02','مؤسسه البنايات',125,'2026-02-10','x')) === api.priceObsKey(a));
+
+  /* لوحة «ما يحتاج مراجعة» لا تُبلّغ عن المختلفَين */
+  STATE.items = [{code:'CIV-001', name:'دهان داخلي Jotun، أبيض 02', category:'مدني وبناء'}];
+  STATE.history = [cyan, magenta, a, b];
+  let fi = api.histFlagInfo();
+  T('⚠️ فلا تُبلَّغ اللوحة عن المختلفَين وتُبلَّغ عن النسخة الحقيقية',
+    fi.dupGroups === 1 && fi.dupExtra === 1 && fi.dupNums.has(1) && fi.dupNums.has(2)
+    && !fi.dupNums.has(670) && !fi.dupNums.has(671),
+    `groups=${fi.dupGroups} extra=${fi.dupExtra}`);
+  T('والصفّان بالرمز النائب يُرصَدان منفصلَين (سعرٌ دُفِع ولا يصل أيّ صنف)',
+    fi.orphanNums.has(670) && fi.orphanNums.has(671) && !fi.orphanNums.has(1));
+
+  /* ── الربط: زرٌّ لكل صفّ منفصل، وبوّابته = بوّابة الفعل حرفيّاً ── */
+  T('⚠️ زرّ الربط يظهر للصفّ المنفصل القابل للتعديل فقط (بوّابة الزرّ = بوّابة الفعل)',
+    /data-action="link-entry"[^`]*?data-num=/.test(CODE)
+    && /h\._user && fi\.orphanNums\.has\(h\.num\)\?`<button[^`]*data-action="link-entry"/.test(CODE));
+  T('وهو مربوط بـopenLinkEntry', /\[data-action="link-entry"\][\s\S]{0,160}openLinkEntry\(Number/.test(CODE));
+  T('وopenLinkEntry ترفض صفّ البذرة (غير قابل للكتابة)',
+    /function openLinkEntry[\s\S]{0,400}if\(!h\._user\)\{\s*toast\('error'/.test(CODE));
+
+  T('⚠️ والربط يمرّ بالمُحلِّل siResolveItem لا بتخمين نصّيّ',
+    /function linkEntryRender[\s\S]{0,1400}siResolveItem\(h\.name/.test(CODE));
+  T('وحالاته الثلاث معروضة: قاطع / مرشّحون / لا مرشّح',
+    /res\.state === 'ok'/.test(CODE) && /res\.state === 'suggest'/.test(CODE)
+    && /لا مرشّح مقنع/.test(CODE));
+  T('والبحث اليدويّ يستعمل siSearchItems (المطبَّع والمرادفات) لا includes خامّاً',
+    /function linkEntryRender[\s\S]{0,900}siSearchItems\(q,/.test(CODE));
+  T('⚠️ والتطبيق يغيّر الرمز ولا يستبدل اسم المورّد (وصفُه جزءٌ من السجلّ)',
+    /function linkEntryApply[\s\S]{0,700}h\.code = it\.code/.test(CODE)
+    && !/function linkEntryApply[\s\S]{0,700}h\.name = it\.name/.test(CODE));
+  T('ويكتب أثر تدقيق ويزامن السحابة ويتعلّم المرادف',
+    /function linkEntryApply[\s\S]{0,1100}logAudit\('link','entry'/.test(CODE)
+    && /function linkEntryApply[\s\S]{0,1100}CLOUD\.history\.upsert/.test(CODE)
+    && /function linkEntryApply[\s\S]{0,1400}siSaveLearnedAlias\(h\.name, it\.code/.test(CODE));
+  T('ومسار «إنشاء صنف جديد» يفتح شاشة الإدخال في وضع new بحقولها الحقيقية',
+    /function linkEntryCreateItem[\s\S]{0,800}setEntryMode\('new'\)/.test(CODE)
+    && /function linkEntryCreateItem[\s\S]{0,900}set\('f-name'/.test(CODE));
+  T('ونافذة الربط عابرة فتُزال من DOM ويُفَكّ قفل التمرير',
+    /id = 'modal-link-entry'; m\.dataset\.ephemeral = '1'/.test(CODE)
+    && /function closeLinkEntry[\s\S]{0,160}remove\(\);\s*syncScrollLock\(\)/.test(CODE));
+
+  /* ── histIsOrphan: مصدرٌ واحد لمعنى «بلا صنف مرتبط» ── */
+  STATE.items = [{code:'IT-001', name:'x'}];
+  T('وhistIsOrphan يطابق تعريف اللوحة نفسه',
+    api.histIsOrphan({code:'NEW'}) === true && api.histIsOrphan({code:'IT-001'}) === false
+    && api.histIsOrphan({}) === true);
 
   STATE.items = savedItems; STATE.history = savedHist;
 }
