@@ -27523,6 +27523,33 @@ const priceRecWord   = (n) => arCountWord(n, 'سجلّ واحد', 'سجلّان'
 const priceObsWord   = (n) => arCountWord(n, 'ملاحظة واحدة', 'ملاحظتان', 'ملاحظات', 'ملاحظة');
 const priceGroupWord = (n) => arCountWord(n, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة');
 
+/* === نتيجة الاستيراد الذكيّ: رسالة واحدة تحمل كلّ ما لم يُسجَّل ===
+   ⚠️ كان الفرعان `if(skipped) / else if(cloudFails)` فيُخفي أوّلُهما ثانيَه:
+   `cloudFails` يُزاد أيضاً من **فشل رفع صفوف السجل والمورّد**، فمتى تُخطّي بندٌ
+   واحد لم يُبلَّغ المستخدم إطلاقاً بما بقي محفوظاً محليّاً غير مرئيّ للزملاء —
+   فلا يضغط أحدٌ «مزامنة»، وسطرٌ يسقط صامتاً يُقرأ اكتمالاً (مراجعة دمج #129).
+   والبنود المُتخطّاة محسوبة في `cloudFails` أصلاً فتُطرَح كي لا تُعَدّ مرّتين.
+   وكلّ عدٍّ يُنطَق بصيغة عربية صحيحة عبر `arCountWord` (القاعدة ٤٢) لا
+   بـ`n + ' بنود'` التي تُنتج «2 بنود» و«11 بنود». */
+const siImportItemWord = (n) => arCountWord(n, 'بندٌ واحد', 'بندان', 'بنود', 'بنداً');
+function siImportResultToast(summary, skipped, cloudFails){
+  const skips = Array.isArray(skipped) ? skipped : [];
+  const unsynced = Math.max(0, (Number(cloudFails) || 0) - skips.length);
+  const syncTail = unsynced > 0
+    ? ` ولم تُزامَن ${priceRecWord(unsynced)} مع السحابة (لن يراها الزملاء) — استخدم «مزامنة» لإعادة الرفع.`
+    : '';
+  if(skips.length > 0){
+    const names = skips.slice(0,5).map(n => '«' + n + '»').join(' · ') + (skips.length > 5 ? ' …' : '');
+    return { level:'warn', title:'بنود لم تُسجَّل — تعذّر حفظ أصنافها',
+      body: `${summary}. تُخطّي ${siImportItemWord(skips.length)} لتعذّر حفظ صنفها في السحابة `
+          + `(لم يُكتب لها سعر حتى لا يبقى سعرٌ بلا صنف): ${names}. تحقّق من الاتصال ثم أعِد استيرادها.${syncTail}` };
+  }
+  if(unsynced > 0){
+    return { level:'warn', title:'حُفظ محلياً — تعذّرت المزامنة', body: `${summary}.${syncTail}` };
+  }
+  return { level:'success', title:'تم الاستيراد بنجاح', body: summary };
+}
+
 /* ⚠️ الاسم جزءٌ من الهويّة لا تزيين — عيبٌ حقيقيّ كلّف حذف ثلاثة سجلات (2026-10-14):
    الرمز وحده ليس هويّة صنف، لأنّ **`NEW` و`PO-ONLY` رمزان نائبان** يتقاسمهما 85 صفّاً
    لأصناف لا تجمعها صلة. فبالرمز وحده صار بندان على الفاتورة نفسها «نسخة واحدة»:
@@ -28449,17 +28476,11 @@ async function siCommitImport(){
 
     closeModal('modal-smart-import');
     const importedSummary = `أُضيف ${supplierAdded?'مورد جديد، ':''}${addedItems} صنف جديد، و ${addedEntries} سجل سعر`;
-    /* ⚠️ البنود المُتخطّاة تُسمّى صراحةً: سطرٌ سقط صامتاً يُقرأ اكتمالاً، وصاحبه
-       لا يعلم أنّ سعره لم يُسجَّل فلا يُعيد المحاولة. */
-    if(skippedNoItem.length > 0){
-      toast('warn','بنود لم تُسجَّل — تعذّر حفظ أصنافها',
-        `${importedSummary}. تُخطّي ${skippedNoItem.length === 1 ? 'بند' : skippedNoItem.length + ' بنود'} لتعذّر حفظ صنفها في السحابة (لم يُكتب لها سعر حتى لا يبقى سعرٌ بلا صنف): ${skippedNoItem.slice(0,5).map(n=>'«'+n+'»').join(' · ')}${skippedNoItem.length>5?' …':''}. تحقّق من الاتصال ثم أعِد استيرادها.`);
-    } else if(cloudFails > 0){
-      // البيانات حُفظت محلياً لكن تعذّرت مزامنة بعضها — لا ندّعي النجاح الكامل
-      toast('warn','حُفظ محلياً — تعذّرت المزامنة', `${importedSummary}. لم تُزامَن ${cloudFails} سجل مع السحابة (لن يراها الزملاء). تحقّق من الاتصال ثم استخدم «مزامنة» لإعادة الرفع.`);
-    } else {
-      toast('success','تم الاستيراد بنجاح', importedSummary);
-    }
+    /* ⚠️ مصدرٌ واحد للرسالة (`siImportResultToast`): البنود المُتخطّاة تُسمّى صراحةً —
+       سطرٌ سقط صامتاً يُقرأ اكتمالاً وصاحبه لا يُعيد المحاولة — **ومعها** ما لم
+       يُزامَن من الباقي، فلا يُخفي أحدُ البلاغين الآخر. */
+    const res = siImportResultToast(importedSummary, skippedNoItem, cloudFails);
+    toast(res.level, res.title, res.body);
   } catch(e) {
     console.error('Commit error:', e);
     toast('error','فشل الحفظ', e.message || 'حدث خطأ غير متوقع');
