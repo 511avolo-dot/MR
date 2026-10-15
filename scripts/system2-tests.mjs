@@ -6093,10 +6093,18 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
     const r = api.siImportResultToast('أُضيف صنفان', [], 0);
     return r.level === 'success' && r.body === 'أُضيف صنفان';
   })());
-  /* ⚠️ مصدرٌ واحد: موضع النداء يُمرّر ولا يبني رسالةً ثانية تتفارق عنها. */
-  T('وموضع النداء يستعمل المصدر الواحد لا بناءً ثانياً',
-    /const res = siImportResultToast\(importedSummary, skippedNoItem, cloudFails\);[\s\S]{0,120}toast\(res\.level, res\.title, res\.body\)/.test(CODE)
-    && (CODE.match(/siImportResultToast\(/g) || []).length === 2);
+  /* ⚠️ مصدرٌ واحد: موضع النداء يُمرّر ولا يبني رسالةً ثانية تتفارق عنها.
+     والمرساة **عدُّ البلاغات في نافذة الخاتمة** لا وجودُ النداء: أوّل صياغة
+     كانت تفحص النداء وعدَّه (=2) فمرّت على فرعٍ مُقحَم يبني رسالةً ثانية
+     بيده — النداء باقٍ والعدّ باقٍ (أمسكه البيت-بروف). */
+  T('وموضع النداء يستعمل المصدر الواحد لا بناءً ثانياً', (() => {
+    const a = CODE.indexOf("logAudit('import','smart'");
+    const b = CODE.indexOf("console.error('Commit error:'");
+    if(a < 0 || b <= a) return false;
+    const win = CODE.slice(a, b);
+    return (win.match(/toast\(/g) || []).length === 1
+      && /const res = siImportResultToast\(importedSummary, skippedNoItem, cloudFails\);[\s\S]{0,120}toast\(res\.level, res\.title, res\.body\)/.test(win);
+  })());
 
   STATE.items = savedItems;
 }
