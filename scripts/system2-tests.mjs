@@ -298,7 +298,7 @@ const NEEDED_FNS = [
   'siSupplierKey', 'siAliasKey', 'siAliasLookup', 'siResolveItem', 'siSearchItems',
   'siItemMatches', 'histRowMatches', 'priceAgeInfo', 'priceDeviationHint',
   // دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
-  'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'itemsVisibleList', 'histIsOrphan',
+  'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'siImportResultToast', 'itemsVisibleList', 'histIsOrphan',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
@@ -308,7 +308,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
@@ -6058,12 +6058,45 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
         && win.indexOf('STATE.items.push(newItem)') > win.indexOf('CLOUD.items.upsert(newItem)')
         && win.indexOf('CLOUD.items.upsert(newItem)') > -1;
     })());
-  /* ⚠️ المرساة هي الشرط حرفيّاً `if(skippedNoItem.length > 0){` — لا
-     `skippedNoItem.length > 0` وحده: تعطيلُ الفرع بـ`if(false && …)` يُبقي
-     النمط المتسامح مطابقاً فلا يعضّ (أمسكه البيت-بروف). */
-  T('والبنود المُتخطّاة تُسمّى للمستخدم لا تسقط صامتةً',
-    /if\(skippedNoItem\.length > 0\)\{[\s\S]{0,400}toast\(/.test(CODE)
-    && /skippedNoItem\.slice\(0,5\)/.test(CODE));
+  /* ⚠️ سلوكيّ لا نصّيّ: الرسالة صارت من مصدر واحد (`siImportResultToast`)
+     فتُستجوَب بمُخرَجها. والمرساة النصّية القديمة (`if(skippedNoItem.length > 0){`)
+     **عضّت على هذا التغيير فعلاً** — وهو ما يُفترض بها: الشرط انتقل إلى الدالّة،
+     فصُحِّح الحارسُ للثابت (لا يُخفى بلاغٌ بلاغاً) لا الكودُ للحارس. */
+  T('والبنود المُتخطّاة تُسمّى للمستخدم لا تسقط صامتةً', (() => {
+    const r = api.siImportResultToast('أُضيف 3 أصناف', ['صابون سائل'], 1);
+    return r.level === 'warn' && r.body.includes('«صابون سائل»');
+  })());
+  /* ⚠️ جوهر مراجعة الدمج: `cloudFails` يُزاد أيضاً من فشل رفع صفوف السجل
+     والمورّد، وكان `else if` يُخفيها كلّها متى تُخطّي بندٌ واحد — فيبقى سعرٌ
+     محفوظ محليّاً لا يراه الزملاء ولا يعلم صاحبه فلا يضغط «مزامنة». */
+  T('ولا يُخفي بلاغُ التخطّي عددَ ما لم يُزامَن من الباقي', (() => {
+    const r = api.siImportResultToast('أُضيف 10 أصناف', ['أ'], 7);   // 1 مُتخطّى + 6 غير مُزامَنة
+    return r.body.includes('«أ»') && r.body.includes('6 سجلّات') && r.body.includes('مزامنة');
+  })());
+  T('ولا يُعَدّ المُتخطّى مرّتين (محسوبٌ في cloudFails أصلاً)', (() => {
+    const r = api.siImportResultToast('أُضيف صنف', ['أ'], 1);        // لا شيء غير مُزامَن
+    return !r.body.includes('مزامنة') && !/\d+\s*سجلّ/.test(r.body);
+  })());
+  /* ⚠️ القاعدة ٤٢: «2 بنود» و«11 بنود» خطأٌ يقرؤه من يراجع الاستيراد. */
+  T('وعدد البنود المُتخطّاة بصيغة عربية صحيحة (لا «2 بنود»)', (() => {
+    const b = (n) => api.siImportResultToast('س', Array.from({length:n}, (_,i)=>'ب'+i), n).body;
+    return b(1).includes('بندٌ واحد') && b(2).includes('بندان')
+        && b(3).includes('3 بنود') && b(11).includes('11 بنداً')
+        && !b(2).includes('2 بنود') && !b(11).includes('11 بنود');
+  })());
+  T('وفرعُ المزامنة وحده يُنطَق صحيحاً كذلك', (() => {
+    const r2 = api.siImportResultToast('س', [], 2), r1 = api.siImportResultToast('س', [], 1);
+    return r2.level === 'warn' && r2.body.includes('سجلّان')
+        && r1.body.includes('سجلّ واحد') && !r1.body.includes('1 سجل ');
+  })());
+  T('وبلا تخطٍّ ولا فشلِ مزامنة = نجاح صريح', (() => {
+    const r = api.siImportResultToast('أُضيف صنفان', [], 0);
+    return r.level === 'success' && r.body === 'أُضيف صنفان';
+  })());
+  /* ⚠️ مصدرٌ واحد: موضع النداء يُمرّر ولا يبني رسالةً ثانية تتفارق عنها. */
+  T('وموضع النداء يستعمل المصدر الواحد لا بناءً ثانياً',
+    /const res = siImportResultToast\(importedSummary, skippedNoItem, cloudFails\);[\s\S]{0,120}toast\(res\.level, res\.title, res\.body\)/.test(CODE)
+    && (CODE.match(/siImportResultToast\(/g) || []).length === 2);
 
   STATE.items = savedItems;
 }
