@@ -292,7 +292,7 @@ const NEEDED_FNS = [
   'siFoldLetters', 'siFoldSynonymMap', 'siNormalizeRaw', 'siNormalizeLegacy',
   'siNormalizePreBilingual', 'siInferCategory', 'siHeadConflict',
   'siExtractNumbers', 'siCompareNumbers', 'siUnitTol', 'siUnitQty', 'siUnitConflict',
-  'siPackCount', 'siHeadToken', 'siScriptOf', 'siHeadConflict', 'siDistinctWord', 'siSpecVeto',
+  'siPackCount', 'siHeadToken', 'siScriptOf', 'siWordSim', 'siHeadConflict', 'siDistinctWord', 'siSpecVeto',
   'siBigrams', 'siDice', 'siJaccard', 'siTokenScore', 'siQualGroupConflict', 'siQualConflict',
   'siSimilarity', 'siExtractModelNumbers', 'siStripUnits', 'siRetrievalScore', 'siRetrieveCandidates',
   'siSupplierKey', 'siAliasKey', 'siAliasLookup', 'siResolveItem', 'siSearchItems',
@@ -308,7 +308,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
@@ -5240,6 +5240,7 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
 {
   const { siSimilarity, siSpecVeto, siResolveItem, siSearchItems, siNormalize, siNormalizeLegacy,
           siAliasKey, siSupplierKey, siAliasLookup, siPackCount, siHeadConflict, siDistinctWord,
+          siWordSim, siDice, SI_WORD_TYPO,
           siUnitTol, siFoldSynonymMap, siFoldLetters, SI_MATCH_AUTO, SI_MATCH_SUGGEST,
           SI_UNIT_TOL_DEFAULT, STATE } = api;
   /* الصفحة تطوي المعجم عند التحميل بعبارةٍ مجرّدة لا يأخذها الصندوق — نفعلها هنا
@@ -5310,8 +5311,46 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
     && siSpecVeto('Hand Wash Soap 4L','صابون يدين سائل 4 لتر') === '');
   T('واختلاف ترتيب الكلمات ليس اختلاف نوع',
     siHeadConflict(siNormalize('صابون سائل معطر'), siNormalize('سائل صابون معطر')) === false);
+  /* ⚠️ كان هذا التأكيد **فراغيّاً**: `مضخه/مضخة` يطويهما التطبيع إلى الكلمة
+     نفسها، فيرجع الحارس من فحص `ha === hb` الأوّل ولا يبلغ بوّابة الخطأ
+     المطبعيّ إطلاقاً — فظلّ عيبُها (العمى عن الحرف الواحد) قابعاً خلف سطرٍ
+     أخضر. المرساة الآن زوجٌ **حقيقيّ من الإنتاج** يبقى مختلفاً بعد التطبيع:
+     «ملبوس» في فاتورة المورّد مقابل «ملبوش» في الكتالوج. */
   T('وخطأ إملائيّ بحرف في الرأس ليس اختلاف نوع',
-    siHeadConflict(siNormalize('مضخه ماء 1 حصان'), siNormalize('مضخة ماء 1 حصان')) === false);
+    siNormalize('ملبوس ايجا 25 ملي').split(' ')[0]
+      !== siNormalize('ملبوش ايجا 25 ملي').split(' ')[0]
+    && siHeadConflict(siNormalize('ملبوس ايجا 25 ملي'), siNormalize('ملبوش ايجا 25 ملي')) === false);
+
+  /* ⚠️ والرأس كذلك — والشكل الذي يفرّق التعريفين هو رأسٌ من أربعة حروف بخطأ في
+     **وسطه** (فتموت ثنائيّتان من ثلاث): زوج «ملبوس/ملبوش» أعلاه لا يفرّقهما
+     (Dice=0.75 لأنّ الاختلاف في آخر كلمة من خمسة حروف) — أمسكه البيت-بروف.
+     والشكل هنا واقعيّ: المورّد قد يكتب العلامة أوّلاً («EGA conduit 25mm»). */
+  T('ورأسٌ قصير بخطأ مطبعيّ في وسطه ليس اختلاف نوع',
+    siHeadConflict(siNormalize('ايقا جلبه 25 ملي'), siNormalize('ايجا جلبه 25 ملي')) === false);
+  /* ⚠️ ولا تعريفان للخطأ المطبعيّ في محرّك واحد: كلا الكاسرين يستثنيان بـ
+     `siWordSim`/`SI_WORD_TYPO` لا بـDice خامّ — تعريفان متفارقان يجعلان الحكم
+     رهن أيّ كاسرٍ وصل الزوجُ إليه أوّلاً. */
+  T('ومصدر واحد لتعريف الخطأ المطبعيّ في الكاسرين',
+    !/siDice\([^)]*\)\s*>=\s*0\.6/.test(CODE)
+    && (CODE.match(/siWordSim\([^)]*\)\s*>=\s*SI_WORD_TYPO/g) || []).length === 2);
+
+  /* === تشابه الكلمة بالكلمة: Dice وحده أعمى عن الحرف الواحد === */
+  T('⚠️ خطأ مطبعيّ بحرف في كلمة قصيرة يُستثنى (ما كان Dice يعجز عنه)',
+    siWordSim('ايقا','ايجا') >= SI_WORD_TYPO && siDice('ايقا','ايجا') < 0.6);
+  T('وكلمتان لكيانين مختلفين تبقيان مميِّزتين',
+    siWordSim('ارضيات','حمامات') < SI_WORD_TYPO
+    && siWordSim('ياباني','صيني') < SI_WORD_TYPO
+    && siWordSim('فيس','فلور') < SI_WORD_TYPO);
+  /* ⚠️ القياس هو ما حدّد العتبة: المتمايز ≤50% والمطبعيّ =75%، فأي تشديد لاحق
+     يجب أن يُبقي هذا الهامش — وإلّا عاد الصفّ يذهب إلى التوأم الخطأ. */
+  T('والهامش بين الحالتين مقيس لا مفترَض',
+    siWordSim('طاءف','حاءل') <= 0.5 && siWordSim('ايقا','ايجا') >= 0.75);
+  /* ⚠️ الأثر الفعليّ المُبلَّغ عنه: «جلبة إيقا بلاستيك» كانت تُحجَب عن مطابقتها
+     في كل كلمة (50%) فتذهب إلى توأمها «أسود» (77%). */
+  T('وعلامةٌ بخطأ مطبعيّ لا تُبعد الصفّ عن مطابقته في كل كلمة',
+    siSpecVeto('جلبة إيقا بلاستيك 25 ملي','جلبة بلاستيك إيجا 25 ملي') === ''
+    && siSimilarity('جلبة إيقا بلاستيك 25 ملي','جلبة بلاستيك إيجا 25 ملي')
+       > siSimilarity('جلبة إيقا بلاستيك 25 ملي','جلبة 25 ملي أسود إيجا'));
 
   /* (هـ) تفاوت الرقم لكل وحدة — سبب أعلى الإيجابيات الكاذبة ثقةً */
   T('رقم بلا وحدة = تطابق تامّ (1625 ≠ 1635)', SI_UNIT_TOL_DEFAULT === 1);
@@ -5984,11 +6023,47 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
   T('والأصناف الموسومة بالقيمة القديمة لا تُصوِّت',
     (() => { STATE.items = [{code:'B-1', name:'كوع نحاس 25 ملي', category:'مستورد'}];
              return siInferCategory('كوع نحاس 25 ملي').category === ''; })());
+  /* ⚠️ المرساة كانت `itemCode = row.code` — أي أنّ الحارس كان يُرمّز **التعبير
+     المعيب نفسه** (تبنّي كود مستند المورّد)، فينكسر حين يُصلَح العيب بحقّ.
+     الثابت الحقيقيّ: الاستيراد يستنتج التصنيف عند إنشاء الصنف. */
   T('⚠️ والاستيراد الذكيّ يستدعيه فعلاً عند إنشاء الصنف',
-    /itemCode = row\.code[\s\S]{0,400}siInferCategory\(row\.name,\s*\{\s*item:\s*row\.matchedItem/.test(CODE)
+    /itemCode = 'USR-'[\s\S]{0,700}siInferCategory\(row\.name,\s*\{\s*item:\s*row\.matchedItem/.test(CODE)
     && /category:\s*inferred\.category/.test(CODE));
   T('وصفّ السجل يأخذ تصنيف صنفه لا وسماً مستقلّاً',
     /canonicalCategory[\s\S]{0,260}find\(i => String\(i\.code\) === String\(itemCode\)\)/.test(CODE));
+
+  /* ━━ الكود المستخرَج من مستند المورّد ليس كوداً لكتالوجنا ━━
+     `siResolveItem` يطابق الكود في المرتبة ① — فالوصول إلى فرع الإنشاء يعني
+     أنّ **لا صنف يحمله**. تبنّيه كان يصكّ كوداً بصيغتنا لم نُسنده
+     (`CIV-001` · `HVAC-Q0012` المرصودة على الإنتاج) ويُنتج سعراً بلا صنف. */
+  T('⚠️ لا يُتبنّى الكود المستخرَج من مستند المورّد كوداً للكتالوج',
+    !/itemCode\s*=\s*row\.code/.test(CODE) && /itemCode = 'USR-'/.test(CODE));
+  T('والكود المستخرَج يبقى مُستعملاً للمطابقة (استعمالُه المشروع)',
+    /siResolveItem\(item\.name,\s*\{\s*code:\s*item\.code/.test(CODE));
+  T('⚠️ ولا يُكتب صفّ سعريّ لصنفٍ تعذّر حفظه في السحابة',
+    /CLOUD\.items\.upsert\(newItem\)[\s\S]{0,300}skippedNoItem\.push\(row\.name\)[\s\S]{0,40}continue/.test(CODE));
+  /* ⚠️ عدٌّ وترتيب لا نمطٌ متسامح: أوّل صياغة كانت
+     `upsert(newItem)[\s\S]{0,320}STATE.items.push(newItem)` — فدفعٌ **إضافيّ**
+     قبل الرفع لا يُفشِلها (أمسكه البيت-بروف). */
+  T('والصنف لا يُثبَّت محليّاً إلا بعد نجاح رفعه (لا نصف كتابة)',
+    (() => {
+      /* ⚠️ مُنطَّق بكتلة الاستيراد الذكيّ: `STATE.items.push(newItem)` يرد في
+         `plAddSelectedToSystem` أيضاً، فعدٌّ على الملفّ كلّه يفشل على السليم. */
+      const a = CODE.indexOf('const skippedNoItem');
+      const b = CODE.indexOf("logAudit('import','smart'");
+      if(a < 0 || b <= a) return false;
+      const win = CODE.slice(a, b);
+      const pushes = (win.match(/STATE\.items\.push\(newItem\)/g) || []).length;
+      return pushes === 1
+        && win.indexOf('STATE.items.push(newItem)') > win.indexOf('CLOUD.items.upsert(newItem)')
+        && win.indexOf('CLOUD.items.upsert(newItem)') > -1;
+    })());
+  /* ⚠️ المرساة هي الشرط حرفيّاً `if(skippedNoItem.length > 0){` — لا
+     `skippedNoItem.length > 0` وحده: تعطيلُ الفرع بـ`if(false && …)` يُبقي
+     النمط المتسامح مطابقاً فلا يعضّ (أمسكه البيت-بروف). */
+  T('والبنود المُتخطّاة تُسمّى للمستخدم لا تسقط صامتةً',
+    /if\(skippedNoItem\.length > 0\)\{[\s\S]{0,400}toast\(/.test(CODE)
+    && /skippedNoItem\.slice\(0,5\)/.test(CODE));
 
   STATE.items = savedItems;
 }

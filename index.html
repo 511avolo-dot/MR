@@ -27117,6 +27117,26 @@ function siPackCount(norm){
   return out;
 }
 
+/* === تشابه كلمة بكلمة — الأعلى بين الثنائيات ومسافة التحرير ===
+   ⚠️ Dice وحده **أعمى بنيويّاً عن الخطأ الإملائيّ بحرف في الكلمة القصيرة**:
+   كلمة من أربعة حروف لها ثلاث ثنائيّات، والاستبدال الواحد يقتل اثنتين منها
+   ⇒ `ايقا × ايجا` (اسم العلامة Ega بخطأ مطبعيّ) = **0.33** فلا يُستثنى، فيُفتى
+   بأنّهما كيانان مختلفان رغم أنّ الكاسرَين يَعِدان نصّاً باستثناء «خطأ إملائيّ
+   بحرف». وأثرُه أسوأ من المنع: يدفع الصفّ إلى **التوأم الخطأ** — «جلبة إيقا
+   بلاستيك 25 ملي» ذهبت إلى «جلبة 25 ملي أسود إيجا» (77%) بدل «جلبة بلاستيك
+   إيجا 25 ملي» المحجوبة بـ50%، وهي مطابقتها في كل كلمة.
+   الصيغة هي المُبرهَنة في محرّك المشاريع (`prjRawSim`) بقياسها المثبَّت:
+   كلمتان لكيانين مختلفين ≤50% (طاءف×حاءل=50 · ابها×تبوك=25) مقابل خطأ إملائيّ
+   بحرف =75% (دمام×دمم · رياض×ريان · ايقا×ايجا) — فالعتبة تفصلهما بهامش مريح.
+   ⚠️ ومسافة التحرير `prjLev` بدائيّة حسابية مشتركة لا منطق نطاق فيها، فتُعاد
+   استعمالاً لا نسخاً؛ أمّا قرار العتبة فيبقى في محرّك الأصناف. */
+const SI_WORD_TYPO = 0.70;   // فوقها = خطأ إملائيّ لا كلمة مميِّزة
+function siWordSim(x, y){
+  if(!x || !y) return 0;
+  if(x === y) return 1;
+  return Math.max(siDice(x, y), 1 - (prjLev(x, y) / Math.max(x.length, y.length)));
+}
+
 /* الكلمة الرأس (نوع المنتج) — أقوى مميِّز متاح بلا اتصال.
    ⚠️ مقيس على الكتالوج: من 82 زوجاً «تلقائيّ» اختلف الرأس في 8 أزواج،
    و**ثمانيتها منتجات مختلفة فعلاً** (وزرة/نعلة · ماسورة/ملبوش/جلبة ·
@@ -27131,7 +27151,7 @@ function siHeadConflict(na, nb){
      الحكم هناك للذكاء الدلاليّ وبقيّة الفيتوهات. */
   if(siScriptOf(ha) !== siScriptOf(hb)) return false;
   if(ha.includes(hb) || hb.includes(ha)) return false;      // تصريف/لاحقة
-  if(siDice(ha, hb) >= 0.6) return false;                    // خطأ إملائيّ بحرف
+  if(siWordSim(ha, hb) >= SI_WORD_TYPO) return false;        // خطأ إملائيّ بحرف
   const ta = (' '+na+' '), tb = (' '+nb+' ');
   /* ⚠️ الرخصة كانت أحاديّة الاتجاه (`||`) فتقبل ما ليس اختلافَ ترتيب:
      «فيس بوكس 4 مود لجراند **فلور**» مقابل «**فلور** بوكس 4 مود لجراند» —
@@ -27169,7 +27189,7 @@ function siDistinctWord(na, nb){
   if(/\d/.test(x) || /\d/.test(y)) return null;
   if(siScriptOf(x) !== siScriptOf(y)) return null;
   if(x.includes(y) || y.includes(x)) return null;
-  if(siDice(x, y) >= 0.6) return null;                      // خطأ إملائيّ
+  if(siWordSim(x, y) >= SI_WORD_TYPO) return null;          // خطأ إملائيّ
   return [x, y];
 }
 
@@ -28269,6 +28289,7 @@ async function siCommitImport(){
     let addedEntries = 0;
     let supplierAdded = false;
     let cloudFails = 0; // عدد السجلات التي تعذّرت مزامنتها مع السحابة (لتنبيه المستخدم بدل ادعاء النجاح)
+    const skippedNoItem = []; // بنود تُخطّيت لتعذّر حفظ صنفها (لا نكتب سعراً بلا صنف)
     const today = new Date().toISOString().slice(0,10);
     const supplierName = m.supplier.name;
 
@@ -28330,7 +28351,13 @@ async function siCommitImport(){
 
       // Add new item if needed
       if(!itemCode){
-        itemCode = row.code || ('USR-' + Date.now() + '-' + Math.random().toString(36).slice(2,5));
+        /* ⚠️ لا يُتبنّى الكود المستخرَج من مستند المورّد كوداً لكتالوجنا.
+           استعمالُه المشروع هو **المطابقة** (المرتبة ① في `siResolveItem`)، وقد
+           جرت فعلاً — فوصولُنا هنا يعني أنّ **لا صنف يحمله**. فتبنّيه يصكّ في
+           الكتالوج كوداً بصيغتنا لم نُسنده نحن (`CIV-001` · `HVAC-Q0012`
+           المرصودة على الإنتاج)، فيتصادم مع الكود الحقيقيّ عند إسناده لاحقاً،
+           ويُنتج صفّاً سعريّاً بكودٍ لا صنف له إن تعذّر حفظ الصنف. */
+        itemCode = 'USR-' + Date.now() + '-' + Math.random().toString(36).slice(2,5);
         /* التصنيف يُستنتَج من أقرب الأصناف — لا وسمٌ افتراضيّ (انظر `siInferCategory`).
            ويُمرَّر المرشّح حتى لو لم يُدمَج: «أقرب صنف» دليلٌ كافٍ للتصنيف
            وإن لم يكفِ للدمج — بوّابتان مختلفتان لقرارين مختلفين. */
@@ -28348,13 +28375,24 @@ async function siCommitImport(){
           last_date: today,
           _user: true
         };
+        /* ⚠️ لا يُكتب صفٌّ سعريّ لصنفٍ تعذّر حفظه. كان فشل رفع الصنف يُعَدّ في
+           `cloudFails` ويمضي، ثمّ يُرفَع صفّ السجل بنجاح — فيبقى سعرٌ بكودٍ لا
+           صنف له في السحابة (منفصل صامت، لا يصل أيّ صنف لأنّ المطابقة بالكود).
+           فيُرفَع الصنف أوّلاً، وعند فشله يُتخطّى السطر كاملاً ويُبلَّغ به —
+           نصفُ كتابة أسوأ من لا كتابة. */
+        if(window.CLOUD && CLOUD.enabled){
+          try{ await CLOUD.items.upsert(newItem); }
+          catch(e){
+            cloudFails++;
+            console.warn('[smart-import] item cloud upsert:', e?.message);
+            skippedNoItem.push(row.name);
+            continue;
+          }
+        }
         STATE.items.push(newItem);
         saveUserItem(newItem);
         addedItems++;
         logAudit('add','item',itemCode,{name:row.name, source:'smart_import'});
-        if(window.CLOUD && CLOUD.enabled){
-          try{ await CLOUD.items.upsert(newItem); }catch(e){ cloudFails++; console.warn('[smart-import] item cloud upsert:', e?.message); }
-        }
       }
 
       // Add history entry — use matched item's canonical name/category if merging
@@ -28411,7 +28449,12 @@ async function siCommitImport(){
 
     closeModal('modal-smart-import');
     const importedSummary = `أُضيف ${supplierAdded?'مورد جديد، ':''}${addedItems} صنف جديد، و ${addedEntries} سجل سعر`;
-    if(cloudFails > 0){
+    /* ⚠️ البنود المُتخطّاة تُسمّى صراحةً: سطرٌ سقط صامتاً يُقرأ اكتمالاً، وصاحبه
+       لا يعلم أنّ سعره لم يُسجَّل فلا يُعيد المحاولة. */
+    if(skippedNoItem.length > 0){
+      toast('warn','بنود لم تُسجَّل — تعذّر حفظ أصنافها',
+        `${importedSummary}. تُخطّي ${skippedNoItem.length === 1 ? 'بند' : skippedNoItem.length + ' بنود'} لتعذّر حفظ صنفها في السحابة (لم يُكتب لها سعر حتى لا يبقى سعرٌ بلا صنف): ${skippedNoItem.slice(0,5).map(n=>'«'+n+'»').join(' · ')}${skippedNoItem.length>5?' …':''}. تحقّق من الاتصال ثم أعِد استيرادها.`);
+    } else if(cloudFails > 0){
       // البيانات حُفظت محلياً لكن تعذّرت مزامنة بعضها — لا ندّعي النجاح الكامل
       toast('warn','حُفظ محلياً — تعذّرت المزامنة', `${importedSummary}. لم تُزامَن ${cloudFails} سجل مع السحابة (لن يراها الزملاء). تحقّق من الاتصال ثم استخدم «مزامنة» لإعادة الرفع.`);
     } else {
