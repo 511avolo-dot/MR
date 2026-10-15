@@ -143,6 +143,40 @@ const fresh = await newItemFlow('شفرة قصّ سجاد صناعية مقاس 
 ok('وصنف جديد فعلاً يُنشأ بلا أي حوار', fresh.dialogText === '' && fresh.count === 4,
   `${fresh.dialogText.slice(0, 40)}|${fresh.count}`);
 
+/* ── ٦) حالة بلاغ المالك (2026-10-15): اسمٌ إنجليزيّ يجد صنفه العربيّ ──
+   كانت «LADDER 3STEPS» تُنشئ بطاقة ثانية لسلّمٍ مسجَّل بالعربية، لأنّ الاسمين
+   لا يشتركان في محرف واحد فلا يجمعهما أيّ قياس تشابه نصّيّ. النقر والكتابة
+   حقيقيّان هنا لأنّ المسار يمرّ بمستمع `#f-code` لا باستدعاء مباشر. */
+await page.evaluate(() => {
+  STATE.items = [
+    { code:'B-SLM023', name:'سلم مزايا 3 درج مزدوج', category:'أدوات التنظيف', unit:'حبة', last_price:156.52, offers:1 },
+    { code:'B-SLM026', name:'سلم مزايا 6 درج مزدوج', category:'أدوات التنظيف', unit:'حبة', last_price:247.83, offers:1 },
+  ];
+  SI_ALIASES_BY_CODE = {};
+  /* ⚠️ المسار السابق تركنا في وضع «صنف جديد» فيُخفى #f-code — نعود للوضع
+     القائم وإلّا انتهت المهلة على حقلٍ غير مرئيّ (لا على عيبٍ في الكود). */
+  try { setEntryMode('existing'); } catch (_) { navigate('entry'); }
+});
+await page.waitForSelector('#f-code', { state: 'visible', timeout: 8000 });
+const ladder = await suggestNames('LADDER 3STEPS');
+ok('⚠️ حالة البلاغ: اسمٌ إنجليزيّ يجد السلّم العربيّ في البحث الحقيقيّ',
+  ladder.split(',').includes('B-SLM023'), ladder || '(لا نتائج)');
+/* ⚠️ البحث صندوقُ عرضٍ للبشر فيُرجع السلّمين معاً — وهو الصواب. الضمانة التي
+   تمنع البطاقة المكرّرة في **المُحلِّل** الذي يستدعيه الاستيراد، فهو ما يُقاس. */
+const pick = await page.evaluate(() => {
+  const a = siResolveItem('LADDER 3STEPS', {});
+  const b = siResolveItem('LADDER 6STEPS', {});
+  return { a3: a.item && a.item.code, s3: a.state, b6: b.item && b.item.code };
+});
+ok('⚠️ والمُحلِّل يُسنِد كلّ سلّم لصاحبه (6 درج ≠ 3 درج)',
+  pick.a3 === 'B-SLM023' && pick.b6 === 'B-SLM026', `${pick.a3}|${pick.b6}`);
+ok('وبحالة «اقتراح» فالقرار البشريّ محفوظ لا دمج تلقائيّ', pick.s3 === 'suggest', pick.s3);
+const cat = await page.evaluate(() => siInferCategory('LADDER 8STEPS').category);
+ok('⚠️ والتصنيف يُستنتَج من أقرب الأصناف لا يُكتب «مستورد»',
+  cat === 'أدوات التنظيف', cat || '(فارغ)');
+const far = await page.evaluate(() => siInferCategory('زززز قققق ططط ككك').category);
+ok('وما لا يقارب شيئاً يُترَك فارغاً', far === '', far || '(فارغ)');
+
 ok('صفر خطأ صفحة', errors.length === 0, errors[0]);
 ok('صفر انتهاك CSP', csp.length === 0, csp[0]);
 

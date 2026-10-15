@@ -25825,7 +25825,7 @@ async function plAddSelectedToSystem(){
   let added = 0, fails = 0;
   for(const row of targets){
     const code = 'USR-' + Date.now() + '-' + added + '-' + Math.random().toString(36).slice(2,5);
-    const newItem = { code, name: row.req, category: 'مستورد', unit: row.unit || 'قطعة', offers: 0, _user: true };
+    const newItem = { code, name: row.req, category: siInferCategory(row.req).category, unit: row.unit || 'قطعة', offers: 0, _user: true };
     STATE.items.push(newItem);
     try{ saveUserItem(newItem); }catch(_){}
     try{ logAudit('add','item',code,{name: row.req, source:'pricing_add'}); }catch(_){}
@@ -26588,6 +26588,10 @@ function siAliasLookup(name, supplier){
   const norms = [siNormalize(name)];
   const legacy = siNormalizeLegacy(name);
   if(legacy && legacy !== norms[0]) norms.push(legacy);
+  /* ⚠️ والشكل الذي سبق المعجم ثنائيّ اللغة: مرادفٌ لاسم إنجليزيّ أكّده بشريّ
+     مفتاحُه محسوب بلا ترجمة، فبدون هذه المحاولة يُفقَد صامتاً عند النشر. */
+  const preBi = siNormalizePreBilingual(name);
+  if(preBi && !norms.includes(preBi)) norms.push(preBi);
   const sk = siSupplierKey(supplier);
   if(sk){
     for(const n of norms){ const c = map[siAliasKey(n, sk)]; if(c) return {code:c, scope:'supplier'}; }
@@ -26791,6 +26795,96 @@ const SI_SYNONYM_MAP = [
   [/\bfloor(ing)?\b/gi, 'ارضية'],
 ];
 
+/* === معجم أسماء المنتجات ثنائيّ اللغة (إنجليزيّ → عربيّ) ===
+   ⚠️ **بلاغ المالك بلقطة (2026-10-15):** «لماذا سجّل بند السلم بالعربي كصنف
+   وبند السلم بالإنجليزي كصنف آخر تماماً؟» — `LADDER 3STEPS` و«سلم مزايا 3 درج
+   مزدوج» صارا بطاقتين. والجذر **بنيويّ لا عابر**: الاسمان لا يشتركان في محرف
+   واحد، فلا Dice ولا Levenshtein ولا أي قياس تشابه نصّيّ يمكنه أن يجمعهما
+   مهما ضُبطت عتباته. (الحالة نفسها موثّقة سابقاً في رفع الموردين: «شركة اكس
+   سي ام جي» ⇄ «شركة XCMG» — أُمسِكت يدويّاً لأنّ لا آلة تمسكها.)
+   المعجم القائم فوق يغطّي **الوحدات** (لتر/مم/قطعة…) وبضع صفات، ولا يغطّي
+   **أسماء المنتجات** — وهي ما يحمل هويّة الصنف.
+   المفردات أدناه مُشتقّة من الكتالوج الحيّ نفسه (819 صنفاً فيه أسماء إنجليزية
+   حقيقية: LADDER · TROLLY · VACUUM CLEANER · Air Compressor · Office Chair ·
+   toner cartridge · EXTENSION POLE …) لا من تخمين عامّ.
+   ⚠️ وهذا **لا يُضعِف الحوكمة**: بعد الترجمة يصير الطرفان بلغة واحدة فتسري
+   عليهما بوّابة المواصفات الفارقة كاملةً — «LADDER 6STEPS» و«سلم مزايا 3 درج»
+   يختلفان رقماً ⇒ فيتو؛ و«LADDER 3STEPS» و«سلم مزايا 3 درج مزدوج» يتقاربان
+   ⇒ **اقتراح للقرار البشريّ لا دمج تلقائيّ** (كلمات زائدة على جانب واحد).
+   ⚠️ ويُطبَّق **بعد** `SI_SYNONYM_MAP` وفي مصفوفة مستقلّة كي يبقى
+   `siNormalizePreBilingual` قادراً على قراءة المرادفات المخزَّنة بالمفتاح
+   القديم (نفس نمط `siNormalizeLegacy`) — فلا يفقد المستخدم ربطاً اعتمده. */
+const SI_BILINGUAL_MAP = [
+  // السلالم — حالة البلاغ. «6STEPS» بلا مسافة فيلزم الشكلان.
+  [/\bladders?\b/gi, 'سلم'],
+  [/(\d)\s*steps?\b/gi, '$1 درج'],
+  [/\bsteps?\b/gi, 'درج'],
+  // عربات ومناولة
+  [/\btroll?e?ys?\b|\btroll?ys?\b/gi, 'ترولي'],
+  [/\bpallet\s*trucks?\b/gi, 'عربة مناولة'],
+  [/\bwheel\s*barrows?\b/gi, 'عربة يدوية'],
+  [/\bforklifts?\b/gi, 'رافعة شوكية'],
+  [/\btrucks?\b/gi, 'شاحنة'],
+  [/\btrailers?\b/gi, 'مقطورة'],
+  // آلات ومعدات
+  [/\bvacuum\s*cleaners?\b|\bvacuums?\b/gi, 'مكنسة'],
+  [/\bcompressors?\b/gi, 'ضاغط'],
+  [/\bgenerators?\b/gi, 'مولد'],
+  [/\bmachines?\b/gi, 'ماكينة'],
+  [/\bmotors?\b|\bengines?\b/gi, 'محرك'],
+  [/\bpumps?\b/gi, 'مضخة'],
+  [/\bscrubbers?\b/gi, 'سكراب'],
+  [/\bsweepers?\b/gi, 'كاسحة'],
+  [/\bpolishers?\b/gi, 'تلميع'],
+  // مكتب وتقنية
+  [/\bchairs?\b/gi, 'كرسي'],
+  [/\bdesks?\b|\btables?\b/gi, 'طاولة'],
+  [/\bcabinets?\b/gi, 'خزانة'],
+  [/\bprinters?\b/gi, 'طابعة'],
+  [/\blaptops?\b|\bnotebooks?\b/gi, 'لابتوب'],
+  [/\bmonitors?\b|\bscreens?\b/gi, 'شاشة'],
+  [/\bkeyboards?\b/gi, 'لوحة مفاتيح'],
+  [/\btoner\s*cartridges?\b|\bink\s*cartridges?\b|\bcartridges?\b|\btoners?\b|\binks?\b/gi, 'حبر'],
+  // تنظيف ومستهلكات
+  [/\btowels?\b/gi, 'منشفة'],
+  [/\btissues?\b|\bnapkins?\b/gi, 'مناديل'],
+  [/\bsoaps?\b/gi, 'صابون'],
+  [/\bbrush(?:es)?\b/gi, 'فرشاة'],
+  [/\bmops?\b/gi, 'ممسحة'],
+  [/\bbuckets?\b|\bpails?\b/gi, 'دلو'],
+  [/\bdispensers?\b/gi, 'موزع'],
+  [/\bsqueegees?\b/gi, 'ممسحة زجاج'],
+  [/\bgloves?\b/gi, 'كفوف'],
+  // سباكة وكهرباء
+  [/\bpipes?\b/gi, 'ماسورة'],
+  [/\bvalves?\b/gi, 'صمام'],
+  [/\bfilters?\b/gi, 'فلتر'],
+  [/\bcables?\b|\bwires?\b/gi, 'سلك'],
+  [/\bbatter(?:y|ies)\b/gi, 'بطارية'],
+  [/\blamps?\b|\bbulbs?\b/gi, 'لمبة'],
+  [/\bswitch(?:es)?\b/gi, 'مفتاح'],
+  [/\bsockets?\b/gi, 'فيش'],
+  [/\bfans?\b/gi, 'مروحة'],
+  [/\btanks?\b/gi, 'خزان'],
+  [/\bheaters?\b/gi, 'سخان'],
+  // مواد ومكوّنات
+  [/\bpaints?\b/gi, 'دهان'],
+  [/\bcement\b/gi, 'اسمنت'],
+  [/\bstainless(?:\s*steel)?\b|\bsteel\b/gi, 'ستانلس'],
+  [/\bplastics?\b/gi, 'بلاستيك'],
+  [/\balumini?um\b/gi, 'المنيوم'],
+  [/\bwood(?:en)?\b/gi, 'خشب'],
+  [/\bglass\b/gi, 'زجاج'],
+  [/\brubber\b/gi, 'مطاط'],
+  [/\bdoors?\b/gi, 'باب'],
+  [/\bwindows?\b/gi, 'نافذة'],
+  [/\bcovers?\b|\blids?\b/gi, 'غطاء'],
+  [/\bhandles?\b/gi, 'مقبض'],
+  [/\bholders?\b|\bstands?\b/gi, 'حامل'],
+  [/\bpoles?\b/gi, 'عصا'],
+  [/\btyres?\b|\btires?\b/gi, 'اطار'],
+];
+
 /* === طيّ الحروف — أبجدية واحدة للمعجم ومُخرَجه ===
    ⚠️ عيب مقيس: `siNormalize` يطوي ة→ه و ى→ي والهمزات **قبل** تطبيق المعجم،
    ثم يُخرِج المعجم بدائل تحمل «ة» و«أ» (بوصة · مضخة · نافذة · بطارية · لمبة ·
@@ -26805,6 +26899,10 @@ function siFoldLetters(s){
    ⚠️ ويُفرِغ ذاكرة التطبيع: تغيير المعجم يُبطِل كل قيمة محفوظة. */
 function siFoldSynonymMap(){
   SI_SYNONYM_MAP.forEach(p => { p[1] = siFoldLetters(p[1]); });
+  /* ⚠️ المعجم ثنائيّ اللغة يُخرِج «مضخة · نافذة · فرشاة · بطارية · اطار …»
+     فيلزمه الطيّ نفسه، وإلّا خرجت ترجمةُ الإنجليزيّ بأبجدية لا يطابقها
+     العربيّ المطبَّع — أي عيبٌ معاكس للغرض كلّه. */
+  SI_BILINGUAL_MAP.forEach(p => { p[1] = siFoldLetters(p[1]); });
   try { SI_NORM_CACHE.clear(); } catch(_){}
 }
 siFoldSynonymMap();
@@ -26825,7 +26923,7 @@ function siNormalize(s){
   SI_NORM_CACHE.set(key, val);
   return val;
 }
-function siNormalizeRaw(s){
+function siNormalizeRaw(s, skipBilingual){
   if(!s) return '';
   let n = s.toString().toLowerCase()
     // Convert Eastern-Arabic and Persian digits to Western (so the
@@ -26855,8 +26953,30 @@ function siNormalizeRaw(s){
   for(const [pattern, replacement] of SI_SYNONYM_MAP){
     n = n.replace(pattern, replacement);
   }
+  /* ثمّ أسماء المنتجات ثنائيّة اللغة — بعد الوحدات كي لا تبتلع وحدةً
+     («STEPS» ليست وحدة، لكن «BOX»/«PCS» وحدات يحسمها المعجم الأوّل). */
+  if(!skipBilingual) for(const [pattern, replacement] of SI_BILINGUAL_MAP){
+    n = n.replace(pattern, replacement);
+  }
   // Final cleanup
   return n.replace(/\s+/g, ' ').trim();
+}
+
+/* التطبيع كما كان **قبل** المعجم ثنائيّ اللغة — لا يُستعمل للمقارنة إطلاقاً،
+   بل لقراءة المرادفات المخزَّنة بمفتاحٍ حُسِب قبله (اسم إنجليزيّ أكّده بشريّ
+   سابقاً). بدونه كان كل ربط معتمَد لاسم إنجليزيّ **يُفقَد صامتاً** لحظة النشر. */
+const SI_PREBI_CACHE = new Map();
+function siNormalizePreBilingual(s){
+  if(!s) return '';
+  const key = typeof s === 'string' ? s : String(s);
+  const hit = SI_PREBI_CACHE.get(key);
+  if(hit !== undefined) return hit;
+  /* ⚠️ يُعاد استعمال `siNormalizeRaw` نفسها بعَلَم — لا نسخة ثانية من جسمها:
+     نسختان تتفارقان عند أوّل تعديل، وهو ما يجعل الحارس يحرس شيئاً لم يعُد قائماً. */
+  const val = siNormalizeRaw(key, true);
+  if(SI_PREBI_CACHE.size >= SI_NORM_CACHE_MAX) SI_PREBI_CACHE.clear();
+  SI_PREBI_CACHE.set(key, val);
+  return val;
 }
 
 /* التطبيع كما كان **قبل** حماية الفاصلة العشرية — لا يُستعمل للمقارنة إطلاقاً،
@@ -27526,6 +27646,60 @@ function siResolveItem(name, opts){
   return out;
 }
 
+/* === استنتاج تصنيف الصنف الجديد ===
+   ⚠️ **بلاغ المالك (2026-10-15):** «يجب أن تجد حلّاً جذريّاً لتصنيف المادة بعد
+   الإدخال الذكيّ ألّا تُصنَّف مستورد وتأخذ الكثير من الوقت للتعديل».
+   **والقياس على الإنتاج يُثبت أنّها ليست تصنيفاً أصلاً:** «مستورد» = 56 صنفاً،
+   **54 منها أُنشئت في آخر ثلاثة أيام** — أي أنّها القيمة الافتراضية للاستيراد
+   الذكيّ وحده، مقابل 26 تصنيفاً حقيقيّاً يحملها الكتالوج (أدوات التنظيف 178 ·
+   معدات التنظيف 76 · المعدات الثقيلة 69 · كهربائي 59 …). فكل صنف يُنشئه
+   الاستيراد يخرج موسوماً بوسمٍ **لا يصف شيئاً**، ويُصلَح يدويّاً صنفاً صنفاً.
+   المعرفة اللازمة موجودة أصلاً: 819 صنفاً مصنَّفاً. فالتصنيف يُستنتَج من
+   **أقرب الأصناف** بالمحرّك نفسه (تصويت موزون بالتشابه) لا يُلفَّق.
+   ⚠️ وحين لا يبلغ أقربُها العتبة **يُترَك فارغاً** لا يُكتب وسمٌ عشوائيّ:
+   الفراغ يُقرأ «غير مصنَّف» فيُراجَع، والوسم الخاطئ يُقرأ تصنيفاً فيستقرّ.
+   ⚠️ والأصناف الموسومة بالقيمة القديمة **لا تُصوِّت** — وإلّا رجّح الخطأُ نفسَه. */
+const SI_CAT_LEGACY_DEFAULT = 'مستورد';
+const SI_CAT_FLOOR = 0.35;   // أدنى تشابه يُحتسب صوتاً
+function siInferCategory(name, opts){
+  const o = opts || {};
+  const out = { category:'', score:0, basis:'' };
+  const clean = v => {
+    const t = String(v == null ? '' : v).trim();
+    return (!t || t === SI_CAT_LEGACY_DEFAULT) ? '' : t;
+  };
+  // ① الصنف المطابق يحسمها (أقوى دليل: قرارٌ وقع فعلاً على هذا البند)
+  const direct = clean(o.item && o.item.category);
+  if(direct) return { category: direct, score: 1, basis: 'تصنيف الصنف المطابق' };
+
+  const items = (STATE.items || []).filter(i => i && i.code && clean(i.category));
+  if(!name || !items.length) return out;
+
+  const score = i => ({ i, s: siSimilarity(i.name, name) });
+  let use = [];
+  try{
+    use = (siRetrieveCandidates(name, 15) || []).filter(i => i && clean(i.category)).map(score);
+  }catch(_){ use = []; }
+  use = use.filter(x => x.s >= SI_CAT_FLOOR);
+  /* احتياط التغطية نفسه الذي في `siResolveItem`: الاسترجاع قد يُسقِط صنفاً
+     يبلغه التشابه الكامل، والمسح الكامل يقع فقط حين لا يأتي بشيء. */
+  if(!use.length) use = items.map(score).filter(x => x.s >= SI_CAT_FLOOR);
+  if(!use.length) return out;
+
+  use.sort((a,b) => b.s - a.s);
+  use = use.slice(0, 5);
+  const weight = {};
+  let total = 0;
+  use.forEach(x => {
+    const c = clean(x.i.category);
+    weight[c] = (weight[c] || 0) + x.s;
+    total += x.s;
+  });
+  const best = Object.keys(weight).sort((a,b) => weight[b] - weight[a])[0];
+  if(!best || !total) return out;
+  return { category: best, score: weight[best] / total, basis: `أقرب ${use.length} صنفاً` };
+}
+
 /* ════════════════════════════════════════════════════════════════════
    محرّك التحليل → الاسترجاع → التحقّق (Retrieve→Verify) — نقلة الدقّة:
    بدل عرض كامل الكتالوج على النموذج (فيؤنسِن السطح ويطابق المتشابه)، نُرشِّح
@@ -28134,10 +28308,14 @@ async function siCommitImport(){
       // Add new item if needed
       if(!itemCode){
         itemCode = row.code || ('USR-' + Date.now() + '-' + Math.random().toString(36).slice(2,5));
+        /* التصنيف يُستنتَج من أقرب الأصناف — لا وسمٌ افتراضيّ (انظر `siInferCategory`).
+           ويُمرَّر المرشّح حتى لو لم يُدمَج: «أقرب صنف» دليلٌ كافٍ للتصنيف
+           وإن لم يكفِ للدمج — بوّابتان مختلفتان لقرارين مختلفين. */
+        const inferred = siInferCategory(row.name, { item: row.matchedItem || null });
         const newItem = {
           code: itemCode,
           name: row.name,
-          category: 'مستورد',
+          category: inferred.category,
           unit: row.unit || 'قطعة',
           last_price: price,
           avg_price: price,
@@ -28158,7 +28336,9 @@ async function siCommitImport(){
 
       // Add history entry — use matched item's canonical name/category if merging
       const canonicalName = willMerge && row.matchedItem ? row.matchedItem.name : row.name;
-      const canonicalCategory = willMerge && row.matchedItem ? (row.matchedItem.category || 'مستورد') : 'مستورد';
+      const canonicalCategory = willMerge && row.matchedItem
+        ? (row.matchedItem.category || siInferCategory(canonicalName, { item: row.matchedItem }).category)
+        : ((STATE.items || []).find(i => String(i.code) === String(itemCode)) || {}).category || '';
       /* ⚠️ الوحدة كانت تسقط من سجلّ الاستيراد الذكيّ (المسار اليدويّ يحفظها)،
          فيخرج السجل السعريّ بصفوف بلا وحدة فلا تُقارَن أسعار على أساس واحد. */
       const canonicalUnit = (willMerge && row.matchedItem ? row.matchedItem.unit : row.unit) || row.unit || '';
