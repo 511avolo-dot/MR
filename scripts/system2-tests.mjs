@@ -290,6 +290,7 @@ const NEEDED_FNS = [
   'canViewAmounts', 'prFindRequest', 'prItemsForPO', 'prItemsClipboardText', 'prItemsClipboardHtml',
   // محرّك مطابقة الأصناف (التسعير الذكيّ) — بوّابة المواصفات والمُحلِّل الموحَّد
   'siFoldLetters', 'siFoldSynonymMap', 'siNormalizeRaw', 'siNormalizeLegacy',
+  'siNormalizePreBilingual', 'siInferCategory',
   'siExtractNumbers', 'siCompareNumbers', 'siUnitTol', 'siUnitQty', 'siUnitConflict',
   'siPackCount', 'siHeadToken', 'siScriptOf', 'siHeadConflict', 'siDistinctWord', 'siSpecVeto',
   'siBigrams', 'siDice', 'siJaccard', 'siTokenScore', 'siQualGroupConflict', 'siQualConflict',
@@ -307,7 +308,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
@@ -5860,6 +5861,101 @@ G('٤٧) التسعير الذكيّ — بوّابة المواصفات وال�
     && api.histIsOrphan({}) === true);
 
   STATE.items = savedItems; STATE.history = savedHist;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا يُلفَّق
+   ⚠️ بلاغ المالك بلقطة (2026-10-15): «لماذا سجّل بند السلم بالعربي كصنف
+   وبند السلم بالإنجليزي كصنف آخر تماماً؟» + «حلّ جذريّ لتصنيف المادة بعد
+   الإدخال الذكيّ ألّا تُصنَّف مستورد وتأخذ الكثير من الوقت للتعديل».
+   كلاهما مقيس على الإنتاج: الصفوف 1560–1566 بطاقتان لسلّم واحد، و«مستورد»
+   56 صنفاً **54 منها أُنشئت في ثلاثة أيام** = وسمٌ لا يصف شيئاً.
+   ═══════════════════════════════════════════════════════════════ */
+G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا يُلفَّق');
+{
+  const savedItems = STATE.items;
+  const { siNormalize, siNormalizePreBilingual, siSimilarity, siSpecVeto,
+          siResolveItem, siInferCategory } = api;
+
+  /* ── أ) المعجم ثنائيّ اللغة ── */
+  T('⚠️ «LADDER» و«STEPS» تُترجَمان فيصيران بلغة الكتالوج',
+    siNormalize('LADDER 3STEPS') === 'سلم 3 درج');
+  T('و«6STEPS» بلا مسافة تُقرأ كذلك (شكل الفاتورة الحقيقيّ)',
+    siNormalize('LADDER 6STEPS') === 'سلم 6 درج');
+  T('ومفردات المنتجات الأخرى مترجَمة (ترولي · مكنسة · حبر · فرشاة)',
+    siNormalize('TROLLY') === 'ترولي'
+    && siNormalize('VACUUM CLEANER').startsWith('مكنسه')
+    && siNormalize('toner cartridge') === 'حبر'
+    && siNormalize('BRUSH') === 'فرشاه');
+  T('والبدائل مطويّة بأبجدية التطبيع نفسها (لا «فرشاة» مقابل «فرشاه»)',
+    api.SI_BILINGUAL_MAP.every(p => typeof p[1] !== 'string' || !/[ةأإآى]/.test(p[1])));
+
+  /* ── ب) حالة البلاغ نفسها: بطاقتان صارتا مرشّحاً واحداً ── */
+  const sim3 = siSimilarity('LADDER 3STEPS', 'سلم مزايا 3 درج مزدوج');
+  T('⚠️ حالة البلاغ: الاسمان الإنجليزيّ والعربيّ صارا متشابهَين فعلاً',
+    sim3 >= api.SI_MATCH_SUGGEST);
+  T('ولا فيتو بينهما (كلمة زائدة على جانب واحد ليست فرقاً)',
+    !siSpecVeto('LADDER 3STEPS', 'سلم مزايا 3 درج مزدوج'));
+  T('⚠️ لكن الاختلاف الرقميّ يبقى قاطعاً: LADDER 6STEPS ≠ سلم 3 درج',
+    !!siSpecVeto('LADDER 6STEPS', 'سلم مزايا 3 درج مزدوج'));
+
+  STATE.items = [
+    {code:'B-SLM023', name:'سلم مزايا 3 درج مزدوج', unit:'حبة', category:'أدوات التنظيف'},
+    {code:'B-SLM026', name:'سلم مزايا 6 درج مزدوج', unit:'حبة', category:'أدوات التنظيف'},
+    {code:'CLN-Q0004', name:'سلم ألمنيوم، A TYPE، 8 درجات 2.4م', unit:'حبة', category:'أدوات التنظيف'},
+  ];
+  const r3 = siResolveItem('LADDER 3STEPS', {});
+  T('⚠️ فالمُحلِّل صار يجد السلّم العربيّ لاسمٍ إنجليزيّ (الجذر مُغلَق)',
+    !!r3.item && r3.item.code === 'B-SLM023');
+  T('⚠️ وبحالة «اقتراح» لا دمجاً تلقائيّاً (القرار البشريّ محفوظ)',
+    r3.state === 'suggest');
+  const r6 = siResolveItem('LADDER 6STEPS', {});
+  T('و«6 درج» تذهب لصاحبها لا لجارها',
+    !!r6.item && r6.item.code === 'B-SLM026');
+
+  /* ── ج) المرادفات المخزَّنة قبل المعجم لا تُفقَد ── */
+  T('⚠️ شكلٌ ما قبل المعجم محفوظ (مفتاح مرادف إنجليزيّ قديم)',
+    /^ladder\s*3\s*steps$/.test(siNormalizePreBilingual('LADDER 3STEPS'))
+    && siNormalizePreBilingual('LADDER 3STEPS') !== siNormalize('LADDER 3STEPS'));
+  const savedAl = api.SI_LEARNED_ALIASES;
+  api.SI_LEARNED_ALIASES = {};
+  api.SI_LEARNED_ALIASES[api.siAliasKey(siNormalizePreBilingual('LADDER 8STEPS'), '')] = 'CLN-Q0004';
+  T('⚠️ وربطٌ اعتمده بشريّ بالمفتاح القديم ما زال يُعثَر عليه بعد النشر',
+    (api.siAliasLookup('LADDER 8STEPS', '') || {}).code === 'CLN-Q0004');
+  api.SI_LEARNED_ALIASES = savedAl;
+
+  /* ── د) التصنيف يُستنتَج من أقرب الأصناف ── */
+  T('⚠️ لا موضع في الكود يكتب «مستورد» تصنيفاً بعد الآن',
+    !/category:\s*'مستورد'/.test(CODE) && !/\|\|\s*'مستورد'\)\s*:/.test(CODE));
+  T('والقيمة القديمة معرَّفة ثابتاً كي تُستبعَد من التصويت لا كي تُكتَب',
+    api.SI_CAT_LEGACY_DEFAULT === 'مستورد'
+    && /clean\s*=\s*v\s*=>[\s\S]{0,200}SI_CAT_LEGACY_DEFAULT/.test(CODE));
+  T('⚠️ صنفٌ جديد يأخذ تصنيف أقرب الأصناف (سلّم ⇐ أدوات التنظيف)',
+    siInferCategory('LADDER 8STEPS').category === 'أدوات التنظيف');
+  T('والصنف المطابق يحسمها مباشرةً',
+    siInferCategory('أي اسم', {item:{category:'سباكة'}}).category === 'سباكة');
+  T('⚠️ والمطابق الموسوم بالقيمة القديمة لا يُمرَّر كتصنيف',
+    siInferCategory('زززز قققق ططط', {item:{category:'مستورد'}}).category === '');
+  STATE.items = [
+    {code:'A-1', name:'كوع نحاس 25 ملي', category:'سباكة'},
+    {code:'A-2', name:'كوع نحاس 32 ملي', category:'سباكة'},
+    {code:'A-3', name:'مفتاح مكيف 45 أمبير', category:'كهربائي'},
+  ];
+  T('والتصويت موزون بالتشابه فيغلب التصنيف الأقرب',
+    siInferCategory('كوع نحاس 40 ملي').category === 'سباكة');
+  T('⚠️ وما لا يقارب شيئاً يُترَك فارغاً لا يُلفَّق له وسم',
+    siInferCategory('زززز قققق ططط ككك').category === '');
+  T('والأصناف الموسومة بالقيمة القديمة لا تُصوِّت',
+    (() => { STATE.items = [{code:'B-1', name:'كوع نحاس 25 ملي', category:'مستورد'}];
+             return siInferCategory('كوع نحاس 25 ملي').category === ''; })());
+  T('⚠️ والاستيراد الذكيّ يستدعيه فعلاً عند إنشاء الصنف',
+    /itemCode = row\.code[\s\S]{0,400}siInferCategory\(row\.name,\s*\{\s*item:\s*row\.matchedItem/.test(CODE)
+    && /category:\s*inferred\.category/.test(CODE));
+  T('وصفّ السجل يأخذ تصنيف صنفه لا وسماً مستقلّاً',
+    /canonicalCategory[\s\S]{0,260}find\(i => String\(i\.code\) === String\(itemCode\)\)/.test(CODE));
+
+  STATE.items = savedItems;
 }
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
