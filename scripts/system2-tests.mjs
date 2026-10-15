@@ -290,7 +290,7 @@ const NEEDED_FNS = [
   'canViewAmounts', 'prFindRequest', 'prItemsForPO', 'prItemsClipboardText', 'prItemsClipboardHtml',
   // محرّك مطابقة الأصناف (التسعير الذكيّ) — بوّابة المواصفات والمُحلِّل الموحَّد
   'siFoldLetters', 'siFoldSynonymMap', 'siNormalizeRaw', 'siNormalizeLegacy',
-  'siNormalizePreBilingual', 'siInferCategory',
+  'siNormalizePreBilingual', 'siInferCategory', 'siHeadConflict',
   'siExtractNumbers', 'siCompareNumbers', 'siUnitTol', 'siUnitQty', 'siUnitConflict',
   'siPackCount', 'siHeadToken', 'siScriptOf', 'siHeadConflict', 'siDistinctWord', 'siSpecVeto',
   'siBigrams', 'siDice', 'siJaccard', 'siTokenScore', 'siQualGroupConflict', 'siQualConflict',
@@ -5924,6 +5924,41 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
   T('⚠️ وربطٌ اعتمده بشريّ بالمفتاح القديم ما زال يُعثَر عليه بعد النشر',
     (api.siAliasLookup('LADDER 8STEPS', '') || {}).code === 'CLN-Q0004');
   api.SI_LEARNED_ALIASES = savedAl;
+
+  /* ── ج-٢) النقل الحرفيّ لأسماء العلامات (مقيس لا مُخمَّن) ──
+     مسحُ الرموز اللاتينية في صفوف الإنتاج المنفصلة مقابل الكتالوج أظهر أنّ
+     `legrand` (12 ورودًا) و`bilanko` (5) بلا نظير لاتينيّ في الكتالوج إطلاقاً. */
+  T('⚠️ اسم العلامة المنقول حرفيّاً يلتقي بنظيره العربيّ',
+    siNormalize('باك بوكس 3 مود Grand Legrand') === siNormalize('باك بوكس 3 مود لجراند')
+    && /بيلانكو/.test(siNormalize('مفتاح سخان 20A، Bilanko أبيض')));
+  T('وما يرد في الكتالوج باللغتين أصلاً لا يُنقَل (النقل طريقٌ بلا نهاية)',
+    /samsung/.test(siNormalize('تابلت Samsung A9+'))
+    && /hyundai/.test(siNormalize('حافلة Hyundai 2011')));
+  T('والواط والجيجا وحدتان تُقرآن باللغتين',
+    siNormalize('كشاف 200W') === siNormalize('كشاف 200 واط')
+    && siNormalize('تابلت 64GB') === siNormalize('تابلت 64 جيجا'));
+  T('⚠️ و«كابل/كبل/سلك» ثلاث كتابات لشيء واحد في هذا الكتالوج',
+    siNormalize('كابل XLPE 4×240 ملي') === siNormalize('سلك XLPE 4×240 ملي')
+    && siNormalize('كبل 4×240 ملي XLPE') === siNormalize('سلك 4×240 ملي XLPE'));
+  STATE.items = [
+    {code:'ELE-030', name:'باك بوكس 3 مود لجراند', unit:'حبة', category:'كهربائي'},
+    {code:'ELE-031', name:'فيس بوكس 3 مود لجراند', unit:'حبة', category:'كهربائي'},
+    {code:'ELE-028', name:'فلور بوكس 4 مود لجراند', unit:'حبة', category:'كهربائي'},
+  ];
+  T('⚠️ فصفٌّ من فاتورة حقيقية يجد صنفه بعد النقل الحرفيّ',
+    (() => { const r = siResolveItem('باك بوكس 3 مود Grand Legrand', {});
+             return r.state === 'ok' && r.item.code === 'ELE-030'; })());
+  T('و«فيس» لا تُسلَّم لـ«فلور» تلقائيّاً (الكتالوج يفرّق بينهما)',
+    (() => { const r = siResolveItem('فيس بوكس 4 مود Grand Legrand، فلور', {});
+             return r.state !== 'ok' || r.item.code !== 'ELE-028'; })());
+  T('⚠️ ورخصة «اختلاف الترتيب» تقتضي وجود الرأسين في الاسمين معاً لا أحدهما',
+    api.siHeadConflict('فيس بوكس 4 مود لجراند فلور', 'فلور بوكس 4 مود لجراند') === true
+    && api.siHeadConflict('زاويه لياسه ثقيل 7 7', 'ثقيل زاويه لياسه 7 7') === false);
+  STATE.items = [
+    {code:'B-SLM023', name:'سلم مزايا 3 درج مزدوج', unit:'حبة', category:'أدوات التنظيف'},
+    {code:'B-SLM026', name:'سلم مزايا 6 درج مزدوج', unit:'حبة', category:'أدوات التنظيف'},
+    {code:'CLN-Q0004', name:'سلم ألمنيوم، A TYPE، 8 درجات 2.4م', unit:'حبة', category:'أدوات التنظيف'},
+  ];
 
   /* ── د) التصنيف يُستنتَج من أقرب الأصناف ── */
   T('⚠️ لا موضع في الكود يكتب «مستورد» تصنيفاً بعد الآن',
