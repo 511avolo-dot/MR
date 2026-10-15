@@ -28269,6 +28269,7 @@ async function siCommitImport(){
     let addedEntries = 0;
     let supplierAdded = false;
     let cloudFails = 0; // عدد السجلات التي تعذّرت مزامنتها مع السحابة (لتنبيه المستخدم بدل ادعاء النجاح)
+    const skippedNoItem = []; // بنود تُخطّيت لتعذّر حفظ صنفها (لا نكتب سعراً بلا صنف)
     const today = new Date().toISOString().slice(0,10);
     const supplierName = m.supplier.name;
 
@@ -28330,7 +28331,13 @@ async function siCommitImport(){
 
       // Add new item if needed
       if(!itemCode){
-        itemCode = row.code || ('USR-' + Date.now() + '-' + Math.random().toString(36).slice(2,5));
+        /* ⚠️ لا يُتبنّى الكود المستخرَج من مستند المورّد كوداً لكتالوجنا.
+           استعمالُه المشروع هو **المطابقة** (المرتبة ① في `siResolveItem`)، وقد
+           جرت فعلاً — فوصولُنا هنا يعني أنّ **لا صنف يحمله**. فتبنّيه يصكّ في
+           الكتالوج كوداً بصيغتنا لم نُسنده نحن (`CIV-001` · `HVAC-Q0012`
+           المرصودة على الإنتاج)، فيتصادم مع الكود الحقيقيّ عند إسناده لاحقاً،
+           ويُنتج صفّاً سعريّاً بكودٍ لا صنف له إن تعذّر حفظ الصنف. */
+        itemCode = 'USR-' + Date.now() + '-' + Math.random().toString(36).slice(2,5);
         /* التصنيف يُستنتَج من أقرب الأصناف — لا وسمٌ افتراضيّ (انظر `siInferCategory`).
            ويُمرَّر المرشّح حتى لو لم يُدمَج: «أقرب صنف» دليلٌ كافٍ للتصنيف
            وإن لم يكفِ للدمج — بوّابتان مختلفتان لقرارين مختلفين. */
@@ -28348,13 +28355,24 @@ async function siCommitImport(){
           last_date: today,
           _user: true
         };
+        /* ⚠️ لا يُكتب صفٌّ سعريّ لصنفٍ تعذّر حفظه. كان فشل رفع الصنف يُعَدّ في
+           `cloudFails` ويمضي، ثمّ يُرفَع صفّ السجل بنجاح — فيبقى سعرٌ بكودٍ لا
+           صنف له في السحابة (منفصل صامت، لا يصل أيّ صنف لأنّ المطابقة بالكود).
+           فيُرفَع الصنف أوّلاً، وعند فشله يُتخطّى السطر كاملاً ويُبلَّغ به —
+           نصفُ كتابة أسوأ من لا كتابة. */
+        if(window.CLOUD && CLOUD.enabled){
+          try{ await CLOUD.items.upsert(newItem); }
+          catch(e){
+            cloudFails++;
+            console.warn('[smart-import] item cloud upsert:', e?.message);
+            skippedNoItem.push(row.name);
+            continue;
+          }
+        }
         STATE.items.push(newItem);
         saveUserItem(newItem);
         addedItems++;
         logAudit('add','item',itemCode,{name:row.name, source:'smart_import'});
-        if(window.CLOUD && CLOUD.enabled){
-          try{ await CLOUD.items.upsert(newItem); }catch(e){ cloudFails++; console.warn('[smart-import] item cloud upsert:', e?.message); }
-        }
       }
 
       // Add history entry — use matched item's canonical name/category if merging
@@ -28411,7 +28429,12 @@ async function siCommitImport(){
 
     closeModal('modal-smart-import');
     const importedSummary = `أُضيف ${supplierAdded?'مورد جديد، ':''}${addedItems} صنف جديد، و ${addedEntries} سجل سعر`;
-    if(cloudFails > 0){
+    /* ⚠️ البنود المُتخطّاة تُسمّى صراحةً: سطرٌ سقط صامتاً يُقرأ اكتمالاً، وصاحبه
+       لا يعلم أنّ سعره لم يُسجَّل فلا يُعيد المحاولة. */
+    if(skippedNoItem.length > 0){
+      toast('warn','بنود لم تُسجَّل — تعذّر حفظ أصنافها',
+        `${importedSummary}. تُخطّي ${skippedNoItem.length === 1 ? 'بند' : skippedNoItem.length + ' بنود'} لتعذّر حفظ صنفها في السحابة (لم يُكتب لها سعر حتى لا يبقى سعرٌ بلا صنف): ${skippedNoItem.slice(0,5).map(n=>'«'+n+'»').join(' · ')}${skippedNoItem.length>5?' …':''}. تحقّق من الاتصال ثم أعِد استيرادها.`);
+    } else if(cloudFails > 0){
       // البيانات حُفظت محلياً لكن تعذّرت مزامنة بعضها — لا ندّعي النجاح الكامل
       toast('warn','حُفظ محلياً — تعذّرت المزامنة', `${importedSummary}. لم تُزامَن ${cloudFails} سجل مع السحابة (لن يراها الزملاء). تحقّق من الاتصال ثم استخدم «مزامنة» لإعادة الرفع.`);
     } else {

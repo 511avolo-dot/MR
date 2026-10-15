@@ -5984,11 +5984,47 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
   T('والأصناف الموسومة بالقيمة القديمة لا تُصوِّت',
     (() => { STATE.items = [{code:'B-1', name:'كوع نحاس 25 ملي', category:'مستورد'}];
              return siInferCategory('كوع نحاس 25 ملي').category === ''; })());
+  /* ⚠️ المرساة كانت `itemCode = row.code` — أي أنّ الحارس كان يُرمّز **التعبير
+     المعيب نفسه** (تبنّي كود مستند المورّد)، فينكسر حين يُصلَح العيب بحقّ.
+     الثابت الحقيقيّ: الاستيراد يستنتج التصنيف عند إنشاء الصنف. */
   T('⚠️ والاستيراد الذكيّ يستدعيه فعلاً عند إنشاء الصنف',
-    /itemCode = row\.code[\s\S]{0,400}siInferCategory\(row\.name,\s*\{\s*item:\s*row\.matchedItem/.test(CODE)
+    /itemCode = 'USR-'[\s\S]{0,700}siInferCategory\(row\.name,\s*\{\s*item:\s*row\.matchedItem/.test(CODE)
     && /category:\s*inferred\.category/.test(CODE));
   T('وصفّ السجل يأخذ تصنيف صنفه لا وسماً مستقلّاً',
     /canonicalCategory[\s\S]{0,260}find\(i => String\(i\.code\) === String\(itemCode\)\)/.test(CODE));
+
+  /* ━━ الكود المستخرَج من مستند المورّد ليس كوداً لكتالوجنا ━━
+     `siResolveItem` يطابق الكود في المرتبة ① — فالوصول إلى فرع الإنشاء يعني
+     أنّ **لا صنف يحمله**. تبنّيه كان يصكّ كوداً بصيغتنا لم نُسنده
+     (`CIV-001` · `HVAC-Q0012` المرصودة على الإنتاج) ويُنتج سعراً بلا صنف. */
+  T('⚠️ لا يُتبنّى الكود المستخرَج من مستند المورّد كوداً للكتالوج',
+    !/itemCode\s*=\s*row\.code/.test(CODE) && /itemCode = 'USR-'/.test(CODE));
+  T('والكود المستخرَج يبقى مُستعملاً للمطابقة (استعمالُه المشروع)',
+    /siResolveItem\(item\.name,\s*\{\s*code:\s*item\.code/.test(CODE));
+  T('⚠️ ولا يُكتب صفّ سعريّ لصنفٍ تعذّر حفظه في السحابة',
+    /CLOUD\.items\.upsert\(newItem\)[\s\S]{0,300}skippedNoItem\.push\(row\.name\)[\s\S]{0,40}continue/.test(CODE));
+  /* ⚠️ عدٌّ وترتيب لا نمطٌ متسامح: أوّل صياغة كانت
+     `upsert(newItem)[\s\S]{0,320}STATE.items.push(newItem)` — فدفعٌ **إضافيّ**
+     قبل الرفع لا يُفشِلها (أمسكه البيت-بروف). */
+  T('والصنف لا يُثبَّت محليّاً إلا بعد نجاح رفعه (لا نصف كتابة)',
+    (() => {
+      /* ⚠️ مُنطَّق بكتلة الاستيراد الذكيّ: `STATE.items.push(newItem)` يرد في
+         `plAddSelectedToSystem` أيضاً، فعدٌّ على الملفّ كلّه يفشل على السليم. */
+      const a = CODE.indexOf('const skippedNoItem');
+      const b = CODE.indexOf("logAudit('import','smart'");
+      if(a < 0 || b <= a) return false;
+      const win = CODE.slice(a, b);
+      const pushes = (win.match(/STATE\.items\.push\(newItem\)/g) || []).length;
+      return pushes === 1
+        && win.indexOf('STATE.items.push(newItem)') > win.indexOf('CLOUD.items.upsert(newItem)')
+        && win.indexOf('CLOUD.items.upsert(newItem)') > -1;
+    })());
+  /* ⚠️ المرساة هي الشرط حرفيّاً `if(skippedNoItem.length > 0){` — لا
+     `skippedNoItem.length > 0` وحده: تعطيلُ الفرع بـ`if(false && …)` يُبقي
+     النمط المتسامح مطابقاً فلا يعضّ (أمسكه البيت-بروف). */
+  T('والبنود المُتخطّاة تُسمّى للمستخدم لا تسقط صامتةً',
+    /if\(skippedNoItem\.length > 0\)\{[\s\S]{0,400}toast\(/.test(CODE)
+    && /skippedNoItem\.slice\(0,5\)/.test(CODE));
 
   STATE.items = savedItems;
 }
