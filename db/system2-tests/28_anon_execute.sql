@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  AX0–AX6 — سحب تنفيذ anon عن مساعدات الهويّة والنطاق
+--  AX0–AX7 — سحب تنفيذ anon عن مساعدات الهويّة والنطاق
 --  تأكيدات **سلوكية**: السحب يُتحقَّق منه بالتشغيل (الحارس ما زال يمنع ·
 --  التسجيل العامّ ما زال يعمل · السياسات ما زالت تُقيَّم) لا بقراءة منح.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -49,24 +49,51 @@ BEGIN
   IF v_bad <> '' THEN RAISE EXCEPTION 'AX1 فشل: anon ما زال ينفّذ: %', v_bad; END IF;
   RAISE NOTICE 'AX1 ✅ anon لا ينفّذ أيّاً من الثماني';
 
+  -- AX2: المسجَّل يحتفظ بما تستعمله السياسات **وبمساعدَي الحارسَين غير-DEFINER**.
+  -- ⚠️ `pr_is_admin`/`pr_is_service` يُناديهما `pr_guard_status` و
+  --    `pr_guard_approval` وهما غير SECURITY DEFINER ⇒ يُنفَّذان بهويّة المتصل،
+  --    فسحبهما من المسجَّل يحوّل حارسَي الحوكمة إلى «permission denied».
+  --    هذا التأكيد يمنع «تشديداً» لاحقاً يبدو تحسيناً وهو عطل.
   v_bad := '';
   FOR r IN SELECT f FROM (VALUES ('proc_me()'),('proc_is_scoped()'),
-      ('proc_scope_sectors()'),('proc_can_see_po(text)')) t(f)
+      ('proc_scope_sectors()'),('proc_can_see_po(text)'),
+      ('pr_is_admin()'),('pr_is_service()')) t(f)
   LOOP
     IF NOT has_function_privilege('authenticated', r.f, 'EXECUTE') THEN v_bad := v_bad || r.f || ' '; END IF;
   END LOOP;
-  IF v_bad <> '' THEN RAISE EXCEPTION 'AX2 فشل: المسجَّل فقد مساعدات تستعملها السياسات: %', v_bad; END IF;
-  RAISE NOTICE 'AX2 ✅ المسجَّل يحتفظ بمساعدات السياسات الأربع';
+  IF v_bad <> '' THEN
+    RAISE EXCEPTION 'AX2 فشل: المسجَّل فقد مساعدات تستعملها السياسات أو الحُرّاس غير-DEFINER: %', v_bad;
+  END IF;
+  RAISE NOTICE 'AX2 ✅ المسجَّل يحتفظ بمساعدات السياسات والحُرّاس الستّ';
 
   v_bad := '';
-  FOR r IN SELECT f FROM (VALUES ('pr_is_admin()'),('pr_is_service()'),
-      ('pr_username()'),('proc_users_guard()')) t(f)
+  FOR r IN SELECT f FROM (VALUES ('pr_username()'),('proc_users_guard()')) t(f)
   LOOP
     IF has_function_privilege('authenticated', r.f, 'EXECUTE') THEN v_bad := v_bad || r.f || ' '; END IF;
   END LOOP;
   IF v_bad <> '' THEN RAISE EXCEPTION 'AX3 فشل: المسجَّل ما زال ينفّذ داخليّات: %', v_bad; END IF;
   RAISE NOTICE 'AX3 ✅ المساعدات الداخلية مسحوبة من المسجَّل كذلك';
 END $ax123$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  AX7 — **بالتشغيل**: حارسا الحوكمة غير-DEFINER ما زالا يعملان بهويّة
+--  المستخدم المسجَّل. (لا يكفي فحص المنح: المقصود أنّ الحارس **يمنع** لا أنّه
+--  يرمي خطأ صلاحية — والنتيجة من الخارج تبدو واحدة.)
+-- ════════════════════════════════════════════════════════════════════════════
+DO $ax7$
+DECLARE v_err text := ''; v_blocked boolean := false;
+BEGIN
+  SET LOCAL ROLE authenticated;
+  PERFORM set_config('request.jwt.claims','{"email":"ax_user@aldeyabi.com"}',true);
+  BEGIN
+    UPDATE proc_purchase_requests SET status='approved' WHERE false;
+  EXCEPTION WHEN others THEN v_blocked := true; v_err := SQLERRM; END;
+  RESET ROLE;
+  IF v_blocked AND v_err ILIKE '%permission denied for function%' THEN
+    RAISE EXCEPTION 'AX7 فشل: الحارس غير-DEFINER تعطّل بسحب تنفيذ مساعده ⇒ %', v_err;
+  END IF;
+  RAISE NOTICE 'AX7 ✅ حارسا الحوكمة غير-DEFINER يعملان (لا خطأ صلاحية على مساعديهما)';
+END $ax7$;
 
 -- ════════════════════════════════════════════════════════════════════════════
 --  AX4 — **بالتشغيل**: حارس المستخدمين ما زال يمنع تصعيد الصلاحية بعد سحب
@@ -135,7 +162,7 @@ BEGIN
     RAISE EXCEPTION 'AX6 فشل: المستخدم المُنطَّق لم يقرأ صفّه (%) — سياسةٌ انكسرت بالسحب', v_n;
   END IF;
   RAISE NOTICE 'AX6 ✅ سياسات الهويّة والنطاق ما زالت تُقيَّم للمستخدم المسجَّل';
-  RAISE NOTICE '── AX0–AX6 كلها ناجحة ──';
+  RAISE NOTICE '── AX0–AX7 كلها ناجحة ──';
 END $ax6$;
 
 DELETE FROM proc_supplier_registrations WHERE id='DG-AX0001';
