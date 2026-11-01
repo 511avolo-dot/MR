@@ -158,7 +158,12 @@ jobs:
         run: npm run test:purchase-workspace
 
   workspace-browser:
-    runs-on: ubuntu-latest
+    # ⚠️ مثبَّت على 24.04 ولا يُترَك ubuntu-latest: صورة العدّاء انتقلت إلى
+    #    Ubuntu 26.04، و`playwright install` بالإصدار المثبَّت (1.55.0) يرفضها
+    #    («Playwright does not support chromium on ubuntu26.04-x64») فيسقط
+    #    قبل أن يبدأ أيّ اختبار. والتثبيت يُعيد **البيئة نفسها** التي تحقّقت
+    #    عليها فحوص المتصفّح كلّها، بخلاف ترقية Playwright.
+    runs-on: ubuntu-24.04
     name: Purchase request workspace browser checks
     steps:
       - uses: actions/checkout@v4
