@@ -260,6 +260,7 @@ const NEEDED_FNS = [
   'prDocFetchBlob', 'prAuthHeader', 'prDocvList', 'prIsFinal', 'prCanRemoveAttachment', 'prFmtBytes',
   'prDocKindLabel', 'docvSourceBlob', 'docvBlobUrl',
   'prQueueGroup', 'prQueueSeq', 'prQueueSort', 'prAuditLabel', 'prPersonName', 'prAuditGroups',
+  'prStageKey', 'prStageStart', 'prStageInfo', 'prStageChip', 'prStageOverBy',
   // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
   'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
@@ -3555,6 +3556,8 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prWorkspaceQueueData'), grab('prCanCancel'),
       // بُعد موعد التوريد — دخل الطابور مجموعةً وفرزاً لا شارةً فقط.
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_STAGE_SLA'), grabConst('PR_STAGE_AGE_LABEL'), grab('prStageKey'),
+      grab('prStageStart'), grab('prStageInfo'), grab('prStageChip'), grab('prStageOverBy'),
       // أطوار ما بعد الاعتماد — ثلاث خانات صريحة (بلاغ المالك 2026-09-17).
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
       grab('prInExecution'), grab('prUnclaimed'), grab('prClaimedByMe'), grab('prInWorkQueue'),
@@ -3562,6 +3565,7 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     return new Function(src + `; return {STATE,
       prIsArchived, prArchiveCount, prWorkspaceQueueData, prCanCancel,
       prQueueGroup, prQueueSeq, prQueueSort, prNeedDays, prDueChip,
+      prStageInfo, prStageChip, prStageOverBy, PR_STAGE_SLA,
       set:(u,scoped,perms)=>{ STATE.currentUser=u; __scoped=!!scoped; __perms=perms||{}; } };`)();
   })();
 
@@ -3888,12 +3892,14 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_STAGE_SLA'), grabConst('PR_STAGE_AGE_LABEL'), grab('prStageKey'),
+      grab('prStageStart'), grab('prStageInfo'), grab('prStageChip'), grab('prStageOverBy'),
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
       grab('prInExecution'), grab('prUnclaimed'), grab('prInWorkQueue'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
     return new Function(src + `; return { prQueueGroup, prQueueSeq, prQueueSort, PR_QUEUE_GROUPS,
-      prNeedDays, prDueChip,
+      prNeedDays, prDueChip, prStageInfo, prStageChip, prStageOverBy, PR_STAGE_SLA,
       act:(ids)=>{ __act=new Set(ids||[]); } };`)();
   })();
 
@@ -4237,11 +4243,13 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       `function prWorkspaceNeedsAction(pr){ return __act.has(pr.id); }`,
       `function prIsArchived(pr){ return !!(pr && pr.archived_at); }`,
       grabConst('PR_FINAL_STATUSES'), grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_STAGE_SLA'), grabConst('PR_STAGE_AGE_LABEL'), grab('prStageKey'),
+      grab('prStageStart'), grab('prStageInfo'), grab('prStageChip'), grab('prStageOverBy'),
       grab('prIsFinal'), grab('prPoLinksOf'), grab('prProcLive'), grab('prAwaitingReceipt'),
       grab('prInExecution'), grab('prUnclaimed'), grab('prInWorkQueue'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
     ].join('\n\n');
-    return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS,
+    return new Function(src + `; return { prQueueGroup, prQueueSort, PR_QUEUE_GROUPS, prStageInfo, prStageChip, prStageOverBy, PR_STAGE_SLA,
       prNeedDays, prDueChip, act:(ids)=>{ __act=new Set(ids||[]); } };`)();
   })();
   const iso = (d) => { const t = new Date(); t.setDate(t.getDate() + d);
@@ -4268,49 +4276,104 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
     ['cancelled','rejected','closed'].every(st => Q.prDueChip({ status: st, needed_by: iso(-5) }) === null)
     && Q.prDueChip({ status:'approved', needed_by: iso(-5), archived_at: '2026-09-01' }) === null);
 
-  // ── التصنيف: مجموعة مستقلّة، وما بيدك يبقى أوّلاً ──
+  /* ── التصنيف: المعيار **عمر المرحلة** لا الموعد ──
+     ⚠️ هذه الثلاثة كانت تُرمّز المعيار القديم («فات الموعد أو يستحقّ غداً»)
+     فعضّت حين تغيّر الثابت بحقّ — فصُحِّحت للثابت الجديد لا الكودُ لها.
+     والسبب مقيس: «الموعد فات» يُشتعل على 68% من الطلبات الحيّة فلا يسمّي
+     شيئاً، و«تجاوز p90 مرحلته» يُسمّي 35% بمرحلتها وصاحبها. */
+  const daysAgo = n => new Date(Date.now() - n*86400000).toISOString();
   Q.act([]);
-  T('الطلب الذي فات موعده أو يستحقّ غداً يدخل مجموعة الموعد',
-    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'due'
-    && Q.prQueueGroup({ id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1) }) === 'due'
-    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'pricing', needed_by: iso(9) }) === 'unclaimed');
+  T('الطلب الذي تجاوز زمن مرحلته يدخل مجموعة التعثّر، والسائر في وقته لا',
+    // عمل المشتريات: عتبته 7 أيام
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(20) }) === 'due'
+    && Q.prQueueGroup({ id:'PR-2', status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(3) }) === 'execution'
+    // بانتظار البضاعة: عتبته 28 يوماً — فـ20 يوماً **ليست** تعثّراً هنا وهي تعثّر هناك
+    && Q.prQueueGroup({ id:'PR-3', status:'approved', workflow_state:'ordered',
+                     po_links:[{ po_number:'P.O-1', linked_at: daysAgo(20) }] }) === 'receiving');
+  T('والموعد لم يبقَ معياراً للتصنيف إطلاقاً',
+    Q.prQueueGroup({ id:'PR-4', status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(2),
+                     needed_by: iso(-40) }) === 'execution');
   Q.act(['PR-1']);
-  T('وما يحتاج إجراءك يبقى قبله مهما كان موعده',
-    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-1) }) === 'action');
+  T('وما يحتاج إجراءك يبقى قبله مهما كان عمر مرحلته',
+    Q.prQueueGroup({ id:'PR-1', status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(40) }) === 'action');
   Q.act([]);
-  T('والملغى يبقى منتهياً لا «فات موعده»',
-    Q.prQueueGroup({ id:'PR-4', status:'cancelled', workflow_state:'cancelled', needed_by: iso(-9) }) === 'closed');
+  T('والملغى يبقى منتهياً لا متعثّراً',
+    Q.prQueueGroup({ id:'PR-5', status:'cancelled', workflow_state:'cancelled',
+                     proc_status:'in_progress', proc_started_at: daysAgo(90) }) === 'closed');
 
-  // ── الفرز: داخل مجموعة الموعد **الأقرب استحقاقاً أوّلاً** لا الأحدث رقماً ──
+  // ── الفرز: داخل مجموعة التعثّر **الأشدّ تجاوزاً أوّلاً** لا الأحدث رقماً ──
   {
     const list = [
-      { id:'PR-2', status:'approved', workflow_state:'pricing', needed_by: iso(1)  },  // غداً، رقم أكبر
-      { id:'PR-1', status:'approved', workflow_state:'pricing', needed_by: iso(-4) },  // فات، رقم أصغر
-      { id:'PR-9', status:'approved', workflow_state:'pricing', needed_by: iso(40) },  // بعيد
+      { id:'PR-2', status:'approved', workflow_state:'pricing', proc_status:'in_progress', proc_started_at: daysAgo(9)  },
+      { id:'PR-1', status:'approved', workflow_state:'pricing', proc_status:'in_progress', proc_started_at: daysAgo(40) },
+      { id:'PR-9', status:'approved', workflow_state:'pricing', proc_status:'in_progress', proc_started_at: daysAgo(2)  },
     ];
     const order = Q.prQueueSort(list).map(x => x.id).join('|');
-    T('ما فات موعده يسبق ما يستحقّ غداً رغم أنّ رقمه أصغر', order === 'PR-1|PR-2|PR-9', order);
+    T('الأشدّ تجاوزاً يسبق الأقلّ رغم أنّ رقمه أصغر، والسائر في وقته آخراً',
+      order === 'PR-1|PR-2|PR-9', order);
   }
-  // ⚠️ وخارج مجموعة الموعد يبقى الفرز بالرقم عدديّاً (صفر انحدار على #112).
+  // ⚠️ وخارج مجموعة التعثّر يبقى الفرز بالرقم عدديّاً (صفر انحدار على #112).
   {
     const list = [
-      { id:'PR-9',  status:'approved', workflow_state:'pricing', needed_by: iso(60) },
-      { id:'PR-10', status:'approved', workflow_state:'pricing', needed_by: iso(60) },
+      { id:'PR-9',  status:'approved', workflow_state:'pricing', proc_status:'in_progress', proc_started_at: daysAgo(1) },
+      { id:'PR-10', status:'approved', workflow_state:'pricing', proc_status:'in_progress', proc_started_at: daysAgo(1) },
     ];
-    T('وفرز الأرقام العدديّ باقٍ خارج مجموعة الموعد',
+    T('وفرز الأرقام العدديّ باقٍ خارج مجموعة التعثّر',
       Q.prQueueSort(list).map(x => x.id).join('|') === 'PR-10|PR-9');
   }
 
-  // ── الواجهة: الشارة تصل البطاقة ولوحة الطلب، ولها أنماط دلاليّة ──
-  T('الشارة تُرسَم على بطاقة الطابور وعلى تاريخ الاحتياج في اللوحة',
-    (CODE.match(/prDueChip\(pr\)/g) || []).length >= 2
-    && /class="pr-work-due \$\{c\[1\]\}"/.test(CODE));
+  /* ── عمر المرحلة: العتبة لكل مرحلة من توزيعها، ولا شارة على السائر في وقته ── */
+  T('العتبات هي p90 المقيس لكل مرحلة لا عتبة واحدة للكلّ',
+    Q.PR_STAGE_SLA.approval === 1 && Q.PR_STAGE_SLA.unclaimed === 3
+    && Q.PR_STAGE_SLA.execution === 7 && Q.PR_STAGE_SLA.receiving === 28
+    && new Set(Object.values(Q.PR_STAGE_SLA)).size === 4);
+  T('لا شارة على طلبٍ داخل زمن مرحلته (شارةٌ على الكلّ ليست إنذاراً)',
+    Q.prStageChip({ status:'approved', workflow_state:'pricing',
+                    proc_status:'in_progress', proc_started_at: daysAgo(6) }) === null
+    && Q.prStageChip({ status:'approved', workflow_state:'ordered',
+                    po_links:[{ linked_at: daysAgo(27) }] }) === null);
+  T('والشارة تسمّي المرحلة وعمرها بصيغة الأيام العربية',
+    (() => { const c = Q.prStageChip({ status:'approved', workflow_state:'ordered',
+                                       po_links:[{ linked_at: daysAgo(40) }] });
+             return !!c && c[0].includes('بانتظار استلام البضاعة') && /40\s*يوماً/.test(c[0]); })());
+  T('وتتدرّج: ضِعف العتبة أحمر وما دونه كهرمانيّ',
+    (Q.prStageChip({ status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(9)  })||[])[1] === 'warn'
+    && (Q.prStageChip({ status:'approved', workflow_state:'pricing',
+                     proc_status:'in_progress', proc_started_at: daysAgo(40) })||[])[1] === 'danger');
+  T('ولا شارة على منتهٍ أو مؤرشَف أو طورٍ غير معلوم',
+    ['closed','cancelled','rejected','returned'].every(st =>
+       Q.prStageChip({ status: st, proc_status:'in_progress', proc_started_at: daysAgo(90) }) === null)
+    && Q.prStageChip({ status:'approved', proc_status:'in_progress',
+                       proc_started_at: daysAgo(90), archived_at:'2026-09-01' }) === null
+    && Q.prStageChip({ status:'draft' }) === null);
+  /* ⚠️ الصفّ السابق للموديل بلا `linked_at` فلا يُلفَّق له تاريخ — يسقط لبداية
+     عمل المشتريات، وبلا أي طابع لا حكم (لا شارة) بدل عمرٍ مخترَع. */
+  T('والرابط بلا طابع يسقط لبداية عمل المشتريات، وبلا طابع أصلاً لا حكم',
+    (() => { const c = Q.prStageChip({ status:'approved', workflow_state:'ordered',
+                                       po_number:'P.O-9', proc_started_at: daysAgo(40) });
+             return !!c && /40/.test(c[0]); })()
+    && Q.prStageChip({ status:'approved', workflow_state:'ordered', po_number:'P.O-9' }) === null);
+
+  /* ── الواجهة: الإنذار على البطاقة، والموعد معلومةٌ في اللوحة ──
+     ⚠️ المرساة **موضع كل شارة** لا عدد ورودها: العدّ كان يحتسب سطر التعريف
+     فيمرّ وإن لم تُرسَم الشارة إطلاقاً. */
+  T('بطاقة الطابور تحمل شارة عمر المرحلة لا شارة الموعد',
+    /class="pr-work-request\$\{[\s\S]{0,1400}prStageChip\(pr\)/.test(CODE)
+    && !/class="pr-work-request\$\{[\s\S]{0,1400}prDueChip\(pr\)/.test(CODE));
+  T('وتاريخ الاحتياج في اللوحة يحمل شارة الموعد (معلومةٌ في سياقها)',
+    /تاريخ الاحتياج[\s\S]{0,260}prDueChip\(pr\)/.test(CODE));
   T('وأنماطها من رموز اللوحة الدلاليّة لا ألوان مخترَعة',
     /\.pr-work-due\.danger,\.pr-work-tag\.danger\{background:var\(--prw-red-bg\)/.test(HTML)
     && /\.pr-work-due\.warn,\.pr-work-tag\.warn\{background:var\(--prw-warn-bg\)/.test(HTML));
-  T('ومجموعة الموعد معرَّفة في الطابور بعد «يحتاج إجراءك»',
+  T('ومجموعة التعثّر معرَّفة في الطابور بعد «يحتاج إجراءك» وعنوانها يصف المعيار',
     Q.PR_QUEUE_GROUPS.findIndex(g => g.key === 'due') === 1
-    && Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
+    && /مرحلت|الزمن المعتاد/.test(Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label)
+    && !Q.PR_QUEUE_GROUPS.find(g => g.key === 'due').label.includes('موعد التوريد'));
 
   /* ── شريط «ما ينقص قبل الإرسال» ──
      النموذج على الجوال 5756px وزرّ الإرسال في قاعه، فمن ينسى بنداً يهبط كل ذلك
@@ -4462,7 +4525,9 @@ G('٢٩) حملة التسجيل + إكمال بطاقة المورد');
       grab('prProcLive'), grab('prAwaitingReceipt'), grab('prInExecution'), grab('prUnclaimed'),
       grab('prInWorkQueue'), grab('prClaimedByMe'), grab('prOpenQuestion'), grab('prDiscussionFlag'), grab('prAwaitingReply'),
       grab('prWorkspaceNeedsAction'), grab('prWorkspaceIsBlocked'),
-      grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'),
+      grab('prNeedDays'), grab('prDueLive'), grab('prDueChip'), grab('poDays'),
+      grabConst('PR_STAGE_SLA'), grabConst('PR_STAGE_AGE_LABEL'), grab('prStageKey'),
+      grab('prStageStart'), grab('prStageInfo'), grab('prStageChip'), grab('prStageOverBy'),
       grabConst('PR_QUEUE_GROUPS'), grab('prQueueGroup'), grab('prQueueSeq'), grab('prQueueSort'),
       grab('prWorkspaceVisible'), grab('prWorkspaceQueueData'),
       grab('prReceivingCardHTML'), grab('prReplyCardHTML'),

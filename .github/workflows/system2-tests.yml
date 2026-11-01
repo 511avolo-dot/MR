@@ -49,6 +49,7 @@ on:
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
       - 'scripts/e2e/pr-request-flow-buckets.mjs'
+      - 'scripts/e2e/pr-stage-age.mjs'
       - 'scripts/e2e/finance-email-followup.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/po-excel-paste-export.mjs'
@@ -105,6 +106,7 @@ on:
       - 'scripts/e2e/pr-attachments.mjs'
       - 'scripts/e2e/pr-workspace-clarity.mjs'
       - 'scripts/e2e/pr-request-flow-buckets.mjs'
+      - 'scripts/e2e/pr-stage-age.mjs'
       - 'scripts/e2e/finance-email-followup.mjs'
       - 'scripts/e2e/scoped-staff-screens.mjs'
       - 'scripts/e2e/po-excel-paste-export.mjs'
@@ -204,6 +206,7 @@ jobs:
           node scripts/e2e/pr-attachments.mjs
           node scripts/e2e/pr-workspace-clarity.mjs
           node scripts/e2e/pr-request-flow-buckets.mjs
+          node scripts/e2e/pr-stage-age.mjs
           node scripts/e2e/finance-email-followup.mjs
           node scripts/e2e/po-excel-paste-export.mjs
           node scripts/e2e/pr-print-one-page.mjs

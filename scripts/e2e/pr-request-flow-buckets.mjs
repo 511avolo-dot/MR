@@ -63,8 +63,13 @@ const seed = async (username, displayName, opts = {}) => page.evaluate(async (a)
                            decision: 'returned', comment: 'أضف عرض سعر ثالث',
                            approver: 'm.elsobky', approver_name: 'م.محمد السبكي', acted_at: '2026-09-16T08:00:00Z' }] }),
     // ② مستلَم تحت التنفيذ باسم مُستلِمه
+    /* ⚠️ الطابع **نسبيّ لا ثابت**: كان `2026-09-16` فصار عمره 46 يوماً، فبعد
+       بند ④ (عمر المرحلة) يُحسَب الطلب متعثّراً لا «تحت التنفيذ» — وهو حكمٌ
+       صحيح على الحالة، لكنّه يُخرج الحالة عن الطور الذي يقصده هذا التأكيد.
+       والملف نفسه يوصي في ترويسته بالمواعيد المحسوبة من اليوم. */
     mk(22, { status: 'approved', workflow_state: 'pricing', proc_status: 'in_progress',
-             proc_started_by: 'proc1', proc_started_at: '2026-09-16T09:00:00Z' }),
+             proc_started_by: 'proc1',
+             proc_started_at: new Date(Date.now() - 2 * 86400000).toISOString() }),
     // ② بانتظار من يستلمه
     mk(23, { status: 'approved', workflow_state: 'pricing' }),
     // ③ صدر أمره وينتظر استلام البضاعة

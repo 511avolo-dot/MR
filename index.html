@@ -13516,6 +13516,75 @@ function prDueChip(pr){
   if(d === 1) return ['موعد التوريد غداً', 'warn'];
   return ['باقٍ '+poDays(d)+' على التوريد', 'warn'];
 }
+
+/* ══════════════ عمر المرحلة — الإنذار، والموعد معلومةٌ لا إنذار ══════════════
+   ⚠️ «الموعد فات» لا يصلح إنذاراً: مقيس على قاعدة الإنتاج (2026-11-01) أنّه
+   يُشتعل على **25 من 37 طلباً حيّاً (68%)**، وحتى عند «تجاوز الموعد بأكثر من
+   30 يوماً» يبقى 10 من 37 (27%). لا فجوة في التوزيع — الموعد ماضٍ لأنّ الدورة
+   نفسها 22 يوماً، فالشارة تصف حالةَ النظام لا شذوذاً فيه. **والسؤال الخطأ لا
+   تُصلحه عتبة:** «هل فات الموعد؟» يصحّ على ثلثي العمل ولا يسمّي فاعلاً، و«كم
+   بقي الطلب في مرحلته» يسمّيه.
+
+   وعتبة كل مرحلة **p90 الذي أنتجه النظام بنفسه** — مقيسة على المدد الحقيقية
+   للطلبات المنتهية (من طوابع الدخول/الخروج لا من «الزمن حتى الآن»، وهي غلطة
+   قياس وقعتُ فيها أوّلاً فتكدّست كل المراحل عند 45–47 يوماً):
+     اعتماد الحاجة p90=23.7 ساعة (n=71) · إذن التسعير 48.2 ساعة (n=65)
+     بانتظار استلام المشتريات 2.7 يوم (n=63) · عمل المشتريات حتى الربط 7.0 (n=56)
+     من الربط حتى الإقفال 27.4 يوم (n=22)
+   فالعتبات تقع على أرقام مستديرة طبيعيّاً، ومعناها «تجاوز تسعة أعشار تاريخ
+   النظام في هذه المرحلة» لا ذوقاً. **الأثر المقيس: 68% ← 35% (13 من 37)**،
+   موزّعة 10 بانتظار البضاعة و3 لدى المشتريات وصفر على الاعتماد. */
+const PR_STAGE_SLA = { approval:1, unclaimed:3, execution:7, receiving:28 };
+const PR_STAGE_AGE_LABEL = {
+  approval:  'بانتظار قرار الاعتماد',
+  unclaimed: 'لم يبدأ العمل عليه',
+  execution: 'لدى المشتريات',
+  receiving: 'بانتظار استلام البضاعة',
+};
+/* ⚠️ ترتيب الفحوص **نفسُ ترتيب `prQueueGroup`** (الاستلام قبل التنفيذ) كي لا
+   تتفارق خانةُ الطلب عن شارته — والترتيب هناك مقصود وموثَّق. */
+function prStageKey(pr){
+  if(!prDueLive(pr)) return null;                       // منتهٍ أو مؤرشَف ⇒ لا مرحلة جارية
+  if(['returned','rejected','cancelled','closed'].includes(pr.status)) return null;
+  if(pr.status==='in_review') return 'approval';
+  if(prAwaitingReceipt(pr)) return 'receiving';
+  if(prInExecution(pr))     return 'execution';
+  if(prUnclaimed(pr))       return 'unclaimed';
+  return null;                                          // طورٌ غير معلوم ⇒ لا حكم
+}
+function prStageStart(pr, key){
+  const t = v => { const n = Date.parse(String(v||'')); return isNaN(n) ? null : n; };
+  if(key==='approval')  return t(pr.maintenance_approved_at) || t(pr.submitted_at) || t(pr.created_at);
+  if(key==='unclaimed') return t(pr.pricing_authorized_at) || t(pr.submitted_at) || t(pr.created_at);
+  if(key==='execution') return t(pr.proc_started_at) || t(pr.pricing_authorized_at) || t(pr.submitted_at);
+  if(key==='receiving'){
+    /* أوّل ربط هو بداية انتظار البضاعة. والصفّ السابق للموديل بلا `linked_at`
+       (انظر `prPoLinksOf`) فيسقط لبداية عمل المشتريات — لا يُلفَّق له تاريخ. */
+    const ts = prPoLinksOf(pr).map(l => t(l && l.linked_at)).filter(v => v !== null);
+    return ts.length ? Math.min.apply(null, ts)
+                     : (t(pr.proc_started_at) || t(pr.pricing_authorized_at) || t(pr.submitted_at));
+  }
+  return null;
+}
+/* {key,label,days,sla,over} أو null. العمر بالأيام الكاملة. */
+function prStageInfo(pr){
+  const key = prStageKey(pr); if(!key) return null;
+  const start = prStageStart(pr, key); if(start === null) return null;
+  const days = Math.max(0, Math.floor((Date.now() - start) / 86400000));
+  const sla = PR_STAGE_SLA[key];
+  return { key, label: PR_STAGE_AGE_LABEL[key], days, sla, over: days > sla };
+}
+/* [نصّ, صنف] — **ولا شارة إلا على المتجاوز**: شارةٌ على كل طلب ليست إنذاراً. */
+function prStageChip(pr){
+  const i = prStageInfo(pr);
+  if(!i || !i.over) return null;
+  return [`${i.label}: ${poDays(i.days)}`, i.days > i.sla * 2 ? 'danger' : 'warn'];
+}
+/* كم تجاوز عتبته — للفرز: الأشدّ تجاوزاً أوّلاً. */
+function prStageOverBy(pr){
+  const i = prStageInfo(pr);
+  return (i && i.over) ? (i.days - i.sla) : -1;
+}
 function prAgeBadge(pr){
   if(pr.status!=='in_review') return '';
   const d = prAgeDays(pr);
@@ -13815,9 +13884,11 @@ function prWorkspaceQueueData(mode){
    الأحدث أوّلاً **برقم الطلب عدديّاً** (لا نصّيّاً — درس تسلسل أوامر الشراء). */
 const PR_QUEUE_GROUPS = [
   {key:'action',  label:'يحتاج إجراءك الآن'},
-  /* ⚠️ الموعد مجموعةٌ لا شارة: طلبٌ يستحقّ غداً يجب أن يُرى قبل طلبٍ يستحقّ بعد
-     ثلاثة أشهر مهما كان رقمه. ويقع **بعد** «يحتاج إجراءك» فما بيدك يبقى أوّلاً. */
-  {key:'due',     label:'موعد التوريد فات أو قارب'},
+  /* ⚠️ التعثّر الزمنيّ مجموعةٌ لا شارة: طلبٌ تجاوز زمن مرحلته يجب أن يُرى قبل
+     طلبٍ يسير في وقته مهما كان رقمه. ويقع **بعد** «يحتاج إجراءك» فما بيدك
+     يبقى أوّلاً. (كان المعيار «الموعد فات» فيُشتعل على 68% — انظر
+     `PR_STAGE_SLA`؛ صار «تجاوز p90 مرحلته» فيُسمّي 35% بمرحلتها.) */
+  {key:'due',     label:'تجاوز الزمن المعتاد لمرحلته'},
   {key:'blocked', label:'متعثّر — أُعيد أو رُفض'},
   {key:'review',  label:'قيد الاعتماد لدى غيرك'},
   {key:'unclaimed',label:'بانتظار استلام المشتريات'},
@@ -13831,7 +13902,7 @@ const PR_QUEUE_GROUPS = [
 function prQueueGroup(pr){
   if(prWorkspaceNeedsAction(pr)) return 'action';
   if(['returned','rejected'].includes(pr.status)) return 'blocked';
-  { const d = prDueLive(pr) ? prNeedDays(pr) : null; if(d!==null && d<=1) return 'due'; }
+  if(prStageOverBy(pr) >= 0) return 'due';
   if(['cancelled','closed'].includes(pr.status)) return 'closed';
   if(pr.status==='in_review') return 'review';
   /* ⚠️ الترتيب هنا مقصود: صدور أمر الشراء يُقدَّم على طور التنفيذ. طلبٌ
@@ -13848,13 +13919,12 @@ function prQueueSeq(pr){
 }
 function prQueueSort(list){
   const rank=g=>Math.max(0,PR_QUEUE_GROUPS.findIndex(x=>x.key===g));
-  /* ⚠️ داخل مجموعة الموعد يُقلَب المعيار: **الأقرب استحقاقاً أوّلاً** لا الأحدث
-     رقماً. فرزٌ برقم الطلب هناك يضع ما فات موعده تحت ما يستحقّ غداً. */
-  const due=pr=>{ const d=prDueLive(pr)?prNeedDays(pr):null; return d===null?1e9:d; };
+  /* ⚠️ داخل مجموعة التعثّر يُقلَب المعيار: **الأشدّ تجاوزاً أوّلاً** لا الأحدث
+     رقماً. فرزٌ برقم الطلب هناك يضع ما تجاوز عتبته بشهر تحت ما تجاوزها بيوم. */
   return list.slice().sort((a,b)=>{
     const ga=prQueueGroup(a), gb=prQueueGroup(b);
     const r=rank(ga)-rank(gb); if(r) return r;
-    if(ga==='due'){ const t=due(a)-due(b); if(t) return t; }
+    if(ga==='due'){ const t=prStageOverBy(b)-prStageOverBy(a); if(t) return t; }
     return prQueueSeq(b)-prQueueSeq(a);
   });
 }
@@ -13938,7 +14008,9 @@ function prWorkspaceHTML({view,mode,requests,selected,canCreatePR}){
       <span class="pr-work-request-title">${escapeHtml(pr.title||'طلب شراء')}</span>
       <span class="pr-work-request-proj" title="المشروع / الجهة">📍 ${escapeHtml(poProjectText(pr))}</span>
       <span class="pr-work-request-meta"><span><i class="pr-work-dot ${stage[1]}"></i>${escapeHtml(stage[0])}</span><span>${escapeHtml(next[0])}</span></span>
-      ${(()=>{const c=prDueChip(pr);return c?`<span class="pr-work-due ${c[1]}">⏳ ${escapeHtml(c[0])}</span>`:'';})()}
+      ${/* بطاقة الطابور تحمل **الإنذار** (عمر المرحلة المتجاوز) لا الموعد:
+            الموعد معلومةٌ تبقى في تفاصيل الطلب حيث تُقرأ في سياقها. */''}
+      ${(()=>{const c=prStageChip(pr);return c?`<span class="pr-work-due ${c[1]}">⏳ ${escapeHtml(c[0])}</span>`:'';})()}
       ${(()=>{const f=prDiscussionFlag(pr);return f?`<span class="pr-work-tag ${f[1]}">💬 ${escapeHtml(f[0])}</span>`:'';})()}
       ${pr.status==='returned'&&prCanEditRequest(pr)?`<span class="pr-work-tag info">↩ اضغط للتعديل وإعادة الإرسال</span>`:''}
     </button>`;
