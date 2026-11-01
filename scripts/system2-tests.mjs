@@ -6109,6 +6109,48 @@ G('٥١) اللغتان صنفٌ واحد + التصنيف يُستنتَج لا
   STATE.items = savedItems;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ٥٢ — عدّاء فحوص المتصفّح مثبَّت الصورة
+   ⚠️ صورة `ubuntu-latest` انتقلت إلى Ubuntu 26.04، و`playwright install`
+      بالإصدار المثبَّت في package.json يرفضها فيسقط **قبل** أن يبدأ أيّ
+      اختبار — أي تصير كل فحوص المتصفّح حمراء بسببٍ لا علاقة له بالشيفرة.
+      فأي وظيفة تُثبِّت المتصفّح تُثبِّت صورة عدّائها كذلك.
+   ═══════════════════════════════════════════════════════════════ */
+G('٥٢ — عدّاء فحوص المتصفّح مثبَّت الصورة');
+{
+  const wfDir = path.join(ROOT, '.github/workflows');
+  const files = fs.readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f));
+  // كل وظيفة تُنشئ كتلة تبدأ بسطرٍ بمسافتين بادئتين وتنتهي بـ':'
+  const offenders = [];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(wfDir, f), 'utf8');
+    const lines = src.split('\n');
+    let job = null, runner = null, installs = false;
+    const flush = () => {
+      if (job && installs && !/ubuntu-\d/.test(runner || '')) offenders.push(`${f}:${job} (${runner || 'بلا runs-on'})`);
+    };
+    for (const ln of lines) {
+      const m = /^  ([A-Za-z0-9_-]+):\s*$/.exec(ln);
+      if (m) { flush(); job = m[1]; runner = null; installs = false; continue; }
+      if (!job) continue;
+      const r = /^\s*runs-on:\s*(\S+)/.exec(ln);
+      if (r) runner = r[1];
+      if (/playwright\s+install/.test(ln)) installs = true;
+    }
+    flush();
+  }
+  T('كل وظيفة تُثبِّت Chromium تُثبِّت صورة عدّائها (لا ubuntu-latest)',
+    offenders.length === 0, offenders.join(' · '));
+
+  // ولا يُفلت الحارس لأنّ لا وظيفة تُثبِّت المتصفّح أصلاً
+  let withInstall = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(wfDir, f), 'utf8');
+    withInstall += (src.match(/playwright\s+install/g) || []).length;
+  }
+  T('والحارس ليس فراغيّاً: توجد وظائف تُثبِّت المتصفّح فعلاً', withInstall >= 3, `العدد ${withInstall}`);
+}
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
