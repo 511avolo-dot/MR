@@ -17,6 +17,11 @@
  *    في النموذج أصلاً. (محروس بتأكيد.)
  */
 
+import {
+  INVITE_AUTO_KEY, inviteRegisteredFn, inviteEmailOf,
+  inviteSendsFromAudit, inviteNextStage, supplierInviteEmail,
+} from './_supplier-invite.js';
+
 const TOKEN_TTL_DAYS = 180;                 // الحملة تمتدّ أسابيع — رابط قصير العمر يُحبِط المورّد
 const MAX_BATCH = 200;                      // سقف السكّ في الطلب الواحد
 const SUP_ID_RE = /^[A-Za-z0-9_-]{3,64}$/;  // شكل معرّف `proc_suppliers.id`
@@ -131,9 +136,176 @@ async function verifyStaff(env, request) {
   } catch (_) { return null; }
 }
 
-/* ── GET: فحص صحّة · أو تعبئة مسبقة برمز ────────────────────────────────── */
+/* ── الإرسال الآليّ للدعوات (بريد) ──────────────────────────────────────────
+   المشكلة المقيسة: 132 مورداً بلا تسجيل، ودعوة واحدة أُرسلت في شهرين لأنّ كل
+   دعوة نقرة يدويّة. الكنس يرسل **المرحلة المستحقّة** لكل مورد له بريد صالح:
+   الدعوة ← تذكير بعد 7 أيام ← تذكير أخير بعد 14 — ثمّ يتوقّف، ويتوقّف فوراً
+   بمجرّد أن يسجّل المورّد (بأي حالة).
+
+   ⚠️ مُطفأ افتراضاً، و**يفشل مغلقاً**: لا إرسال إلا إن قرأ الإعداد
+      `proc_settings.supplier_invite_auto.enabled === true` فعلاً. تعذّر القراءة
+      = لا إرسال (رسالة لمورّدين خارجيين باسم الشركة لا تُرسَل على تخمين).
+   ⚠️ وتعذّر قراءة التسجيلات أو سجلّ الإرسال = لا إرسال أيضاً: الأولى تعني دعوة
+      من سجّل، والثانية تعني تكرار رسالة أُرسلت.
+   ⚠️ المرحلة لكل **مورد** لا لكل قناة: دعوة واتساب أرسلها موظّف تُحتسَب
+      «الدعوة»، فالبريد التالي هو التذكير لا دعوة ثانية.
+   الواتساب لا يُرسَل آليّاً: لا واجهة WhatsApp Business مهيّأة، و`wa.me` يفتح
+   محادثة في جهاز الموظّف — فهو طابور بالمرحلة في الواجهة لا إرسال خادميّ. */
+const SWEEP_MIN_HOURS = 20;     // تشغيلة واحدة يوميّاً ولو نُودي كل دقيقة
+const SWEEP_MAX_PER_RUN = 40;   // سقف الرسائل في التشغيلة (مزوّد البريد يحدّ المعدّل)
+const SWEEP_SPACING_MS = 300;
+
+function fromAddress(env) {
+  const v = String(env.NOTIFY_FROM || '').trim();
+  if (v && !/no-?reply/i.test(v)) return v;
+  return 'Aldeyabi Group <notifications@suppliers.aldeyabi.com>';
+}
+function replyTo(env) {
+  return String(env.NOTIFY_REPLY_TO || 'supply@aldeyabi.com').trim();
+}
+function htmlToText(html) {
+  return String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+async function audit(env, entry) {
+  try {
+    const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+    await fetch(`${base}/rest/v1/proc_audit_log`, {
+      method: 'POST', headers: { ...svcHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify([entry]),
+    });
+  } catch (_) { /* أفضل جهد */ }
+}
+
+/* هل الأتمتة مفعّلة؟ ← true | false | null (تعذّرت القراءة) */
+async function autoEnabled(env) {
+  try {
+    const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+    const r = await fetch(`${base}/rest/v1/proc_settings?key=eq.${INVITE_AUTO_KEY}&select=value`,
+      { headers: svcHeaders(env) });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    if (!Array.isArray(rows) || !rows[0]) return false;
+    let v = rows[0].value;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch (_) { v = null; } }
+    return !!(v && v.enabled === true);
+  } catch (_) { return null; }
+}
+
+async function sweepInvites(env, request) {
+  const url = new URL(request.url);
+  const secret = String(env.CRON_SECRET || '').trim();
+  const auth = request.headers.get('authorization') || '';
+  const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : String(url.searchParams.get('key') || '');
+
+  // مساران كـ`doc-renew.js`: الكرون بالسرّ · أو نبضة كسولة من جلسة موظّف same-origin
+  let by = '';
+  if (secret && given && timingSafeEq(given, secret)) by = 'cron';
+  if (!by && sameOrigin(request) && await verifyStaff(env, request)) by = 'staff';
+  if (!by) return json({ error: 'غير مصرّح' }, 401);
+  if (!configured(env) || !env.RESEND_API_KEY || !tokenSecret(env)) {
+    return json({ error: 'الخدمة غير مهيّأة', reason: 'not_configured' }, 503);
+  }
+
+  const enabled = await autoEnabled(env);
+  if (enabled === null) return json({ ok: false, skipped: 'settings_unreadable' }, 502);
+  if (!enabled) return json({ ok: true, skipped: 'disabled' });
+
+  const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+  const force = url.searchParams.get('force') === '1' && by === 'cron';
+  if (!force) {
+    try {
+      const r = await fetch(`${base}/rest/v1/proc_audit_log?entity_type=eq.supplier_invite&action=eq.sweep` +
+        `&ts=gte.${encodeURIComponent(new Date(Date.now() - SWEEP_MIN_HOURS * 3600000).toISOString())}` +
+        `&select=id&limit=1`, { headers: svcHeaders(env) });
+      // تعذّر قراءة الخانق ⇒ لا إرسال (الخانق هو ما يمنع الإغراق)
+      if (!r.ok) return json({ ok: false, skipped: 'throttle_unreadable' }, 502);
+      const rows = await r.json();
+      if (Array.isArray(rows) && rows.length) return json({ ok: true, skipped: 'throttled' });
+    } catch (_) { return json({ ok: false, skipped: 'throttle_unreadable' }, 502); }
+  }
+
+  let sups = [], regs = [], auditRows = [];
+  try {
+    const sr = await fetch(`${base}/rest/v1/proc_suppliers?select=id,name,email,commercial_reg,tax_id&limit=5000`,
+      { headers: svcHeaders(env) });
+    if (!sr.ok) return json({ error: 'تعذّر جلب الموردين' }, 502);
+    sups = await sr.json();
+
+    const getRegs = (c) => fetch(`${base}/rest/v1/proc_supplier_registrations?select=${c}&limit=5000`,
+      { headers: svcHeaders(env) });
+    let rr = await getRegs('commercial_reg,vat_number,legal_name_ar,link_supplier_id');
+    if (!rr.ok) rr = await getRegs('commercial_reg,vat_number,legal_name_ar');
+    if (!rr.ok) return json({ error: 'تعذّر جلب التسجيلات' }, 502);
+    regs = await rr.json();
+
+    const ar = await fetch(`${base}/rest/v1/proc_audit_log?or=(and(entity_type.eq.supplier_invite,action.eq.notify),` +
+      `and(entity_type.eq.supplier,action.eq.supplier_invite_wa))&select=entity_id,action,new_value,ts&limit=10000`,
+      { headers: svcHeaders(env) });
+    if (!ar.ok) return json({ error: 'تعذّر جلب سجلّ الإرسال' }, 502);
+    auditRows = await ar.json();
+  } catch (_) { return json({ error: 'تعذّر الاتصال بقاعدة البيانات' }, 502); }
+
+  const isRegistered = inviteRegisteredFn(regs);
+  const sends = inviteSendsFromAudit(auditRows);
+  const now = Date.now();
+  const due = [];
+  for (const s of (Array.isArray(sups) ? sups : [])) {
+    if (!s || !SUP_ID_RE.test(String(s.id || ''))) continue;
+    if (isRegistered(s)) continue;
+    const to = inviteEmailOf(s);
+    if (!to) continue;
+    const next = inviteNextStage(sends.get(String(s.id)), now);
+    if (next.done || !next.due) continue;
+    due.push({ s, to, next });
+  }
+  // الأقدم استحقاقاً أوّلاً — فلا يحجب السقفُ تذكيراً مستحقّاً منذ أيام خلف دعوات جديدة
+  due.sort((a, b) => a.next.dueAt - b.next.dueAt);
+
+  const origin = publicOrigin(env, request);
+  const exp = Math.floor(now / 1000) + TOKEN_TTL_DAYS * 86400;
+  let sent = 0; const failures = [];
+  for (const d of due.slice(0, SWEEP_MAX_PER_RUN)) {
+    const t = await signToken(env, { k: 'sup-invite', s: String(d.s.id), e: exp });
+    const link = `${origin}/register?s=${t}`;
+    const { subject, html } = supplierInviteEmail(d.s.name, link, d.next.stage);
+    try {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: fromAddress(env), to: [d.to], subject, html,
+                               text: htmlToText(html), reply_to: replyTo(env) }),
+      });
+      if (!r.ok) { failures.push(String(d.s.id)); continue; }
+    } catch (_) { failures.push(String(d.s.id)); continue; }
+    sent++;
+    await audit(env, {
+      username: 'system', display_name: 'دعوة موردين آليّة', user_role: 'system',
+      action: 'notify', entity_type: 'supplier_invite', entity_id: String(d.s.id),
+      new_value: { stage: d.next.stage, channel: 'email', to: d.to, name: d.s.name || '' },
+      meta: { kind: 'supplier_invite', scheduled: true, by },
+    });
+    await new Promise((z) => setTimeout(z, SWEEP_SPACING_MS));
+  }
+
+  await audit(env, {
+    username: 'system', display_name: 'دعوة موردين آليّة', user_role: 'system',
+    action: 'sweep', entity_type: 'supplier_invite', entity_id: 'sweep',
+    new_value: { candidates: due.length, sent, failed: failures.length, by },
+    meta: { kind: 'supplier_invite_sweep', by },
+  });
+  return json({ ok: true, by, candidates: due.length, sent, failed: failures.length,
+                capped: due.length > SWEEP_MAX_PER_RUN });
+}
+
+/* ── GET: فحص صحّة · أو تعبئة مسبقة برمز · أو `?sweep=1` ──────────────────── */
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
+  if (url.searchParams.get('sweep') === '1') return sweepInvites(env, request);
   const token = url.searchParams.get('s');
 
   if (!token) {
@@ -144,6 +316,8 @@ export async function onRequestGet({ request, env }) {
         supabase_url: !!env.SUPABASE_URL,
         service_key: !!env.SUPABASE_SERVICE_ROLE_KEY,
         token_secret: !!tokenSecret(env),
+        resend: !!env.RESEND_API_KEY,
+        cron_secret: !!String(env.CRON_SECRET || '').trim(),
       },
     });
   }
@@ -162,6 +336,7 @@ export async function onRequestGet({ request, env }) {
 
 /* ── POST: سكّ روابط دعوة (موظّف مُصادَق) ───────────────────────────────── */
 export async function onRequestPost({ request, env }) {
+  if (new URL(request.url).searchParams.get('sweep') === '1') return sweepInvites(env, request);
   if (!sameOrigin(request)) return json({ error: 'غير مصرّح' }, 401);
   if (!configured(env)) return json({ error: 'not_configured' }, 503);
   if (!tokenSecret(env)) return json({ error: 'not_configured' }, 503);

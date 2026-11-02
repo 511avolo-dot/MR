@@ -262,7 +262,7 @@ const NEEDED_FNS = [
   'prQueueGroup', 'prQueueSeq', 'prQueueSort', 'prAuditLabel', 'prPersonName', 'prAuditGroups',
   'prStageKey', 'prStageStart', 'prStageInfo', 'prStageChip', 'prStageOverBy',
   // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
-  'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
+  'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regCampSendsFromAudit', 'regCampNextStage', 'regCampEmailOf', 'regCampWaDue', 'regCampStatus', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
@@ -300,18 +300,21 @@ const NEEDED_FNS = [
   'siItemMatches', 'histRowMatches', 'priceAgeInfo', 'priceDeviationHint',
   // دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
   'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'siImportResultToast', 'itemsVisibleList', 'histIsOrphan',
+  // تصنيف الموردين: التصفّح بما يعمل فيه المورد (مُعلَن + مُثبَت بعروض أسعار)
+  'supCatIndex', 'supCatToken', 'supSplitSpecialty', 'supEvidenceIndex', 'supCatProfile', 'supInCategory', 'supCardCatsHtml',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
-const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED', '_supCatIdx', '_supEvIdx', '_supCat', 'REGCAMP_SENDS', 'REGCAMP_AUTO'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['REGCAMP_STAGES', 'REGCAMP_AUTO_KEY', 'SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
+  'SUP_SECTORS', 'SUP_CAT_NONE', 'SUP_CAT_PREFIX_MIN', 'SUP_CAT_SYNONYMS', '_supProfCache', 'SUP_CARD_CATS',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
   'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL',
   // مرفقات طلب الشراء — فضاء مفاتيح مستقلّ بنقطة خادمية أخرى
@@ -1136,11 +1139,14 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /const SUP_PAGE\s*=\s*\d+/.test(CODE) && CODE.includes('slice(0, _supShown)') && CODE.includes('function supShowMore'));
   T('يُعلَن المجموع فلا يبدو الباقي مفقوداً',
     CODE.includes("getElementById('sup-count')") && HTML.includes('id="sup-count"'));
-  T('مُنتقي التخصص يُعاد بناؤه مع تغيّر القائمة',
-    /sel\.options\.length\s*-\s*1\s*!==\s*specs\.length/.test(CODE));
-  T('مستمعا البحث والتخصص لا يمرّران الحدث كمعامل',
+  /* مُنتقي «كل التخصصات» أُزيل 2026-11-02 (100 قيمة مدموجة بفاصلة بمطابقة تامّة) —
+     حلّ محلّه شريط تصنيفات يُعاد رسمه مع **كل** رسم ويعُدّ على النتائج الحاليّة. */
+  T('شريط التصنيفات يُرسَم مع كل رسم وقبل مرشّح التصنيف (العدّاد على النتائج الحاليّة)',
+    /supRenderCatRail\(list\);[\s\S]{0,120}if\(_supCat\) list = list\.filter\(s => supInCategory\(supCatProfile\(s\), _supCat\)\)/.test(CODE));
+  T('مستمع البحث لا يمرّر الحدث كمعامل · ولا مُنتقي تخصص بمطابقة تامّة',
     CODE.includes("addEventListener('input',()=>renderSuppliers())") &&
-    CODE.includes("addEventListener('change',()=>renderSuppliers())"));
+    !/addEventListener\([^)]*,\s*renderSuppliers\)/.test(CODE) &&
+    !CODE.includes("s.specialty===specFilter") && !HTML.includes('id="sup-specialty"'));
 
   // متابعة صلاحية الوثائق النظامية
   const day = 86400000, iso = (d) => new Date(Date.now() + d*day).toISOString().slice(0,10);
@@ -2123,7 +2129,7 @@ G('٢٦) تركيب قائمة الموردين');
   T('الشاشة مربوطة: مُنتقي + تصفية + مفتاح إعادة الرسم',
     /id="sup-gaps"/.test(HTML) && /gapFilter\s*=\s*document\.getElementById\('sup-gaps'\)/.test(CODE) &&
     /list = list\.filter\(s=>supGapMatch\(s, gapFilter\)\)/.test(CODE) &&
-    /key = raw \+ '\\u0000' \+ specFilter \+ '\\u0000' \+ sort \+ '\\u0000' \+ gapFilter/.test(CODE));
+    /key = raw \+ '\\u0000' \+ _supCat \+ '\\u0000' \+ sort \+ '\\u0000' \+ gapFilter/.test(CODE));
   T('الشارة تفتح نموذج التعديل مباشرةً ولا تفتح بطاقة المورد',
     /function supFixSupplier\(name\)\{[\s\S]{0,200}openEditSupplier\(s\)/.test(CODE) &&
     /event\.stopPropagation\(\);supFixSupplier\(/.test(CODE));
@@ -6439,6 +6445,116 @@ await (async () => {
     /actionable\s*\)\s*;/.test(CODE) || /badge\.textContent\s*=\s*actionable/.test(CODE));
   T('ولا يبقى في الشيفرة إسكاتٌ جماعيّ بلا قائمة معرّفات',
     !/update\(\{read:true\}\)\s*\.eq\('recipient'[^\n]*\.eq\('read',\s*false\)/.test(CODE));
+})();
+
+G('٥٥ — الموردون: تصفّح بالتصنيف + دعوة آليّة بمراحل');
+await (async () => {
+  const { supCatToken, supSplitSpecialty, supCatProfile, supInCategory, supMatches, supHaystack,
+          regCampNextStage, regCampSendsFromAudit, regCampEmailOf, regCampWaDue, regCampBuild,
+          regCampMessage, regCampStatus, supKeyStrong, REGCAMP_STAGES } = api;
+  const SAVED = { items: STATE.items, history: STATE.history, suppliers: STATE.suppliers };
+
+  /* ── (أ) خريطة التخصص: قاطعة فقط، والملتبس لا يُخمَّن ── */
+  T('تصنيف معتمد بنصّه يطابق نفسه', supCatToken('السباكة والصرف الصحي')[0] === 'السباكة والصرف الصحي');
+  T('كتابة حرّة قديمة تُطابَق بمرادفها («سباكة»)', supCatToken('سباكة')[0] === 'السباكة والصرف الصحي');
+  T('بلا همزة تُطابَق أيضاً («اضاءة»)', supCatToken('اضاءة')[0] === 'الكهرباء والإنارة');
+  T('مرادف بتصنيفين يُعطي الاثنين', supCatToken('المعدات الثقيلة والمركبات').length === 2);
+  T('بادئة مبتورة غير ملتبسة تُطابَق (≥4 محارف)', supCatToken('السباك').length === 1);
+  T('بادئة قصيرة لا تُطابَق (أقلّ من 4)', supCatToken('الس').length === 0);
+  T('بادئة ملتبسة على تصنيفين لا تُخمَّن («المعدات»: ثقيلة؟ مركبات؟)', supCatToken('المعدات').length === 0,
+    JSON.stringify(supCatToken('المعدات')));
+  T('كتابة بلا مقابل تبقى بلا تصنيف (لا تخمين)', supCatToken('مولدات ديزل خاصة').length === 0);
+  T('التخصص متعدّد القيم يُقسَم على الفواصل العربية واللاتينية',
+    JSON.stringify(supSplitSpecialty('سباكة، إضاءة, دهانات؛ عام')) === JSON.stringify(['سباكة','إضاءة','دهانات','عام']));
+  T('القيمة النائبة «—» لا تُنتج وسماً', supSplitSpecialty('—').length === 0);
+
+  /* ── (ب) ملفّ المورد: معلَن + مثبت بما سعّره فعلاً ── */
+  STATE.items = [{ code:'C1', name:'مكنسة كهربائية', category:'معدات التنظيف' },
+                 { code:'C2', name:'لمبة LED', category:'كهربائي' }];
+  STATE.history = [
+    { num: 1, code:'C1', name:'مكنسة كهربائية 1600 واط', supplier:'شركة النخبة' },
+    { num: 2, code:'C1', name:'مكنسة كهربائية', supplier:'شركة  النخبة' },   // كتابة أخرى للمورد نفسه
+    { num: 3, code:'C2', name:'لمبة LED', supplier:'شركة النخبة', category:'سباكة' }, // لقطة قديمة خاطئة
+  ];
+  const nukhba = { id:'S1', name:'شركة النخبة', specialty:'سباكة، مولدات خاصة' };
+  const p = supCatProfile(nukhba);
+  T('المعلَن: السباكة من التخصص', p.declared.has('السباكة والصرف الصحي'));
+  T('الكتابة بلا مقابل تبقى وسماً حرّاً مرئيّاً', p.extra.includes('مولدات خاصة'));
+  T('المثبَت: ما سعّره (التنظيف) يدخل تصنيفاته', p.evidence.has('النظافة والمواد الاستهلاكية'));
+  T('فئة الصنف من الكتالوج لا من لقطة السجل القديمة', p.evidence.has('الكهرباء والإنارة'));
+  T('الصنف الواحد يُعَدّ مرّة واحدة مهما تكرّرت عروضه', p.evidence.get('النظافة والمواد الاستهلاكية') === 1);
+  T('يظهر في تصنيف معلَن وفي تصنيف مثبَت معاً',
+    supInCategory(p, 'السباكة والصرف الصحي') && supInCategory(p, 'الكهرباء والإنارة') && !supInCategory(p, 'مواد البناء'));
+  const bare = supCatProfile({ id:'S2', name:'مورد بلا شيء', specialty:'' });
+  T('«غير مصنّف» = لا معلَن ولا مثبَت', supInCategory(bare, '__none__') && !supInCategory(p, '__none__'));
+  T('البحث بما يورّده فعلاً («مكنسة») يجد المورد ولو لم يكتبها في تخصصه',
+    supMatches(nukhba, [api.arNorm('مكنسة')], ''));
+  T('والبحث باسم التصنيف المستنتَج يجده', supHaystack(nukhba).includes(api.arNorm('الكهرباء والإنارة')));
+
+  /* ── (ج) المراحل: مرآة الخادم حرفيّاً ── */
+  const lib = await import('../functions/api/_supplier-invite.js');
+  const now = Date.parse('2026-11-02T10:00:00Z'), D = 86400000;
+  const cases = [
+    [],
+    [{ stage:'inv1', at: now - 3*D, channel:'email' }],
+    [{ stage:'inv1', at: now - 8*D, channel:'wa' }],
+    [{ stage:'inv1', at: now - 30*D }, { stage:'inv2', at: now - 13*D }],
+    [{ stage:'inv1', at: now - 30*D }, { stage:'inv2', at: now - 15*D }],
+    [{ stage:'inv1', at: 1 }, { stage:'inv2', at: 2 }, { stage:'inv3', at: 3 }],
+    [{ stage:'inv2', at: now - 1*D }],
+  ];
+  T('regCampNextStage ≡ inviteNextStage على كل الحالات',
+    cases.every(c => JSON.stringify(regCampNextStage(c, now)) === JSON.stringify(lib.inviteNextStage(c, now))),
+    cases.map(c => JSON.stringify(regCampNextStage(c, now))).join(' | '));
+  T('المراحل نفسها في النسختين (المفاتيح والمهل)',
+    JSON.stringify(REGCAMP_STAGES) === JSON.stringify(lib.INVITE_STAGES));
+  const AUD = [
+    { entity_id:'A', action:'supplier_invite_wa', new_value:{ name:'x' }, ts:'2026-10-01T00:00:00Z' },
+    { entity_id:'A', action:'notify', new_value:{ stage:'inv2', channel:'email' }, ts:'2026-10-09T00:00:00Z' },
+    { entity_id:'B', action:'supplier_invite_wa', new_value:{ stage:'extra' }, ts:'2026-10-02T00:00:00Z' },
+    { entity_id:'C', action:'notify', new_value:{}, ts:'غير صالح' },
+  ];
+  const mapStr = (m) => JSON.stringify([...m.entries()].sort());
+  T('regCampSendsFromAudit ≡ inviteSendsFromAudit', mapStr(regCampSendsFromAudit(AUD)) === mapStr(lib.inviteSendsFromAudit(AUD)));
+  const names = ['شركة الأنوار للتجارة', 'مؤسسة الانوار للتجاره', 'مصنع   ﺍﻟﻨﻮﺭ', 'XCMG'];
+  T('supKeyStrong ≡ inviteKeyStrong (مطابقة «من سجّل»)',
+    names.every(n => supKeyStrong(n) === lib.inviteKeyStrong(n)), names.map(n => supKeyStrong(n) + '/' + lib.inviteKeyStrong(n)).join(' '));
+  const mails = ['a@b.co', ' A@B.CO ', '—', 'not-an-email', '', 'x@y'];
+  T('regCampEmailOf ≡ inviteEmailOf', mails.every(e => regCampEmailOf({ email:e }) === lib.inviteEmailOf({ email:e })));
+
+  /* ── (د) طابور الواتساب: لا رسالة مزدوجة مع البريد الآليّ ── */
+  const due = { stage:'inv1', due:true, done:false, dueAt:0 };
+  T('مستحقّ وله جوال وبلا بريد ⇒ في طابور الواتساب', regCampWaDue({ wa:'9665', email:'', next:due }, true));
+  T('له بريد والإرسال الآليّ مُفعَّل ⇒ ليس في الطابور (البريد يتولّاه)', !regCampWaDue({ wa:'9665', email:'a@b.co', next:due }, true));
+  T('له بريد والآليّ مُطفأ ⇒ في الطابور', regCampWaDue({ wa:'9665', email:'a@b.co', next:due }, false));
+  T('غير مستحقّ بعد ⇒ ليس في الطابور', !regCampWaDue({ wa:'9665', email:'', next:{ ...due, due:false } }, true));
+  T('سجلّ إرسال تعذّرت قراءته ⇒ لا طابور (لا تخمين)', !regCampWaDue({ wa:'9665', email:'', next:null }, true));
+
+  /* ── (هـ) الحالة: لا «لم يُدعَ» على تخمين ── */
+  STATE.suppliers = [{ id:'S9', name:'مورد تسعة', mobile:'0501234567' }];
+  T('بلا سجلّ إرسال ⇒ next=null', regCampBuild([], null)[0].next === null);
+  T('وحالته «—» لا «لم يُدعَ»', regCampStatus({ next:null }).t === '—');
+  const withSends = regCampBuild([], new Map([['S9', [{ stage:'inv1', at: Date.now() - 2*D }]]]));
+  T('دُعي قبل يومين ⇒ «دُعي — تذكير بعد 5 أيام»', /دُعي — تذكير بعد 5 أيام/.test(regCampStatus(withSends[0]).t), regCampStatus(withSends[0]).t);
+  T('لم يُدعَ ⇒ «لم يُدعَ بعد»', regCampStatus(regCampBuild([], new Map())[0]).t === 'لم يُدعَ بعد');
+  STATE.suppliers = [{ id:'S8', name:'بريده نصّ', email:'غير متوفر' }, { id:'S7', name:'بريده صالح', email:' Info@Ex.com ' }];
+  const em = regCampBuild([], new Map());
+  T('بريد نصّه ليس بريداً لا يُحتسَب «له بريد» (فلا يُستبعَد من طابور الواتساب)',
+    em.find(r => r.id === 'S8').email === '' && em.find(r => r.id === 'S7').email === 'info@ex.com');
+
+  /* ── (و) نصّ الواتساب بالمرحلة، والدعوة الأولى بلا تغيير ── */
+  const m1 = regCampMessage({ name:'س' }, 'https://x', 'inv1'), m0 = regCampMessage({ name:'س' }, 'https://x');
+  T('الدعوة الأولى = النصّ القائم حرفيّاً (بلا مرحلة)', m1 === m0);
+  T('التذكير يفتتح بـ«نذكّركم»', /نذكّركم بدعوة/.test(regCampMessage({ name:'س' }, 'https://x', 'inv2')));
+  T('الأخير يقول «للمرّة الأخيرة»', /للمرّة الأخيرة/.test(regCampMessage({ name:'س' }, 'https://x', 'inv3')));
+
+  /* ── (ز) حرّاس بنيويّة ── */
+  T('مفتاح التشغيل التلقائيّ مُطفأ افتراضاً: الخادم يشترط enabled === true',
+    /v\.enabled === true/.test(fs.readFileSync(path.join(ROOT, 'functions/api/supplier-invite-link.js'), 'utf8')));
+  T('النبضة الكسولة مربوطة بعدّادات اللوحة', /try\{ supInviteTick\(\); \}catch\(e\)\{\}/.test(CODE));
+  T('سجلّ الإرسال يُقرأ بالصفحات لا بنداء مبتور عند 1000', /regCampLoadSends[\s\S]{0,600}\.range\(from, from \+ 999\)/.test(CODE));
+
+  Object.assign(STATE, SAVED);
 })();
 
 /* ── النتيجة ─────────────────────────────────────────────────── */

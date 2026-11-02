@@ -555,6 +555,42 @@ textarea.form-input{min-height:70px;resize:vertical;font-family:inherit}
 .sup-gap-badge:hover{background:rgba(180,83,9,0.18)}
 .sup-gap-badge.crit{background:rgba(185,28,28,0.10);color:#b91c1c;border-color:rgba(185,28,28,0.25)}
 .sup-gap-badge.crit:hover{background:rgba(185,28,28,0.18)}
+/* شريط التصنيفات — التصفّح بما يعمل فيه المورد (بديل مُنتقي المئة قيمة).
+   أزرار حقيقية (لوحة مفاتيح + aria-pressed)، وتلتفّ ولا تمرّر أفقياً: حاوية تمرير
+   أفقيّ في RTL تفتح منزلقةً على WebKit (درس جدول «سجلّ المشاريع»). */
+.sup-cats{display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 12px}
+.sup-cat-chip{
+  display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:5px 12px;
+  border:1px solid var(--border);border-radius:999px;background:var(--surface);
+  color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.sup-cat-chip:hover{border-color:var(--accent)}
+.sup-cat-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sup-cat-chip .n{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+  color:var(--muted);background:var(--surface-2,rgba(0,0,0,.04));border-radius:999px;padding:1px 7px;
+}
+.sup-cat-chip.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.sup-cat-chip.active .n{background:rgba(255,255,255,.18);color:#fff}
+.sup-cat-chip.none{border-style:dashed}
+.sup-cat-more{
+  min-height:32px;padding:5px 12px;border:0;background:none;color:var(--accent-2);
+  font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;
+}
+.sup-cat-more:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:999px}
+/* تصنيفات المورد على بطاقته — ✓ = مُثبَت بعروض أسعار سعّرها فعلاً */
+.sup-cats-line{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+.sup-cat-tag{
+  font-size:11px;font-weight:600;line-height:1.5;padding:2px 9px;border-radius:999px;
+  background:var(--surface-2,rgba(0,0,0,.04));color:var(--ink-2);border:1px solid var(--border);
+}
+.sup-cat-tag.ev{background:rgba(21,128,61,.08);color:#15803d;border-color:rgba(21,128,61,.22)}
+.sup-cat-tag.on{box-shadow:0 0 0 2px var(--accent)}
+.sup-cat-tag.free{border-style:dashed;color:var(--muted)}
+.sup-cat-tag.more{color:var(--muted)}
+.sup-ev-line{margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.6}
+.sup-ev-line .n{font-family:'IBM Plex Mono',monospace;font-size:10.5px}
 
 /* ============ TOAST ============ */
 /* ============ MODE TOGGLE ============ */
@@ -609,6 +645,7 @@ body.dark .sidebar{background:linear-gradient(180deg,#0a1614 0%,#050d0b 100%)}
 body.dark .stat-card,body.dark .panel,body.dark .form-card,body.dark .table-wrap{background:var(--surface)}
 body.dark thead{background:var(--surface-2)}
 body.dark .info-card.dark{background:linear-gradient(135deg,#231F20 0%,#111010 100%)}
+body.dark .sup-cat-tag.ev{background:rgba(74,222,128,.10);color:#86efac;border-color:rgba(74,222,128,.25)}
 
 /* ============ MODAL ============ */
 .modal-overlay{
@@ -4009,10 +4046,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
           <p class="page-subtitle">الموردون المعتمدون مع بيانات الاتصال الكاملة، عدد العروض السابقة، والتخصصات.</p>
         </div>
         <div class="toolbar">
-          <input type="text" class="input" id="sup-search" placeholder="ابحث: الاسم · التخصص · جهة الاتصال · الهاتف · البريد · السجل التجاري" style="flex:1;max-width:400px">
-          <select class="select" id="sup-specialty">
-            <option value="">كل التخصصات</option>
-          </select>
+          <input type="text" class="input" id="sup-search" placeholder="ابحث: الاسم · ما يورّده (صنف أو تخصص) · الهاتف · البريد · السجل التجاري" style="flex:1;max-width:420px">
           <select class="select" id="sup-gaps" onchange="renderSuppliers()" data-tooltip="تصفية حسب اكتمال البيانات">
             <option value="">كل الموردين</option>
             <option value="any">⚠ بيانات ناقصة</option>
@@ -4038,6 +4072,7 @@ const MARK_B64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWsAAAGnCAYAAABx
             </button>
           </div>
         </div>
+        <div class="sup-cats" id="sup-cats" role="group" aria-label="التصفّح حسب التصنيف"></div>
         <div id="sup-count" style="font-size:12.5px;color:var(--muted,#64748b);margin:-4px 0 12px"></div>
         <div class="supplier-grid" id="supplier-grid"></div>
         <div id="sup-more" style="display:none;text-align:center;margin-top:18px"></div>
@@ -7386,6 +7421,7 @@ async function tasksLoadCloud(){
   }
   // نبضة التذكير المجدوَل (بلا انتظار — لا تُعطّل رسم اللوحة)
   try{ docRenewTick(); }catch(e){}
+  try{ supInviteTick(); }catch(e){}
   // طلبات الشراء التي يستطيع المستخدم البتّ فيها
   if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
     try{ await prLoadAll(); TASKS.prPending = prIncoming().length; }catch(e){ TASKS.prPending=null; }
@@ -8518,10 +8554,159 @@ function supQueryDigits(q){
   const d = String(q||'').replace(/\D/g,'');
   return d.length >= 9 ? d.slice(-9) : d;
 }
-/* الحقول التي يشملها بحث المورد */
+/* ============================================================
+   تصنيف الموردين — التصفّح «حسب ما يعمل فيه المورد»  (طلب المالك 2026-11-02)
+   ------------------------------------------------------------
+   القياس على الإنتاج: 194 مورداً و**100 قيمة تخصص مختلفة لـ155 مورداً**. السبب
+   بنيويّ لا إدخاليّ: النموذج يحفظ التخصصات المختارة **مدموجةً بفاصلة**
+   («المقاولات والإنشاءات، التشغيل والصيانة، …») والمُنتقي القديم كان يعامل كل
+   تركيبة تخصصاً مستقلاً ويطابق **مطابقةً تامّة** — فمورد مسجَّل في ستّة تخصصات
+   لا يظهر تحت أيّ منها. ومعه كتابات حرّة قديمة («كهربائي» · «مواد كهرباء» ·
+   «انارة وكهرباء» = «الكهرباء والإنارة») وقيم مبتورة («تقنية المعلو»).
+
+   الحلّ: التصنيف المعتمد هو `SUP_SECTORS` (قائمة نموذج التسجيل نفسها — لا قائمة
+   ثانية) ولكل مورد **مجموعة** تصنيفات من مصدرين:
+     (١) المُعلَن — تفكيك التخصص بالفاصلة ثمّ مطابقة قاطعة: اسم معتمد · مرادف من
+         `SUP_CAT_SYNONYMS` (مُشتقّ من قيم الإنتاج المقيسة: يغطّي 63 من 68 كتابة)
+         · بادئة مبتورة (≥4 محارف) تقود لتصنيف **واحد** فقط.
+     (٢) المُثبَت — فئات الأصناف التي سعّرها فعلاً في السجل السعري (84 مورداً
+         لهم ذلك، منهم 17 بلا تخصص مكتوب أصلاً). هذا جواب «ماذا يعمل» الحقيقيّ.
+   ⚠️ لا تخمين: ما لا يُطابَق قطعاً يبقى **وسماً ظاهراً كما كُتب** ويُبحَث به، ولا
+      يُنسَب لتصنيف بالتشابه. عتبة البادئة 4 لا 3 عن قصد: بالثلاثة تصير «مدن»
+      (مدينة) «مواد البناء».
+   ⚠️ لا يُمَسّ المخزَّن: الاشتقاق عرضٌ وتصفية، والبيانات كما هي.
+   ============================================================ */
+const SUP_CAT_NONE = '__none__';
+const SUP_CAT_PREFIX_MIN = 4;
+const SUP_CAT_SYNONYMS = {
+  // ── كتابات التخصص الحرّة القديمة (مقيسة من الإنتاج) ──
+  'سباكة':['السباكة والصرف الصحي'],
+  'المعدات الثقيلة والمركبات':['المعدات الثقيلة','النقليات والمركبات'],
+  'معدات ثقيلة':['المعدات الثقيلة'],
+  'أدوات إلكترونية':['تقنية المعلومات والبرمجيات'],
+  'تقنية المعلومات':['تقنية المعلومات والبرمجيات'],
+  'إعاشة':['المواد الغذائية والضيافة'],
+  'أغذية ومشروبات':['المواد الغذائية والضيافة'],
+  'معدات الكافيتيريا':['المواد الغذائية والضيافة'],
+  'مبيدات حشرية':['النظافة والمواد الاستهلاكية'],
+  'مبيدات ومكافحة الآفات':['النظافة والمواد الاستهلاكية'],
+  'مستهلكات':['النظافة والمواد الاستهلاكية'],
+  'معدات نظافة':['النظافة والمواد الاستهلاكية'],
+  'معدات التنظيف':['النظافة والمواد الاستهلاكية'],
+  'أدوات التنظيف':['النظافة والمواد الاستهلاكية'],
+  'مواد التنظيف الكيماوية':['النظافة والمواد الاستهلاكية'],
+  'سلال وحاويات القمامة':['النظافة والمواد الاستهلاكية'],
+  'أدوات بلاستيك و ورقيات و مواد التنظيف':['النظافة والمواد الاستهلاكية'],
+  'إضاءة':['الكهرباء والإنارة'],
+  'مواد كهرباء':['الكهرباء والإنارة'],
+  'كهربائي':['الكهرباء والإنارة'],
+  'إنارة وكهرباء':['الكهرباء والإنارة'],
+  'أجهزة كهربائية':['الكهرباء والإنارة'],
+  'اجهزه كهربائة':['الكهرباء والإنارة'],
+  'أدوات مكتبية':['القرطاسية والمكتبية'],
+  'أثاث وديكور':['الأثاث والمفروشات'],
+  'مفارش وأسرة':['الأثاث والمفروشات'],
+  'موكيت وسجاد':['الأثاث والمفروشات'],
+  'دهانات':['مواد البناء'],
+  'دهان جوتن':['مواد البناء'],
+  'دهانات وبويات':['مواد البناء'],
+  'حديد تسليح':['مواد البناء'],
+  'مدني وبناء':['مواد البناء'],
+  'اكسسوارات أبواب':['مواد البناء'],
+  'اكسسورات نجارة':['مواد البناء'],
+  'قطع غيار وأدوات':['الأدوات والمعدات'],
+  'قطع غيار':['الأدوات والمعدات'],
+  'معدات يدوية':['الأدوات والمعدات'],
+  'سقالات':['الأدوات والمعدات'],
+  'الخدمات الاستشارية':['الاستشارات والخدمات المهنية'],
+  'أمن وسلامة':['السلامة والأمن'],
+  'أجهزة أمنية':['السلامة والأمن'],
+  'سلامة':['السلامة والأمن'],
+  'تبريد وتكييف':['التكييف والتبريد'],
+  'كفرات سيارات':['النقليات والمركبات'],
+  'للدعاية والإعلان':['الدعاية والإعلان والمطبوعات'],
+  'عام':['التوريدات العامة'],
+  'المقاولات':['المقاولات والإنشاءات'],
+};
+let _supCatIdx = null;
+function supCatIndex(){
+  if(_supCatIdx) return _supCatIdx;
+  const map = new Map();               // مفتاح مطبَّع → [تصنيفات معتمدة]
+  SUP_SECTORS.forEach(c => map.set(arNorm(c), [c]));
+  Object.entries(SUP_CAT_SYNONYMS).forEach(([k, v]) => map.set(arNorm(k), v));
+  return (_supCatIdx = map);
+}
+/* كتابة واحدة → تصنيفاتها المعتمدة (مصفوفة فارغة = لا مطابقة قاطعة) */
+function supCatToken(tok){
+  const k = arNorm(tok); if(!k) return [];
+  const idx = supCatIndex();
+  if(idx.has(k)) return idx.get(k);
+  if(k.length >= SUP_CAT_PREFIX_MIN){
+    const hits = new Set();
+    for(const [key, cats] of idx) if(key.startsWith(k)) cats.forEach(c => hits.add(c));
+    if(hits.size === 1) return [...hits];   // مبتورة وغير ملتبسة
+  }
+  return [];
+}
+function supSplitSpecialty(v){
+  return String(supVal(v)).split(/[،,؛;]/).map(t => t.trim()).filter(Boolean);
+}
+/* فهرس ما سعّره كل مورد: فئة الصنف ← أكوادها، وأسماء الأصناف للبحث.
+   ⚠️ فئة الصنف من الكتالوج (`STATE.items`) أوّلاً لا من صفّ السجل — الكتالوج يُصحَّح
+   والسجل يحمل لقطة قديمة. ومُذكَّر بنسخة البيانات فلا يُعاد بناؤه مع كل حرف بحث. */
+let _supEvIdx = { key:'', bySup:new Map() };
+function supEvidenceIndex(){
+  const h = STATE.history || [], it = STATE.items || [];
+  const key = h.length + ':' + it.length + ':' + (h[0] && h[0].num) + ':' + (h[h.length-1] && h[h.length-1].num);
+  if(_supEvIdx.key === key) return _supEvIdx.bySup;
+  const catOf = new Map(it.map(i => [i.code, i.category]));
+  const bySup = new Map();
+  h.forEach(r => {
+    const k = supKey(r && r.supplier); if(!k) return;
+    let e = bySup.get(k); if(!e){ e = { cats:new Map(), names:new Set() }; bySup.set(k, e); }
+    const cat = supVal(catOf.get(r.code) || r.category);
+    if(cat){ if(!e.cats.has(cat)) e.cats.set(cat, new Set()); e.cats.get(cat).add(r.code || r.name); }
+    if(r.name) e.names.add(String(r.name));
+  });
+  _supEvIdx = { key, bySup };
+  return bySup;
+}
+/* ملفّ تصنيف المورد — مُذكَّر لكل كائن مورد ما لم يتغيّر تخصصه أو بيانات السجل */
+const _supProfCache = new WeakMap();
+function supCatProfile(s){
+  const bySup = supEvidenceIndex();
+  const hit = s && _supProfCache.get(s);
+  if(hit && hit.k === _supEvIdx.key && hit.sp === s.specialty && hit.n === s.name) return hit.p;
+  const declared = new Set(), extra = [];
+  supSplitSpecialty(s && s.specialty).forEach(t => {
+    const c = supCatToken(t);
+    if(c.length) c.forEach(x => declared.add(x)); else extra.push(t);
+  });
+  const ev = bySup.get(supKey(s && s.name));
+  const evidence = new Map(), evRaw = [];
+  if(ev) for(const [ic, codes] of ev.cats){
+    evRaw.push([ic, codes.size]);
+    supCatToken(ic).forEach(c => evidence.set(c, (evidence.get(c) || 0) + codes.size));
+  }
+  evRaw.sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'ar'));
+  const all = new Set([...declared, ...evidence.keys()]);
+  const p = { declared, evidence, evRaw, extra, all, items: ev ? [...ev.names] : [] };
+  if(s) _supProfCache.set(s, { k:_supEvIdx.key, sp:s.specialty, n:s.name, p });
+  return p;
+}
+function supInCategory(p, cat){
+  if(!cat) return true;
+  if(cat === SUP_CAT_NONE) return p.all.size === 0;
+  return p.all.has(cat);
+}
+
+/* الحقول التي يشملها بحث المورد — ومعها «ما يعمل فيه»: تصنيفاته المعتمدة ووسومه
+   الحرّة **وأسماء الأصناف التي سعّرها فعلاً** (بحث «مكنسة» يجد من ورّد المكانس). */
 function supHaystack(s){
+  const p = supCatProfile(s);
   return arNorm([s.name, s.specialty, s.contact, s.email, s.address, s.city,
-                 s.commercial_reg, s.tax_id, s.notes].filter(Boolean).join(' '))
+                 s.commercial_reg, s.tax_id, s.notes, ...p.all, ...p.extra,
+                 ...p.evRaw.map(x => x[0]), ...p.items].filter(Boolean).join(' '))
        + ' ' + supPhoneKeys(s.phone) + ' ' + supPhoneKeys(s.mobile);
 }
 function supMatches(s, terms, digits){
@@ -8590,27 +8775,60 @@ function supSourceBreakdown(list){
 }
 const SUP_PAGE = 60;          // دفعة العرض — 1000 بطاقة دفعةً تُجمّد الصفحة
 let _supShown = SUP_PAGE, _supLast = '';
+/* التصنيف المختار في شريط التصنيفات ('' = الكل · SUP_CAT_NONE = غير مصنّف) */
+let _supCat = '', _supCatsOpen = false;
+const SUP_CATS_COLLAPSED = 8;  // تصنيفات تظهر قبل «المزيد» — الباقي بنقرة لا بتمرير
+const SUP_CATS_COLLAPSED_NARROW = 4;  // الجوال: أهداف اللمس 44px فتأخذ 8 تصنيفات خمسة أسطر
+function supCatsCollapsedN(){
+  try{ if(window.matchMedia && window.matchMedia('(max-width:600px)').matches) return SUP_CATS_COLLAPSED_NARROW; }catch(e){}
+  return SUP_CATS_COLLAPSED;
+}
+function supSetCat(cat){
+  _supCat = (_supCat === cat) ? '' : cat;   // النقر على المختار يُلغيه
+  renderSuppliers();
+}
+function supToggleCats(){ _supCatsOpen = !_supCatsOpen; renderSuppliers(true); }
+/* شريط التصنيفات — العدّاد **على نتائج البحث والمرشّحات الحالية** لا على الدليل كلّه،
+   فيقول «كم مورد كهرباء بين من بحثتُ عنهم» لا رقماً ثابتاً. ولا يظهر تصنيف بلا مورد. */
+function supRenderCatRail(base){
+  const host = document.getElementById('sup-cats'); if(!host) return;
+  const counts = new Map(); let none = 0;
+  base.forEach(s => {
+    const p = supCatProfile(s);
+    if(!p.all.size){ none++; return; }
+    p.all.forEach(c => counts.set(c, (counts.get(c) || 0) + 1));
+  });
+  const order = SUP_SECTORS.slice();
+  const cats = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([c, n]) => ({ c, n }));
+  if(_supCat && _supCat !== SUP_CAT_NONE && !counts.has(_supCat)) cats.push({ c:_supCat, n:0 });
+  const shownCats = _supCatsOpen ? cats
+    : cats.filter((x, i) => i < supCatsCollapsedN() || x.c === _supCat);
+  const hidden = cats.length - shownCats.length;
+  const chip = (cat, label, n, extraCls) => {
+    const on = _supCat === cat;
+    const safe = escapeAttr(cat).replace(/'/g, "\\'");
+    return `<button type="button" class="sup-cat-chip${on ? ' active' : ''}${extraCls ? ' ' + extraCls : ''}" aria-pressed="${on}"
+      onclick="supSetCat('${safe}')">${escapeHtml(label)}<span class="n">${n}</span></button>`;
+  };
+  host.innerHTML =
+      chip('', 'كل التصنيفات', base.length, 'all')
+    + shownCats.map(x => chip(x.c, x.c, x.n)).join('')
+    + ((none || _supCat === SUP_CAT_NONE) ? chip(SUP_CAT_NONE, 'غير مصنّف', none, 'none') : '')
+    + (hidden > 0 || _supCatsOpen
+        ? `<button type="button" class="sup-cat-more" onclick="supToggleCats()">${_supCatsOpen ? 'عرض أقلّ' : '+ ' + arCountWord(hidden, 'تصنيف آخر', 'تصنيفان آخران', 'تصنيفات أخرى', 'تصنيفاً آخر')}</button>`
+        : '');
+}
 
 function renderSuppliers(more){
   // Recompute fresh stats
   recomputeSupplierStats();
 
-  // مُنتقي التخصص: يُعاد بناؤه مع تغيّر القائمة (كان يُبنى مرّة فيتقادم بعد المزامنة)
-  const sel = document.getElementById('sup-specialty');
-  if(sel){
-    const specs = [...new Set(STATE.suppliers.map(s=>s.specialty).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
-    if(sel.options.length - 1 !== specs.length){
-      const keep = sel.value;
-      sel.innerHTML = '<option value="">كل التخصصات</option>' +
-        specs.map(c=>`<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('');
-      if(specs.includes(keep)) sel.value = keep;
-    }
-  }
   const raw = (document.getElementById('sup-search')?.value||'').trim();
-  const specFilter = sel ? sel.value : '';
   const sort = document.getElementById('sup-sort')?.value || 'offers';
   const gapFilter = document.getElementById('sup-gaps')?.value || '';
-  const key = raw + '\u0000' + specFilter + '\u0000' + sort + '\u0000' + gapFilter;
+  const key = raw + '\u0000' + _supCat + '\u0000' + sort + '\u0000' + gapFilter;
   if(!more || key !== _supLast) _supShown = SUP_PAGE;   // أي تغيير للمرشّح يعيد الدفعة الأولى
   _supLast = key;
 
@@ -8618,10 +8836,17 @@ function renderSuppliers(more){
   const terms = arNorm(raw).split(' ').filter(Boolean);
   const digits = supQueryDigits(raw);
   if(terms.length || digits) list = list.filter(s => supMatches(s, terms, digits));
-  if(specFilter) list = list.filter(s=>s.specialty===specFilter);
   if(gapFilter) list = list.filter(s=>supGapMatch(s, gapFilter));
+  supRenderCatRail(list);                     // العدّاد على ما قبل مرشّح التصنيف
+  if(_supCat) list = list.filter(s => supInCategory(supCatProfile(s), _supCat));
   if(sort === 'name') list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ar'));
   else if(sort === 'recent') list.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  else if(_supCat && _supCat !== SUP_CAT_NONE){
+    /* داخل تصنيف: من سعّر فيه فعلاً أوّلاً (بعدد أصنافه فيه)، ثمّ المُعلِن وحده —
+       مورد أعلن 24 تخصصاً لا يتقدّم على من ورّد الصنف فعلاً. */
+    const ev = (s) => supCatProfile(s).evidence.get(_supCat) || 0;
+    list.sort((a,b) => ev(b) - ev(a) || (b.offers_count||0) - (a.offers_count||0));
+  }
   else list.sort((a,b)=>(b.offers_count||0)-(a.offers_count||0));
 
   const shown = list.slice(0, _supShown);
@@ -8630,10 +8855,12 @@ function renderSuppliers(more){
     : `<div class="empty" style="grid-column:1/-1"><div class="empty-title">لا توجد نتائج</div></div>`;
 
   const cnt = document.getElementById('sup-count');
+  const specFilter = _supCat;
   const filtered = !!(terms.length || digits || specFilter);
   const bd = supSourceBreakdown();
   if(cnt) cnt.innerHTML = list.length
     ? `عرض <b>${shown.length}</b> من <b>${list.length}</b> مورد${filtered?` (من ${STATE.suppliers.length} إجمالاً)`:''}`
+      + (_supCat && _supCat !== SUP_CAT_NONE && sort === 'offers' ? ` · <span title="من سعّر أصنافاً في هذا التصنيف يتقدّم على من أعلنه فقط">مرتّبون بما سعّروه فعلاً في «${escapeHtml(_supCat)}»</span>` : '')
       // تركيب العدد: يجيب «كيف صار العدد كذا؟» بلا تخمين — والبذرة غير المرفوعة تُميَّز
       + (!filtered && bd.seed ? ` · <b>${bd.cloud}</b> من السحابة · <b>${bd.seed}</b> من بذرة الإكسل <span style="opacity:.75">(لم تُرفع للسحابة بعد)</span>` : '')
       + (bd.dupGroups ? ` · <a href="#" onclick="event.preventDefault();supShowDupes()" style="color:#b45309">⚠ ${bd.dupGroups} اسماً مكرّراً</a>` : '')
@@ -8754,11 +8981,37 @@ function supplierCard(s, criticalGapsOnly){
         ${s.phone && s.phone!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:${normalizeSaudiPhone(s.phone)}" dir="ltr" style="unicode-bidi:isolate">${escapeHtml(normalizeSaudiPhone(s.phone))}</a></div>`:''}
         ${s.mobile && s.mobile!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><a href="tel:${normalizeSaudiPhone(s.mobile)}" dir="ltr" style="unicode-bidi:isolate">${escapeHtml(normalizeSaudiPhone(s.mobile))}</a></div>`:''}
         ${s.email && s.email!=='—'? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><a href="mailto:${escapeAttr(s.email)}">${escapeHtml(s.email)}</a></div>`:''}
-        ${s.specialty? `<div class="supplier-detail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>${escapeHtml(s.specialty)}</span></div>`:''}
         ${s.commercial_reg && s.commercial_reg!=='—'? `<div class="supplier-detail" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">س.ت: ${escapeHtml(s.commercial_reg)}</div>`:''}
       </div>
+      ${supCardCatsHtml(s)}
     </div>
   `;
+}
+/* تصنيفات المورد على بطاقته — بدل سلسلة التخصص الخامّ (كانت تصل 24 تخصصاً في سطر).
+   المُثبَت بعروض أسعار يتقدّم ويُميَّز (✓)، والمُعلَن وحده بعده، ثمّ الوسوم الحرّة
+   التي لم تُطابَق — لا يضيع منها شيء. وسطر «سعّر فعلاً» بفئات الأصناف الدقيقة. */
+const SUP_CARD_CATS = 3;
+function supCardCatsHtml(s){
+  const p = supCatProfile(s);
+  if(!p.all.size && !p.extra.length) return '';
+  const order = SUP_SECTORS;
+  const cats = [...p.all].sort((a, b) =>
+    (p.evidence.get(b) || 0) - (p.evidence.get(a) || 0) || order.indexOf(a) - order.indexOf(b));
+  const tags = cats.map(c => {
+    const ev = p.evidence.get(c) || 0;
+    const on = c === _supCat ? ' on' : '';
+    return `<span class="sup-cat-tag${ev ? ' ev' : ''}${on}" title="${ev ? 'مُثبَت: سعّر ' + escapeAttr(String(ev)) + ' صنفاً في هذا التصنيف' : 'تصنيف مُعلَن'}">${ev ? '✓ ' : ''}${escapeHtml(c)}</span>`;
+  });
+  const free = p.extra.map(t => `<span class="sup-cat-tag free" title="تخصص كُتب نصّاً ولم يُطابِق تصنيفاً معتمداً">${escapeHtml(t)}</span>`);
+  const all = tags.concat(free);
+  const more = all.length - SUP_CARD_CATS;
+  const evLine = p.evRaw.length
+    ? `<div class="sup-ev-line" title="فئات الأصناف التي سعّرها في السجل السعري">سعّر فعلاً: ${
+        p.evRaw.slice(0, 3).map(([c, n]) => `${escapeHtml(c)} <span class="n">${n}</span>`).join(' · ')}${
+        p.evRaw.length > 3 ? ' …' : ''}</div>`
+    : '';
+  return `<div class="sup-cats-line">${all.slice(0, SUP_CARD_CATS).join('')}${
+      more > 0 ? `<span class="sup-cat-tag more" title="${escapeAttr(cats.concat(p.extra).slice(SUP_CARD_CATS).join(' · '))}">+${more}</span>` : ''}</div>${evLine}`;
 }
 
 /* ========== REFERENCE ========== */
@@ -10533,11 +10786,27 @@ const SAUDI_CITIES = ["الرياض","جدة","مكة المكرمة","المد�
 // يعرض مجموعة اختيار متعدّد (شارات قابلة للنقر) داخل حاوية، ويؤشّر القيم المحددة حالياً.
 // يحافظ على أي قيمة قائمة خارج القائمة المعتمدة (لا يفقد بيانات المورد).
 function sfRenderChecks(containerId, options, selectedCsv){
-  const sel = String(selectedCsv||'').split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  let sel = String(selectedCsv||'').split(/[،,]/).map(s=>s.trim()).filter(Boolean);
+  /* حقل التخصص فقط: الكتابة الحرّة القديمة التي تُطابِق تصنيفاً معتمداً **قطعاً**
+     («سباكة» ← «السباكة والصرف الصحي») يُؤشَّر بدلها المعتمد ويُعلَن ذلك تحت
+     المربّعات — فتتقارب البيانات مع كل تعديل بلا ترحيل جماعيّ. ما لا يُطابَق
+     يبقى مربّعاً مؤشَّراً كما كُتب (لا يُفقَد شيء). */
+  const converted = [];
+  if(containerId === 'sf-sectors' && typeof supCatToken === 'function'){
+    const out = [];
+    sel.forEach(v=>{
+      if(options.includes(v)){ out.push(v); return; }
+      const cats = supCatToken(v);
+      if(cats.length){ cats.forEach(c=>out.push(c)); converted.push(v + ' ← ' + cats.join(' + ')); }
+      else out.push(v);
+    });
+    sel = [...new Set(out)];
+  }
   const all = options.slice();
   sel.forEach(v=>{ if(!all.includes(v)) all.push(v); });
   const c = document.getElementById(containerId); if(!c) return;
-  c.innerHTML = all.map(v=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;background:var(--surface,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none"><input type="checkbox" value="${escapeHtml(v)}" ${sel.includes(v)?'checked':''} style="accent-color:var(--gold,#c4a265)"> ${escapeHtml(v)}</label>`).join('');
+  c.innerHTML = all.map(v=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;background:var(--surface,#f8fafc);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:6px 10px;cursor:pointer;user-select:none"><input type="checkbox" value="${escapeHtml(v)}" ${sel.includes(v)?'checked':''} style="accent-color:var(--gold,#c4a265)"> ${escapeHtml(v)}</label>`).join('')
+    + (converted.length ? `<div class="sf-conv-note" style="flex-basis:100%;font-size:11.5px;color:var(--muted);margin-top:4px">وُحِّدت كتابات قديمة إلى التصنيف المعتمد: ${converted.map(escapeHtml).join(' · ')} — تُحفَظ بالتصنيف المعتمد عند الحفظ.</div>` : '');
 }
 function sfGetChecks(containerId){
   return [...document.querySelectorAll('#'+containerId+' input[type=checkbox]:checked')].map(c=>c.value).join('، ');
@@ -10659,6 +10928,7 @@ async function saveSupplierForm(){
     // If name changed and there are history records, propagate
     if(oldName !== name){
       STATE.history.forEach(h=>{ if(h.supplier===oldName) h.supplier = name });
+      _supEvIdx.key = '';   // فهرس «ما سعّره» مفتاحه اسم المورد — يُعاد بناؤه بالاسم الجديد
       // Update user_entries in localStorage too
       try{
         const stored = localStorage.getItem('proc_user_entries');
@@ -22818,7 +23088,7 @@ function init(){
   // ⚠️ لا تُمرّر renderSuppliers مستمعاً مباشراً: الحدث يصل كمعامل `more`
   //    فيُفسَّر «عرض المزيد» (نفس فخّ openCmdPalette السابق).
   document.getElementById('sup-search').addEventListener('input',()=>renderSuppliers());
-  document.getElementById('sup-specialty').addEventListener('change',()=>renderSuppliers());
+  // (مُنتقي «كل التخصصات» أُزيل 2026-11-02 — حلّ محلّه شريط التصنيفات `#sup-cats`)
   document.getElementById('add-new-supplier-btn').addEventListener('click',openAddSupplier);
   document.getElementById('export-suppliers').addEventListener('click',()=>{
     exportExcel(STATE.suppliers, 'suppliers.xlsx', [
@@ -30187,8 +30457,15 @@ function regCampWaPhone(sup){
    (رابط شخصيّ يُكمِل البطاقة القائمة) تبقى كما هي في الخلفية، لكنها **شأن داخليّ
    لا يُشرَح للمورّد** في متن الخطاب. (محروس بتأكيد على الرسالة والبطاقة واللافتة.)
    ⚠️ الرابط في سطر مستقلّ: واتساب لا يُحوِّله رابطاً قابلاً للنقر إن التصق بنصّ عربيّ. */
-function regCampMessage(sup, url){
+function regCampMessage(sup, url, stage){
   const name = supVal(sup.name) || 'المورد';
+  /* المرحلة تُبدّل الافتتاحية وحدها — الرسالة واحدة البنية في المراحل الثلاث،
+     ونظيرتها البريدية `supplierInviteEmail` في `functions/api/_supplier-invite.js`. */
+  const lead = stage === 'inv3'
+    ? 'نذكّركم للمرّة الأخيرة بدعوة إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.'
+    : stage === 'inv2'
+      ? 'نذكّركم بدعوة إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.'
+      : 'في إطار تحديث *سجل الموردين المعتمدين*، تدعوكم إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.';
   return [
     'السلام عليكم ورحمة الله وبركاته',
     '',
@@ -30196,7 +30473,7 @@ function regCampMessage(sup, url){
     '',
     'تحية طيبة وبعد،',
     '',
-    'في إطار تحديث *سجل الموردين المعتمدين*، تدعوكم إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.',
+    lead,
     '',
     '*أولاً: متطلبات استكمال الملف*',
     '• تعبئة نموذج التسجيل الإلكتروني — بيانات المنشأة وجهات التواصل والحساب البنكي',
@@ -30221,7 +30498,53 @@ function regCampMessage(sup, url){
 /* من لم يُسجّل؟ مطابقة الدليل بالتسجيلات: سجل تجاري · رقم ضريبي · مفتاح الاسم
    القويّ. ⚠️ المطابقة **متساهلة عمداً** هنا (عكس الاعتماد): إدراج مورد مسجَّل
    في الحملة يُرسل له دعوة لا يحتاجها — إزعاج؛ أهون بكثير من بطاقة مكرّرة. */
-function regCampBuild(regs){
+/* ── مراحل الدعوة: مرآة `functions/api/_supplier-invite.js` ─────────────────
+   الخادم يرسل البريد آليّاً بهذه المراحل، والواجهة تعرض الحالة نفسها وتُرتّب
+   طابور الواتساب بها — فالنسختان **يجب** أن تتطابقا (محروس بتأكيد يُشغّل
+   الاثنتين على الحالات نفسها ويقارن المُخرَج).
+   ⚠️ المرحلة لكل **مورد** لا لكل قناة: رسالة واحدة لكل خطوة مهما تعدّدت القنوات. */
+const REGCAMP_STAGES = [
+  { key: 'inv1', afterDays: 0,  label: 'الدعوة' },
+  { key: 'inv2', afterDays: 7,  label: 'تذكير' },
+  { key: 'inv3', afterDays: 14, label: 'تذكير أخير' },
+];
+const REGCAMP_AUTO_KEY = 'supplier_invite_auto';
+let REGCAMP_SENDS = null;       // Map id → [{stage,at,channel}] · null = تعذّرت قراءة سجلّ الإرسال
+let REGCAMP_AUTO = null;        // true · false · null (تعذّرت القراءة)
+let REGCAMP_FILTER = 'all';     // all · wa_due · no_channel
+
+function regCampSendsFromAudit(rows){
+  const by = new Map();
+  (rows || []).forEach(r => {
+    if (!r || !r.entity_id) return;
+    const nv = (r.new_value && typeof r.new_value === 'object') ? r.new_value : {};
+    const stage = REGCAMP_STAGES.some(x => x.key === nv.stage) ? nv.stage : 'inv1';
+    const channel = nv.channel || (r.action === 'supplier_invite_wa' ? 'wa' : 'email');
+    const at = Date.parse(r.ts || '');
+    if (!isFinite(at)) return;
+    const k = String(r.entity_id);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push({ stage, at, channel });
+  });
+  return by;
+}
+function regCampNextStage(sends, now){
+  const list = Array.isArray(sends) ? sends : [];
+  const doneKeys = new Set(list.map(x => x.stage));
+  const last = list.reduce((m, x) => Math.max(m, x.at || 0), 0) || null;
+  const idx = REGCAMP_STAGES.findIndex(x => !doneKeys.has(x.key));
+  if (idx < 0) return { done: true, sent: list.length, last };
+  const st = REGCAMP_STAGES[idx];
+  const dueAt = (idx === 0 || !last) ? 0 : last + st.afterDays * 86400000;
+  return { stage: st.key, label: st.label, index: idx, due: dueAt <= now, dueAt, last, sent: list.length };
+}
+/* بريد صالح للمراسلة (نظير `inviteEmailOf`) — القيمة النائبة ليست بريداً */
+function regCampEmailOf(s){
+  const e = supVal(s && s.email).toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : '';
+}
+
+function regCampBuild(regs, sends){
   const crs  = new Set(), taxes = new Set(), keys = new Set();
   (regs || []).forEach(r => {
     if (supVal(r.commercial_reg)) crs.add(String(r.commercial_reg).trim());
@@ -30236,15 +30559,18 @@ function regCampBuild(regs){
     const k = supKeyStrong(s.name || '');
     return !!(k && keys.has(k));
   };
+  const now = Date.now();
   return (STATE.suppliers || [])
     .filter(s => supVal(s.name) && !registered(s))
     .map(s => ({
       id: s.id, name: s.name, sup: s,
       wa: regCampWaPhone(s),
       phone: supVal(s.mobile) || supVal(s.phone) || '',
-      email: supVal(s.email),
+      email: regCampEmailOf(s),
       offers: s.offers_count || 0,
       gaps: supDataGaps(s).length,
+      // سجلّ إرسال تعذّرت قراءته ⇒ لا حالة (null) — لا نُعلن «لم يُدعَ» على تخمين
+      next: sends ? regCampNextStage(sends.get(String(s.id)), now) : null,
     }))
     .sort((a, b) => (b.offers - a.offers) || String(a.name).localeCompare(String(b.name), 'ar'));
 }
@@ -30257,12 +30583,113 @@ async function loadRegCampaign(){
     let regs;
     try { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar,link_supplier_id'); }
     catch(_) { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar'); }
-    REGCAMP_ROWS = regCampBuild(regs);
+    const [sends, auto] = await Promise.all([regCampLoadSends(), regCampReadAuto()]);
+    REGCAMP_SENDS = sends; REGCAMP_AUTO = auto;
+    REGCAMP_ROWS = regCampBuild(regs, sends);
     renderRegCampaign();
   } catch(e){
     box.innerHTML = `<div style="padding:18px;color:#b91c1c;font-size:13px">تعذّر التحميل: ${escapeHtml(e.message||'')}</div>`;
     reportError('loadRegCampaign', e);
   }
+}
+
+/* سجلّ الإرسال (بريد آليّ + واتساب يدويّ) — بالصفحات: سقف PostgREST 1000 صفّ،
+   وبتر السجلّ صامتاً يُظهر من دُعي «لم يُدعَ» فيُدعى ثانيةً. */
+async function regCampLoadSends(){
+  try {
+    const rows = [];
+    for (let from = 0; from < 20000; from += 1000){
+      const { data, error } = await CLOUD.client.from('proc_audit_log')
+        .select('id,entity_id,action,new_value,ts')
+        .or('and(entity_type.eq.supplier_invite,action.eq.notify),and(entity_type.eq.supplier,action.eq.supplier_invite_wa)')
+        .order('id', { ascending: true })
+        .range(from, from + 999);
+      if (error) return null;
+      rows.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    return regCampSendsFromAudit(rows);
+  } catch(e){ reportError('regCampLoadSends', e); return null; }
+}
+/* إعداد الإرسال الآليّ ← true · false · null (تعذّرت القراءة) */
+async function regCampReadAuto(){
+  try {
+    const { data, error } = await CLOUD.client.from('proc_settings')
+      .select('value').eq('key', REGCAMP_AUTO_KEY).maybeSingle();
+    if (error) return null;
+    let v = data && data.value;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch(_) { v = null; } }
+    return !!(v && v.enabled === true);
+  } catch(_) { return null; }
+}
+/* من يستحقّ رسالة واتساب الآن؟ مستحقّ المرحلة، له رقم جوال، و**ليس** ممّن يتولّاه
+   البريد الآليّ — وإلّا وصلته الرسالة نفسها مرّتين في يوم واحد. */
+function regCampWaDue(r, auto){
+  if (!r || !r.wa || !r.next || r.next.done || !r.next.due) return false;
+  return !(auto === true && r.email);
+}
+async function regCampJwt(){
+  const {data:{session}} = await CLOUD.client.auth.getSession();
+  const jwt = session && session.access_token;
+  if (!jwt) throw new Error('الجلسة منتهية — أعد تسجيل الدخول');
+  return jwt;
+}
+async function regCampSetAuto(on){
+  if (!hasPermission('can_review_registrations')) { toast('error', 'لا تملك صلاحية إدارة حملة التسجيل'); return; }
+  const n = REGCAMP_ROWS.filter(r => r.email && r.next && !r.next.done).length;
+  if (on && !confirm(`سيُرسَل بريد الدعوة آليّاً إلى ${arCountWord(n, 'مورد واحد', 'موردان', 'موردين', 'مورداً')} لهم بريد مسجَّل:\n`
+      + '• الدعوة الآن (حتى 40 رسالة يوميّاً)\n• تذكير بعد 7 أيام\n• تذكير أخير بعد 14 يوماً\n'
+      + 'وتتوقّف السلسلة فور تسجيل المورد. هل تريد التفعيل؟')) return;
+  try {
+    const { error } = await CLOUD.client.from('proc_settings').upsert({
+      key: REGCAMP_AUTO_KEY,
+      value: { enabled: !!on, by: STATE.currentUser?.username || '', at: new Date().toISOString() },
+      description: 'الإرسال الآليّ لدعوات تسجيل الموردين (بريد)',
+      updated_by: STATE.currentUser?.username || 'unknown',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+    if (error) throw error;
+  } catch(e){ toast('error', 'تعذّر حفظ الإعداد', e.message || ''); return; }
+  REGCAMP_AUTO = !!on;
+  logAudit(on ? 'supplier_invite_auto_on' : 'supplier_invite_auto_off', 'settings', REGCAMP_AUTO_KEY, { enabled: !!on });
+  toast('success', on ? 'فُعِّل الإرسال الآليّ' : 'أُوقف الإرسال الآليّ',
+        on ? 'تُرسَل الدفعة الأولى الآن' : 'لن تُرسَل رسائل بريد آليّة');
+  renderRegCampaign();
+  if (on) regCampRunNow();
+}
+/* تشغيل الكنس الآن (الخادم يحكم: مُفعَّل؟ مرّ يوم على آخر دفعة؟) */
+async function regCampRunNow(){
+  try {
+    const r = await fetch('/api/supplier-invite-link?sweep=1', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + await regCampJwt() },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.skipped === 'throttled') toast('info', 'أُرسلت دفعة اليوم', 'الدفعة التالية تُرسَل تلقائيّاً بعد يوم');
+    else if (j.skipped === 'disabled') toast('info', 'الإرسال الآليّ مُطفأ');
+    else if (!r.ok || !j.ok) toast('error', 'تعذّر الإرسال', j.error || j.skipped || ('HTTP ' + r.status));
+    else if (!j.sent && !j.failed) toast('info', 'لا دعوات مستحقّة الآن', 'كل مورد له بريد إمّا دُعي في موعده أو سجّل');
+    else if (!j.sent) toast('error', 'تعذّر إرسال الدعوات', `فشل ${j.failed} — يُعاد في الدفعة التالية`);
+    else toast(j.failed ? 'warning' : 'success',
+      `أُرسلت ${arCountWord(j.sent, 'دعوة واحدة', 'دعوتان', 'دعوات', 'دعوة')}`,
+      (j.failed ? `تعذّر ${j.failed} — يُعاد في الدفعة التالية · ` : '') + (j.capped ? 'والباقي في دفعات الأيام التالية' : ''));
+    loadRegCampaign();
+  } catch(e){ toast('error', 'تعذّر الإرسال', e.message || ''); }
+}
+/* نبضة كسولة (نمط `docRenewTick`): أوّل موظّف يفتح النظام في اليوم يُشغّل الكنس.
+   الخادم هو الضمانة (مُطفأ ⇒ لا شيء · خانق 20 ساعة)، والخانق المحلّي يوفّر الطلب. */
+const SUPINV_TICK_KEY = 'proc_sup_invite_tick';
+async function supInviteTick(){
+  if (!hasPermission('can_review_registrations')) return;
+  try {
+    const last = Number(localStorage.getItem(SUPINV_TICK_KEY) || 0);
+    if (Date.now() - last < 12*3600*1000) return;
+    localStorage.setItem(SUPINV_TICK_KEY, String(Date.now()));
+  } catch(e){}
+  try {
+    await fetch('/api/supplier-invite-link?sweep=1', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + await regCampJwt() },
+    });
+  } catch(e){ /* صامت — الإرسال اليدويّ من اللوحة متاح دائماً */ }
 }
 
 /* سكّ الرابط الشخصيّ (خادميّ — السرّ لا يغادر Cloudflare) */
@@ -30286,12 +30713,23 @@ async function regCampSend(id){
   if (!row) return;
   try {
     const url = await regCampLink(id);
-    const msg = regCampMessage(row.sup, url);
+    // المرحلة المستحقّة تحكم الافتتاحية؛ وبعد اكتمال السلسلة يبقى الإرسال اليدويّ
+    // ممكناً بنصّ «التذكير الأخير» ويُقيَّد `extra` فلا يُحرّك المراحل.
+    const stage = row.next && !row.next.done ? row.next.stage : (row.next ? 'extra' : 'inv1');
+    const msg = regCampMessage(row.sup, url, stage === 'extra' ? 'inv3' : stage);
     // نافذة الواتساب تُفتح فوراً من نقرة المستخدم؟ لا — بعد await، فقد يحجبها
     // المتصفّح؛ لذا ننسخ النصّ دائماً أولاً كي لا تضيع الرسالة إن حُجِبت.
     try { await navigator.clipboard.writeText(msg); } catch(_) {}
     const w = window.open(`https://wa.me/${row.wa}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
-    logAudit('supplier_invite_wa', 'supplier', id, { name: row.name });
+    logAudit('supplier_invite_wa', 'supplier', id, { name: row.name, stage, channel: 'wa' });
+    // تحديث الحالة محليّاً فوراً — لا ينتظر الموظّف إعادة التحميل ليرى أنّ الصفّ أُنجِز
+    if (REGCAMP_SENDS) {
+      const k = String(id);
+      if (!REGCAMP_SENDS.has(k)) REGCAMP_SENDS.set(k, []);
+      REGCAMP_SENDS.get(k).push({ stage: REGCAMP_STAGES.some(x => x.key === stage) ? stage : 'inv1', at: Date.now(), channel: 'wa' });
+      row.next = regCampNextStage(REGCAMP_SENDS.get(k), Date.now());
+      renderRegCampaign();
+    }
     toast(w ? 'success' : 'info',
       w ? 'فُتحت محادثة الواتساب' : 'نُسخت الرسالة — الصقها في الواتساب',
       row.name);
@@ -30302,7 +30740,7 @@ async function regCampCopy(id){
   if (!row) return;
   try {
     const url = await regCampLink(id);
-    await navigator.clipboard.writeText(regCampMessage(row.sup, url));
+    await navigator.clipboard.writeText(regCampMessage(row.sup, url, row.next && !row.next.done ? row.next.stage : 'inv1'));
     toast('success', 'نُسخت الرسالة مع الرابط الخاصّ', row.name);
   } catch(e){ toast('error', 'تعذّر النسخ', e.message || ''); }
 }
@@ -30339,46 +30777,105 @@ async function regCampExport(){
   } catch(e){ toast('error', 'تعذّر التصدير', e.message || ''); }
 }
 
+/* حالة الدعوة لصفّ — نصّ + لون. سجلّ إرسال تعذّرت قراءته ⇒ «—» لا «لم يُدعَ». */
+function regCampStatus(r){
+  const n = r && r.next;
+  if (!n) return { t: '—', c: '#94a3b8', tip: 'تعذّرت قراءة سجلّ الإرسال' };
+  const ago = (ms) => poDays(Math.max(0, Math.floor((Date.now() - ms) / 86400000)));
+  if (n.done) return { t: 'اكتملت الدعوة', c: '#64748b', tip: `أُرسلت المراحل الثلاث — آخرها منذ ${ago(n.last)}. السلسلة متوقّفة.` };
+  if (n.index === 0) return { t: 'لم يُدعَ بعد', c: '#b45309', tip: 'لم تُرسَل له أيّ دعوة' };
+  if (n.due) return { t: `${n.label} مستحقّ`, c: '#b91c1c', tip: `آخر رسالة منذ ${ago(n.last)}` };
+  const left = Math.max(1, Math.ceil((n.dueAt - Date.now()) / 86400000));
+  return { t: `دُعي — ${n.label} بعد ${poDays(left)}`, c: '#15803d', tip: `آخر رسالة منذ ${ago(n.last)}` };
+}
+function regCampSetFilter(f){ REGCAMP_FILTER = f; renderRegCampaign(); }
+
 function renderRegCampaign(){
   const box = document.getElementById('regcamp-body'); if(!box) return;
-  const all = REGCAMP_ROWS, wa = all.filter(r => r.wa), noWa = all.length - wa.length;
+  const all = REGCAMP_ROWS, auto = REGCAMP_AUTO;
   if (!all.length){
     box.innerHTML = '<div style="padding:16px;text-align:center;color:#15803d;font-size:13px">✓ كل الموردين في الدليل لهم طلب تسجيل</div>';
     return;
   }
+  const byEmail = all.filter(r => r.email);
+  const waOnly  = all.filter(r => !r.email && r.wa);
+  const noCh    = all.filter(r => !r.email && !r.wa);
+  const waDue   = all.filter(r => regCampWaDue(r, auto));
+  const emailDue = byEmail.filter(r => r.next && !r.next.done && r.next.due).length;
+  const canEdit = hasPermission('can_review_registrations');
+
+  /* لوحة الإرسال الآليّ — حالتها مقروءة من الإعداد نفسه، وتعذّر القراءة يُقال صراحةً */
+  const autoBox = auto === null
+    ? `<div style="font-size:12.5px;color:#b91c1c">تعذّرت قراءة إعداد الإرسال الآليّ — لن يُرسَل شيء آليّاً حتى تُقرأ.</div>`
+    : auto
+      ? `<div style="flex:1;min-width:220px">
+           <div style="font-size:13px;font-weight:800;color:#15803d">✉ الإرسال الآليّ بالبريد مُفعَّل</div>
+           <div style="font-size:11.5px;color:#475569;margin-top:3px;line-height:1.7">يُرسَل يوميّاً: الدعوة ← تذكير بعد 7 أيام ← تذكير أخير بعد 14 يوماً، ويتوقّف فور تسجيل المورد.
+           مستحقّ الآن: <b>${emailDue}</b> من <b>${byEmail.length}</b> لهم بريد.</div>
+         </div>
+         ${canEdit ? `<button onclick="regCampRunNow()" class="btn btn-ghost btn-sm">إرسال المستحقّ الآن</button>
+         <button onclick="regCampSetAuto(false)" class="btn btn-ghost btn-sm" style="color:#b91c1c">إيقاف</button>` : ''}`
+      : `<div style="flex:1;min-width:220px">
+           <div style="font-size:13px;font-weight:800;color:#334155">✉ الإرسال الآليّ بالبريد مُطفأ</div>
+           <div style="font-size:11.5px;color:#475569;margin-top:3px;line-height:1.7">عند التفعيل يُراسَل <b>${byEmail.length}</b> مورداً لهم بريد بثلاث رسائل متدرّجة بلا تدخّل، وتتوقّف السلسلة لمن يسجّل.</div>
+         </div>
+         ${canEdit ? `<button onclick="regCampSetAuto(true)" style="cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:700">تفعيل الإرسال الآليّ</button>` : ''}`;
+
+  const F = { all, wa_due: waDue, no_channel: noCh };
+  const shown = (F[REGCAMP_FILTER] || all).slice();
+  if (REGCAMP_FILTER === 'wa_due') shown.sort((a, b) => (a.next.dueAt - b.next.dueAt) || (b.offers - a.offers));
+  const chip = (k, label, n, tone) => `<button onclick="regCampSetFilter('${k}')" aria-pressed="${REGCAMP_FILTER === k}"
+      style="cursor:pointer;font-family:inherit;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;
+      border:1.5px solid ${REGCAMP_FILTER === k ? tone : '#e2e8f0'};background:${REGCAMP_FILTER === k ? tone : 'var(--surface,#fff)'};
+      color:${REGCAMP_FILTER === k ? '#fff' : '#334155'}">${label} <span style="opacity:.85">${n}</span></button>`;
+
   box.innerHTML = `
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <span style="font-size:12.5px;color:#475569">
         <b style="color:#b45309;font-size:16px">${all.length}</b> مورد بلا تسجيل ·
-        <b style="color:#15803d">${wa.length}</b> يمكن مراسلتهم واتساب${noWa?` · <b style="color:#b91c1c">${noWa}</b> بلا رقم جوال`:''}
+        <b style="color:#15803d">${byEmail.length}</b> لهم بريد · <b style="color:#15803d">${waOnly.length}</b> واتساب فقط${noCh.length ? ` · <b style="color:#b91c1c">${noCh.length}</b> بلا جوال ولا بريد` : ''}
       </span>
-      <button onclick="regCampExport()" style="margin-inline-start:auto;cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">⬇ تصدير الحملة (${wa.length})</button>
+      <button onclick="regCampExport()" style="margin-inline-start:auto;cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#0B1B36;border:1.5px solid #cbd5e1;border-radius:11px;padding:8px 14px;font-size:12.5px;font-weight:700">⬇ تصدير الحملة (${all.filter(r => r.wa).length})</button>
+    </div>
+    <div class="regcamp-auto" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:12px 14px;border-radius:12px;
+         border:1px solid ${auto ? '#bbf7d0' : '#e2e8f0'};background:${auto ? '#f0fdf4' : '#f8fafc'}">${autoBox}</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${chip('all', 'الكل', all.length, '#0B1B36')}
+      ${chip('wa_due', 'واتساب مستحقّ الآن', waDue.length, '#16a34a')}
+      ${chip('no_channel', 'بلا جوال ولا بريد', noCh.length, '#b91c1c')}
+      <span style="font-size:11.5px;color:#64748b">${REGCAMP_FILTER === 'wa_due'
+        ? (auto ? 'من ليس له بريد فلا يصله الإرسال الآليّ — يُرسَل لهم واتساب بالمرحلة المستحقّة.' : 'كل من استحقّ مرحلته وله جوال — فعِّل الإرسال الآليّ ليتولّى البريدُ من له بريد.')
+        : REGCAMP_FILTER === 'no_channel' ? 'لا تصلهم الدعوة آليّاً ولا واتساب (الأرضيّ إن وُجد يُتّصَل به) — يُكمَل جوالهم أو بريدهم من دليل الموردين.' : ''}</span>
     </div>
     <div style="font-size:11.5px;color:#64748b;margin-bottom:10px;padding:8px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px">
       رابط كل مورد <b>خاصّ به</b>: يفتح النموذج مُعبّأً ببياناته، وعند اعتماد طلبه تُكمَّل <b>بطاقته الحالية</b> — لا بطاقة جديدة ولا فقدان لتعاملاته.
     </div>
-    <div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
+    ${shown.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr class="thead-navy" style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
           <th style="padding:11px 13px;text-align:right;font-size:12px">المورد</th>
-          <th style="padding:11px 13px;text-align:right;font-size:12px">الجوال</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">التواصل</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">حالة الدعوة</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">عروض</th>
-          <th style="padding:11px 13px;text-align:center;font-size:12px">بيانات ناقصة</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">الدعوة</th>
         </tr></thead>
-        <tbody>${all.map(r => `<tr style="border-top:1px solid var(--border,#eef1f6)">
-          <td style="padding:10px 13px;font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}</td>
-          <td style="padding:10px 13px;font-family:'IBM Plex Mono',monospace;font-size:11.5px" dir="ltr">${r.phone?escapeHtml(normalizeSaudiPhone(r.phone)):'<span style="color:#b91c1c;font-family:inherit">— لا رقم</span>'}</td>
+        <tbody>${shown.map(r => { const st = regCampStatus(r); return `<tr style="border-top:1px solid var(--border,#eef1f6)">
+          <td style="padding:10px 13px;font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}${r.gaps ? `<div style="font-size:11px;color:#b45309;font-weight:600">${r.gaps} بيانات ناقصة</div>` : ''}</td>
+          <td style="padding:10px 13px;font-size:11.5px;line-height:1.7">
+            ${r.phone ? `<div dir="ltr" style="font-family:'IBM Plex Mono',monospace;text-align:right">${escapeHtml(normalizeSaudiPhone(r.phone))}</div>` : ''}
+            ${r.email ? `<div dir="ltr" style="text-align:right;color:#475569;word-break:break-all">${escapeHtml(r.email)}${auto ? ' <span style="color:#15803d;font-family:inherit">· آليّ</span>' : ''}</div>` : ''}
+            ${!r.phone && !r.email ? '<span style="color:#b91c1c">— لا رقم ولا بريد</span>' : ''}
+          </td>
+          <td style="padding:10px 13px;font-size:12px;font-weight:700;color:${st.c}" title="${escapeAttr(st.tip)}">${escapeHtml(st.t)}</td>
           <td style="padding:10px 13px;text-align:center;color:#64748b">${r.offers||'—'}</td>
-          <td style="padding:10px 13px;text-align:center">${r.gaps?`<span style="color:#b45309;font-weight:700">${r.gaps}</span>`:'<span style="color:#15803d">✓</span>'}</td>
           <td style="padding:10px 13px;text-align:center;white-space:nowrap">
-            ${r.wa?`<button onclick="regCampSend('${escapeAttr(r.id)}')" title="فتح واتساب برسالة الدعوة ورابطه الخاصّ"
+            ${r.wa?`<button onclick="regCampSend('${escapeAttr(r.id)}')" title="فتح واتساب برسالة المرحلة المستحقّة ورابطه الخاصّ"
               style="cursor:pointer;font-family:inherit;background:#25D366;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">واتساب</button> `:''}
             <button onclick="regCampCopy('${escapeAttr(r.id)}')" title="نسخ نصّ الرسالة مع الرابط الخاصّ"
               style="cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#334155;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">نسخ</button>
-          </td></tr>`).join('')}</tbody>
+          </td></tr>`; }).join('')}</tbody>
       </table>
-    </div>`;
+    </div>` : `<div style="padding:16px;text-align:center;color:#15803d;font-size:13px">✓ لا أحد في هذا التصنيف</div>`}`;
   try{ a11yWire(box); mobileTableWrap(box); }catch(e){}
 }
 
