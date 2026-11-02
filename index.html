@@ -23197,25 +23197,112 @@ async function decidePurchaseRequest(id, approve, note){
   return {ok:true};
 }
 
-/* ── الإشعارات (جرس) ── */
+/* ── الإشعارات (جرس) ──
+   ⚠️ قياس الإنتاج (2026-11-02) الذي أعاد بناء هذه الكتلة: 210 إشعاراً غير مقروء
+   من 424، أقدمها 6 أغسطس — ومن 131 إشعار «طلب تسجيل مورد جديد» غير مقروء كان
+   **127 يشير إلى تسجيلٍ اعتُمد أو رُفض فعلاً** و4 فقط إلى تسجيلٍ معلّق. أي أنّ
+   97% من العدّاد الأحمر **إنذارٌ على عملٍ أُنجِز** لا ينطفئ بإنجازه، لأنّ الوسيلة
+   الوحيدة لإطفائه كانت «تحديد الكل مقروء» — وهي تُسكِت المعلّق مع المُنجَز، فتُرِك.
+   والعدّاد كان مسقوفاً بـ30 صفّاً (`limit(30)`) فيُقصِّر عن 102 أصلاً.
+   القاعدة المثبَّتة: **عدّادٌ لا يزول بفعلٍ زينةٌ لا تنبيه** — فالبادج صار يَعُدّ
+   «ما يحتاج إجراءً» مشتقّاً من الحالة، والإشعار الذي تمّ عمله **يُسوّى بنفسه**. */
+const WF_NOTIF_INFO_TITLES = ['مورّد حدّث مستنداً'];   // للعلم — لا تُعَدّ في البادج
+const WF_NOTIF_REG_TITLE   = 'طلب تسجيل مورد جديد';
+const WF_OPEN_REG_TTL      = 60000;
+let __wfOpenRegs = { at: 0, ids: null };
+
+function wfNotifRegId(body){ const m = /\(([A-Z]{2}-[A-Z0-9]{4,})\)/.exec(String(body||'')); return m ? m[1] : null; }
+function wfNotifWord(n){ return arCountWord(n, 'إشعار واحد', 'إشعاران', 'إشعارات', 'إشعاراً'); }
+
+/* مجموعة التسجيلات التي ما تزال معلّقة. ⚠️ تُرجِع null عند تعذّر القراءة
+   (شبكة/صلاحية) — والتصنيف يعتبر المجهول «يحتاج إجراءً» فلا يُسوّي إشعاراً
+   بناءً على استعلامٍ فاشل. فشلٌ مغلق. */
+async function wfOpenRegIds(){
+  const now = Date.now();
+  if(__wfOpenRegs.ids && (now - __wfOpenRegs.at) < WF_OPEN_REG_TTL) return __wfOpenRegs.ids;
+  if(!(CLOUD && CLOUD.enabled && CLOUD.client)) return null;
+  try{
+    const { data, error } = await CLOUD.client.from('proc_supplier_registrations').select('id').eq('status','pending').limit(1000);
+    if(error || !data) return null;
+    const set = new Set(data.map(r=>r.id));
+    __wfOpenRegs = { at: now, ids: set };
+    return set;
+  }catch(e){ return null; }
+}
+
+/* ثلاث حالات: action (يحتاج إجراءك) · done (تمّ عمله ⇒ يُسوّى) · info (للعلم). */
+function wfNotifState(n, openRegs){
+  const title = String((n&&n.title)||'');
+  if(WF_NOTIF_INFO_TITLES.includes(title)) return 'info';
+  if(title === WF_NOTIF_REG_TITLE){
+    const rid = wfNotifRegId(n&&n.body);
+    if(!rid || !openRegs) return 'action';          // مجهول ⇒ يبقى إنذاراً
+    return openRegs.has(rid) ? 'action' : 'done';
+  }
+  return 'action';                                   // نوع جديد لا يُخفى صامتاً
+}
+
 async function wfFetchNotifications(){
   if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return [];
   try{ const {data} = await CLOUD.client.from('proc_notifications').select('*').eq('recipient', STATE.currentUser.username).order('created_at',{ascending:false}).limit(30); return data||[]; }catch(e){ return []; }
 }
+/* كل غير المقروء بأعمدة خفيفة — البادج لا يجوز أن يُقصِّر عن الواقع بسقف عرضٍ. */
+async function wfFetchUnreadLite(){
+  if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return [];
+  try{
+    const {data} = await CLOUD.client.from('proc_notifications').select('id,title,body,link')
+      .eq('recipient', STATE.currentUser.username).eq('read', false).limit(500);
+    return data||[];
+  }catch(e){ return []; }
+}
+/* تسوية ما تمّ عمله: دفعة واحدة، مقيَّدة بالمستلِم (المنح عموديّ: UPDATE(read) له وحده). */
+async function wfSettleDone(ids){
+  if(!ids || !ids.length) return 0;
+  try{
+    await CLOUD.client.from('proc_notifications').update({read:true})
+      .eq('recipient', STATE.currentUser.username).in('id', ids.slice(0,500));
+    return ids.length;
+  }catch(e){ return 0; }
+}
+
 async function wfRefreshBell(){
   if(!STATE.currentUser) return;
-  const list = await wfFetchNotifications();
-  const unread = list.filter(n=>!n.read).length;
+  const [list, unreadLite, openRegs] = await Promise.all([
+    wfFetchNotifications(), wfFetchUnreadLite(), wfOpenRegIds()
+  ]);
+
+  /* ما تمّ عمله يُسوّى بنفسه فينزل العدّاد بالإنجاز لا بضغطة إسكات. */
+  const settle = unreadLite.filter(n=>wfNotifState(n, openRegs)==='done').map(n=>n.id);
+  if(settle.length){
+    await wfSettleDone(settle);
+    const done = new Set(settle);
+    for(const n of list) if(done.has(n.id)) n.read = true;
+  }
+  const settled = new Set(settle);
+  const live = unreadLite.filter(n=>!settled.has(n.id));
+  const actionable = live.filter(n=>wfNotifState(n, openRegs)==='action').length;
+  const infoCount  = live.length - actionable;
+
   const badge = document.getElementById('wf-bell-badge');
-  if(badge){ badge.textContent = unread; badge.style.display = unread?'flex':'none'; }
+  if(badge){ badge.textContent = actionable; badge.style.display = actionable?'flex':'none'; }
+  const bell = document.getElementById('wf-bell');
+  if(bell) bell.title = actionable ? `${wfNotifWord(actionable)} بانتظار إجراءك` : 'الإشعارات — لا شيء ينتظر إجراءك';
+
   const panel = document.getElementById('wf-notif-list');
   if(panel){
-    panel.innerHTML = list.length ? list.map(n=>`
+    const row = n => `
       <div class="wf-notif ${n.read?'':'unread'}" data-id="${escapeHtml(n.id)}" data-link="${escapeHtml(n.link||'')}">
         <div class="wf-notif-title">${escapeHtml(n.title)}</div>
         <div class="wf-notif-body">${escapeHtml(n.body||'')}</div>
         <div class="wf-notif-time">${new Date(n.created_at).toLocaleString('ar-SA-u-nu-latn',{dateStyle:'short',timeStyle:'short'})}</div>
-      </div>`).join('') : '<div class="wf-empty">لا توجد إشعارات</div>';
+      </div>`;
+    const act  = list.filter(n=>!n.read && wfNotifState(n, openRegs)==='action');
+    const rest = list.filter(n=>!act.includes(n));
+    let html = '';
+    if(act.length)  html += `<div class="wf-notif-group">يحتاج إجراءك — ${wfNotifWord(act.length)}</div>` + act.map(row).join('');
+    if(rest.length) html += `<div class="wf-notif-group muted">${act.length?'سابقة وللعلم':'للعلم'}</div>` + rest.map(row).join('');
+    if(!act.length && infoCount) html = `<div class="wf-notif-ok">✓ لا شيء ينتظر إجراءك</div>` + html;
+    panel.innerHTML = html || '<div class="wf-empty">لا توجد إشعارات</div>';
     panel.querySelectorAll('.wf-notif').forEach(el=>{
       el.addEventListener('click', async ()=>{
         const nid = el.getAttribute('data-id'); const link = el.getAttribute('data-link');
@@ -23228,9 +23315,20 @@ async function wfRefreshBell(){
     });
   }
 }
+/* ⚠️ كانت تُسكِت **كلّ** شيء — المعلّق مع المُنجَز — فصارت الوسيلة الوحيدة لإطفاء
+   عدّادٍ 97% منه ضجيج، فتُرِكت وبقي العدّاد 102 منذ أغسطس. الآن تُخفي ما **للعلم**
+   وحده، وما يحتاج إجراءً يزول بالإجراء (أو بالنقر عليه) لا بإسكاتٍ جماعيّ. */
 async function wfMarkAllRead(){
   if(!(CLOUD && CLOUD.enabled && STATE.currentUser)) return;
-  try{ await CLOUD.client.from('proc_notifications').update({read:true}).eq('recipient', STATE.currentUser.username).eq('read', false); }catch(e){}
+  const [unreadLite, openRegs] = await Promise.all([wfFetchUnreadLite(), wfOpenRegIds()]);
+  const ids = unreadLite.filter(n=>wfNotifState(n, openRegs)!=='action').map(n=>n.id);
+  if(!ids.length){
+    const left = unreadLite.length;
+    toast('info', left ? 'لا شيء للعلم فقط' : 'لا إشعارات غير مقروءة',
+      left ? `${wfNotifWord(left)} تحتاج إجراءك — تزول بإتمام عملها أو بالنقر عليها.` : '');
+    return;
+  }
+  await wfSettleDone(ids);
   wfRefreshBell();
 }
 
@@ -23301,6 +23399,9 @@ function wfInjectUI(){
     .wf-notif-title{font-size:13px;font-weight:600;color:var(--ink,#231F20)}
     .wf-notif-body{font-size:12px;color:var(--ink-2,#555);margin-top:2px}
     .wf-notif-time{font-size:10.5px;color:var(--muted,#999);margin-top:3px}
+    .wf-notif-group{padding:7px 14px;font-size:11px;font-weight:800;letter-spacing:.3px;color:#8a6a30;background:rgba(196,162,101,0.14);border-bottom:1px solid var(--border,#f0ece2)}
+    .wf-notif-group.muted{color:var(--muted,#999);background:var(--surface-2,#faf8f3);font-weight:700}
+    .wf-notif-ok{padding:12px 14px;font-size:12.5px;font-weight:700;color:#1f7a55;background:rgba(45,157,111,0.10);border-bottom:1px solid var(--border,#f0ece2)}
     .wf-empty{padding:24px 14px;text-align:center;color:var(--muted,#999);font-size:13px}
     #modal-approvals{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;padding:20px}
     .wf-modal{width:min(640px,96vw);max-height:88vh;overflow:auto;background:var(--surface,#fff);border-radius:14px;border:1px solid var(--border,#e5e0d5)}
@@ -23340,7 +23441,7 @@ function wfInjectUI(){
         <a id="wf-open-approvals" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">الاعتمادات</a>
         <a id="wf-open-rfq" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">عروض الأسعار</a>
         <a id="wf-open-sc" style="font-size:12px;color:var(--accent-2,#C4A265);cursor:pointer;font-weight:600">أداء الموردين</a>
-        <a id="wf-mark-read" style="font-size:12px;color:var(--muted,#999);cursor:pointer">تحديد الكل مقروء</a>
+        <a id="wf-mark-read" style="font-size:12px;color:var(--muted,#999);cursor:pointer" title="يُخفي ما للعلم فقط — ما يحتاج إجراءً يزول بالإجراء">إخفاء ما للعلم</a>
       </span>
     </div>
     <div id="wf-notif-list"></div>`;

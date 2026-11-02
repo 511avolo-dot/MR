@@ -6255,6 +6255,192 @@ G('٥٣ — الخطوط أصولٌ مستقلّة لا base64');
     && /const MARK_B64 = 'data:image\/png;base64,/.test(HTML));
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ٥٤ — الجرس: عدّادٌ يَعُدّ ما يحتاج إجراءً، والمُنجَز يُسوّى بنفسه
+   ───────────────────────────────────────────────────────────────
+   قياس الإنتاج (2026-11-02): 210 غير مقروء من 424، أقدمها 6 أغسطس. ومن 131
+   إشعار «طلب تسجيل مورد جديد» غير مقروء كان **127 يشير إلى تسجيلٍ اعتُمد أو
+   رُفض فعلاً** و4 فقط إلى معلّق ⇒ **97% من العدّاد الأحمر إنذارٌ على عملٍ
+   أُنجِز** لا ينطفئ بإنجازه. والبادج كان مسقوفاً بـ30 صفّاً فيُقصِّر عن 102.
+   ⚠️ تأكيدات **سلوكية** تُشغّل `wfRefreshBell`/`wfMarkAllRead` على عميلٍ
+      مُقلَّد وDOM حقيقيّ-الشكل — العلّة كانت في منطق العدّ والتسوية لا في نصّ. */
+G('٥٤ — الجرس: ما يحتاج إجراءً وحده يُعَدّ');
+await (async () => {
+  const B = (() => {
+    const src = [
+      `const STATE = { currentUser:{ username:'Mahmoud', role:'admin' } };`,
+      `const escapeHtml = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));`,
+      `let __toasts = [];`,
+      `function toast(k,t,b){ __toasts.push({k,t,b}); }`,
+      `function navigate(){} function loadRegistrations(){}`,
+      `function openApprovalsModal(){} function wfIsApprover(){ return true; }`,
+      // DOM بالحد الذي يُظهر ما يُكتَب فعلاً (البادج والعنوان واللوحة)
+      `const __els = {};`,
+      `function __mk(id){ return { id, textContent:'', innerHTML:'', title:'', style:{},
+         querySelectorAll:(sel)=>[], contains:()=>false, addEventListener(){} }; }`,
+      `const document = { getElementById:(id)=> (__els[id] = __els[id] || __mk(id)) };`,
+      `let CLOUD = null;`,
+      grabConst('WF_NOTIF_INFO_TITLES'), grabConst('WF_NOTIF_REG_TITLE'),
+      grabConst('WF_OPEN_REG_TTL'), grabLet('__wfOpenRegs'),
+      grab('arCountWord'), grab('wfNotifRegId'), grab('wfNotifWord'),
+      grab('wfOpenRegIds'), grab('wfNotifState'),
+      grab('wfFetchNotifications'), grab('wfFetchUnreadLite'), grab('wfSettleDone'),
+      grab('wfRefreshBell'), grab('wfMarkAllRead'),
+    ].join('\n\n');
+    return new Function(src + `; return { wfNotifState, wfNotifRegId, wfNotifWord,
+      wfRefreshBell, wfMarkAllRead, els:__els, toasts:()=>__toasts,
+      reset(){ __wfOpenRegs = { at:0, ids:null }; __toasts = []; },
+      wire(v){ CLOUD = v; } };`)();
+  })();
+
+  /* شبكة مُقلَّدة: جدول الإشعارات + جدول التسجيلات، وتتبّع كل كتابة. */
+  const wire = (rows, regStatus, opts = {}) => {
+    const writes = [];
+    const tbl = (name) => {
+      if (name === 'proc_supplier_registrations') {
+        const q = { _st: null,
+          select(){ return q; }, eq(c,v){ if(c==='status') q._st=v; return q; }, limit(){ return q; },
+          then(res){ // thenable: await يُرجِع {data,error}
+            if (opts.regsFail) return Promise.resolve({ error:{message:'denied'}, data:null }).then(res);
+            const data = Object.entries(regStatus).filter(([,s]) => s === q._st).map(([id]) => ({ id }));
+            return Promise.resolve({ data, error:null }).then(res);
+          } };
+        return q;
+      }
+      /* ⚠️ الكعب يحترم `limit()` — وهو **جوهر العلّة الأصلية** (العدّاد كان من
+         استعلامٍ مسقوف بـ30 فيُقصِّر عن 102). كعبٌ يتجاهله يجعل تأكيد السقف
+         فراغيّاً: مُتحقَّق أنّ إعادة `limit(30)` لم تعضّ قبل هذا الإصلاح. */
+      const q = { _eq:{}, _upd:null, _in:null, _lim:null,
+        select(){ return q; }, order(){ return q; }, limit(n){ q._lim = n; return q; },
+        update(p){ q._upd = p; return q; },
+        eq(c,v){ q._eq[c]=v; return q; },
+        in(c,v){ q._in = { c, v }; return q; },
+        then(res){
+          if (q._upd) { writes.push({ upd:q._upd, eq:{...q._eq}, in:q._in }); return Promise.resolve({ error:null }).then(res); }
+          let d = rows.filter(r => r.recipient === q._eq.recipient);
+          if (q._eq.read === false) d = d.filter(r => r.read !== true);
+          if (q._lim != null) d = d.slice(0, q._lim);
+          return Promise.resolve({ data: d.map(r => ({...r})), error:null }).then(res);
+        } };
+      return q;
+    };
+    B.reset();
+    B.wire({ enabled:true, client:{ from:tbl } });
+    return writes;
+  };
+
+  const mk = (i, title, reg, read) => ({ id:'N'+i, recipient:'Mahmoud', title,
+    body: reg ? `منشأة ما — بانتظار المراجعة (${reg})` : 'جسم', link:'registrations',
+    read: !!read, created_at:'2026-10-01T00:00:00Z' });
+  /* ⚠️ شكل رقم التسجيل الحقيقيّ `DG-XXXXXX` (مقيس: 80/80 صفّاً على الإنتاج بطول 9).
+     كعبٌ لا يطابق الشكل الحقيقيّ ليس اختباراً — أوّل صياغة استعملت `DG-D0`
+     فسقط الاستخلاص وبدا العيب في الكود. */
+  const RID = (s) => 'DG-' + String(s).toUpperCase().padStart(6, 'X');
+  T('استخلاص رقم التسجيل يطابق شكل الإنتاج', B.wfNotifRegId('منشأة (DG-24DRZ9)') === 'DG-24DRZ9');
+  T('ولا يلتقط قوساً ليس رقم تسجيل', B.wfNotifRegId('منشأة (ملاحظة)') === null);
+
+  /* ── (أ) التصنيف الثلاثيّ ── */
+  const open = new Set([RID('open01')]);
+  T('إشعار تسجيلٍ ما يزال معلّقاً = يحتاج إجراءك',
+    B.wfNotifState(mk(1,'طلب تسجيل مورد جديد',RID('open01')), open) === 'action');
+  T('وإشعار تسجيلٍ اعتُمد أو رُفض = تمّ عمله (يُسوّى)',
+    B.wfNotifState(mk(2,'طلب تسجيل مورد جديد',RID('done01')), open) === 'done');
+  T('و«مورّد حدّث مستنداً» للعلم — لا تُعَدّ في البادج',
+    B.wfNotifState(mk(3,'مورّد حدّث مستنداً',null), open) === 'info');
+  /* ⚠️ فشلٌ مغلق: استعلام الحالة الفاشل (null) لا يُسوّي شيئاً. */
+  T('وتعذّر قراءة حالة التسجيلات يُبقي الإشعار إنذاراً (لا تسويةً على استعلامٍ فاشل)',
+    B.wfNotifState(mk(4,'طلب تسجيل مورد جديد',RID('done01')), null) === 'action');
+  T('وجسمٌ بلا رقم تسجيل يبقى إنذاراً',
+    B.wfNotifState(mk(5,'طلب تسجيل مورد جديد',null), open) === 'action');
+  /* نوعٌ جديد لا يُخفى صامتاً — الصمت عن المجهول يُقرأ «لا شيء ينتظرك». */
+  T('ونوع إشعار جديد غير معروف يُعَدّ إنذاراً لا يُهمَل',
+    B.wfNotifState({ title:'حدثٌ لم يُصنَّف بعد', body:'' }, open) === 'action');
+
+  /* ── (ب) شكل الإنتاج: 1 معلّق + 9 مُنجَزة + 2 للعلم ── */
+  {
+    const rows = [ mk(1,'طلب تسجيل مورد جديد',RID('open01')) ];
+    const regs = { [RID('open01')]:'pending' };
+    for (let i = 0; i < 9; i++) { const r = RID('d'+i); rows.push(mk(100+i,'طلب تسجيل مورد جديد',r)); regs[r] = 'approved'; }
+    rows.push(mk(200,'مورّد حدّث مستنداً',null), mk(201,'مورّد حدّث مستنداً',null));
+    const writes = wire(rows, regs);
+    await B.wfRefreshBell();
+    T('البادج يَعُدّ المعلّق وحده لا كل غير المقروء (1 من 12)',
+      B.els['wf-bell-badge'].textContent === 1, String(B.els['wf-bell-badge'].textContent));
+    const settle = writes.filter(w => w.upd && w.upd.read === true && w.in);
+    const sIds = settle.length === 1 ? settle[0].in.v : null;
+    T('والتسعة المُنجَزة تُسوَّى بنفسها في دفعة واحدة',
+      !!sIds && sIds.length === 9, JSON.stringify(settle.map(s=>s.in && s.in.v)));
+    /* ⚠️ الكتابة مقيَّدة بالمستلِم — المنح عموديّ (UPDATE(read) له وحده). */
+    T('والتسوية مقيَّدة بالمستلِم', !!sIds && settle[0].eq.recipient === 'Mahmoud');
+    T('ولا تُسوَّى إشعارات «للعلم» (قرارٌ في بريد صاحبها لا يُفتَرض)',
+      !!sIds && !sIds.includes('N200') && !sIds.includes('N201'));
+    T('ولوحة الجرس تُجمِّع: «يحتاج إجراءك» ثمّ «للعلم»',
+      /يحتاج إجراءك/.test(B.els['wf-notif-list'].innerHTML)
+      && /للعلم/.test(B.els['wf-notif-list'].innerHTML));
+    T('وتلميح الجرس يقول ما ينتظر إجراءه بصيغة عربية صحيحة',
+      B.els['wf-bell'].title === 'إشعار واحد بانتظار إجراءك', B.els['wf-bell'].title);
+  }
+
+  /* ── (ج) صفر معلّق ⇒ لا بادج أحمر ولو بقيت مئة صفّ للعلم ── */
+  {
+    const rows = []; for (let i = 0; i < 100; i++) rows.push(mk(300+i,'مورّد حدّث مستنداً',null));
+    wire(rows, {});
+    await B.wfRefreshBell();
+    T('مئة إشعار للعلم ⇒ لا عدّاد أحمر (العدّاد ليس أرشيفاً)',
+      B.els['wf-bell-badge'].style.display === 'none' && B.els['wf-bell-badge'].textContent === 0);
+    T('واللوحة تُعلِن «لا شيء ينتظر إجراءك» صراحةً',
+      /لا شيء ينتظر إجراءك/.test(B.els['wf-notif-list'].innerHTML));
+  }
+
+  /* ── (د) العدّاد لا يُقصِّر بسقف العرض (العلّة: limit(30)) ── */
+  {
+    const rows = []; const regs = {};
+    for (let i = 0; i < 48; i++) { const r = RID('p'+i); rows.push(mk(400+i,'طلب تسجيل مورد جديد',r)); regs[r] = 'pending'; }
+    wire(rows, regs);
+    await B.wfRefreshBell();
+    T('48 معلّقاً تُعَدّ 48 لا 30 (البادج لا يَقصُر بسقف لوحة العرض)',
+      B.els['wf-bell-badge'].textContent === 48, String(B.els['wf-bell-badge'].textContent));
+  }
+
+  /* ── (هـ) «إخفاء ما للعلم» لم تعُد تُسكِت المعلّق ── */
+  {
+    const rows = [ mk(1,'طلب تسجيل مورد جديد',RID('open01')), mk(2,'مورّد حدّث مستنداً',null) ];
+    const writes = wire(rows, { [RID('open01')]:'pending' });
+    await B.wfMarkAllRead();
+    const upd = writes.filter(w => w.upd);
+    T('«إخفاء ما للعلم» يُخفي الإشعار المعلوماتيّ وحده',
+      upd.length === 1 && upd[0].in && upd[0].in.v.length === 1 && upd[0].in.v[0] === 'N2',
+      JSON.stringify(upd.map(u => u.in && u.in.v)));
+    /* ⚠️ العلّة الأصلية: `update({read:true}).eq(read,false)` بلا `in` تُسكِت الكلّ. */
+    T('ولا كتابةٌ جماعية بلا قائمة معرّفات (إسكاتُ الكلّ كان الجذر)',
+      upd.every(u => !!u.in));
+  }
+  {
+    const rows = [ mk(1,'طلب تسجيل مورد جديد',RID('open01')) ];
+    const writes = wire(rows, { [RID('open01')]:'pending' });
+    await B.wfMarkAllRead();
+    T('وبلا شيءٍ للعلم لا تكتب شيئاً وتشرح أنّ المتبقّي يحتاج إجراءً',
+      writes.filter(w=>w.upd).length === 0 && /تحتاج إجراءك/.test((B.toasts().slice(-1)[0]||{}).b || ''),
+      JSON.stringify(B.toasts().slice(-1)));
+  }
+
+  /* ── (و) تعذّر قراءة الحالة ⇒ لا تسوية ولا إسكات ── */
+  {
+    const rows = [ mk(1,'طلب تسجيل مورد جديد',RID('done01')) ];
+    const writes = wire(rows, {}, { regsFail:true });
+    await B.wfRefreshBell();
+    T('استعلام الحالة الفاشل: صفر تسوية والعدّاد يبقى قائماً',
+      writes.filter(w=>w.upd).length === 0 && B.els['wf-bell-badge'].textContent === 1,
+      `writes=${writes.length} badge=${B.els['wf-bell-badge'].textContent}`);
+  }
+
+  /* ── (ز) حرّاس بنيويّة ── */
+  T('البادج يُبنى من المُصنَّف «action» لا من طول قائمة غير المقروء',
+    /actionable\s*\)\s*;/.test(CODE) || /badge\.textContent\s*=\s*actionable/.test(CODE));
+  T('ولا يبقى في الشيفرة إسكاتٌ جماعيّ بلا قائمة معرّفات',
+    !/update\(\{read:true\}\)\s*\.eq\('recipient'[^\n]*\.eq\('read',\s*false\)/.test(CODE));
+})();
+
 /* ── النتيجة ─────────────────────────────────────────────────── */
 console.log(`\n${'─'.repeat(52)}`);
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
