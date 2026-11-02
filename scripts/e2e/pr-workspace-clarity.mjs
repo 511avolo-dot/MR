@@ -49,6 +49,7 @@ await page.evaluate(async () => {
      بعد أسابيع فينقلب التأكيد صامتاً. */
   const DUE = (d) => { const t = new Date(); t.setDate(t.getDate() + d);
     return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; };
+  const AGO = (d) => new Date(Date.now() - d * 86400000).toISOString();
   const mk = (n, o) => Object.assign({
     id: 'PR-DG2026-' + String(n).padStart(4, '0'), request_no: 'PR-DG2026-' + String(n).padStart(4, '0'),
     title: 'طلب ' + n, requester: 'mostafa.kishk', requester_name: 'مصطفى كشك',
@@ -57,11 +58,17 @@ await page.evaluate(async () => {
   }, o);
   STATE.currentUser = { username: 'Abdullah', displayName: 'عبدالله الذيابي', role: 'admin', permissions: {} };
   STATE.purchaseRequests = [
-    mk(3,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(-4) }),
+    /* ⚠️ عمر المرحلة هو المعيار لا الموعد (بند ④، 2026-11-01): هذه الثلاثة في
+       طور «لم يبدأ العمل عليه» وعتبته 3 أيام، فتُقاد بـ`pricing_authorized_at`.
+       والمواعيد باقية لأنّها ما زالت تُعرَض في تفاصيل الطلب. */
+    mk(3,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(-4),
+             pricing_authorized_at: AGO(30) }),                 // 27 يوماً فوق عتبته
     mk(12, { status: 'in_review', workflow_state: 'maintenance_review', current_seq: 1 }),
     mk(11, { status: 'in_review', workflow_state: 'maintenance_review', current_seq: 1 }),
-    mk(10, { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(1) }),
-    mk(9,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(45) }),
+    mk(10, { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(1),
+             pricing_authorized_at: AGO(5) }),                  // يومان فوق عتبته
+    mk(9,  { status: 'approved',  workflow_state: 'pricing', needed_by: DUE(45),
+             pricing_authorized_at: AGO(1) }),                  // داخل زمن مرحلته
     mk(2,  { status: 'returned',  workflow_state: 'returned' }),
   ];
   STATE.prWorkspaceMode = 'requests'; STATE.prWorkspaceFilter = 'all'; STATE.prWorkspaceSearch = '';
@@ -235,19 +242,27 @@ const dueUI = await page.evaluate(() => {
   return { rows, groups: rows.filter(r => r.group).map(r => r.group) };
 });
 const dueRows = dueUI.rows.filter(r => r.id);
-T('مجموعة موعد التوريد تظهر في الطابور',
-  dueUI.groups.some(g => /موعد التوريد/.test(g)), JSON.stringify(dueUI.groups));
+/* ⚠️ هذه الأربعة كانت تُرمّز معيار الموعد فعضّت حين تغيّر الثابت (بند ④) —
+   فصُحِّحت للمعيار الجديد. وتفصيل نموذج عمر المرحلة في `pr-stage-age.mjs`؛
+   ما يُسهم به هذا القسم وحده هو **قياس الصندوق المرسوم**. */
+T('مجموعة التعثّر الزمنيّ تظهر في الطابور',
+  dueUI.groups.some(g => /الزمن المعتاد لمرحلته/.test(g))
+  && !dueUI.groups.some(g => /موعد التوريد/.test(g)), JSON.stringify(dueUI.groups));
 /* صندوقٌ غير صفريّ = **مرسومة فعلاً**، لا موجودة في الترميز وحده. */
-T('  وشارة الموعد مرسومة بصندوق غير صفريّ',
+T('  وشارة عمر المرحلة مرسومة بصندوق غير صفريّ',
   dueRows.filter(r => r.box > 0).length === 2, JSON.stringify(dueRows.map(r => [r.id.slice(-4), r.box])));
-T('  ونصّها يفرّق بين ما فات وما يستحقّ غداً',
-  dueRows.some(r => /تجاوز موعد التوريد/.test(r.due)) && dueRows.some(r => /غداً/.test(r.due)),
+T('  ونصّها يسمّي المرحلة وعمرها',
+  dueRows.filter(r => /لم يبدأ العمل عليه/.test(r.due)).length === 2
+  && dueRows.some(r => /30\s*يوماً/.test(r.due)),
   JSON.stringify(dueRows.map(r => r.due).filter(Boolean)));
-/* 0003 فات موعده و0010 يستحقّ غداً — ورقم 0010 أكبر، فالفرز بالرقم كان سيقلبهما. */
-T('  وما فات موعده يسبق ما يستحقّ غداً رغم أنّ رقمه أصغر',
+/* 0003 تجاوز عتبته بـ27 يوماً و0010 بيومين — ورقم 0010 أكبر، فالفرز بالرقم
+   كان سيقلبهما، والفرز بالموعد أيضاً (موعد 0010 أقرب). */
+T('  والأشدّ تجاوزاً يسبق الأقلّ رغم أنّ رقمه أصغر',
   dueRows.findIndex(r => r.id.endsWith('0003')) < dueRows.findIndex(r => r.id.endsWith('0010')),
   dueRows.map(r => r.id.slice(-4)).join(','));
-T('  والبعيد (45 يوماً) بلا شارة',
+/* ⚠️ 0009 موعده بعد 45 يوماً **وداخل زمن مرحلته** — فبلا شارة. وهو الانعكاس:
+   بالمعيار القديم كان البعيد بلا شارة لبُعد موعده، والآن لانتظام مرحلته. */
+T('  والسائر في زمن مرحلته بلا شارة',
   (dueRows.find(r => r.id.endsWith('0009')) || {}).box === 0);
 
 T('صفر خطأ صفحة', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
