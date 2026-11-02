@@ -262,7 +262,7 @@ const NEEDED_FNS = [
   'prQueueGroup', 'prQueueSeq', 'prQueueSort', 'prAuditLabel', 'prPersonName', 'prAuditGroups',
   'prStageKey', 'prStageStart', 'prStageInfo', 'prStageChip', 'prStageOverBy',
   // حملة تسجيل الموردين غير المسجَّلين + إكمال البطاقة القائمة عند الاعتماد
-  'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
+  'regCampWaPhone', 'regCampMessage', 'regCampBuild', 'regCampSendsFromAudit', 'regCampNextStage', 'regCampEmailOf', 'regCampWaDue', 'regCampStatus', 'regSupplierFill', 'regMatchExistingSupplier', 'normalizeSaudiPhone',
   'docvKind', 'docvExt', 'docvListFromReg', 'docvLabel', 'regSearchSafe',
   'poFollowDelivery', 'poFollowReceived', 'buildPOFollowupReport',
   'rtIndexOf', 'rtApply',
@@ -304,14 +304,14 @@ const NEEDED_FNS = [
   'supCatIndex', 'supCatToken', 'supSplitSpecialty', 'supEvidenceIndex', 'supCatProfile', 'supInCategory', 'supCardCatsHtml',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
-const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED', '_supCatIdx', '_supEvIdx', '_supCat'];
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED', '_supCatIdx', '_supEvIdx', '_supCat', 'REGCAMP_SENDS', 'REGCAMP_AUTO'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['REGCAMP_STAGES', 'REGCAMP_AUTO_KEY', 'SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   'SUP_SECTORS', 'SUP_CAT_NONE', 'SUP_CAT_PREFIX_MIN', 'SUP_CAT_SYNONYMS', '_supProfCache', 'SUP_CARD_CATS',

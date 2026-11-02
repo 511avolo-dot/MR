@@ -7421,6 +7421,7 @@ async function tasksLoadCloud(){
   }
   // نبضة التذكير المجدوَل (بلا انتظار — لا تُعطّل رسم اللوحة)
   try{ docRenewTick(); }catch(e){}
+  try{ supInviteTick(); }catch(e){}
   // طلبات الشراء التي يستطيع المستخدم البتّ فيها
   if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
     try{ await prLoadAll(); TASKS.prPending = prIncoming().length; }catch(e){ TASKS.prPending=null; }
@@ -30456,8 +30457,15 @@ function regCampWaPhone(sup){
    (رابط شخصيّ يُكمِل البطاقة القائمة) تبقى كما هي في الخلفية، لكنها **شأن داخليّ
    لا يُشرَح للمورّد** في متن الخطاب. (محروس بتأكيد على الرسالة والبطاقة واللافتة.)
    ⚠️ الرابط في سطر مستقلّ: واتساب لا يُحوِّله رابطاً قابلاً للنقر إن التصق بنصّ عربيّ. */
-function regCampMessage(sup, url){
+function regCampMessage(sup, url, stage){
   const name = supVal(sup.name) || 'المورد';
+  /* المرحلة تُبدّل الافتتاحية وحدها — الرسالة واحدة البنية في المراحل الثلاث،
+     ونظيرتها البريدية `supplierInviteEmail` في `functions/api/_supplier-invite.js`. */
+  const lead = stage === 'inv3'
+    ? 'نذكّركم للمرّة الأخيرة بدعوة إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.'
+    : stage === 'inv2'
+      ? 'نذكّركم بدعوة إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.'
+      : 'في إطار تحديث *سجل الموردين المعتمدين*، تدعوكم إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.';
   return [
     'السلام عليكم ورحمة الله وبركاته',
     '',
@@ -30465,7 +30473,7 @@ function regCampMessage(sup, url){
     '',
     'تحية طيبة وبعد،',
     '',
-    'في إطار تحديث *سجل الموردين المعتمدين*، تدعوكم إدارة المشتريات في *مجموعة الذيابي* إلى استكمال بيانات منشأتكم واعتماد ملفّها عبر بوابة تسجيل الموردين.',
+    lead,
     '',
     '*أولاً: متطلبات استكمال الملف*',
     '• تعبئة نموذج التسجيل الإلكتروني — بيانات المنشأة وجهات التواصل والحساب البنكي',
@@ -30490,7 +30498,53 @@ function regCampMessage(sup, url){
 /* من لم يُسجّل؟ مطابقة الدليل بالتسجيلات: سجل تجاري · رقم ضريبي · مفتاح الاسم
    القويّ. ⚠️ المطابقة **متساهلة عمداً** هنا (عكس الاعتماد): إدراج مورد مسجَّل
    في الحملة يُرسل له دعوة لا يحتاجها — إزعاج؛ أهون بكثير من بطاقة مكرّرة. */
-function regCampBuild(regs){
+/* ── مراحل الدعوة: مرآة `functions/api/_supplier-invite.js` ─────────────────
+   الخادم يرسل البريد آليّاً بهذه المراحل، والواجهة تعرض الحالة نفسها وتُرتّب
+   طابور الواتساب بها — فالنسختان **يجب** أن تتطابقا (محروس بتأكيد يُشغّل
+   الاثنتين على الحالات نفسها ويقارن المُخرَج).
+   ⚠️ المرحلة لكل **مورد** لا لكل قناة: رسالة واحدة لكل خطوة مهما تعدّدت القنوات. */
+const REGCAMP_STAGES = [
+  { key: 'inv1', afterDays: 0,  label: 'الدعوة' },
+  { key: 'inv2', afterDays: 7,  label: 'تذكير' },
+  { key: 'inv3', afterDays: 14, label: 'تذكير أخير' },
+];
+const REGCAMP_AUTO_KEY = 'supplier_invite_auto';
+let REGCAMP_SENDS = null;       // Map id → [{stage,at,channel}] · null = تعذّرت قراءة سجلّ الإرسال
+let REGCAMP_AUTO = null;        // true · false · null (تعذّرت القراءة)
+let REGCAMP_FILTER = 'all';     // all · wa_due · no_channel
+
+function regCampSendsFromAudit(rows){
+  const by = new Map();
+  (rows || []).forEach(r => {
+    if (!r || !r.entity_id) return;
+    const nv = (r.new_value && typeof r.new_value === 'object') ? r.new_value : {};
+    const stage = REGCAMP_STAGES.some(x => x.key === nv.stage) ? nv.stage : 'inv1';
+    const channel = nv.channel || (r.action === 'supplier_invite_wa' ? 'wa' : 'email');
+    const at = Date.parse(r.ts || '');
+    if (!isFinite(at)) return;
+    const k = String(r.entity_id);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push({ stage, at, channel });
+  });
+  return by;
+}
+function regCampNextStage(sends, now){
+  const list = Array.isArray(sends) ? sends : [];
+  const doneKeys = new Set(list.map(x => x.stage));
+  const last = list.reduce((m, x) => Math.max(m, x.at || 0), 0) || null;
+  const idx = REGCAMP_STAGES.findIndex(x => !doneKeys.has(x.key));
+  if (idx < 0) return { done: true, sent: list.length, last };
+  const st = REGCAMP_STAGES[idx];
+  const dueAt = (idx === 0 || !last) ? 0 : last + st.afterDays * 86400000;
+  return { stage: st.key, label: st.label, index: idx, due: dueAt <= now, dueAt, last, sent: list.length };
+}
+/* بريد صالح للمراسلة (نظير `inviteEmailOf`) — القيمة النائبة ليست بريداً */
+function regCampEmailOf(s){
+  const e = supVal(s && s.email).toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : '';
+}
+
+function regCampBuild(regs, sends){
   const crs  = new Set(), taxes = new Set(), keys = new Set();
   (regs || []).forEach(r => {
     if (supVal(r.commercial_reg)) crs.add(String(r.commercial_reg).trim());
@@ -30505,15 +30559,18 @@ function regCampBuild(regs){
     const k = supKeyStrong(s.name || '');
     return !!(k && keys.has(k));
   };
+  const now = Date.now();
   return (STATE.suppliers || [])
     .filter(s => supVal(s.name) && !registered(s))
     .map(s => ({
       id: s.id, name: s.name, sup: s,
       wa: regCampWaPhone(s),
       phone: supVal(s.mobile) || supVal(s.phone) || '',
-      email: supVal(s.email),
+      email: regCampEmailOf(s),
       offers: s.offers_count || 0,
       gaps: supDataGaps(s).length,
+      // سجلّ إرسال تعذّرت قراءته ⇒ لا حالة (null) — لا نُعلن «لم يُدعَ» على تخمين
+      next: sends ? regCampNextStage(sends.get(String(s.id)), now) : null,
     }))
     .sort((a, b) => (b.offers - a.offers) || String(a.name).localeCompare(String(b.name), 'ar'));
 }
@@ -30526,12 +30583,113 @@ async function loadRegCampaign(){
     let regs;
     try { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar,link_supplier_id'); }
     catch(_) { regs = await regFetchAll('commercial_reg,vat_number,legal_name_ar'); }
-    REGCAMP_ROWS = regCampBuild(regs);
+    const [sends, auto] = await Promise.all([regCampLoadSends(), regCampReadAuto()]);
+    REGCAMP_SENDS = sends; REGCAMP_AUTO = auto;
+    REGCAMP_ROWS = regCampBuild(regs, sends);
     renderRegCampaign();
   } catch(e){
     box.innerHTML = `<div style="padding:18px;color:#b91c1c;font-size:13px">تعذّر التحميل: ${escapeHtml(e.message||'')}</div>`;
     reportError('loadRegCampaign', e);
   }
+}
+
+/* سجلّ الإرسال (بريد آليّ + واتساب يدويّ) — بالصفحات: سقف PostgREST 1000 صفّ،
+   وبتر السجلّ صامتاً يُظهر من دُعي «لم يُدعَ» فيُدعى ثانيةً. */
+async function regCampLoadSends(){
+  try {
+    const rows = [];
+    for (let from = 0; from < 20000; from += 1000){
+      const { data, error } = await CLOUD.client.from('proc_audit_log')
+        .select('id,entity_id,action,new_value,ts')
+        .or('and(entity_type.eq.supplier_invite,action.eq.notify),and(entity_type.eq.supplier,action.eq.supplier_invite_wa)')
+        .order('id', { ascending: true })
+        .range(from, from + 999);
+      if (error) return null;
+      rows.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    return regCampSendsFromAudit(rows);
+  } catch(e){ reportError('regCampLoadSends', e); return null; }
+}
+/* إعداد الإرسال الآليّ ← true · false · null (تعذّرت القراءة) */
+async function regCampReadAuto(){
+  try {
+    const { data, error } = await CLOUD.client.from('proc_settings')
+      .select('value').eq('key', REGCAMP_AUTO_KEY).maybeSingle();
+    if (error) return null;
+    let v = data && data.value;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch(_) { v = null; } }
+    return !!(v && v.enabled === true);
+  } catch(_) { return null; }
+}
+/* من يستحقّ رسالة واتساب الآن؟ مستحقّ المرحلة، له رقم جوال، و**ليس** ممّن يتولّاه
+   البريد الآليّ — وإلّا وصلته الرسالة نفسها مرّتين في يوم واحد. */
+function regCampWaDue(r, auto){
+  if (!r || !r.wa || !r.next || r.next.done || !r.next.due) return false;
+  return !(auto === true && r.email);
+}
+async function regCampJwt(){
+  const {data:{session}} = await CLOUD.client.auth.getSession();
+  const jwt = session && session.access_token;
+  if (!jwt) throw new Error('الجلسة منتهية — أعد تسجيل الدخول');
+  return jwt;
+}
+async function regCampSetAuto(on){
+  if (!hasPermission('can_review_registrations')) { toast('error', 'لا تملك صلاحية إدارة حملة التسجيل'); return; }
+  const n = REGCAMP_ROWS.filter(r => r.email && r.next && !r.next.done).length;
+  if (on && !confirm(`سيُرسَل بريد الدعوة آليّاً إلى ${arCountWord(n, 'مورد واحد', 'موردان', 'موردين', 'مورداً')} لهم بريد مسجَّل:\n`
+      + '• الدعوة الآن (حتى 40 رسالة يوميّاً)\n• تذكير بعد 7 أيام\n• تذكير أخير بعد 14 يوماً\n'
+      + 'وتتوقّف السلسلة فور تسجيل المورد. هل تريد التفعيل؟')) return;
+  try {
+    const { error } = await CLOUD.client.from('proc_settings').upsert({
+      key: REGCAMP_AUTO_KEY,
+      value: { enabled: !!on, by: STATE.currentUser?.username || '', at: new Date().toISOString() },
+      description: 'الإرسال الآليّ لدعوات تسجيل الموردين (بريد)',
+      updated_by: STATE.currentUser?.username || 'unknown',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+    if (error) throw error;
+  } catch(e){ toast('error', 'تعذّر حفظ الإعداد', e.message || ''); return; }
+  REGCAMP_AUTO = !!on;
+  logAudit(on ? 'supplier_invite_auto_on' : 'supplier_invite_auto_off', 'settings', REGCAMP_AUTO_KEY, { enabled: !!on });
+  toast('success', on ? 'فُعِّل الإرسال الآليّ' : 'أُوقف الإرسال الآليّ',
+        on ? 'تُرسَل الدفعة الأولى الآن' : 'لن تُرسَل رسائل بريد آليّة');
+  renderRegCampaign();
+  if (on) regCampRunNow();
+}
+/* تشغيل الكنس الآن (الخادم يحكم: مُفعَّل؟ مرّ يوم على آخر دفعة؟) */
+async function regCampRunNow(){
+  try {
+    const r = await fetch('/api/supplier-invite-link?sweep=1', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + await regCampJwt() },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.skipped === 'throttled') toast('info', 'أُرسلت دفعة اليوم', 'الدفعة التالية تُرسَل تلقائيّاً بعد يوم');
+    else if (j.skipped === 'disabled') toast('info', 'الإرسال الآليّ مُطفأ');
+    else if (!r.ok || !j.ok) toast('error', 'تعذّر الإرسال', j.error || j.skipped || ('HTTP ' + r.status));
+    else if (!j.sent && !j.failed) toast('info', 'لا دعوات مستحقّة الآن', 'كل مورد له بريد إمّا دُعي في موعده أو سجّل');
+    else if (!j.sent) toast('error', 'تعذّر إرسال الدعوات', `فشل ${j.failed} — يُعاد في الدفعة التالية`);
+    else toast(j.failed ? 'warning' : 'success',
+      `أُرسلت ${arCountWord(j.sent, 'دعوة واحدة', 'دعوتان', 'دعوات', 'دعوة')}`,
+      (j.failed ? `تعذّر ${j.failed} — يُعاد في الدفعة التالية · ` : '') + (j.capped ? 'والباقي في دفعات الأيام التالية' : ''));
+    loadRegCampaign();
+  } catch(e){ toast('error', 'تعذّر الإرسال', e.message || ''); }
+}
+/* نبضة كسولة (نمط `docRenewTick`): أوّل موظّف يفتح النظام في اليوم يُشغّل الكنس.
+   الخادم هو الضمانة (مُطفأ ⇒ لا شيء · خانق 20 ساعة)، والخانق المحلّي يوفّر الطلب. */
+const SUPINV_TICK_KEY = 'proc_sup_invite_tick';
+async function supInviteTick(){
+  if (!hasPermission('can_review_registrations')) return;
+  try {
+    const last = Number(localStorage.getItem(SUPINV_TICK_KEY) || 0);
+    if (Date.now() - last < 12*3600*1000) return;
+    localStorage.setItem(SUPINV_TICK_KEY, String(Date.now()));
+  } catch(e){}
+  try {
+    await fetch('/api/supplier-invite-link?sweep=1', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + await regCampJwt() },
+    });
+  } catch(e){ /* صامت — الإرسال اليدويّ من اللوحة متاح دائماً */ }
 }
 
 /* سكّ الرابط الشخصيّ (خادميّ — السرّ لا يغادر Cloudflare) */
@@ -30555,12 +30713,23 @@ async function regCampSend(id){
   if (!row) return;
   try {
     const url = await regCampLink(id);
-    const msg = regCampMessage(row.sup, url);
+    // المرحلة المستحقّة تحكم الافتتاحية؛ وبعد اكتمال السلسلة يبقى الإرسال اليدويّ
+    // ممكناً بنصّ «التذكير الأخير» ويُقيَّد `extra` فلا يُحرّك المراحل.
+    const stage = row.next && !row.next.done ? row.next.stage : (row.next ? 'extra' : 'inv1');
+    const msg = regCampMessage(row.sup, url, stage === 'extra' ? 'inv3' : stage);
     // نافذة الواتساب تُفتح فوراً من نقرة المستخدم؟ لا — بعد await، فقد يحجبها
     // المتصفّح؛ لذا ننسخ النصّ دائماً أولاً كي لا تضيع الرسالة إن حُجِبت.
     try { await navigator.clipboard.writeText(msg); } catch(_) {}
     const w = window.open(`https://wa.me/${row.wa}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
-    logAudit('supplier_invite_wa', 'supplier', id, { name: row.name });
+    logAudit('supplier_invite_wa', 'supplier', id, { name: row.name, stage, channel: 'wa' });
+    // تحديث الحالة محليّاً فوراً — لا ينتظر الموظّف إعادة التحميل ليرى أنّ الصفّ أُنجِز
+    if (REGCAMP_SENDS) {
+      const k = String(id);
+      if (!REGCAMP_SENDS.has(k)) REGCAMP_SENDS.set(k, []);
+      REGCAMP_SENDS.get(k).push({ stage: REGCAMP_STAGES.some(x => x.key === stage) ? stage : 'inv1', at: Date.now(), channel: 'wa' });
+      row.next = regCampNextStage(REGCAMP_SENDS.get(k), Date.now());
+      renderRegCampaign();
+    }
     toast(w ? 'success' : 'info',
       w ? 'فُتحت محادثة الواتساب' : 'نُسخت الرسالة — الصقها في الواتساب',
       row.name);
@@ -30571,7 +30740,7 @@ async function regCampCopy(id){
   if (!row) return;
   try {
     const url = await regCampLink(id);
-    await navigator.clipboard.writeText(regCampMessage(row.sup, url));
+    await navigator.clipboard.writeText(regCampMessage(row.sup, url, row.next && !row.next.done ? row.next.stage : 'inv1'));
     toast('success', 'نُسخت الرسالة مع الرابط الخاصّ', row.name);
   } catch(e){ toast('error', 'تعذّر النسخ', e.message || ''); }
 }
@@ -30608,46 +30777,105 @@ async function regCampExport(){
   } catch(e){ toast('error', 'تعذّر التصدير', e.message || ''); }
 }
 
+/* حالة الدعوة لصفّ — نصّ + لون. سجلّ إرسال تعذّرت قراءته ⇒ «—» لا «لم يُدعَ». */
+function regCampStatus(r){
+  const n = r && r.next;
+  if (!n) return { t: '—', c: '#94a3b8', tip: 'تعذّرت قراءة سجلّ الإرسال' };
+  const ago = (ms) => poDays(Math.max(0, Math.floor((Date.now() - ms) / 86400000)));
+  if (n.done) return { t: 'اكتملت الدعوة', c: '#64748b', tip: `أُرسلت المراحل الثلاث — آخرها منذ ${ago(n.last)}. السلسلة متوقّفة.` };
+  if (n.index === 0) return { t: 'لم يُدعَ بعد', c: '#b45309', tip: 'لم تُرسَل له أيّ دعوة' };
+  if (n.due) return { t: `${n.label} مستحقّ`, c: '#b91c1c', tip: `آخر رسالة منذ ${ago(n.last)}` };
+  const left = Math.max(1, Math.ceil((n.dueAt - Date.now()) / 86400000));
+  return { t: `دُعي — ${n.label} بعد ${poDays(left)}`, c: '#15803d', tip: `آخر رسالة منذ ${ago(n.last)}` };
+}
+function regCampSetFilter(f){ REGCAMP_FILTER = f; renderRegCampaign(); }
+
 function renderRegCampaign(){
   const box = document.getElementById('regcamp-body'); if(!box) return;
-  const all = REGCAMP_ROWS, wa = all.filter(r => r.wa), noWa = all.length - wa.length;
+  const all = REGCAMP_ROWS, auto = REGCAMP_AUTO;
   if (!all.length){
     box.innerHTML = '<div style="padding:16px;text-align:center;color:#15803d;font-size:13px">✓ كل الموردين في الدليل لهم طلب تسجيل</div>';
     return;
   }
+  const byEmail = all.filter(r => r.email);
+  const waOnly  = all.filter(r => !r.email && r.wa);
+  const noCh    = all.filter(r => !r.email && !r.wa);
+  const waDue   = all.filter(r => regCampWaDue(r, auto));
+  const emailDue = byEmail.filter(r => r.next && !r.next.done && r.next.due).length;
+  const canEdit = hasPermission('can_review_registrations');
+
+  /* لوحة الإرسال الآليّ — حالتها مقروءة من الإعداد نفسه، وتعذّر القراءة يُقال صراحةً */
+  const autoBox = auto === null
+    ? `<div style="font-size:12.5px;color:#b91c1c">تعذّرت قراءة إعداد الإرسال الآليّ — لن يُرسَل شيء آليّاً حتى تُقرأ.</div>`
+    : auto
+      ? `<div style="flex:1;min-width:220px">
+           <div style="font-size:13px;font-weight:800;color:#15803d">✉ الإرسال الآليّ بالبريد مُفعَّل</div>
+           <div style="font-size:11.5px;color:#475569;margin-top:3px;line-height:1.7">يُرسَل يوميّاً: الدعوة ← تذكير بعد 7 أيام ← تذكير أخير بعد 14 يوماً، ويتوقّف فور تسجيل المورد.
+           مستحقّ الآن: <b>${emailDue}</b> من <b>${byEmail.length}</b> لهم بريد.</div>
+         </div>
+         ${canEdit ? `<button onclick="regCampRunNow()" class="btn btn-ghost btn-sm">إرسال المستحقّ الآن</button>
+         <button onclick="regCampSetAuto(false)" class="btn btn-ghost btn-sm" style="color:#b91c1c">إيقاف</button>` : ''}`
+      : `<div style="flex:1;min-width:220px">
+           <div style="font-size:13px;font-weight:800;color:#334155">✉ الإرسال الآليّ بالبريد مُطفأ</div>
+           <div style="font-size:11.5px;color:#475569;margin-top:3px;line-height:1.7">عند التفعيل يُراسَل <b>${byEmail.length}</b> مورداً لهم بريد بثلاث رسائل متدرّجة بلا تدخّل، وتتوقّف السلسلة لمن يسجّل.</div>
+         </div>
+         ${canEdit ? `<button onclick="regCampSetAuto(true)" style="cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:10px;padding:8px 14px;font-size:12.5px;font-weight:700">تفعيل الإرسال الآليّ</button>` : ''}`;
+
+  const F = { all, wa_due: waDue, no_channel: noCh };
+  const shown = (F[REGCAMP_FILTER] || all).slice();
+  if (REGCAMP_FILTER === 'wa_due') shown.sort((a, b) => (a.next.dueAt - b.next.dueAt) || (b.offers - a.offers));
+  const chip = (k, label, n, tone) => `<button onclick="regCampSetFilter('${k}')" aria-pressed="${REGCAMP_FILTER === k}"
+      style="cursor:pointer;font-family:inherit;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;
+      border:1.5px solid ${REGCAMP_FILTER === k ? tone : '#e2e8f0'};background:${REGCAMP_FILTER === k ? tone : 'var(--surface,#fff)'};
+      color:${REGCAMP_FILTER === k ? '#fff' : '#334155'}">${label} <span style="opacity:.85">${n}</span></button>`;
+
   box.innerHTML = `
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <span style="font-size:12.5px;color:#475569">
         <b style="color:#b45309;font-size:16px">${all.length}</b> مورد بلا تسجيل ·
-        <b style="color:#15803d">${wa.length}</b> يمكن مراسلتهم واتساب${noWa?` · <b style="color:#b91c1c">${noWa}</b> بلا رقم جوال`:''}
+        <b style="color:#15803d">${byEmail.length}</b> لهم بريد · <b style="color:#15803d">${waOnly.length}</b> واتساب فقط${noCh.length ? ` · <b style="color:#b91c1c">${noCh.length}</b> بلا وسيلة تواصل` : ''}
       </span>
-      <button onclick="regCampExport()" style="margin-inline-start:auto;cursor:pointer;font-family:inherit;background:#0B1B36;color:#fff;border:0;border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700">⬇ تصدير الحملة (${wa.length})</button>
+      <button onclick="regCampExport()" style="margin-inline-start:auto;cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#0B1B36;border:1.5px solid #cbd5e1;border-radius:11px;padding:8px 14px;font-size:12.5px;font-weight:700">⬇ تصدير الحملة (${all.filter(r => r.wa).length})</button>
+    </div>
+    <div class="regcamp-auto" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:12px 14px;border-radius:12px;
+         border:1px solid ${auto ? '#bbf7d0' : '#e2e8f0'};background:${auto ? '#f0fdf4' : '#f8fafc'}">${autoBox}</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${chip('all', 'الكل', all.length, '#0B1B36')}
+      ${chip('wa_due', 'واتساب مستحقّ الآن', waDue.length, '#16a34a')}
+      ${chip('no_channel', 'بلا وسيلة تواصل', noCh.length, '#b91c1c')}
+      <span style="font-size:11.5px;color:#64748b">${REGCAMP_FILTER === 'wa_due'
+        ? (auto ? 'من ليس له بريد فلا يصله الإرسال الآليّ — يُرسَل لهم واتساب بالمرحلة المستحقّة.' : 'كل من استحقّ مرحلته وله جوال — فعِّل الإرسال الآليّ ليتولّى البريدُ من له بريد.')
+        : REGCAMP_FILTER === 'no_channel' ? 'لا جوال ولا بريد — يُكمَل رقمهم من دليل الموردين أوّلاً.' : ''}</span>
     </div>
     <div style="font-size:11.5px;color:#64748b;margin-bottom:10px;padding:8px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px">
       رابط كل مورد <b>خاصّ به</b>: يفتح النموذج مُعبّأً ببياناته، وعند اعتماد طلبه تُكمَّل <b>بطاقته الحالية</b> — لا بطاقة جديدة ولا فقدان لتعاملاته.
     </div>
-    <div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
+    ${shown.length ? `<div style="overflow-x:auto;border:1px solid var(--border,#e6e8ee);border-radius:12px;background:var(--surface,#fff)">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr class="thead-navy" style="background:linear-gradient(135deg,#0B1B36,#16315c);color:#fff">
           <th style="padding:11px 13px;text-align:right;font-size:12px">المورد</th>
-          <th style="padding:11px 13px;text-align:right;font-size:12px">الجوال</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">التواصل</th>
+          <th style="padding:11px 13px;text-align:right;font-size:12px">حالة الدعوة</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">عروض</th>
-          <th style="padding:11px 13px;text-align:center;font-size:12px">بيانات ناقصة</th>
           <th style="padding:11px 13px;text-align:center;font-size:12px">الدعوة</th>
         </tr></thead>
-        <tbody>${all.map(r => `<tr style="border-top:1px solid var(--border,#eef1f6)">
-          <td style="padding:10px 13px;font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}</td>
-          <td style="padding:10px 13px;font-family:'IBM Plex Mono',monospace;font-size:11.5px" dir="ltr">${r.phone?escapeHtml(normalizeSaudiPhone(r.phone)):'<span style="color:#b91c1c;font-family:inherit">— لا رقم</span>'}</td>
+        <tbody>${shown.map(r => { const st = regCampStatus(r); return `<tr style="border-top:1px solid var(--border,#eef1f6)">
+          <td style="padding:10px 13px;font-weight:700;color:var(--ink,#1f2937)">${escapeHtml(r.name)}${r.gaps ? `<div style="font-size:11px;color:#b45309;font-weight:600">${r.gaps} بيانات ناقصة</div>` : ''}</td>
+          <td style="padding:10px 13px;font-size:11.5px;line-height:1.7">
+            ${r.phone ? `<div dir="ltr" style="font-family:'IBM Plex Mono',monospace;text-align:right">${escapeHtml(normalizeSaudiPhone(r.phone))}</div>` : ''}
+            ${r.email ? `<div dir="ltr" style="text-align:right;color:#475569;word-break:break-all">${escapeHtml(r.email)}${auto ? ' <span style="color:#15803d;font-family:inherit">· آليّ</span>' : ''}</div>` : ''}
+            ${!r.phone && !r.email ? '<span style="color:#b91c1c">— لا وسيلة تواصل</span>' : ''}
+          </td>
+          <td style="padding:10px 13px;font-size:12px;font-weight:700;color:${st.c}" title="${escapeAttr(st.tip)}">${escapeHtml(st.t)}</td>
           <td style="padding:10px 13px;text-align:center;color:#64748b">${r.offers||'—'}</td>
-          <td style="padding:10px 13px;text-align:center">${r.gaps?`<span style="color:#b45309;font-weight:700">${r.gaps}</span>`:'<span style="color:#15803d">✓</span>'}</td>
           <td style="padding:10px 13px;text-align:center;white-space:nowrap">
-            ${r.wa?`<button onclick="regCampSend('${escapeAttr(r.id)}')" title="فتح واتساب برسالة الدعوة ورابطه الخاصّ"
+            ${r.wa?`<button onclick="regCampSend('${escapeAttr(r.id)}')" title="فتح واتساب برسالة المرحلة المستحقّة ورابطه الخاصّ"
               style="cursor:pointer;font-family:inherit;background:#25D366;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">واتساب</button> `:''}
             <button onclick="regCampCopy('${escapeAttr(r.id)}')" title="نسخ نصّ الرسالة مع الرابط الخاصّ"
               style="cursor:pointer;font-family:inherit;background:var(--surface,#fff);color:#334155;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700">نسخ</button>
-          </td></tr>`).join('')}</tbody>
+          </td></tr>`; }).join('')}</tbody>
       </table>
-    </div>`;
+    </div>` : `<div style="padding:16px;text-align:center;color:#15803d;font-size:13px">✓ لا أحد في هذا التصنيف</div>`}`;
   try{ a11yWire(box); mobileTableWrap(box); }catch(e){}
 }
 
