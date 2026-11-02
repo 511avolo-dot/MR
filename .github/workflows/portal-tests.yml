@@ -19,6 +19,8 @@ on:
       - 'functions/api/reg-doc.js'
       - 'functions/api/doc-renew.js'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/supplier-invite-link.js'
+      - 'functions/api/_supplier-invite.js'
       - 'functions/api/_pr-shared.js'
       - 'functions/_middleware.js'
       - 'assets/**'
@@ -45,6 +47,8 @@ on:
       - 'functions/api/reg-doc.js'
       - 'functions/api/doc-renew.js'
       - 'functions/api/staff-invite.js'
+      - 'functions/api/supplier-invite-link.js'
+      - 'functions/api/_supplier-invite.js'
       - 'functions/api/_pr-shared.js'
       - 'functions/_middleware.js'
       - 'assets/**'
@@ -78,6 +82,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: تأكيدات حارس الملفات المرفوعة (JS)
         run: node db/portal-tests/file-guard.test.mjs
+
+      - name: الإرسال الآليّ لدعوات تسجيل الموردين (JS)
+        run: node db/portal-tests/supplier-invite.test.mjs
 
       - name: عقد الواجهة المؤسسية ومعاينة المستندات
         run: node scripts/e2e/enterprise-ui-contract.test.mjs

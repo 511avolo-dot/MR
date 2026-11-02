@@ -52,6 +52,8 @@ run_sql "إعادة فتح التعميد (044)" "$HERE/24_reopen_award.sql"
 if command -v node >/dev/null 2>&1; then
   echo "▶ تأكيدات حارس الملفات المرفوعة + نقطة /api/reg-doc (JS)"
   node "$HERE/file-guard.test.mjs" | tail -3
+  echo "▶ الإرسال الآليّ لدعوات تسجيل الموردين (/api/supplier-invite-link?sweep=1)"
+  node "$HERE/supplier-invite.test.mjs" | tail -1
   echo "▶ حارس هدف E2E المعزول (ref+url، رفض الإنتاج)"
   node "$ROOT/scripts/e2e/target-guard.test.mjs" | tail -1
 fi
