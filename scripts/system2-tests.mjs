@@ -300,9 +300,11 @@ const NEEDED_FNS = [
   'siItemMatches', 'histRowMatches', 'priceAgeInfo', 'priceDeviationHint',
   // دقّة السجل السعريّ: الملاحظة الواحدة · التمايز الفعليّ · ما يحتاج مراجعة
   'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'siImportResultToast', 'itemsVisibleList', 'histIsOrphan',
+  // تصنيف الموردين: التصفّح بما يعمل فيه المورد (مُعلَن + مُثبَت بعروض أسعار)
+  'supCatIndex', 'supCatToken', 'supSplitSpecialty', 'supEvidenceIndex', 'supCatProfile', 'supInCategory', 'supCardCatsHtml',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
-const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED'];
+const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED', '_supCatIdx', '_supEvIdx', '_supCat'];
 function grabLet(name){
   const lines = JS.split('\n');
   const i = lines.findIndex(l => l.startsWith(`let ${name} `) || l.startsWith(`let ${name}=`) || l.startsWith(`let ${name},`));
@@ -312,6 +314,7 @@ function grabLet(name){
 const NEEDED_CONSTS = ['SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
+  'SUP_SECTORS', 'SUP_CAT_NONE', 'SUP_CAT_PREFIX_MIN', 'SUP_CAT_SYNONYMS', '_supProfCache', 'SUP_CARD_CATS',
   // جلب وثائق الموردين (مخزنان: R2 + القديم) — تُختبَر سلوكيّاً
   'SUP_ENTITY_RE', 'SUP_GAP_FIELDS', 'REG_SUP_COLS', 'REG_BUCKET', 'REGDOC_R2_MISS', 'REGDOC_LEGACY_HINT', 'REGDOC_SIGNED', 'REGDOC_SIGN_TTL',
   // مرفقات طلب الشراء — فضاء مفاتيح مستقلّ بنقطة خادمية أخرى
@@ -1136,11 +1139,14 @@ G('٨) حلقة السعر (أمر الشراء ← السجل السعري)');
     /const SUP_PAGE\s*=\s*\d+/.test(CODE) && CODE.includes('slice(0, _supShown)') && CODE.includes('function supShowMore'));
   T('يُعلَن المجموع فلا يبدو الباقي مفقوداً',
     CODE.includes("getElementById('sup-count')") && HTML.includes('id="sup-count"'));
-  T('مُنتقي التخصص يُعاد بناؤه مع تغيّر القائمة',
-    /sel\.options\.length\s*-\s*1\s*!==\s*specs\.length/.test(CODE));
-  T('مستمعا البحث والتخصص لا يمرّران الحدث كمعامل',
+  /* مُنتقي «كل التخصصات» أُزيل 2026-11-02 (100 قيمة مدموجة بفاصلة بمطابقة تامّة) —
+     حلّ محلّه شريط تصنيفات يُعاد رسمه مع **كل** رسم ويعُدّ على النتائج الحاليّة. */
+  T('شريط التصنيفات يُرسَم مع كل رسم وقبل مرشّح التصنيف (العدّاد على النتائج الحاليّة)',
+    /supRenderCatRail\(list\);[\s\S]{0,120}if\(_supCat\) list = list\.filter\(s => supInCategory\(supCatProfile\(s\), _supCat\)\)/.test(CODE));
+  T('مستمع البحث لا يمرّر الحدث كمعامل · ولا مُنتقي تخصص بمطابقة تامّة',
     CODE.includes("addEventListener('input',()=>renderSuppliers())") &&
-    CODE.includes("addEventListener('change',()=>renderSuppliers())"));
+    !/addEventListener\([^)]*,\s*renderSuppliers\)/.test(CODE) &&
+    !CODE.includes("s.specialty===specFilter") && !HTML.includes('id="sup-specialty"'));
 
   // متابعة صلاحية الوثائق النظامية
   const day = 86400000, iso = (d) => new Date(Date.now() + d*day).toISOString().slice(0,10);
@@ -2123,7 +2129,7 @@ G('٢٦) تركيب قائمة الموردين');
   T('الشاشة مربوطة: مُنتقي + تصفية + مفتاح إعادة الرسم',
     /id="sup-gaps"/.test(HTML) && /gapFilter\s*=\s*document\.getElementById\('sup-gaps'\)/.test(CODE) &&
     /list = list\.filter\(s=>supGapMatch\(s, gapFilter\)\)/.test(CODE) &&
-    /key = raw \+ '\\u0000' \+ specFilter \+ '\\u0000' \+ sort \+ '\\u0000' \+ gapFilter/.test(CODE));
+    /key = raw \+ '\\u0000' \+ _supCat \+ '\\u0000' \+ sort \+ '\\u0000' \+ gapFilter/.test(CODE));
   T('الشارة تفتح نموذج التعديل مباشرةً ولا تفتح بطاقة المورد',
     /function supFixSupplier\(name\)\{[\s\S]{0,200}openEditSupplier\(s\)/.test(CODE) &&
     /event\.stopPropagation\(\);supFixSupplier\(/.test(CODE));
