@@ -17,6 +17,8 @@ on:
       - 'functions/api/_pr-shared.js'
       - 'functions/api/supplier-invite-link.js'
       - 'functions/api/_supplier-invite.js'
+      - 'functions/api/receipt-reminder.js'
+      - 'functions/api/_receipt-reminder.js'
       - 'db/system2-staff-scope.sql'
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
@@ -55,6 +57,7 @@ on:
       - 'scripts/e2e/font-external.mjs'
       - 'scripts/e2e/bell-actionable.mjs'
       - 'scripts/e2e/supplier-directory-invite.mjs'
+      - 'scripts/e2e/receipt-reminder.mjs'
       - 'assets/neo-sans-arabic.woff2'
       - '_headers'
       - 'scripts/e2e/finance-email-followup.mjs'
@@ -81,6 +84,8 @@ on:
       - 'functions/api/_pr-shared.js'
       - 'functions/api/supplier-invite-link.js'
       - 'functions/api/_supplier-invite.js'
+      - 'functions/api/receipt-reminder.js'
+      - 'functions/api/_receipt-reminder.js'
       - 'db/system2-staff-scope.sql'
       - 'db/system2-request-numbering.sql'
       - 'db/system2-request-flow.sql'
@@ -119,6 +124,7 @@ on:
       - 'scripts/e2e/font-external.mjs'
       - 'scripts/e2e/bell-actionable.mjs'
       - 'scripts/e2e/supplier-directory-invite.mjs'
+      - 'scripts/e2e/receipt-reminder.mjs'
       - 'assets/neo-sans-arabic.woff2'
       - '_headers'
       - 'scripts/e2e/finance-email-followup.mjs'
@@ -224,6 +230,7 @@ jobs:
           node scripts/e2e/font-external.mjs
           node scripts/e2e/bell-actionable.mjs
           node scripts/e2e/supplier-directory-invite.mjs
+          node scripts/e2e/receipt-reminder.mjs
           node scripts/e2e/finance-email-followup.mjs
           node scripts/e2e/po-excel-paste-export.mjs
           node scripts/e2e/pr-print-one-page.mjs

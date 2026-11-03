@@ -3031,6 +3031,21 @@ body.data-loading .chart-card{opacity:.4;filter:blur(2.5px);pointer-events:none;
 .po-lifecycle-head>span:first-child{font-size:13px;font-weight:700;color:var(--ink)}
 .po-lifecycle-hint{font-size:11.5px;color:var(--muted);font-weight:500}
 .po-card-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+/* تذكير الاستلام لأصحاب الطلبات (لوحة الإنذارات) + نافذة «لم تصل بعد» */
+.rr-box{margin-bottom:16px}
+.rr-box h3{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rr-state{font-size:11.5px;font-weight:700;border-radius:20px;padding:2px 10px}
+.rr-on{background:#e8f5ee;color:#1f7a55}
+.rr-off{background:var(--bg-soft,#f1f2f5);color:var(--muted)}
+.rr-bad{background:#fdecea;color:#a93226}
+.rr-sum{font-size:13px;font-weight:700;margin:0 0 8px}
+.rr-list{margin:0 0 12px;padding-inline-start:18px;font-size:12.5px;line-height:1.9}
+.rr-pos{display:block;color:var(--muted)}
+.rr-pos a{color:var(--accent,#9A7A45);font-family:'IBM Plex Mono',monospace}
+.rr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.rr-reasons{display:grid;gap:8px}
+.rr-reason{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:1px solid var(--border,#ddd);border-radius:10px;cursor:pointer;font-size:14px}
+.rr-reason:has(input:checked){border-color:var(--accent,#9A7A45);background:rgba(184,146,61,.08)}
 .po-card-box h3{font-size:13px;font-weight:700;color:var(--ink);margin:0 0 14px}
 .po-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px}
 .po-bar-row .lbl{width:120px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -7422,6 +7437,7 @@ async function tasksLoadCloud(){
   // نبضة التذكير المجدوَل (بلا انتظار — لا تُعطّل رسم اللوحة)
   try{ docRenewTick(); }catch(e){}
   try{ supInviteTick(); }catch(e){}
+  try{ receiptReminderTick(); }catch(e){}
   // طلبات الشراء التي يستطيع المستخدم البتّ فيها
   if(typeof prLoadAll==='function' && (hasPermission('can_approve_l1')||hasPermission('can_approve_l2')||hasPermission('can_manage_rfq')||hasPermission('can_verify_stock'))){
     try{ await prLoadAll(); TASKS.prPending = prIncoming().length; }catch(e){ TASKS.prPending=null; }
@@ -21923,6 +21939,7 @@ function renderPOAlerts(){
         <tbody>${partialRows}</tbody>
       </table>
     </div>`:''}
+    <div id="rr-box"></div>
     <div class="po-card-box" style="max-width:420px">
       <h3>مؤشر صحة النظام العام</h3>
       <div style="display:flex;align-items:center;gap:18px">
@@ -21933,7 +21950,291 @@ function renderPOAlerts(){
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:12px">يُحسب من: نسبة التسليم في الموعد (40%) + (1−نسبة المتأخر) (30%) + متوسط تقييم الموردين (20%) + اكتمال أسباب التأخير (10%).</div>
     </div>`;
+  try{ rrRenderBox(); }catch(e){ reportError('rrRenderBox', e); }
 }
+/* ══════════════════════════════════════════════════════════════════════
+   تذكير الاستلام لصاحب الطلب (2026-11-03)
+   ----------------------------------------------------------------------
+   قياس الإنتاج: 32 من 38 طلباً حيّاً واقفة على «بانتظار استلام البضاعة»،
+   و24 أمراً مربوطاً تجاوز موعد تسليمه. الإقفال آليّ منذ #131 لكنه ينتظر من
+   يسجّل الاستلام. قرار المالك: «صاحب الطلب هو المستلم».
+   الخادم (`/api/receipt-reminder`) يرسل ملخّصاً يوميّاً لكل صاحب طلب بأوامره
+   المتأخرة؛ وهنا: المعاينة والمفتاح، والرابط العميق من البريد (`act=receive|wait`)،
+   ونافذة «لم تصل بعد» التي تُعلِم المشتريات بالسبب.
+   ⚠️ دوال `rr*` الخالصة **نسخة مطابقة** لـ`functions/api/_receipt-reminder.js`
+   (محروسة بتأكيد تكافؤ) — عدّل الاثنتين معاً.
+   ══════════════════════════════════════════════════════════════════════ */
+const RR_AUTO_KEY = 'receipt_reminder_auto';
+const RR_EVERY_DAYS = 3;
+const RR_AFTER_REPLY_DAYS = 5;
+const RR_TERMINAL = ['تسليم كامل','مُسلَّم','ملغى'];
+const RR_PR_DONE = ['closed','cancelled','rejected'];
+const RR_SLACK = 6*3600000;
+const RR_DAY = 86400000;
+/* أسباب «لم تصل بعد» — تُختار بنقرة، والملاحظة اختيارية */
+const RR_WAIT_REASONS = [
+  {v:'nothing',  l:'لم يصل شيء'},
+  {v:'supplier', l:'المورد أبلغ بتأخير'},
+  {v:'partial_unrecorded', l:'وصل جزء ولم أسجّله بعد'},
+  {v:'other',    l:'سبب آخر'},
+];
+function rrToday(now){ return new Date(Number(now)+3*3600000).toISOString().slice(0,10); }
+function rrDaysLate(expected, today){
+  const e=String(expected||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(e)) return null;
+  return Math.round((Date.parse(today)-Date.parse(e))/RR_DAY);
+}
+function rrIsOpenPO(po){ return !!po && !RR_TERMINAL.includes(String(po.status||'').trim()); }
+function rrLastReceiptAt(po){
+  let last=0;
+  for(const r of (Array.isArray(po&&po.receipts)?po.receipts:[])){ const t=Date.parse(r&&r.at); if(t>last) last=t; }
+  return last;
+}
+function rrEventsFromAudit(rows){
+  const m=new Map();
+  for(const r of (Array.isArray(rows)?rows:[])){
+    if(!r || r.entity_type && r.entity_type!=='receipt_reminder') continue;
+    const po=String(r.entity_id||'').trim();
+    if(!po || po==='sweep') continue;
+    const t=Date.parse(r.ts);
+    if(!(t>0)) continue;
+    const e=m.get(po)||{sent:0,lastSent:0,lastReply:0,reason:''};
+    if(r.action==='notify'){ e.sent++; if(t>e.lastSent) e.lastSent=t; }
+    else if(r.action==='reply'){
+      if(t>e.lastReply){ e.lastReply=t; const v=r.new_value&&typeof r.new_value==='object'?r.new_value:{}; e.reason=String(v.reason||''); }
+    }
+    m.set(po,e);
+  }
+  return m;
+}
+function rrPoDue(po, ev, now){
+  if(!rrIsOpenPO(po)) return {due:false, why:'closed'};
+  const late=rrDaysLate(po.expected_delivery, rrToday(now));
+  if(late==null) return {due:false, why:'no_date'};
+  if(late<1) return {due:false, why:'not_late', late};
+  const e=ev||{sent:0,lastSent:0,lastReply:0};
+  const lastAct=Math.max(e.lastReply||0, rrLastReceiptAt(po));
+  let nextAt=0;
+  if(e.lastSent) nextAt=e.lastSent+RR_EVERY_DAYS*RR_DAY-RR_SLACK;
+  if(lastAct) nextAt=Math.max(nextAt, lastAct+RR_AFTER_REPLY_DAYS*RR_DAY-RR_SLACK);
+  return {due:now>=nextAt, why:now>=nextAt?'due':'waiting', late, nextAt,
+          sent:e.sent||0, lastReply:e.lastReply||0, reason:e.reason||''};
+}
+function rrBuildDigests({links, prs, pos, users, audit, now}){
+  const prById=new Map((prs||[]).map(p=>[String(p.id),p]));
+  const poByNum=new Map((pos||[]).map(o=>[String(o.po_number),o]));
+  const userBy=new Map((users||[]).map(u=>[String(u.username||'').toLowerCase(),u]));
+  const events=rrEventsFromAudit(audit);
+  const byReq=new Map();
+  for(const l of (links||[])){
+    if(!l || l.active===false) continue;
+    const pr=prById.get(String(l.pr_id));
+    if(!pr || pr.archived_at || RR_PR_DONE.includes(String(pr.status||''))) continue;
+    const po=poByNum.get(String(l.po_number));
+    if(!po) continue;
+    const req=String(pr.requester||'').trim().toLowerCase();   // حالة أحرف موحَّدة — بريد واحد للشخص
+    if(!req) continue;
+    const m=byReq.get(req)||new Map();
+    const row=m.get(po.po_number)||{po, pr_ids:new Set()};
+    row.pr_ids.add(String(pr.id));
+    m.set(po.po_number,row);
+    byReq.set(req,m);
+  }
+  const out=[];
+  for(const [req,m] of byReq){
+    const u=userBy.get(req);
+    if(!u || u.active===false) continue;
+    const items=[];
+    for(const {po,pr_ids} of m.values()){
+      const d=rrPoDue(po, events.get(String(po.po_number)), now);
+      if(!d.due) continue;
+      items.push({po, pr_ids:[...pr_ids], late:d.late, sent:d.sent});
+    }
+    if(!items.length) continue;
+    items.sort((a,b)=>b.late-a.late || String(a.po.po_number).localeCompare(String(b.po.po_number)));
+    out.push({username:u.username, name:u.display_name||u.username, user:u, items});
+  }
+  out.sort((a,b)=>b.items[0].late-a.items[0].late);
+  return out;
+}
+
+/* ── المفتاح والمعاينة (لوحة الإنذارات) ──
+   ⚠️ بوّابة المفتاح = بوّابة الخادم حرفيّاً (`proc_settings_guard`): زرٌّ يُعرَض
+   وكتابتُه مرفوضة عيبٌ. والموظّف المُنطَّق لا يرى الصندوق أصلاً. */
+const RR_SETTINGS_PERMS = ['can_manage_users','can_manage_company','can_review_registrations','can_manage_ai_settings'];
+function rrCanManage(){
+  if(isScopedUser()) return false;
+  if(STATE.currentUser && STATE.currentUser.role==='admin') return true;
+  return RR_SETTINGS_PERMS.some(k=>hasPermission(k));
+}
+let RR_STATE = {auto:null, digests:null, err:''};
+async function rrReadAuto(){
+  try{
+    const {data, error} = await CLOUD.client.from('proc_settings').select('value').eq('key', RR_AUTO_KEY).maybeSingle();
+    if(error) return null;
+    let v=data && data.value;
+    if(typeof v==='string'){ try{ v=JSON.parse(v); }catch(_){ v=null; } }
+    return !!(v && v.enabled===true);
+  }catch(_){ return null; }
+}
+/* المعاينة تحسب بالمنطق نفسه ما سيُرسَل في الدفعة القادمة — من يصله وأيّ أوامر */
+async function rrLoadPreview(){
+  const since=new Date(Date.now()-120*RR_DAY).toISOString();
+  const q=(t)=>CLOUD.client.from(t);
+  const [l,p,u,a]=await Promise.all([
+    q('proc_pr_po_links').select('pr_id,po_number,active').eq('active',true).limit(10000),
+    q('proc_purchase_requests').select('id,requester,status,archived_at').limit(10000),
+    q('proc_users').select('username,display_name,active').limit(1000),
+    q('proc_audit_log').select('entity_type,entity_id,action,new_value,ts')
+      .eq('entity_type','receipt_reminder').in('action',['notify','reply']).gte('ts',since).limit(10000),
+  ]);
+  const bad=[l,p,u,a].find(r=>r.error);
+  if(bad) throw bad.error;
+  return rrBuildDigests({links:l.data, prs:p.data, pos:STATE.purchaseOrders, users:u.data, audit:a.data, now:Date.now()});
+}
+async function rrRenderBox(){
+  const el=document.getElementById('rr-box'); if(!el) return;
+  if(!rrCanManage() || !(window.CLOUD && CLOUD.enabled && CLOUD.client)){ el.innerHTML=''; return; }
+  el.innerHTML='<div class="po-card-box rr-box"><h3>📬 تذكير الاستلام لأصحاب الطلبات</h3><p class="po-rep-note">جارٍ الحساب…</p></div>';
+  try{
+    const [auto, digests]=await Promise.all([rrReadAuto(), rrLoadPreview()]);
+    RR_STATE={auto, digests, err:''};
+  }catch(e){ RR_STATE={auto:null, digests:null, err:e.message||'تعذّرت القراءة'}; }
+  const {auto, digests, err}=RR_STATE;
+  const people=(digests||[]).length, orders=(digests||[]).reduce((n,d)=>n+d.items.length,0);
+  const list=(digests||[]).map(d=>`<li><b>${escapeHtml(d.name)}</b> — ${escapeHtml(arCountWord(d.items.length,'أمر شراء واحد','أمرا شراء','أوامر شراء','أمر شراء'))}
+      <span class="rr-pos">${d.items.slice(0,8).map(it=>`<a href="#" onclick="event.preventDefault();openPODrawer('${escapeAttr(it.po.po_number)}')" dir="ltr">${escapeHtml(it.po.po_number)}</a> <small>(${escapeHtml(poDays(it.late))})</small>`).join(' · ')}${d.items.length>8?' …':''}</span></li>`).join('');
+  const stateLine = auto===null ? '<span class="rr-state rr-bad">تعذّرت قراءة الإعداد</span>'
+    : auto ? '<span class="rr-state rr-on">مُفعَّل</span>' : '<span class="rr-state rr-off">مُطفأ</span>';
+  el.innerHTML=`<div class="po-card-box rr-box">
+    <h3>📬 تذكير الاستلام لأصحاب الطلبات ${stateLine}</h3>
+    <p class="po-rep-note">يصل صاحبَ الطلب بريدٌ واحد يوميّاً بأوامره التي تجاوزت موعد التسليم ولم يُسجَّل استلامها، فيه لكل أمر زرّان: «وصلت — سجّل الاستلام» و«لم تصل بعد» (يختار السبب فيصل للمشتريات). يتكرّر لكل أمر كل ${RR_EVERY_DAYS} أيام، ويتوقّف ${RR_AFTER_REPLY_DAYS} أيام بعد أي ردّ أو استلام جزئي. لا مبالغ في البريد.</p>
+    ${err?`<p class="po-rep-note" style="color:#a93226">تعذّر حساب المعاينة: ${escapeHtml(err)}</p>`:`
+    <p class="rr-sum" id="rr-sum">${people?`الدفعة القادمة: ${escapeHtml(arCountWord(people,'شخص واحد','شخصان','أشخاص','شخصاً'))} · ${escapeHtml(arCountWord(orders,'أمر شراء واحد','أمرا شراء','أوامر شراء','أمر شراء'))}`:'لا أوامر مستحقّة للتذكير الآن.'}</p>
+    ${people?`<ul class="rr-list">${list}</ul>`:''}`}
+    <div class="rr-actions">
+      ${auto===true?`<button class="btn btn-ghost btn-sm" id="rr-off" onclick="rrSetAuto(false)">إيقاف التذكير</button>
+        <button class="btn btn-ghost btn-sm" onclick="rrRunNow()">إرسال دفعة اليوم الآن</button>`
+      : auto===false?`<button class="btn btn-accent btn-sm" id="rr-on" onclick="rrSetAuto(true)">تفعيل التذكير الآليّ</button>`:''}
+    </div></div>`;
+}
+async function rrJwt(){
+  const {data:{session}} = await CLOUD.client.auth.getSession();
+  const jwt=session && session.access_token;
+  if(!jwt) throw new Error('الجلسة منتهية — أعد تسجيل الدخول');
+  return jwt;
+}
+async function rrSetAuto(on){
+  if(!rrCanManage()){ toast('error','صلاحية مرفوضة','تفعيل التذكير يتطلّب صلاحية إدارة الإعدادات'); return; }
+  const d=RR_STATE.digests||[], orders=d.reduce((n,x)=>n+x.items.length,0);
+  if(on && !confirm(`سيُرسَل اليوم تذكير إلى ${arCountWord(d.length,'شخص واحد','شخصين','أشخاص','شخصاً')} يشمل ${arCountWord(orders,'أمرَ شراء واحداً','أمرَي شراء','أوامر شراء','أمرَ شراء')} تجاوزت موعد التسليم،\n`
+      + `ثمّ تذكير لكل أمر كل ${RR_EVERY_DAYS} أيام حتى يُستلَم. هل تريد التفعيل؟`)) return;
+  try{
+    const {error}=await CLOUD.client.from('proc_settings').upsert({
+      key:RR_AUTO_KEY,
+      value:{enabled:!!on, by:STATE.currentUser?.username||'', at:new Date().toISOString()},
+      description:'تذكير أصحاب الطلبات باستلام أوامر الشراء المتأخرة (بريد)',
+      updated_by:STATE.currentUser?.username||'unknown',
+      updated_at:new Date().toISOString(),
+    },{onConflict:'key'});
+    if(error) throw error;
+  }catch(e){ toast('error','تعذّر حفظ الإعداد', e.message||''); return; }
+  logAudit(on?'receipt_reminder_on':'receipt_reminder_off','settings',RR_AUTO_KEY,{enabled:!!on});
+  toast('success', on?'فُعِّل تذكير الاستلام':'أُوقف تذكير الاستلام', on?'تُرسَل دفعة اليوم الآن':'لن يُرسَل تذكير آليّ');
+  if(on) await rrRunNow();
+  rrRenderBox();
+}
+/* تشغيل الكنس الآن — الخادم يحكم (مُفعَّل؟ مرّ يوم على آخر دفعة؟) */
+async function rrRunNow(){
+  try{
+    const r=await fetch('/api/receipt-reminder?sweep=1',{method:'POST', headers:{Authorization:'Bearer '+await rrJwt()}});
+    const j=await r.json().catch(()=>({}));
+    if(j.skipped==='throttled') toast('info','أُرسلت دفعة اليوم','الدفعة التالية تُرسَل تلقائيّاً بعد يوم');
+    else if(j.skipped==='disabled') toast('info','تذكير الاستلام مُطفأ');
+    else if(!r.ok || !j.ok) toast('error','تعذّر الإرسال', j.error||j.skipped||('HTTP '+r.status));
+    else if(!j.sent && !j.failed) toast('info','لا تذكيرات مستحقّة الآن');
+    else if(!j.sent) toast('error','تعذّر إرسال التذكيرات', `فشل ${j.failed} — يُعاد في الدفعة التالية`);
+    else toast(j.failed?'warning':'success',
+      `أُرسل ${arCountWord(j.sent,'تذكير واحد','تذكيران','تذكيرات','تذكيراً')}`,
+      `يغطّي ${arCountWord(j.orders,'أمر شراء واحداً','أمرَي شراء','أوامر شراء','أمر شراء')}`+(j.failed?` · تعذّر ${j.failed}`:''));
+  }catch(e){ toast('error','تعذّر الإرسال', e.message||''); }
+}
+/* نبضة كسولة (نمط `supInviteTick`): أوّل موظّف مكتب يفتح النظام في اليوم يُشغّل
+   الكنس. الضمانة على الخادم (مُطفأ ⇒ لا شيء · خانق 20 ساعة). */
+const RR_TICK_KEY='proc_receipt_reminder_tick';
+async function receiptReminderTick(){
+  if(isScopedUser()) return;
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)) return;
+  try{
+    const last=Number(localStorage.getItem(RR_TICK_KEY)||0);
+    if(Date.now()-last < 12*3600*1000) return;
+    localStorage.setItem(RR_TICK_KEY, String(Date.now()));
+  }catch(e){}
+  try{
+    await fetch('/api/receipt-reminder?sweep=1',{method:'POST', headers:{Authorization:'Bearer '+await rrJwt()}});
+  }catch(e){ /* صامت — التشغيل اليدويّ متاح من لوحة الإنذارات */ }
+}
+
+/* ── «لم تصل بعد» من البريد ──
+   السبب يُكتب ملاحظةَ متابعة على الأمر (يقرؤها فريق المشتريات في درجه)، ويُقيَّد
+   ردّاً في سجلّ التذكير (يُسكِت الأمر خمسة أيام)، ويُرسَل بريد
+   للمشتريات عبر حدث `not_arrived`. */
+function rrWaitOpen(num){
+  const po=poFind(num); if(!po) return;
+  if(!rrIsOpenPO(po)){ toast('info','—','الأمر مُغلق أو مُلغى — لا حاجة للمتابعة'); return; }
+  const old=document.getElementById('modal-rr-wait'); if(old) old.remove();
+  const late=rrDaysLate(po.expected_delivery, rrToday(Date.now()));
+  const m=document.createElement('div'); m.className='modal-overlay active'; m.id='modal-rr-wait'; m.dataset.ephemeral='1';
+  m.innerHTML=`<div class="modal" style="max-width:520px;width:96vw" role="dialog" aria-modal="true" aria-labelledby="rr-wait-title">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border,#eee)">
+      <h3 id="rr-wait-title" class="modal-title" style="margin:0;font-size:16px">⏳ لم تصل البضاعة بعد — <span dir="ltr">${escapeHtml(po.po_number)}</span></h3>
+      <button class="modal-close" onclick="rrWaitClose()" aria-label="إغلاق"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:16px 20px">
+      <p style="font-size:13px;color:var(--muted,#777);margin:0 0 12px">${escapeHtml(po.supplier||'—')} · ${escapeHtml(poProjectText(po))}${late>0?` · متأخر ${escapeHtml(poDays(late))}`:''}. اختر السبب فيصل لفريق المشتريات ليتابع المورد.</p>
+      <div class="rr-reasons" role="radiogroup" aria-label="السبب">
+        ${RR_WAIT_REASONS.map((r,i)=>`<label class="rr-reason"><input type="radio" name="rr-reason" id="rr-reason-${r.v}" value="${r.v}"${i===0?' checked':''}> ${escapeHtml(r.l)}</label>`).join('')}
+      </div>
+      <textarea id="rr-wait-note" rows="2" maxlength="500" placeholder="تفاصيل (اختياري): ما وصل، ما أبلغ به المورد…" style="width:100%;margin-top:12px;padding:9px;border:1px solid var(--border,#ddd);border-radius:8px;font-family:inherit;font-size:16px"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--border,#eee)">
+      <button class="btn btn-ghost btn-sm" onclick="rrWaitClose();poReceiveOpen('${escapeAttr(po.po_number)}')">بل وصلت — سجّل الاستلام</button>
+      <button class="btn btn-accent btn-sm" id="rr-wait-send" onclick="rrWaitSave('${escapeAttr(po.po_number)}')">إرسال للمشتريات</button>
+    </div></div>`;
+  document.body.appendChild(m); syncScrollLock();
+}
+function rrWaitClose(){ const m=document.getElementById('modal-rr-wait'); if(m) m.remove(); syncScrollLock(); }
+async function rrWaitSave(num){
+  const m=document.getElementById('modal-rr-wait'); if(!m) return;
+  const v=(m.querySelector('input[name="rr-reason"]:checked')||{}).value||'nothing';
+  const reason=(RR_WAIT_REASONS.find(r=>r.v===v)||RR_WAIT_REASONS[0]);
+  const note=(document.getElementById('rr-wait-note')?.value||'').trim().slice(0,500);
+  if(reason.v==='other' && !note){ toast('warn','اكتب السبب','اختر «سبب آخر» يتطلّب كتابته'); return; }
+  if(!(window.CLOUD && CLOUD.enabled && CLOUD.client)){ toast('error','غير متصل','الإرسال يتطلّب اتصالاً بالسحابة.'); return; }
+  const text=`⏳ لم تصل البضاعة بعد — ${reason.l}${note?`: ${note}`:''}`;
+  const btn=document.getElementById('rr-wait-send'); if(btn) btn.disabled=true;
+  try{
+    // الملاحظة على الأمر أوّلاً — هي ما يقرؤه فريق المشتريات، فإن فشلت لا نُسكِت التذكير
+    const {error}=await CLOUD.client.rpc('po_add_comment',{p_po:num, p_text:text});
+    if(error) throw error;
+  }catch(e){
+    if(btn) btn.disabled=false;
+    reportError('rrWaitSave', e, {po:num}, {title:'تعذّر الإرسال', body:e.message||'راجع اتصالك أو صلاحيتك.'});
+    return;
+  }
+  logAudit('reply','receipt_reminder',num,{reason:reason.v, label:reason.l, note});
+  try{
+    const {data}=await CLOUD.client.from('proc_pr_po_links').select('pr_id').eq('po_number',num).eq('active',true).limit(1);
+    const prId=data && data[0] && data[0].pr_id;
+    if(prId) prNotifyPR(prId,'not_arrived',`أمر الشراء ${num}: ${reason.l}${note?` — ${note}`:''}`);
+  }catch(e){ /* الإشعار لا يُسقِط ما نجح */ }
+  const po=poFind(num);
+  if(po) po.comments=(po.comments||[]).concat([{by:(STATE.currentUser?STATE.currentUser.displayName:'—'), at:new Date().toISOString(), text}]);
+  rrWaitClose();
+  if(document.getElementById('po-drawer')?.classList.contains('active')) openPODrawer(num);
+  toast('success','وصل للمشتريات',`سجّلنا أنّ ${num} لم يصل بعد. لن نذكّرك به ${RR_AFTER_REPLY_DAYS} أيام.`);
+}
+
 function poAlertJump(seg,statusFilter){
   STATE.poView='list'; STATE.poSegment=seg||'all';
   STATE.poFilter={q:'',sector:'',status:statusFilter||'',priority:'',project:''}; STATE.poPage=1;
@@ -24454,6 +24755,9 @@ function openDeepLink(){
   let q; try{ q = new URLSearchParams(location.search); }catch(e){ return; }
   const pr = (q.get('pr')||'').trim();
   const po = (q.get('po')||'').trim();
+  // `act` من بريد تذكير الاستلام: receive يفتح نافذة الاستلام · wait يفتح «لم تصل بعد».
+  // قائمة بيضاء — أي قيمة أخرى تُفتح الأمر فقط.
+  const act = ['receive','wait'].includes((q.get('act')||'').trim()) ? q.get('act').trim() : '';
   if(!pr && !po) return;
   try{ history.replaceState(null, '', location.pathname + location.hash); }catch(e){}
   if(pr){
@@ -24462,8 +24766,27 @@ function openDeepLink(){
     setTimeout(()=>{ try{ prGoView('track', pr); }catch(e){ reportError('deepLinkPR', e); } }, 120);
   } else {
     navigate('purchase-orders');
-    setTimeout(()=>{ try{ openPODrawer(po); }catch(e){ reportError('deepLinkPO', e); } }, 200);
+    // ⚠️ الأوامر تصل بعد الترطيب (للموظّف المُنطَّق من `proc_po_visible`)، فمؤقّتٌ ثابت
+    // كان يفتح لا شيء صامتاً إن تأخّرت. ننتظر الأمر نفسه حتى 15 ثانية.
+    deepLinkAwaitPO(po).then(found=>{
+      if(!found){ toast('info','الأمر غير متاح', `لم نجد ${po} ضمن أوامر الشراء التي تخصّك.`); return; }
+      try{
+        openPODrawer(po);
+        if(act==='receive') poReceiveOpen(po);
+        else if(act==='wait') rrWaitOpen(po);
+      }catch(e){ reportError('deepLinkPO', e); }
+    });
   }
+}
+function deepLinkAwaitPO(num, timeoutMs){
+  const limit = Date.now() + (timeoutMs || 15000);
+  return new Promise(resolve=>{
+    (function poll(){
+      if(poFind(num)) return resolve(true);
+      if(Date.now() > limit) return resolve(false);
+      setTimeout(poll, 300);
+    })();
+  });
 }
 
 async function bootstrap(){

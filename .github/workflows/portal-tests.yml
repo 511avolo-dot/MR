@@ -21,6 +21,8 @@ on:
       - 'functions/api/staff-invite.js'
       - 'functions/api/supplier-invite-link.js'
       - 'functions/api/_supplier-invite.js'
+      - 'functions/api/receipt-reminder.js'
+      - 'functions/api/_receipt-reminder.js'
       - 'functions/api/_pr-shared.js'
       - 'functions/_middleware.js'
       - 'assets/**'
@@ -49,6 +51,8 @@ on:
       - 'functions/api/staff-invite.js'
       - 'functions/api/supplier-invite-link.js'
       - 'functions/api/_supplier-invite.js'
+      - 'functions/api/receipt-reminder.js'
+      - 'functions/api/_receipt-reminder.js'
       - 'functions/api/_pr-shared.js'
       - 'functions/_middleware.js'
       - 'assets/**'
@@ -85,6 +89,9 @@ jobs:
 
       - name: الإرسال الآليّ لدعوات تسجيل الموردين (JS)
         run: node db/portal-tests/supplier-invite.test.mjs
+
+      - name: تذكير الاستلام لصاحب الطلب (JS)
+        run: node db/portal-tests/receipt-reminder.test.mjs
 
       - name: عقد الواجهة المؤسسية ومعاينة المستندات
         run: node scripts/e2e/enterprise-ui-contract.test.mjs

@@ -302,6 +302,9 @@ const NEEDED_FNS = [
   'priceObsKey', 'priceSpreadInfo', 'histFlagInfo', 'arCountWord', 'siImportResultToast', 'itemsVisibleList', 'histIsOrphan',
   // تصنيف الموردين: التصفّح بما يعمل فيه المورد (مُعلَن + مُثبَت بعروض أسعار)
   'supCatIndex', 'supCatToken', 'supSplitSpecialty', 'supEvidenceIndex', 'supCatProfile', 'supInCategory', 'supCardCatsHtml',
+  // تذكير الاستلام لصاحب الطلب — مرآة `_receipt-reminder.js` + الرابط العميق
+  'rrToday', 'rrDaysLate', 'rrIsOpenPO', 'rrLastReceiptAt', 'rrEventsFromAudit', 'rrPoDue', 'rrBuildDigests',
+  'rrCanManage', 'deepLinkAwaitPO', 'normScopeSectors', 'myScopeSectors', 'isScopedUser',
 ];
 // متغيّرات وحدة قابلة للتغيّر تحتاجها الدوال (ذاكرة فهرس الأصناف + فهرس المشاريع)
 const NEEDED_LETS = ['__poItemIdx', '_prjIdx', '_poZipCrcT', 'SI_LEARNED_ALIASES', 'SI_ALIASES_BY_CODE', 'SI_ALIAS_SCOPED', '_supCatIdx', '_supEvIdx', '_supCat', 'REGCAMP_SENDS', 'REGCAMP_AUTO'];
@@ -311,7 +314,7 @@ function grabLet(name){
   if (i < 0) throw new Error('متغيّر غير موجود: ' + name);
   return lines[i];
 }
-const NEEDED_CONSTS = ['REGCAMP_STAGES', 'REGCAMP_AUTO_KEY', 'SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
+const NEEDED_CONSTS = ['RR_AUTO_KEY', 'RR_EVERY_DAYS', 'RR_AFTER_REPLY_DAYS', 'RR_TERMINAL', 'RR_PR_DONE', 'RR_SLACK', 'RR_DAY', 'RR_WAIT_REASONS', 'RR_SETTINGS_PERMS', 'REGCAMP_STAGES', 'REGCAMP_AUTO_KEY', 'SI_NORM_CACHE', 'SI_NORM_CACHE_MAX', 'SI_SPEC_UNITS', 'SI_UNIT_TOL', 'SI_UNIT_TOL_DEFAULT', 'SI_QUAL_GROUPS', 'SI_MATCH_AUTO', 'SI_MATCH_SUGGEST', 'SI_UNIT_STOP', 'SI_TIE_EPSILON', 'SI_WORD_TYPO', 'priceRecWord', 'priceObsWord', 'priceGroupWord', 'siImportItemWord', 'PRICE_STALE_DAYS', 'PRICE_DEVIATION_WARN', 'SUP_REQUIRED_DOCS', 'SUP_EXPIRY_SOON_DAYS', 'REG_PLAN_LIMITS', 'DOCV_NAMES', 'SI_SYNONYM_MAP', 'SI_BILINGUAL_MAP', 'SI_PREBI_CACHE', 'SI_CAT_LEGACY_DEFAULT', 'SI_CAT_FLOOR', 'PO_PRICE_REF', 'PO_ENUMS', 'PO_STATUS_META', 'PO_BOARD_ORDER', 'PO_STEPPER', 'PO_TERMINAL', 'PO_STATUS_ALIAS', 'PO_SEGMENTS',
   'PRJ_SETTINGS_KEY', 'PRJ_LOCAL_KEY', 'PRJ', 'PRJ_STOPWORDS', 'PRJ_SIM_STRONG', 'PRJ_SIM_WEAK',
   'RT_MAP',
   'SUP_SECTORS', 'SUP_CAT_NONE', 'SUP_CAT_PREFIX_MIN', 'SUP_CAT_SYNONYMS', '_supProfCache', 'SUP_CARD_CATS',
@@ -6555,6 +6558,92 @@ await (async () => {
   T('سجلّ الإرسال يُقرأ بالصفحات لا بنداء مبتور عند 1000', /regCampLoadSends[\s\S]{0,600}\.range\(from, from \+ 999\)/.test(CODE));
 
   Object.assign(STATE, SAVED);
+})();
+
+G('٥٦ — تذكير الاستلام لصاحب الطلب: مرآة الخادم + الرابط العميق + «لم تصل بعد»');
+await (async () => {
+  const lib = await import('../functions/api/_receipt-reminder.js');
+  const { rrToday, rrDaysLate, rrIsOpenPO, rrPoDue, rrBuildDigests, rrEventsFromAudit, rrCanManage,
+          deepLinkAwaitPO, RR_AUTO_KEY, RR_EVERY_DAYS, RR_AFTER_REPLY_DAYS, RR_TERMINAL, RR_WAIT_REASONS,
+          RR_SETTINGS_PERMS } = api;
+  const D = 86400000, NOW = Date.parse('2026-11-03T07:00:00Z');
+  const today = rrToday(NOW);
+  const dAgo = (n) => new Date(Date.parse(today) - n * D).toISOString().slice(0, 10);
+
+  /* ── (أ) الثوابت مطابقة للخادم ── */
+  T('مفتاح الإعداد واحد في الواجهة والخادم', RR_AUTO_KEY === lib.RECEIPT_AUTO_KEY);
+  T('الإيقاع واحد (3 أيام / إسكات 5)', RR_EVERY_DAYS === lib.RR_EVERY_DAYS && RR_AFTER_REPLY_DAYS === lib.RR_AFTER_REPLY_DAYS);
+  T('الحالات المغلقة واحدة (ومنها المرادف «مُسلَّم»)', JSON.stringify(RR_TERMINAL) === JSON.stringify(lib.RR_TERMINAL) && RR_TERMINAL.includes('مُسلَّم'));
+
+  /* ── (ب) تكافؤ سلوكيّ: الواجهة تعاين ما سيُرسله الخادم بالضبط ── */
+  const PO = (n, x = {}) => ({ po_number: n, status: 'قيد التوريد', expected_delivery: dAgo(10), items: [{ qty: 2, received_qty: 0 }], receipts: [], ...x });
+  const pos = [PO('A'), PO('B', { expected_delivery: dAgo(0) }), PO('C', { status: 'تسليم كامل' }), PO('E', { expected_delivery: dAgo(4) }),
+               PO('F', { status: 'تسليم جزئي', receipts: [{ at: new Date(NOW - D).toISOString() }] }), PO('G', { expected_delivery: null }), PO('H')];
+  const prs = [{ id: 'P1', requester: 'k', status: 'approved' }, { id: 'P2', requester: 'k', status: 'closed' },
+               { id: 'P3', requester: 'z', status: 'approved' }, { id: 'P4', requester: 'K', status: 'approved' }];
+  const links = [{ pr_id: 'P1', po_number: 'A' }, { pr_id: 'P1', po_number: 'B' }, { pr_id: 'P1', po_number: 'C' },
+                 { pr_id: 'P1', po_number: 'E' }, { pr_id: 'P1', po_number: 'F' }, { pr_id: 'P1', po_number: 'G' },
+                 { pr_id: 'P2', po_number: 'H' }, { pr_id: 'P3', po_number: 'H' }, { pr_id: 'P4', po_number: 'A' }];
+  const users = [{ username: 'k', display_name: 'ك', active: true }, { username: 'z', active: false }];
+  const audit = [{ entity_type: 'receipt_reminder', entity_id: 'E', action: 'notify', ts: new Date(NOW - 1 * D).toISOString() }];
+  const shape = (ds) => JSON.stringify(ds.map(d => [d.username, d.items.map(i => [i.po.po_number, i.late, i.pr_ids.slice().sort().join('+')])]));
+  const cli = rrBuildDigests({ links, prs, pos, users, audit, now: NOW });
+  const srv = lib.rrBuildDigests({ links, prs, pos, users, audit, now: NOW });
+  T('ملخّصات الواجهة = ملخّصات الخادم حرفيّاً', shape(cli) === shape(srv), shape(cli) + ' ≠ ' + shape(srv));
+  T('النتيجة المتوقّعة: «ك» بأمر A وحده (مربوط بطلبيه بحالتين للاسم)', shape(cli) === JSON.stringify([['k', [['A', 10, 'P1+P4']]]]), shape(cli));
+  const cases = [[PO('X'), null], [PO('X'), { sent: 1, lastSent: NOW - 2 * D }], [PO('X'), { sent: 1, lastSent: NOW - 3 * D }],
+                 [PO('X'), { sent: 2, lastSent: NOW - 4 * D, lastReply: NOW - 4 * D }], [PO('X', { status: 'ملغى' }), null],
+                 [PO('X', { expected_delivery: dAgo(1) }), null], [PO('X', { expected_delivery: '2026/10/01' }), null]];
+  T('rrPoDue: الواجهة = الخادم في كل الأحوال', cases.every(([po, ev]) =>
+    JSON.stringify(rrPoDue(po, ev, NOW)) === JSON.stringify(lib.rrPoDue(po, ev, NOW))));
+  T('rrToday/rrDaysLate: الواجهة = الخادم', [Date.UTC(2026, 10, 3, 20, 59), Date.UTC(2026, 10, 3, 21, 0)].every(t => rrToday(t) === lib.rrToday(t))
+    && rrDaysLate(dAgo(7), today) === 7 && rrDaysLate('', today) === null);
+  T('rrEventsFromAudit: الواجهة = الخادم', JSON.stringify([...rrEventsFromAudit(audit)]) === JSON.stringify([...lib.rrEventsFromAudit(audit)]));
+  T('أمر مغلق ⇒ rrIsOpenPO=false', !rrIsOpenPO(PO('X', { status: 'تسليم كامل' })) && rrIsOpenPO(PO('X')));
+
+  /* ── (ج) الرابط العميق ── */
+  const dl = CODE.slice(CODE.indexOf('function openDeepLink'), CODE.indexOf('function deepLinkAwaitPO'));
+  T('الرابط العميق يقبل act من قائمة بيضاء (receive/wait) فقط', /\['receive','wait'\]\.includes/.test(dl));
+  T('act=receive يفتح نافذة الاستلام، وwait يفتح «لم تصل بعد»', /act==='receive'\) poReceiveOpen\(po\)/.test(dl) && /act==='wait'\) rrWaitOpen\(po\)/.test(dl));
+  T('الرابط ينتظر وصول الأمر بدل مؤقّت ثابت يفتح لا شيء', /deepLinkAwaitPO\(po\)/.test(dl) && !/setTimeout\(\(\)=>\{ try\{ openPODrawer\(po\)/.test(dl));
+  T('رابط البريد بالمعاملين اللذين يقرؤهما النظام', /\?po=\$\{encodeURIComponent\(poNumber\)\}&act=/.test(fs.readFileSync(path.join(ROOT, 'functions/api/_receipt-reminder.js'), 'utf8')));
+  const SAVED = STATE.purchaseOrders;
+  STATE.purchaseOrders = [{ po_number: 'P.O-1' }];
+  T('deepLinkAwaitPO: موجود ⇒ true فوراً', await deepLinkAwaitPO('P.O-1', 50) === true);
+  T('deepLinkAwaitPO: غائب ⇒ false بعد المهلة (لا انتظار أبديّ)', await deepLinkAwaitPO('P.O-404', 50) === false);
+  const late = deepLinkAwaitPO('P.O-LATE', 2000);
+  setTimeout(() => STATE.purchaseOrders.push({ po_number: 'P.O-LATE' }), 120);
+  T('deepLinkAwaitPO: يصل الأمر بعد الترطيب ⇒ true', await late === true);
+  STATE.purchaseOrders = SAVED;
+
+  /* ── (د) «لم تصل بعد» ── */
+  const ws = CODE.slice(CODE.indexOf('async function rrWaitSave'), CODE.indexOf('async function rrWaitSave') + 2400);
+  T('الملاحظة على الأمر تُكتب أوّلاً، والإسكات (قيد الردّ) بعدها فقط',
+    ws.indexOf("rpc('po_add_comment'") > 0 && ws.indexOf("rpc('po_add_comment'") < ws.indexOf("logAudit('reply','receipt_reminder'"));
+  T('فشل الملاحظة يُوقف (return قبل قيد الردّ)', /reportError\('rrWaitSave'[\s\S]{0,140}return;[\s\S]*logAudit\('reply'/.test(ws));
+  T('قيد الردّ واحد فقط، ولا يقع في مسار الفشل', (ws.match(/logAudit\('reply'/g) || []).length === 1
+    && ws.indexOf("logAudit('reply'") > ws.indexOf("reportError('rrWaitSave'"));
+  T('«سبب آخر» يتطلّب كتابته', /reason\.v==='other' && !note/.test(ws));
+  T('إشعار المشتريات بحدث not_arrived', /prNotifyPR\(prId,'not_arrived'/.test(ws));
+  T('أسباب الردّ أربعة وأوّلها «لم يصل شيء»', RR_WAIT_REASONS.length === 4 && RR_WAIT_REASONS[0].v === 'nothing');
+  const notifyJs = fs.readFileSync(path.join(ROOT, 'functions/api/notify.js'), 'utf8');
+  const shared = fs.readFileSync(path.join(ROOT, 'functions/api/_pr-shared.js'), 'utf8');
+  T('not_arrived حدثٌ للمشتريات لا للطالب (الاتجاه خادميّ)', /TO_PROCUREMENT = \['answer', 'not_arrived'\]/.test(notifyJs)
+    && !/TO_REQUESTER\s*=\s*\[[^\]]*not_arrived/.test(notifyJs));
+  T('ولقالبه عنوان وسطر', /not_arrived:\s+\['البضاعة لم تصل بعد'/.test(shared) && /not_arrived:\s+`أبلغ مُقدّم الطلب/.test(shared));
+
+  /* ── (هـ) المفتاح والنبضة ── */
+  const guard = fs.readFileSync(path.join(ROOT, 'db/audit-safe-hardening-2026-07-24.sql'), 'utf8');
+  T('بوّابة المفتاح = صلاحيات `proc_settings_guard` حرفيّاً', RR_SETTINGS_PERMS.every(k => guard.includes(`'${k}'`))
+    && (guard.slice(guard.indexOf('proc_settings_guard'), guard.indexOf('proc_settings_guard') + 900).match(/pr_has_perm\('/g) || []).length === RR_SETTINGS_PERMS.length);
+  const SU = STATE.currentUser;
+  STATE.currentUser = { username: 'k', role: 'admin', scopeSectors: ['الصيانة والتشغيل'], permissions: {} };
+  T('الموظّف المُنطَّق لا يرى المفتاح ولو كان أدمن', rrCanManage() === false);
+  STATE.currentUser = SU;
+  T('النبضة الكسولة مربوطة بعدّادات اللوحة', /try\{ receiptReminderTick\(\); \}catch\(e\)\{\}/.test(CODE));
+  T('والنبضة لا تُطلَق من الموظّف المُنطَّق', /async function receiptReminderTick\(\)\{\s*if\(isScopedUser\(\)\) return;/.test(CODE));
+  T('الخادم مُطفأ افتراضاً: يشترط enabled === true', /v\.enabled === true/.test(fs.readFileSync(path.join(ROOT, 'functions/api/receipt-reminder.js'), 'utf8')));
+  T('صندوق التذكير مرسوم في لوحة الإنذارات', /<div id="rr-box"><\/div>/.test(CODE) && /try\{ rrRenderBox\(\); \}/.test(CODE));
 })();
 
 /* ── النتيجة ─────────────────────────────────────────────────── */
