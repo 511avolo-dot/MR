@@ -141,7 +141,7 @@ export async function onRequestPost({ request, env }) {
     // ⚠️ الأحداث الموجَّهة للطالب وتلك الموجَّهة للمشتريات مفصولة عمداً:
     // اتجاه البريد يُحدَّد على الخادم من نوع الحدث، لا من العميل.
     const TO_REQUESTER  = ['pending', 'approved', 'rejected', 'returned', 'submitted', 'proc_started', 'quotes_collected', 'po_issued', 'question'];
-    const TO_PROCUREMENT = ['answer'];
+    const TO_PROCUREMENT = ['answer', 'not_arrived'];
     if (!prId || ![...TO_REQUESTER, ...TO_PROCUREMENT].includes(ev)) return json({ error: 'مدخلات غير صالحة' }, 400);
     const pr = await prLoadPR(env, base, prId);
     if (!pr) return json({ error: 'الطلب غير موجود' }, 404);
